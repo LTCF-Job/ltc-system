@@ -1,0 +1,47 @@
+# 長照交通接送後台系統 — 前端應用程式 (@ltc/web)
+
+本專案為長照交通接送後台系統的前端 SPA 應用程式，使用 Vue 3 + Vite + TypeScript + Element Plus 建置。
+
+## 1. 環境變數設定
+
+請複製 `.env.example` 為 `.env.development`：
+
+```bash
+cp .env.example .env.development
+```
+
+變數說明：
+- `VITE_API_BASE_URL`: 後端 API 基礎路徑（預設 `/api/v1`）
+- `VITE_SUPABASE_URL`: Supabase 專案 URL
+- `VITE_SUPABASE_ANON_KEY`: Supabase 匿名金鑰
+- `VITE_API_SPEC_URL`: OpenAPI 規範 Swagger JSON 網址
+- `VITE_ENABLE_MSW`: 是否啟用本地 MSW 模擬伺服器（`true` / `false`）
+
+## 2. 啟動與開發指令
+
+安裝相依套件：
+```bash
+npm install
+```
+
+啟動本地開發伺服器（含 MSW 模擬環境）：
+```bash
+npm run dev
+```
+
+執行型別檢查：
+```bash
+npm run type-check
+```
+
+建置生產打包檔案：
+```bash
+npm run build
+```
+
+## 3. 產出 API 型別指令
+
+當後端 OpenAPI 規範更新時，執行以下指令重新產生 `src/types/api.d.ts`：
+```bash
+npm run gen:types
+```

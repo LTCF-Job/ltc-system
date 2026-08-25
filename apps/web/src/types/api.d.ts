@@ -1,0 +1,440 @@
+import type {
+  UserRole,
+  Region,
+  CaseStatus,
+  Direction,
+  TripPattern,
+  EffectiveRideStatus,
+  RideReportedStatus,
+  MappingStatus,
+  ColumnKind,
+  ExportJobType,
+  ExportJobStatus,
+  ServiceCategory,
+  ServiceUsageType
+} from './domain'
+
+// 共通分頁與錯誤結構
+export interface PaginationMeta {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
+export interface Paged<T> {
+  data: T[]
+  meta: PaginationMeta
+}
+
+export interface ErrorDetail {
+  field?: string
+  reason: string
+}
+
+export interface ApiError {
+  code: string
+  message: string
+  details?: ErrorDetail[]
+}
+
+export interface ApiResponse<T> {
+  data: T
+  meta?: PaginationMeta
+  error?: ApiError
+}
+
+// 使用者與認證
+export interface UserDTO {
+  id: string
+  email: string
+  displayName: string
+  role: UserRole
+}
+
+export interface AuthSession {
+  user: UserDTO
+  accessToken: string
+}
+
+// 個案與排班
+export interface ScheduleLegDTO {
+  id: string
+  legSeq: number
+  direction: Direction
+  departTime: string
+  arriveTime?: string
+  runNo: number
+  vehicleId: string
+  vehicleName?: string
+}
+
+export interface CaseScheduleDTO {
+  id: string
+  caseId: string
+  siteId: string
+  siteName?: string
+  effectiveFrom: string
+  effectiveTo?: string
+  weekdays: number[]
+  tripPattern: TripPattern
+  unitPrice: number
+  distanceKm: number
+  serviceDurationMin: number
+  serviceCode: string
+  note?: string
+  legs: ScheduleLegDTO[]
+}
+
+export interface CaseDTO {
+  id: string
+  code: string
+  name: string
+  nameNormalized?: string
+  nationalId: string
+  homeAddress: string
+  region: Region
+  ltcLevel?: string
+  serviceCategory: ServiceCategory
+  serviceUsageType: ServiceUsageType
+  claimStartDate: string
+  claimEndDate?: string
+  status: CaseStatus
+  createdAt: string
+  updatedAt: string
+  activeSchedule?: CaseScheduleDTO
+}
+
+export interface CreateCaseRequest {
+  name: string
+  nationalId: string
+  homeAddress: string
+  region: Region
+  ltcLevel?: string
+  serviceCategory: ServiceCategory
+  serviceUsageType: ServiceUsageType
+  claimStartDate: string
+  claimEndDate?: string
+  status?: CaseStatus
+}
+
+export interface UpdateCaseRequest extends Partial<CreateCaseRequest> {}
+
+export interface CreateScheduleRequest {
+  siteId: string
+  effectiveFrom: string
+  effectiveTo?: string
+  weekdays: number[]
+  tripPattern: TripPattern
+  unitPrice: number
+  distanceKm: number
+  serviceDurationMin: number
+  serviceCode?: string
+  note?: string
+  legs: Array<{
+    legSeq: number
+    direction: Direction
+    departTime: string
+    arriveTime?: string
+    runNo: number
+    vehicleId: string
+  }>
+}
+
+// 主檔：據點、車輛、司機
+export interface SiteDTO {
+  id: string
+  name: string
+  region: Region
+  address: string
+  openDays: number[]
+  createdAt: string
+}
+
+export interface CreateSiteRequest {
+  name: string
+  region: Region
+  address: string
+  openDays: number[]
+}
+
+export interface UpdateSiteRequest extends Partial<CreateSiteRequest> {}
+
+export interface VehicleDTO {
+  id: string
+  plateNo: string
+  displayName: string
+  region: Region
+  active: boolean
+  createdAt: string
+}
+
+export interface CreateVehicleRequest {
+  plateNo: string
+  displayName: string
+  region: Region
+  active?: boolean
+}
+
+export interface UpdateVehicleRequest extends Partial<CreateVehicleRequest> {}
+
+export interface DriverAssignmentDTO {
+  id: string
+  driverId: string
+  vehicleId: string
+  vehicleName?: string
+  startDate: string
+  endDate?: string
+  isPrimary: boolean
+}
+
+export interface DriverDTO {
+  id: string
+  name: string
+  nameNormalized?: string
+  nationalId: string
+  phone?: string
+  email?: string
+  active: boolean
+  createdAt: string
+  assignments?: DriverAssignmentDTO[]
+}
+
+export interface CreateDriverRequest {
+  name: string
+  nationalId: string
+  phone?: string
+  email?: string
+  active?: boolean
+}
+
+export interface UpdateDriverRequest extends Partial<CreateDriverRequest> {}
+
+// Google 表單與欄位對應
+export interface FormDTO {
+  id: string
+  formId: string
+  title: string
+  sheetUrl?: string
+  lastSyncedAt?: string
+  totalColumns: number
+  pendingColumns: number
+  hasSyncAlert?: boolean
+}
+
+export interface FormColumnDTO {
+  id: string
+  formId: string
+  columnName: string
+  columnSeq: number
+  kind: ColumnKind
+  mappingStatus: MappingStatus
+  suggestedCaseId?: string
+  suggestedCaseName?: string
+  suggestedLegSeq?: number
+  suggestionScore?: number
+  mappedCaseId?: string
+  mappedCaseName?: string
+  mappedLegSeq?: number
+  updatedAt: string
+}
+
+export interface UpdateColumnMappingRequest {
+  caseId?: string
+  legSeq?: number
+  mappingStatus: MappingStatus
+}
+
+export interface BatchMappingRequest {
+  mappings: Array<{
+    columnId: string
+    caseId?: string
+    legSeq?: number
+    mappingStatus: MappingStatus
+  }>
+}
+
+// 搭乘紀錄與月曆矩陣
+export interface RideSourceDTO {
+  id: string
+  submissionId: string
+  vehicleId: string
+  vehicleName?: string
+  driverId?: string
+  driverName?: string
+  reported: RideReportedStatus
+  submittedAt: string
+}
+
+export interface RideRecordDTO {
+  id: string
+  caseId: string
+  caseName?: string
+  serviceDate: string
+  legSeq: number
+  direction?: Direction
+  mergedStatus: EffectiveRideStatus
+  effectiveStatus: EffectiveRideStatus
+  hasConflict: boolean
+  vehicleId?: string
+  vehicleName?: string
+  driverId?: string
+  driverName?: string
+  departTimeOverride?: string
+  durationMinOverride?: number
+  scheduledDepartTime?: string
+  scheduledDurationMin?: number
+  notClaimedAa09: boolean
+  correctedBy?: string
+  correctedByName?: string
+  correctedAt?: string
+  correctionReason?: string
+  sourceChanged?: boolean
+  sources: RideSourceDTO[]
+}
+
+export interface RideCalendarCellDTO {
+  date: string
+  dayOfWeek: number
+  isExpected: boolean
+  isHoliday?: boolean
+  holidayName?: string
+  records: RideRecordDTO[]
+}
+
+export interface CaseRideCalendarRowDTO {
+  caseId: string
+  caseCode: string
+  caseName: string
+  region: Region
+  tripPattern: TripPattern
+  days: Record<string, RideCalendarCellDTO>
+}
+
+export interface RideCalendarMatrixDTO {
+  month: string
+  totalCases: number
+  daysInMonth: number
+  cases: CaseRideCalendarRowDTO[]
+}
+
+export interface PatchRideRequest {
+  effectiveStatus?: EffectiveRideStatus
+  vehicleId?: string
+  driverId?: string
+  departTimeOverride?: string | null
+  durationMinOverride?: number | null
+  legSeq?: number
+  notClaimedAa09?: boolean
+  reason?: string
+}
+
+export interface ResolveConflictRequest {
+  vehicleId: string
+  driverId: string
+  reason?: string
+}
+
+export interface IssueRideDTO {
+  id: string
+  caseId: string
+  caseName: string
+  serviceDate: string
+  legSeq: number
+  issueType: 'conflict' | 'unreported' | 'import_error'
+  hasConflict: boolean
+  description: string
+  vehicles?: string[]
+  sources?: RideSourceDTO[]
+}
+
+// 申報匯出
+export interface PrecheckItemDTO {
+  level: 'error' | 'warning' | 'info'
+  code: string
+  message: string
+  details?: Array<{
+    caseId?: string
+    caseName?: string
+    field?: string
+    serviceDate?: string
+    rideId?: string
+    description?: string
+  }>
+}
+
+export interface PrecheckResultDTO {
+  passed: boolean
+  hasErrors: boolean
+  hasWarnings: boolean
+  summary: {
+    totalErrors: number
+    totalWarnings: number
+    totalInfos: number
+  }
+  items: PrecheckItemDTO[]
+}
+
+export interface CreateExportJobRequest {
+  jobType: ExportJobType
+  periodYm: string // RRR-MM 如 115-07
+  region?: Region
+  mode: 'single_multi_case' | 'case_per_file'
+  caseIds?: string[]
+  vehicleIds?: string[]
+}
+
+export interface ExportJobDTO {
+  id: string
+  jobType: ExportJobType
+  periodYm: string
+  region?: Region
+  mode: 'single_multi_case' | 'case_per_file'
+  status: ExportJobStatus
+  totalCases?: number
+  totalRows?: number
+  fileName?: string
+  fileSize?: number
+  downloadUrl?: string
+  precheck?: PrecheckResultDTO
+  errorMessage?: string
+  createdAt: string
+  completedAt?: string
+}
+
+// 儀表板
+export interface DashboardStatsDTO {
+  currentMonth: string
+  totalCasesCount: number
+  reportedTripsCount: number
+  unreportedVehiclesToday: number
+  pendingConflictsCount: number
+  pendingFormColumnsCount: number
+  recentExports: ExportJobDTO[]
+}
+
+// 批次匯入預覽
+export interface ImportRowErrorDTO {
+  rowIndex: number
+  caseName?: string
+  field?: string
+  message: string
+}
+
+export interface ImportRowWarningDTO {
+  rowIndex: number
+  caseName?: string
+  field?: string
+  message: string
+  useDefault?: boolean
+}
+
+export interface DryRunImportResultDTO {
+  totalRows: number
+  validRows: number
+  errorRows: number
+  warningRows: number
+  previewRows: Array<Record<string, any>>
+  errors: ImportRowErrorDTO[]
+  warnings: ImportRowWarningDTO[]
+}
