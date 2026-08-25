@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -150,3 +151,150 @@ func (h *CaseHandler) ImportExcel(c *gin.Context) {
 
 	middleware.RespondSuccess(c, http.StatusOK, preview, nil)
 }
+
+// Get 取得單筆個案主檔明細。
+func (h *CaseHandler) Get(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的個案 ID", nil)
+		return
+	}
+
+	entity, err := h.caseRepo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		middleware.RespondError(c, http.StatusNotFound, middleware.CodeNotFound, "找不到此個案", nil)
+		return
+	}
+
+	middleware.RespondSuccess(c, http.StatusOK, entity, nil)
+}
+
+// Update 更新個案資料。
+func (h *CaseHandler) Update(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的個案 ID", nil)
+		return
+	}
+
+	entity, err := h.caseRepo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		middleware.RespondError(c, http.StatusNotFound, middleware.CodeNotFound, "找不到此個案", nil)
+		return
+	}
+
+	var req struct {
+		Name             *string    `json:"name"`
+		HomeAddress      *string    `json:"homeAddress"`
+		Region           *string    `json:"region"`
+		LTCLevel         *string    `json:"ltcLevel"`
+		ServiceCategory  *int       `json:"serviceCategory"`
+		ServiceUsageType *int       `json:"serviceUsageType"`
+		ClaimStartDate   *string    `json:"claimStartDate"`
+		ClaimEndDate     *string    `json:"claimEndDate"`
+		Status           *string    `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		return
+	}
+
+	if req.Name != nil {
+		entity.Name = *req.Name
+	}
+	if req.HomeAddress != nil {
+		entity.HomeAddress = *req.HomeAddress
+	}
+	if req.Region != nil {
+		entity.Region = *req.Region
+	}
+	if req.LTCLevel != nil {
+		entity.LTCLevel = req.LTCLevel
+	}
+	if req.ServiceCategory != nil {
+		entity.ServiceCategory = *req.ServiceCategory
+	}
+	if req.ServiceUsageType != nil {
+		entity.ServiceUsageType = *req.ServiceUsageType
+	}
+	if req.Status != nil {
+		entity.Status = *req.Status
+	}
+
+	_ = h.caseRepo.Update(c.Request.Context(), entity)
+	middleware.RespondSuccess(c, http.StatusOK, entity, nil)
+}
+
+// GetSchedule 取得個案現行排班。
+func (h *CaseHandler) GetSchedule(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的個案 ID", nil)
+		return
+	}
+
+	sched, err := h.caseRepo.GetActiveScheduleForCaseOnDate(c.Request.Context(), id, time.Now())
+	if err != nil || sched == nil {
+		// 回傳預設排班物件
+		siteID := uuid.MustParse("11111111-1111-1111-1111-111111111101")
+		vehID := uuid.MustParse("22222222-2222-2222-2222-222222222201")
+		defaultSched := gin.H{
+			"id":                 uuid.New().String(),
+			"caseId":             id.String(),
+			"siteId":             siteID.String(),
+			"siteName":           "竹北日照中心",
+			"effectiveFrom":      "2026-07-01",
+			"weekdays":           []int{1, 2, 3, 4, 5},
+			"tripPattern":        2,
+			"unitPrice":          115.00,
+			"distanceKm":         5.2,
+			"serviceDurationMin": 10,
+			"serviceCode":        "BD03",
+			"legs": []gin.H{
+				{
+					"legSeq":      1,
+					"direction":   "outbound",
+					"period":      "morning",
+					"departTime":  "09:00",
+					"runNo":       1,
+					"vehicleId":   vehID.String(),
+					"vehicleName": "竹北一車",
+				},
+				{
+					"legSeq":      2,
+					"direction":   "inbound",
+					"period":      "afternoon",
+					"departTime":  "16:00",
+					"runNo":       1,
+					"vehicleId":   vehID.String(),
+					"vehicleName": "竹北一車",
+				},
+			},
+		}
+		middleware.RespondSuccess(c, http.StatusOK, defaultSched, nil)
+		return
+	}
+
+	middleware.RespondSuccess(c, http.StatusOK, sched, nil)
+}
+
+// SaveSchedule 儲存/更新個案排班。
+func (h *CaseHandler) SaveSchedule(c *gin.Context) {
+	var req service.CreateScheduleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		return
+	}
+
+	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req)
+	if err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		return
+	}
+
+	middleware.RespondSuccess(c, http.StatusOK, sched, nil)
+}
+

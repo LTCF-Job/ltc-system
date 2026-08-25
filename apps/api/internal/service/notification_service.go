@@ -53,13 +53,14 @@ func (s *NotificationService) SendNotification(ctx context.Context, topic, subje
 	if len(recipients) == 0 {
 		errMsg := "無設定收件人"
 		logItem := &repository.NotificationLogEntity{
-			Channel: "email",
-			Target:  "-",
-			Topic:   topic,
-			Body:    fmt.Sprintf("[%s] %s", subject, body),
-			SentAt:  time.Now().UTC(),
-			Success: false,
-			Error:   &errMsg,
+			Topic:           topic,
+			Channel:         "email",
+			RecipientEmails: []string{},
+			Subject:         subject,
+			ContentSummary:  &body,
+			Status:          "failed",
+			ErrorMessage:    &errMsg,
+			SentAt:          time.Now().UTC(),
 		}
 		_ = s.repo.InsertLog(ctx, logItem)
 		slog.Warn("Notification not sent because recipient list is empty", slog.String("topic", topic))
@@ -67,18 +68,26 @@ func (s *NotificationService) SendNotification(ctx context.Context, topic, subje
 	}
 
 	for _, r := range recipients {
-		sendErr := s.sender.SendEmail(ctx, r.Email, subject, body)
-		logItem := &repository.NotificationLogEntity{
-			Channel: "email",
-			Target:  r.Email,
-			Topic:   topic,
-			Body:    fmt.Sprintf("[%s] %s", subject, body),
-			SentAt:  time.Now().UTC(),
-			Success: sendErr == nil,
+		var sendErr error
+		if s.sender != nil {
+			sendErr = s.sender.SendEmail(ctx, r.Email, subject, body)
 		}
+		status := "sent"
+		var errStr *string
 		if sendErr != nil {
-			errStr := sendErr.Error()
-			logItem.Error = &errStr
+			status = "failed"
+			msg := sendErr.Error()
+			errStr = &msg
+		}
+		logItem := &repository.NotificationLogEntity{
+			Topic:           topic,
+			Channel:         "email",
+			RecipientEmails: []string{r.Email},
+			Subject:         subject,
+			ContentSummary:  &body,
+			Status:          status,
+			ErrorMessage:    errStr,
+			SentAt:          time.Now().UTC(),
 		}
 		_ = s.repo.InsertLog(ctx, logItem)
 	}

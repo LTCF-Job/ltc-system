@@ -3,6 +3,9 @@
 test:
 	cd apps/api && go test -v ./...
 
+test-e2e:
+	node tests/e2e/e2e.spec.js
+
 build:
 	cd apps/api && go build -o bin/server.exe ./cmd/server
 	cd apps/api && go build -o bin/exporter.exe ./cmd/exporter

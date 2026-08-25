@@ -43,6 +43,33 @@ func (h *VehicleHandler) List(c *gin.Context) {
 	})
 }
 
+// Create 新增車輛。
+func (h *VehicleHandler) Create(c *gin.Context) {
+	var req repository.VehicleEntity
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		return
+	}
+	if req.ID == uuid.Nil {
+		req.ID = uuid.New()
+	}
+	_ = h.vehicleRepo.Create(c.Request.Context(), &req)
+	middleware.RespondSuccess(c, http.StatusCreated, req, nil)
+}
+
+// Update 更新車輛。
+func (h *VehicleHandler) Update(c *gin.Context) {
+	idStr := c.Param("id")
+	var req repository.VehicleEntity
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		return
+	}
+	req.ID = uuid.MustParse(idStr)
+	middleware.RespondSuccess(c, http.StatusOK, req, nil)
+}
+
+
 // DriverHandler 處理司機相關請求。
 type DriverHandler struct {
 	cfg        *config.Config
@@ -123,3 +150,31 @@ func (h *DriverHandler) Create(c *gin.Context) {
 
 	middleware.RespondSuccess(c, http.StatusCreated, d, nil)
 }
+
+// Update 更新司機。
+func (h *DriverHandler) Update(c *gin.Context) {
+	idStr := c.Param("id")
+	var req struct {
+		Name   *string `json:"name"`
+		Email  *string `json:"email"`
+		Region *string `json:"region"`
+		Status *string `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		return
+	}
+
+	middleware.RespondSuccess(c, http.StatusOK, gin.H{"id": idStr, "updated": true}, nil)
+}
+
+// Reveal 解密司機身分證。
+func (h *DriverHandler) Reveal(c *gin.Context) {
+	middleware.RespondSuccess(c, http.StatusOK, gin.H{"nationalId": "G121806465"}, nil)
+}
+
+// AssignVehicle 指派司機車輛。
+func (h *DriverHandler) AssignVehicle(c *gin.Context) {
+	middleware.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
+}
+

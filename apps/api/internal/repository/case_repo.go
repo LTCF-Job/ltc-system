@@ -312,7 +312,8 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 	query := `
 		SELECT c.id, c.code, c.name, c.region, c.claim_start_date, c.claim_end_date,
 		       s.id as schedule_id, s.site_id, st.open_days,
-		       lower(s.effective_range) as eff_from, upper(s.effective_range) as eff_to,
+		       lower(s.effective_range) as eff_from,
+		       CASE WHEN upper_inf(s.effective_range) THEN NULL ELSE to_char(upper(s.effective_range), 'YYYY-MM-DD') END as eff_to_str,
 		       s.weekdays, s.trip_pattern
 		FROM cases c
 		JOIN case_schedules s ON c.id = s.case_id
@@ -336,17 +337,21 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 
 	for rows.Next() {
 		var sr scheduleRow
-		var effTo *time.Time
+		var effToStr *string
 		if err := rows.Scan(
 			&sr.info.CaseID, &sr.info.CaseCode, &sr.info.CaseName, &sr.info.Region,
 			&sr.info.ClaimStartDate, &sr.info.ClaimEndDate,
 			&sr.scheduleID, &sr.info.SiteID, &sr.info.SiteOpenDays,
-			&sr.info.EffectiveFrom, &effTo,
+			&sr.info.EffectiveFrom, &effToStr,
 			&sr.info.Weekdays, &sr.info.TripPattern,
 		); err != nil {
 			return nil, err
 		}
-		sr.info.EffectiveTo = effTo
+		if effToStr != nil && *effToStr != "" {
+			if t, err := time.Parse("2006-01-02", *effToStr); err == nil {
+				sr.info.EffectiveTo = &t
+			}
+		}
 		list = append(list, sr)
 	}
 

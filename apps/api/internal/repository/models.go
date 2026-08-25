@@ -137,14 +137,17 @@ type NotificationRecipientEntity struct {
 
 // NotificationLogEntity 代表通知發送歷史留痕。
 type NotificationLogEntity struct {
-	ID      int64     `json:"id"`
-	Channel string    `json:"channel"`
-	Target  string    `json:"target"`
-	Topic   string    `json:"topic"`
-	Body    string    `json:"body"`
-	SentAt  time.Time `json:"sentAt"`
-	Success bool      `json:"success"`
-	Error   *string   `json:"error,omitempty"`
+	ID              int64      `json:"id"`
+	Topic           string     `json:"topic"`
+	Channel         string     `json:"channel"`
+	RecipientEmails []string   `json:"recipientEmails"`
+	Subject         string     `json:"subject"`
+	ContentSummary  *string    `json:"contentSummary,omitempty"`
+	Status          string     `json:"status"`
+	ErrorMessage    *string    `json:"errorMessage,omitempty"`
+	TriggeredBy     *uuid.UUID `json:"triggeredBy,omitempty"`
+	TriggeredByName *string    `json:"triggeredByName,omitempty"`
+	SentAt          time.Time  `json:"sentAt"`
 }
 
 // AuditLogEntity 代表稽核日誌。

@@ -34,7 +34,7 @@ func (h *TaskHandler) CheckMissingReports(c *gin.Context) {
 
 	missingList, err := h.svc.CheckMissingReports(c.Request.Context(), targetDate, region)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "未回報檢查失敗", nil)
+		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, fmt.Sprintf("未回報檢查失敗: %s", err.Error()), nil)
 		return
 	}
 
@@ -60,7 +60,7 @@ func (h *TaskHandler) GetMissingReports(c *gin.Context) {
 
 	missingList, err := h.svc.CheckMissingReports(c.Request.Context(), targetDate, region)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "查詢未回報清單失敗", nil)
+		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, fmt.Sprintf("查詢未回報清單失敗: %s", err.Error()), nil)
 		return
 	}
 

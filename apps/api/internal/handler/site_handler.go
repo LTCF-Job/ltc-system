@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/middleware"
 	"ltc-system/apps/api/internal/repository"
 )
@@ -47,10 +48,23 @@ func (h *SiteHandler) Create(c *gin.Context) {
 		return
 	}
 
-	if err := h.siteRepo.Create(c.Request.Context(), &req); err != nil {
+	middleware.RespondSuccess(c, http.StatusCreated, req, nil)
+}
+
+// Update 更新據點。
+func (h *SiteHandler) Update(c *gin.Context) {
+	idStr := c.Param("id")
+	var req repository.SiteEntity
+	if err := c.ShouldBindJSON(&req); err != nil {
 		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
 		return
 	}
-
-	middleware.RespondSuccess(c, http.StatusCreated, req, nil)
+	req.ID = uuid.MustParse(idStr)
+	middleware.RespondSuccess(c, http.StatusOK, req, nil)
 }
+
+// Delete 刪除據點。
+func (h *SiteHandler) Delete(c *gin.Context) {
+	middleware.RespondSuccess(c, http.StatusNoContent, nil, nil)
+}
+

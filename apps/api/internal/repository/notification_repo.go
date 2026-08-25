@@ -120,15 +120,17 @@ func (r *NotificationRepository) InsertLog(ctx context.Context, log *Notificatio
 	}
 
 	query := `
-		INSERT INTO notification_log (channel, target, topic, body, sent_at, success, error)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO notification_log (topic, channel, recipient_emails, subject, content_summary, status, error_message, triggered_by, triggered_by_name, sent_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id
 	`
 	if log.SentAt.IsZero() {
 		log.SentAt = time.Now().UTC()
 	}
-	return r.db.QueryRow(ctx, query, log.Channel, log.Target, log.Topic, log.Body, log.SentAt, log.Success, log.Error).
-		Scan(&log.ID)
+	return r.db.QueryRow(ctx, query,
+		log.Topic, log.Channel, log.RecipientEmails, log.Subject, log.ContentSummary,
+		log.Status, log.ErrorMessage, log.TriggeredBy, log.TriggeredByName, log.SentAt,
+	).Scan(&log.ID)
 }
 
 // ListLogs 取得通知日誌清單（支援主題篩選與分頁）。
@@ -139,7 +141,7 @@ func (r *NotificationRepository) ListLogs(ctx context.Context, topic string, pag
 
 	offset := (page - 1) * pageSize
 	query := `
-		SELECT id, channel, target, topic, body, sent_at, success, error
+		SELECT id, topic, channel, recipient_emails, subject, content_summary, status, error_message, triggered_by, triggered_by_name, sent_at
 		FROM notification_log
 		WHERE ($1 = '' OR topic = $1)
 		ORDER BY sent_at DESC, id DESC
@@ -154,7 +156,10 @@ func (r *NotificationRepository) ListLogs(ctx context.Context, topic string, pag
 	var logs []NotificationLogEntity
 	for rows.Next() {
 		var l NotificationLogEntity
-		if err := rows.Scan(&l.ID, &l.Channel, &l.Target, &l.Topic, &l.Body, &l.SentAt, &l.Success, &l.Error); err != nil {
+		if err := rows.Scan(
+			&l.ID, &l.Topic, &l.Channel, &l.RecipientEmails, &l.Subject, &l.ContentSummary,
+			&l.Status, &l.ErrorMessage, &l.TriggeredBy, &l.TriggeredByName, &l.SentAt,
+		); err != nil {
 			return nil, 0, err
 		}
 		logs = append(logs, l)
