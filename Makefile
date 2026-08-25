@@ -1,4 +1,4 @@
-.PHONY: test build run migrate-up migrate-down clean web-dev web-build web-typecheck
+.PHONY: test build run migrate-up migrate-down clean web-dev web-build web-typecheck docker-up docker-down docker-build
 
 test:
 	cd apps/api && go test -v ./...
@@ -28,3 +28,12 @@ web-build:
 
 web-typecheck:
 	cd apps/web && npm run type-check
+
+docker-up:
+	docker compose up -d
+
+docker-down:
+	docker compose down
+
+docker-build:
+	docker compose build
