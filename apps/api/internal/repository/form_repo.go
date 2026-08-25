@@ -247,3 +247,132 @@ func (r *FormRepository) CorrectRideRecord(
 	)
 	return err
 }
+
+// GoogleFormEntity 代表 google_forms 查詢實體。
+type GoogleFormEntity struct {
+	ID                 uuid.UUID
+	VehicleID          uuid.UUID
+	VehicleDisplayName string
+	FormTitle          string
+	Region             string
+	LastSyncedAt       *time.Time
+	Status             string
+}
+
+// FormColumnMappingEntity 代表包含關聯資訊的表單欄位對應實體。
+type FormColumnMappingEntity struct {
+	ID                string
+	FormID            string
+	FormTitle         string
+	VehicleName       string
+	ColumnIndex       int
+	ColumnHeader      string
+	CleanedName       string
+	Kind              string
+	MappingStatus     string
+	CaseID            *string
+	CaseName          *string
+	LegSeq            *int16
+	SuggestedCaseID   *string
+	SuggestedCaseName *string
+	SuggestionScore   float64
+}
+
+// ListGoogleForms 查詢所有 Google 表單與所屬車輛資訊。
+func (r *FormRepository) ListGoogleForms(ctx context.Context) ([]GoogleFormEntity, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+
+	query := `
+		SELECT f.id, f.vehicle_id, COALESCE(v.display_name, '未知車輛'), f.form_title, COALESCE(v.region, 'hsinchu'),
+		       f.last_synced_at, f.status
+		FROM google_forms f
+		LEFT JOIN vehicles v ON f.vehicle_id = v.id
+		ORDER BY f.created_at ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var forms []GoogleFormEntity
+	for rows.Next() {
+		var f GoogleFormEntity
+		if err := rows.Scan(&f.ID, &f.VehicleID, &f.VehicleDisplayName, &f.FormTitle, &f.Region, &f.LastSyncedAt, &f.Status); err == nil {
+			forms = append(forms, f)
+		}
+	}
+	return forms, nil
+}
+
+// ListColumnsWithMapping 查詢表單欄位對應狀態。
+func (r *FormRepository) ListColumnsWithMapping(ctx context.Context, mappingStatus string) ([]FormColumnMappingEntity, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+
+	query := `
+		SELECT fc.id::text, fc.form_id::text, COALESCE(gf.form_title, ''), COALESCE(v.display_name, ''),
+		       fc.column_index, fc.column_header, fc.cleaned_name, fc.kind, fc.mapping_status,
+		       fc.case_id::text, COALESCE(c.name, ''), fc.leg_seq,
+		       fc.suggested_case_id::text, COALESCE(sc.name, ''), fc.suggestion_score
+		FROM form_columns fc
+		LEFT JOIN google_forms gf ON fc.form_id = gf.id
+		LEFT JOIN vehicles v ON gf.vehicle_id = v.id
+		LEFT JOIN cases c ON fc.case_id = c.id
+		LEFT JOIN cases sc ON fc.suggested_case_id = sc.id
+		WHERE 1=1
+	`
+	var args []interface{}
+	if mappingStatus != "" {
+		query += " AND fc.mapping_status = $1"
+		args = append(args, mappingStatus)
+	}
+	query += " ORDER BY fc.form_id, fc.column_index ASC"
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cols []FormColumnMappingEntity
+	for rows.Next() {
+		var c FormColumnMappingEntity
+		var caseID, caseName, suggID, suggName *string
+		if err := rows.Scan(
+			&c.ID, &c.FormID, &c.FormTitle, &c.VehicleName,
+			&c.ColumnIndex, &c.ColumnHeader, &c.CleanedName, &c.Kind, &c.MappingStatus,
+			&caseID, &caseName, &c.LegSeq,
+			&suggID, &suggName, &c.SuggestionScore,
+		); err == nil {
+			c.CaseID = caseID
+			c.CaseName = caseName
+			c.SuggestedCaseID = suggID
+			c.SuggestedCaseName = suggName
+			cols = append(cols, c)
+		}
+	}
+	return cols, nil
+}
+
+// UpdateColumnMappingById 更新指定欄位的對應狀態與個案綁定。
+func (r *FormRepository) UpdateColumnMappingById(ctx context.Context, colID string, status string, caseID *string, legSeq *int16) error {
+	if r.db == nil {
+		return nil
+	}
+
+	query := `
+		UPDATE form_columns
+		SET mapping_status = $2,
+		    case_id = $3::uuid,
+		    leg_seq = $4,
+		    updated_at = now()
+		WHERE id = $1::uuid
+	`
+	_, err := r.db.Exec(ctx, query, colID, status, caseID, legSeq)
+	return err
+}
+

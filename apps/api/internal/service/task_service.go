@@ -7,22 +7,27 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/domain/calendar"
 	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/repository"
 )
 
+// TaskRepositoryPort 定義排程檢核所需的資料庫操作介面。
+type TaskRepositoryPort interface {
+	GetReportedRideSlots(ctx context.Context, targetDate time.Time) ([]repository.ReportedRideSlot, error)
+	GetMonthEndRideStats(ctx context.Context, start, end time.Time) (repository.MonthEndRideStats, error)
+}
+
 // MissingRideItem 代表未回報之搭乘趟次。
 type MissingRideItem struct {
-	CaseID      uuid.UUID `json:"caseId"`
-	CaseCode    string    `json:"caseCode"`
-	CaseName    string    `json:"caseName"`
-	Region      string    `json:"region"`
-	ServiceDate string    `json:"serviceDate"` // YYYY-MM-DD
-	LegSeq      int16     `json:"legSeq"`
-	Direction   string    `json:"direction"`
-	DepartTime  string    `json:"departTime"`
+	CaseID      uuid.UUID  `json:"caseId"`
+	CaseCode    string     `json:"caseCode"`
+	CaseName    string     `json:"caseName"`
+	Region      string     `json:"region"`
+	ServiceDate string     `json:"serviceDate"` // YYYY-MM-DD
+	LegSeq      int16      `json:"legSeq"`
+	Direction   string     `json:"direction"`
+	DepartTime  string     `json:"departTime"`
 	VehicleID   *uuid.UUID `json:"vehicleId,omitempty"`
 }
 
@@ -38,7 +43,7 @@ type MonthEndSummary struct {
 
 // TaskService 負責處理定期與後台非同步排程任務。
 type TaskService struct {
-	db              *pgxpool.Pool
+	taskRepo        TaskRepositoryPort
 	caseRepo        *repository.CaseRepository
 	holidayRepo     *repository.HolidayRepository
 	notificationSvc *NotificationService
@@ -46,13 +51,13 @@ type TaskService struct {
 
 // NewTaskService 建立 TaskService 實例。
 func NewTaskService(
-	db *pgxpool.Pool,
+	taskRepo TaskRepositoryPort,
 	caseRepo *repository.CaseRepository,
 	holidayRepo *repository.HolidayRepository,
 	notificationSvc *NotificationService,
 ) *TaskService {
 	return &TaskService{
-		db:              db,
+		taskRepo:        taskRepo,
 		caseRepo:        caseRepo,
 		holidayRepo:     holidayRepo,
 		notificationSvc: notificationSvc,
@@ -118,32 +123,18 @@ func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.T
 		}
 	}
 
-	// 本機離線測試降級支援
-	if s.db == nil {
-		return expectedList, nil
-	}
-
-	reportedQuery := `
-		SELECT case_id, leg_seq
-		FROM ride_records
-		WHERE service_date = $1 AND effective_status != 'unreported'
-	`
-	rows, err := s.db.Query(ctx, reportedQuery, targetDate)
+	reportedSlots, err := s.taskRepo.GetReportedRideSlots(ctx, targetDate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query reported rides: %w", err)
 	}
-	defer rows.Close()
 
 	type key struct {
 		caseID uuid.UUID
 		legSeq int16
 	}
 	reportedSet := make(map[key]bool)
-	for rows.Next() {
-		var k key
-		if err := rows.Scan(&k.caseID, &k.legSeq); err == nil {
-			reportedSet[k] = true
-		}
+	for _, slot := range reportedSlots {
+		reportedSet[key{caseID: slot.CaseID, legSeq: slot.LegSeq}] = true
 	}
 
 	var missingList []MissingRideItem
@@ -174,19 +165,12 @@ func (s *TaskService) MonthEndReminder(ctx context.Context, year, month int) (*M
 		YearMonth: rocYM,
 	}
 
-	if s.db != nil {
-		query := `
-			SELECT 
-				COUNT(*) as total,
-				COUNT(CASE WHEN effective_status = 'boarded' THEN 1 END) as boarded,
-				COUNT(CASE WHEN effective_status = 'unreported' THEN 1 END) as unreported,
-				COUNT(CASE WHEN has_conflict = true THEN 1 END) as conflicts
-			FROM ride_records
-			WHERE service_date >= $1 AND service_date <= $2
-		`
-		_ = s.db.QueryRow(ctx, query, firstDay, lastDay).Scan(
-			&summary.TotalRides, &summary.BoardedRides, &summary.UnreportedRides, &summary.ConflictCount,
-		)
+	stats, err := s.taskRepo.GetMonthEndRideStats(ctx, firstDay, lastDay)
+	if err == nil {
+		summary.TotalRides = stats.TotalRides
+		summary.BoardedRides = stats.BoardedRides
+		summary.UnreportedRides = stats.UnreportedRides
+		summary.ConflictCount = stats.ConflictCount
 	}
 
 	if s.notificationSvc != nil {
@@ -201,3 +185,4 @@ func (s *TaskService) MonthEndReminder(ctx context.Context, year, month int) (*M
 
 	return summary, nil
 }
+

@@ -11,6 +11,7 @@ import (
 	"ltc-system/apps/api/internal/config"
 	"ltc-system/apps/api/internal/domain/govform"
 	"ltc-system/apps/api/internal/export"
+	"ltc-system/apps/api/internal/repository"
 	"ltc-system/apps/api/internal/service"
 )
 
@@ -43,7 +44,8 @@ func main() {
 
 	slog.Info("Starting Export Job", slog.String("periodYM", periodYM), slog.String("region", region))
 
-	precheckSvc := service.NewPrecheckService(pool)
+	precheckRepo := repository.NewPrecheckRepository(pool)
+	precheckSvc := service.NewPrecheckService(precheckRepo)
 	report, err := precheckSvc.RunPrecheck(ctx, periodYM, region)
 	if err != nil || !report.Passed {
 		slog.Error("Precheck failed, aborting export", slog.Int("errors", report.TotalErrors))

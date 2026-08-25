@@ -273,27 +273,28 @@ watch(
   (s) => {
     if (s) {
       formData.siteId = s.siteId
-      formData.effectiveFrom = s.effectiveFrom
-      formData.tripPattern = s.tripPattern
-      formData.weekdays = [...s.weekdays]
-      formData.unitPrice = s.unitPrice
-      formData.distanceKm = s.distanceKm
-      formData.serviceDurationMin = s.serviceDurationMin
-      formData.legs = s.legs.map((leg) => ({
-        legSeq: leg.legSeq,
-        direction: leg.direction,
-        departTime: leg.departTime,
-        arriveTime: leg.arriveTime,
-        runNo: leg.runNo,
-        vehicleId: leg.vehicleId
-      }))
+      formData.effectiveFrom = s.effectiveFrom || new Date().toISOString().split('T')[0]
+      formData.tripPattern = s.tripPattern || 2
+      formData.weekdays = s.weekdays && s.weekdays.length > 0 ? [...s.weekdays] : [1, 2, 3, 4, 5]
+      formData.unitPrice = s.unitPrice ?? 115
+      formData.distanceKm = s.distanceKm ?? 5
+      formData.serviceDurationMin = s.serviceDurationMin ?? 10
+      if (s.legs && s.legs.length > 0) {
+        formData.legs = s.legs.map((leg) => ({
+          legSeq: leg.legSeq,
+          direction: leg.direction,
+          departTime: leg.departTime || '09:00',
+          arriveTime: leg.arriveTime || '',
+          runNo: leg.runNo || 1,
+          vehicleId: leg.vehicleId
+        }))
+      }
     }
   },
-  { immediate: true }
+  { immediate: true, deep: true }
 )
 
-onMounted(async () => {
-  // 載入相同區域的據點與車輛
+async function loadSitesAndVehicles() {
   const [sitesRes, vehiclesRes] = await Promise.all([
     listSites({ region: props.region, pageSize: 100 }),
     listVehicles({ region: props.region, active: true, pageSize: 100 })
@@ -304,11 +305,24 @@ onMounted(async () => {
   if (!formData.siteId && availableSites.value.length > 0) {
     formData.siteId = availableSites.value[0].id
   }
-  if (!formData.legs[0]?.vehicleId && availableVehicles.value.length > 0) {
+  if (availableVehicles.value.length > 0) {
     formData.legs.forEach((leg) => {
-      if (!leg.vehicleId) leg.vehicleId = availableVehicles.value[0].id
+      if (!leg.vehicleId) {
+        leg.vehicleId = availableVehicles.value[0].id
+      }
     })
   }
+}
+
+watch(
+  () => props.region,
+  () => {
+    loadSitesAndVehicles()
+  }
+)
+
+onMounted(async () => {
+  await loadSitesAndVehicles()
 })
 
 async function handleSave() {

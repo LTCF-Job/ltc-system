@@ -70,7 +70,7 @@
           <el-table-column
             v-if="authStore.can('staff')"
             label="操作"
-            width="120"
+            width="140"
             fixed="right"
             align="center"
           >
@@ -78,8 +78,10 @@
               <el-button link type="primary" size="small" @click="openEditDialog(row)">
                 編輯
               </el-button>
+              <el-button link type="danger" size="small" @click="handleDeleteVehicle(row as any)">
+                刪除
+              </el-button>
             </template>
-
           </el-table-column>
 
         </el-table>
@@ -122,9 +124,9 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
-import { ElMessage, type FormInstance } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
-import { listVehicles, createVehicle, updateVehicle } from '@/api/masters'
+import { listVehicles, createVehicle, updateVehicle, deleteVehicle } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { REGION_LABELS, type Region } from '@/types/domain'
@@ -218,6 +220,28 @@ async function handleSubmit() {
       submitting.value = false
     }
   })
+}
+
+async function handleDeleteVehicle(row: VehicleDTO) {
+  try {
+    await ElMessageBox.confirm(
+      `確定要刪除車輛「${row.displayName} (${row.plateNo})」？`,
+      '刪除確認',
+      {
+        confirmButtonText: '確定刪除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+    await deleteVehicle(row.id)
+    ElMessage.success(`車輛「${row.displayName}」已成功刪除`)
+    executeFetch()
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(err.message || '刪除車輛失敗')
+    }
+  }
 }
 
 executeFetch()

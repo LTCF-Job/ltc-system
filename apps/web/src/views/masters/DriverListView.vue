@@ -79,7 +79,7 @@
           <el-table-column
             v-if="authStore.can('staff')"
             label="操作"
-            width="160"
+            width="200"
             fixed="right"
             align="center"
           >
@@ -89,6 +89,9 @@
               </el-button>
               <el-button link type="success" size="small" @click="openAssignDialog(row)">
                 指派車輛
+              </el-button>
+              <el-button link type="danger" size="small" @click="handleDeleteDriver(row as any)">
+                刪除
               </el-button>
             </template>
           </el-table-column>
@@ -172,13 +175,14 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
-import { ElMessage, type FormInstance } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import MaskedId from '@/components/MaskedId.vue'
 import DataTablePage from '@/components/DataTablePage.vue'
 import {
   listDrivers,
   createDriver,
   updateDriver,
+  deleteDriver,
   revealDriverId,
   assignDriverVehicle,
   listVehicles
@@ -320,6 +324,28 @@ async function handleAssignSubmit() {
       submitting.value = false
     }
   })
+}
+
+async function handleDeleteDriver(row: DriverDTO) {
+  try {
+    await ElMessageBox.confirm(
+      `確定要刪除司機「${row.name} (${row.code})」？`,
+      '刪除確認',
+      {
+        confirmButtonText: '確定刪除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+    await deleteDriver(row.id)
+    ElMessage.success(`司機「${row.name}」已成功刪除`)
+    executeFetch()
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(err.message || '刪除司機失敗')
+    }
+  }
 }
 
 onMounted(async () => {

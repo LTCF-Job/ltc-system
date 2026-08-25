@@ -19,7 +19,7 @@
       <div class="action-group">
         <el-button
           v-if="authStore.can('staff') && caseData?.status === 'active'"
-          type="danger"
+          type="warning"
           plain
           @click="handleToggleStatus('suspended')"
         >
@@ -32,6 +32,14 @@
           @click="handleToggleStatus('active')"
         >
           恢復在案
+        </el-button>
+        <el-button
+          v-if="authStore.can('staff')"
+          type="danger"
+          plain
+          @click="handleDeleteCase"
+        >
+          刪除個案
         </el-button>
       </div>
     </div>
@@ -49,11 +57,7 @@
           <el-descriptions title="系統與身分資訊" :column="2" border style="margin-bottom: 20px">
             <el-descriptions-item label="個案編號">{{ caseData?.code }}</el-descriptions-item>
             <el-descriptions-item label="身分證字號">
-              <MaskedId
-                v-if="caseData"
-                :masked-value="caseData.nationalId"
-                :on-reveal="fetchPlainId"
-              />
+              <span class="font-mono font-bold">{{ caseData?.nationalId }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="建立時間">{{ caseData?.createdAt }}</el-descriptions-item>
             <el-descriptions-item label="最後更新">{{ caseData?.updatedAt }}</el-descriptions-item>
@@ -151,24 +155,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import MaskedId from '@/components/MaskedId.vue'
 import ScheduleEditor from './ScheduleEditor.vue'
-import { getCase, updateCase, revealCaseId } from '@/api/cases'
+import { getCase, updateCase, deleteCase, getCaseSchedule } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
 import { CASE_STATUS_LABELS, REGION_LABELS } from '@/types/domain'
 import type { CaseDTO, UpdateCaseRequest } from '@/types/api'
 
 const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
-const caseId = route.params.id as string
+const caseId = computed(() => route.params.id as string)
 
 const loading = ref(false)
 const saving = ref(false)
-const activeTab = ref('basic')
+const activeTab = ref(route.query.tab === 'schedule' ? 'schedule' : 'basic')
 const caseData = ref<CaseDTO | null>(null)
 
 const editForm = reactive<UpdateCaseRequest>({
@@ -182,31 +186,42 @@ const editForm = reactive<UpdateCaseRequest>({
 })
 
 async function fetchDetail() {
+  if (!caseId.value) return
   loading.value = true
   try {
-    const res = await getCase(caseId)
+    const [rawCase, rawSchedule] = await Promise.all([
+      getCase(caseId.value) as Promise<any>,
+      getCaseSchedule(caseId.value).catch(() => null) as Promise<any>
+    ])
+    const res: any = rawCase?.data ?? rawCase
+    const sched: any = rawSchedule?.data ?? rawSchedule
+
+    if (!res) return
+
+    res.nationalId = res.nationalId || res.nationalIdMasked || ''
+    if (sched) {
+      res.activeSchedule = sched?.data ?? sched
+    }
+
     caseData.value = res
-    editForm.name = res.name
-    editForm.region = res.region
-    editForm.homeAddress = res.homeAddress
-    editForm.serviceCategory = res.serviceCategory
-    editForm.serviceUsageType = res.serviceUsageType
-    editForm.claimStartDate = res.claimStartDate
-    editForm.claimEndDate = res.claimEndDate
+    editForm.name = res.name || ''
+    editForm.region = res.region || 'miaoli'
+    editForm.homeAddress = res.homeAddress || ''
+    editForm.serviceCategory = res.serviceCategory || 1
+    editForm.serviceUsageType = res.serviceUsageType || 2
+    editForm.claimStartDate = res.claimStartDate ? String(res.claimStartDate).slice(0, 10) : ''
+    editForm.claimEndDate = res.claimEndDate ? String(res.claimEndDate).slice(0, 10) : ''
+  } catch (err: any) {
+    ElMessage.error(err.message || '載入個案明細失敗')
   } finally {
     loading.value = false
   }
 }
 
-async function fetchPlainId(): Promise<string> {
-  const res = await revealCaseId(caseId)
-  return res.nationalId
-}
-
 async function handleUpdateCase() {
   saving.value = true
   try {
-    await updateCase(caseId, editForm)
+    await updateCase(caseId.value, editForm)
     ElMessage.success('個案基本資料已更新')
     fetchDetail()
   } finally {
@@ -226,10 +241,48 @@ async function handleToggleStatus(newStatus: 'active' | 'suspended') {
     }
   )
 
-  await updateCase(caseId, { status: newStatus })
+  await updateCase(caseId.value, { status: newStatus })
   ElMessage.success(`個案已${actionText}`)
   fetchDetail()
 }
+
+async function handleDeleteCase() {
+  try {
+    await ElMessageBox.confirm(
+      `確定要刪除個案「${caseData.value?.name} (${caseData.value?.code})」？此操作將一併移除其關聯排班資料，且無法復原。`,
+      '刪除確認',
+      {
+        confirmButtonText: '確定刪除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+    await deleteCase(caseId.value)
+    ElMessage.success(`個案「${caseData.value?.name}」已成功刪除`)
+    router.push('/cases')
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(err.message || '刪除個案失敗')
+    }
+  }
+}
+
+watch(
+  () => route.params.id,
+  () => {
+    fetchDetail()
+  }
+)
+
+watch(
+  () => route.query.tab,
+  (newTab) => {
+    if (newTab === 'schedule' || newTab === 'basic') {
+      activeTab.value = newTab
+    }
+  }
+)
 
 onMounted(() => {
   fetchDetail()

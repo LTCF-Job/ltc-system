@@ -213,7 +213,7 @@ function onSizeChange(size: number) {
   fetchAuditLogs()
 }
 
-function openDetail(log: any) {
+function openDetail(log: AuditLogDTO) {
   selectedLog.value = log
   detailVisible.value = true
 }

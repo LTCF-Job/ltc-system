@@ -5,8 +5,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/repository"
 )
+
+// DashboardRepositoryPort 定義儀表板資料庫操作介面。
+type DashboardRepositoryPort interface {
+	GetActiveCasesCount(ctx context.Context) (int, error)
+	GetReportedTripsCount(ctx context.Context, start, end time.Time) (int, error)
+	GetPendingConflictsCount(ctx context.Context) (int, error)
+	GetPendingFormColumnsCount(ctx context.Context) (int, error)
+	GetVehicleTripTrends(ctx context.Context, start, end time.Time) ([]repository.VehicleTripTrendData, error)
+	GetAttendanceDistribution(ctx context.Context, start, end time.Time) (map[string]int, error)
+}
 
 // AttendanceDistributionDTO 代表出勤狀況分佈。
 type AttendanceDistributionDTO struct {
@@ -39,12 +49,12 @@ type DashboardMetricsDTO struct {
 
 // DashboardService 提供儀表板整合統計資料。
 type DashboardService struct {
-	db *pgxpool.Pool
+	repo DashboardRepositoryPort
 }
 
 // NewDashboardService 建立 DashboardService 實例。
-func NewDashboardService(db *pgxpool.Pool) *DashboardService {
-	return &DashboardService{db: db}
+func NewDashboardService(repo DashboardRepositoryPort) *DashboardService {
+	return &DashboardService{repo: repo}
 }
 
 // GetMetrics 查詢儀表板完整營運與圖表統計指標。
@@ -71,7 +81,7 @@ func (s *DashboardService) GetMetrics(ctx context.Context, periodYm string) (*Da
 		ClaimFulfillmentRate: 95.0,
 	}
 
-	if s.db == nil {
+	if s.repo == nil {
 		dto.TotalCasesCount = 186
 		dto.ReportedTripsCount = 1420
 		dto.PendingConflictsCount = 2
@@ -94,76 +104,47 @@ func (s *DashboardService) GetMetrics(ctx context.Context, periodYm string) (*Da
 		return dto, nil
 	}
 
-	_ = s.db.QueryRow(ctx, "SELECT COUNT(*) FROM cases WHERE status = 'active'").Scan(&dto.TotalCasesCount)
+	if casesCount, err := s.repo.GetActiveCasesCount(ctx); err == nil {
+		dto.TotalCasesCount = casesCount
+	}
 
-	_ = s.db.QueryRow(ctx, `
-		SELECT COUNT(*) 
-		FROM ride_records 
-		WHERE service_date >= $1 AND service_date < $2 AND effective_status = 'boarded'
-	`, startDate, endDate).Scan(&dto.ReportedTripsCount)
+	if tripsCount, err := s.repo.GetReportedTripsCount(ctx, startDate, endDate); err == nil {
+		dto.ReportedTripsCount = tripsCount
+	}
 
-	_ = s.db.QueryRow(ctx, `
-		SELECT COUNT(*) 
-		FROM ride_records 
-		WHERE has_conflict = true AND conflict_resolved_at IS NULL
-	`).Scan(&dto.PendingConflictsCount)
+	if conflictsCount, err := s.repo.GetPendingConflictsCount(ctx); err == nil {
+		dto.PendingConflictsCount = conflictsCount
+	}
 
-	_ = s.db.QueryRow(ctx, `
-		SELECT COUNT(*) 
-		FROM form_columns 
-		WHERE mapping_status = 'pending'
-	`).Scan(&dto.PendingFormColumnsCount)
+	if colsCount, err := s.repo.GetPendingFormColumnsCount(ctx); err == nil {
+		dto.PendingFormColumnsCount = colsCount
+	}
 
-	trendRows, err := s.db.Query(ctx, `
-		SELECT v.display_name, v.plate_no, COUNT(r.id) as trips
-		FROM vehicles v
-		LEFT JOIN ride_records r ON r.vehicle_id = v.id 
-		  AND r.service_date >= $1 AND r.service_date < $2 
-		  AND r.effective_status = 'boarded'
-		GROUP BY v.id, v.display_name, v.plate_no
-		ORDER BY v.display_name ASC
-	`, startDate, endDate)
-	if err == nil {
-		defer trendRows.Close()
-		for trendRows.Next() {
-			var vName, plateNo string
-			var trips int
-			if err := trendRows.Scan(&vName, &plateNo, &trips); err == nil {
-				dto.VehicleTripTrends = append(dto.VehicleTripTrends, VehicleTripTrendItemDTO{
-					VehicleName: vName,
-					PlateNo:     plateNo,
-					TripCount:   trips,
-				})
-			}
+	if trends, err := s.repo.GetVehicleTripTrends(ctx, startDate, endDate); err == nil {
+		for _, t := range trends {
+			dto.VehicleTripTrends = append(dto.VehicleTripTrends, VehicleTripTrendItemDTO{
+				VehicleName: t.VehicleName,
+				PlateNo:     t.PlateNo,
+				TripCount:   t.TripCount,
+			})
 		}
 	}
 
-	attRows, err := s.db.Query(ctx, `
-		SELECT status, COUNT(*)
-		FROM attendance_records
-		WHERE record_date >= $1 AND record_date < $2
-		GROUP BY status
-	`, startDate, endDate)
-	if err == nil {
-		defer attRows.Close()
+	if dist, err := s.repo.GetAttendanceDistribution(ctx, startDate, endDate); err == nil {
 		totalWorkingDays := 0
-		for attRows.Next() {
-			var status string
-			var count int
-			if err := attRows.Scan(&status, &count); err == nil {
-				switch status {
-				case "work":
-					dto.AttendanceDistribution.WorkCount = count
-					totalWorkingDays += count
-				case "leave":
-					dto.AttendanceDistribution.LeaveCount = count
-					totalWorkingDays += count
-				case "sick":
-					dto.AttendanceDistribution.SickCount = count
-					totalWorkingDays += count
-				case "off":
-					dto.AttendanceDistribution.OffCount = count
-				}
+		for status, count := range dist {
+			switch status {
+			case "work":
+				dto.AttendanceDistribution.WorkCount = count
+				totalWorkingDays += count
+			case "leave":
+				dto.AttendanceDistribution.LeaveCount = count
+				totalWorkingDays += count
+			case "sick":
+				dto.AttendanceDistribution.SickCount = count
+				totalWorkingDays += count
+			case "off":
+				dto.AttendanceDistribution.OffCount = count
 			}
 		}
 		if totalWorkingDays > 0 {

@@ -21,16 +21,15 @@
           <template #title>總覽儀表板</template>
         </el-menu-item>
 
-        <el-menu-item index="/cases">
-          <el-icon><User /></el-icon>
-          <template #title>個案管理</template>
-        </el-menu-item>
-
         <el-sub-menu index="masters">
           <template #title>
             <el-icon><Management /></el-icon>
             <span>主檔資料</span>
           </template>
+          <el-menu-item index="/cases">
+            <el-icon><User /></el-icon>
+            <template #title>個案管理</template>
+          </el-menu-item>
           <el-menu-item index="/masters/sites">
             <el-icon><Location /></el-icon>
             <template #title>據點管理</template>

@@ -54,6 +54,10 @@ export async function updateVehicle(id: string, data: UpdateVehicleRequest): Pro
   return apiClient.patch(`/vehicles/${id}`, data)
 }
 
+export async function deleteVehicle(id: string): Promise<void> {
+  return apiClient.delete(`/vehicles/${id}`)
+}
+
 // 司機 Drivers
 export async function listDrivers(params?: {
   page?: number
@@ -70,6 +74,10 @@ export async function createDriver(data: CreateDriverRequest): Promise<DriverDTO
 
 export async function updateDriver(id: string, data: UpdateDriverRequest): Promise<DriverDTO> {
   return apiClient.patch(`/drivers/${id}`, data)
+}
+
+export async function deleteDriver(id: string): Promise<void> {
+  return apiClient.delete(`/drivers/${id}`)
 }
 
 export async function revealDriverId(id: string): Promise<{ nationalId: string }> {

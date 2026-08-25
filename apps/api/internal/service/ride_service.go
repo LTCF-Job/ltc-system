@@ -2,14 +2,12 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/domain/merge"
 	"ltc-system/apps/api/internal/domain/namenorm"
 	"ltc-system/apps/api/internal/middleware"
@@ -18,27 +16,27 @@ import (
 
 // RideService 封裝 Google 表單回報解析、正規化、混車合併、衝突裁決與更正。
 type RideService struct {
-	db          *pgxpool.Pool
 	formRepo    *repository.FormRepository
 	driverRepo  *repository.DriverRepository
 	caseRepo    *repository.CaseRepository
 	vehicleRepo *repository.VehicleRepository
+	auditRepo   *repository.AuditRepository
 }
 
 // NewRideService 建立 RideService 實例。
 func NewRideService(
-	db *pgxpool.Pool,
 	formRepo *repository.FormRepository,
 	driverRepo *repository.DriverRepository,
 	caseRepo *repository.CaseRepository,
 	vehicleRepo *repository.VehicleRepository,
+	auditRepo *repository.AuditRepository,
 ) *RideService {
 	return &RideService{
-		db:          db,
 		formRepo:    formRepo,
 		driverRepo:  driverRepo,
 		caseRepo:    caseRepo,
 		vehicleRepo: vehicleRepo,
+		auditRepo:   auditRepo,
 	}
 }
 
@@ -53,10 +51,6 @@ type ProcessFormWebhookRequest struct {
 
 // IngestWebhook 處理 Google 表單回報並執行欄位正規化、四趟展開與混車合併。
 func (s *RideService) IngestWebhook(ctx context.Context, secret string, req ProcessFormWebhookRequest) error {
-	if s.db == nil {
-		return errors.New("database unavailable")
-	}
-
 	formID, defaultVehicleID, err := s.formRepo.GetFormBySecret(ctx, secret)
 	if err != nil {
 		return middleware.ErrInvalidToken
@@ -268,10 +262,6 @@ func (s *RideService) CorrectRideRecord(
 	actorID uuid.UUID,
 	actorRole, ip, ua string,
 ) error {
-	if s.db == nil {
-		return errors.New("database unavailable")
-	}
-
 	err := s.formRepo.CorrectRideRecord(
 		ctx, rideID, req.EffectiveStatus, req.VehicleID, req.DriverID,
 		req.DepartTimeOverride, req.DurationMinOverride, req.NotClaimedAA09, req.Reason, actorID,
@@ -280,16 +270,19 @@ func (s *RideService) CorrectRideRecord(
 		return fmt.Errorf("failed to correct ride record: %w", err)
 	}
 
-	_ = middleware.RecordAuditLog(ctx, s.db, middleware.AuditLogEntry{
-		ActorID:    actorID,
-		ActorRole:  actorRole,
-		Action:     "correct",
-		EntityType: "ride_records",
-		EntityID:   rideID.String(),
-		AfterData:  req,
-		IPAddress:  ip,
-		UserAgent:  ua,
-	})
+	if s.auditRepo != nil {
+		entityIDStr := rideID.String()
+		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+			ActorID:    &actorID,
+			ActorRole:  &actorRole,
+			Action:     "correct",
+			EntityType: "ride_records",
+			EntityID:   &entityIDStr,
+			AfterData:  req,
+			IPAddress:  &ip,
+			UserAgent:  &ua,
+		})
+	}
 
 	return nil
 }

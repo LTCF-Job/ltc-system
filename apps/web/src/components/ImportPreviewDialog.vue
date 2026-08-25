@@ -8,21 +8,48 @@
   >
     <!-- 第一步：上傳檔案與檢核 -->
     <div v-if="!dryRunResult" class="upload-section">
+      <div v-if="onDownloadTemplate" class="template-tip-box">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="匯入前請先下載標準範本填寫，確認欄位格式正確後再上傳。"
+        >
+          <template #default>
+            <div class="template-action">
+              <span>依照範本格式填寫個案姓名、身分證字號、區域及排班趟數等必填欄位。</span>
+              <el-button
+                type="primary"
+                plain
+                size="small"
+                :loading="downloadingTemplate"
+                @click="handleDownloadTemplate"
+                style="margin-top: 8px"
+              >
+                <el-icon><Download /></el-icon>
+                下載匯入範本 (.csv)
+              </el-button>
+            </div>
+          </template>
+        </el-alert>
+      </div>
+
       <el-upload
         drag
         action="#"
         :auto-upload="false"
         :limit="1"
         :on-change="handleFileChange"
-        accept=".xlsx,.xls"
+        accept=".xlsx,.xls,.csv"
+        style="width: 100%; margin-top: 16px;"
       >
         <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
         <div class="el-upload__text">
-          拖曳 Excel 檔案至此，或 <em>點選上傳</em>
+          拖曳 Excel / CSV 檔案至此，或 <em>點選上傳</em>
         </div>
         <template #tip>
           <div class="el-upload__tip">
-            僅支援 .xlsx 與 .xls 格式之批次匯入檔案
+            支援 .xlsx、.xls 與 .csv 格式之批次匯入檔案
           </div>
         </template>
       </el-upload>
@@ -111,7 +138,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { UploadFilled, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { DryRunImportResultDTO } from '@/types/api'
 
@@ -119,6 +146,7 @@ const props = defineProps<{
   title: string
   onDryRun: (file: File) => Promise<DryRunImportResultDTO>
   onCommit: (file: File) => Promise<void>
+  onDownloadTemplate?: () => Promise<void> | void
 }>()
 
 const emit = defineEmits<{
@@ -129,7 +157,18 @@ const visible = ref(false)
 const selectedFile = ref<File | null>(null)
 const analyzing = ref(false)
 const submitting = ref(false)
+const downloadingTemplate = ref(false)
 const dryRunResult = ref<DryRunImportResultDTO | null>(null)
+
+async function handleDownloadTemplate() {
+  if (!props.onDownloadTemplate) return
+  downloadingTemplate.value = true
+  try {
+    await props.onDownloadTemplate()
+  } finally {
+    downloadingTemplate.value = false
+  }
+}
 
 function open() {
   selectedFile.value = null
