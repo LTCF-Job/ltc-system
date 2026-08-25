@@ -133,3 +133,57 @@ export const CORRECTION_REASONS = [
   '混車確認',
   '其他'
 ] as const
+
+export type NotificationTopic = 'missing_report' | 'driver_leave' | 'month_end' | 'export_failed'
+
+export const NOTIFICATION_TOPIC_LABELS: Record<NotificationTopic, string> = {
+  missing_report: '未回報催報',
+  driver_leave: '司機請假通知',
+  month_end: '月底提醒',
+  export_failed: '匯出失敗通知'
+}
+
+export type AuditAction =
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'reveal_pii'
+  | 'correct'
+  | 'resolve_conflict'
+  | 'export'
+  | 'setting_change'
+  | 'import'
+
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  create: '主檔新增',
+  update: '主檔修改',
+  delete: '主檔停用/刪除',
+  reveal_pii: '查看完整身分證',
+  correct: '搭乘紀錄更正',
+  resolve_conflict: '衝突裁決',
+  export: '申報匯出',
+  setting_change: '系統設定變更',
+  import: '批次匯入'
+}
+
+export type AuditEntityType =
+  | 'cases'
+  | 'sites'
+  | 'vehicles'
+  | 'drivers'
+  | 'ride_records'
+  | 'notification_recipients'
+  | 'export_jobs'
+  | 'app_settings'
+
+export const AUDIT_ENTITY_LABELS: Record<AuditEntityType, string> = {
+  cases: '個案主檔',
+  sites: '據點主檔',
+  vehicles: '車輛主檔',
+  drivers: '司機主檔',
+  ride_records: '搭乘紀錄',
+  notification_recipients: '通知收件人',
+  export_jobs: '匯出工作',
+  app_settings: '系統設定'
+}
+

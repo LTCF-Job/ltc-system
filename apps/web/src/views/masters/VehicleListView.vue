@@ -79,7 +79,9 @@
                 編輯
               </el-button>
             </template>
+
           </el-table-column>
+
         </el-table>
       </template>
     </DataTablePage>
@@ -188,7 +190,7 @@ function openCreateDialog() {
   dialogVisible.value = true
 }
 
-function openEditDialog(row: VehicleDTO) {
+function openEditDialog(row: any) {
   editingId.value = row.id
   form.displayName = row.displayName
   form.plateNo = row.plateNo

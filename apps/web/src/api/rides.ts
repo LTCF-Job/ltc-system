@@ -5,6 +5,7 @@ import type {
   PatchRideRequest,
   ResolveConflictRequest,
   IssueRideDTO,
+  MissingRideDTO,
   Paged
 } from '@/types/api'
 
@@ -36,3 +37,16 @@ export async function listIssueRides(params?: {
 }): Promise<Paged<IssueRideDTO>> {
   return apiClient.get('/rides/issues', { params })
 }
+
+export async function listMissingRides(params?: {
+  page?: number
+  pageSize?: number
+  startDate?: string
+  endDate?: string
+  region?: string
+  vehicleId?: string
+  caseId?: string
+}): Promise<Paged<MissingRideDTO>> {
+  return apiClient.get('/rides/missing', { params })
+}
+

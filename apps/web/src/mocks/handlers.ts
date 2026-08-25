@@ -8,8 +8,14 @@ import {
   mockFormColumns,
   mockPrecheckResult,
   mockExportJobs,
-  mockDashboardStats
+  mockDashboardStats,
+  mockAuditLogs,
+  mockNotificationRecipients,
+  mockNotificationLogs,
+  mockMissingRides,
+  mockTripSummaryReport
 } from './data/mockData'
+
 
 export const handlers = [
   // 1. 個案與排班
@@ -473,5 +479,150 @@ export const handlers = [
   // 6. 儀表板
   http.get('/api/v1/dashboard/stats', () => {
     return HttpResponse.json(mockDashboardStats)
+  }),
+
+  // 7. 未回報清單
+  http.get('/api/v1/rides/missing', ({ request }) => {
+    const url = new URL(request.url)
+    const vehicleId = url.searchParams.get('vehicleId')
+    let list = [...mockMissingRides]
+    if (vehicleId) {
+      list = list.filter((r) => r.vehicleId === vehicleId)
+    }
+    return HttpResponse.json({
+      data: list,
+      meta: {
+        page: 1,
+        pageSize: 20,
+        total: list.length,
+        totalPages: 1
+      }
+    })
+  }),
+
+  // 8. 車輛趟數表
+  http.get('/api/v1/reports/trip-summary', ({ request }) => {
+    const url = new URL(request.url)
+    const vehicleId = url.searchParams.get('vehicleId')
+    const report = { ...mockTripSummaryReport }
+    if (vehicleId) {
+      report.vehicles = report.vehicles.filter((v) => v.vehicleId === vehicleId)
+    }
+    return HttpResponse.json(report)
+  }),
+
+  http.get('/api/v1/reports/trip-summary/export', () => {
+    const dummyBlob = new Blob(['mock-excel-binary-data'], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    })
+    return new HttpResponse(dummyBlob, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': 'attachment; filename="trip-summary.xlsx"'
+      }
+    })
+  }),
+
+  // 9. 系統稽核紀錄
+  http.get('/api/v1/audit', ({ request }) => {
+    const url = new URL(request.url)
+    const action = url.searchParams.get('action')
+    const entityType = url.searchParams.get('entityType')
+    let list = [...mockAuditLogs]
+    if (action) {
+      list = list.filter((a) => a.action === action)
+    }
+    if (entityType) {
+      list = list.filter((a) => a.entityType === entityType)
+    }
+    return HttpResponse.json({
+      data: list,
+      meta: {
+        page: 1,
+        pageSize: 20,
+        total: list.length,
+        totalPages: 1
+      }
+    })
+  }),
+
+  // 10. 通知收件人管理
+  http.get('/api/v1/settings/notification-recipients', ({ request }) => {
+    const url = new URL(request.url)
+    const topic = url.searchParams.get('topic')
+    let list = [...mockNotificationRecipients]
+    if (topic) {
+      list = list.filter((r) => r.topic === topic)
+    }
+    return HttpResponse.json(list)
+  }),
+
+  http.post('/api/v1/settings/notification-recipients', async ({ request }) => {
+    const body = (await request.json()) as any
+    const newRecipient = {
+      id: `rec_${Date.now()}`,
+      topic: body.topic,
+      email: body.email,
+      displayName: body.displayName || '',
+      active: body.active !== undefined ? body.active : true,
+      createdByName: '系統管理員',
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    }
+    mockNotificationRecipients.push(newRecipient)
+    return HttpResponse.json(newRecipient)
+  }),
+
+  http.patch('/api/v1/settings/notification-recipients/:id', async ({ params, request }) => {
+    const target = mockNotificationRecipients.find((r) => r.id === params.id)
+    if (!target) return new HttpResponse(null, { status: 404 })
+    const body = (await request.json()) as any
+    Object.assign(target, body)
+    return HttpResponse.json(target)
+  }),
+
+  http.delete('/api/v1/settings/notification-recipients/:id', ({ params }) => {
+    const idx = mockNotificationRecipients.findIndex((r) => r.id === params.id)
+    if (idx !== -1) mockNotificationRecipients.splice(idx, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  // 11. 通知歷史紀錄
+  http.get('/api/v1/notifications/logs', ({ request }) => {
+    const url = new URL(request.url)
+    const topic = url.searchParams.get('topic')
+    let list = [...mockNotificationLogs]
+    if (topic) {
+      list = list.filter((l) => l.topic === topic)
+    }
+    return HttpResponse.json({
+      data: list,
+      meta: {
+        page: 1,
+        pageSize: 20,
+        total: list.length,
+        totalPages: 1
+      }
+    })
+  }),
+
+  // 12. 任務手動觸發
+  http.post('/api/v1/tasks/check-missing-reports', () => {
+    const newLog = {
+      id: `nlog_${Date.now()}`,
+      topic: 'missing_report' as const,
+      channel: 'email' as const,
+      recipientEmails: ['admin@ltc.example.com'],
+      subject: `【長照交通系統】手動催報執行通知 (${new Date().toLocaleDateString()})`,
+      contentSummary: `已發送未回報提醒，共計 ${mockMissingRides.length} 筆待回報項目。`,
+      status: 'sent' as const,
+      triggeredByName: '當前操作人員 (手動觸發)',
+      sentAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    }
+    mockNotificationLogs.unshift(newLog)
+    return HttpResponse.json({
+      triggeredCount: mockMissingRides.length,
+      message: `已成功執行未回報檢核，並發送催報通知至收件人信箱。`
+    })
   })
 ]
+

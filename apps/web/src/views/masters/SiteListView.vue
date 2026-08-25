@@ -79,7 +79,9 @@
                 刪除
               </el-button>
             </template>
+
           </el-table-column>
+
         </el-table>
       </template>
     </DataTablePage>
@@ -193,7 +195,7 @@ function openCreateDialog() {
   dialogVisible.value = true
 }
 
-function openEditDialog(row: SiteDTO) {
+function openEditDialog(row: any) {
   editingId.value = row.id
   form.name = row.name
   form.region = row.region
@@ -223,7 +225,7 @@ async function handleSubmit() {
   })
 }
 
-async function handleDelete(row: SiteDTO) {
+async function handleDelete(row: any) {
   await ElMessageBox.confirm(`確定刪除據點「${row.name}」？此操作無法還原。`, '確認刪除', {
     confirmButtonText: '確定',
     cancelButtonText: '取消',

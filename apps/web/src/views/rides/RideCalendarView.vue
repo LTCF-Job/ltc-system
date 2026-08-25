@@ -171,6 +171,8 @@
             </template>
             <div v-else class="calendar-cell status-non-scheduled" />
           </template>
+
+
         </el-table-column>
       </el-table>
     </el-card>
@@ -225,7 +227,7 @@ async function fetchMatrix() {
   }
 }
 
-function getCell(row: CaseRideCalendarRowDTO, day: number) {
+function getCell(row: any, day: number) {
   const dayKey = `${selectedDate.value}-${String(day).padStart(2, '0')}`
   return row.days[dayKey]
 }

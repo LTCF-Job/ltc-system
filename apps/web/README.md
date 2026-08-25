@@ -45,3 +45,16 @@ npm run build
 ```bash
 npm run gen:types
 ```
+
+## 4. Docker 容器化建置
+
+獨立建置前端映像檔：
+```bash
+docker build -t ltc-web ./apps/web
+```
+
+透過專案根目錄之 Docker Compose 啟動完整環境（含 Postgres、API 與 Web）：
+```bash
+docker compose up -d --build
+```
+啟動後前端可透過 `http://localhost:3000` 瀏覽，Nginx 會自動將 `/api/` 請求反向代理至後端 API 服務。

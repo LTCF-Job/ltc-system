@@ -11,7 +11,10 @@ import type {
   ExportJobType,
   ExportJobStatus,
   ServiceCategory,
-  ServiceUsageType
+  ServiceUsageType,
+  NotificationTopic,
+  AuditAction,
+  AuditEntityType
 } from './domain'
 
 // 共通分頁與錯誤結構
@@ -438,3 +441,118 @@ export interface DryRunImportResultDTO {
   errors: ImportRowErrorDTO[]
   warnings: ImportRowWarningDTO[]
 }
+
+// 7. 系統稽核紀錄 (Audit Log)
+export interface AuditLogDTO {
+  id: string
+  actorId?: string
+  actorName?: string
+  actorRole?: string
+  action: AuditAction
+  entityType: AuditEntityType
+  entityId?: string
+  entityName?: string
+  beforeData?: Record<string, any>
+  afterData?: Record<string, any>
+  ipAddress?: string
+  userAgent?: string
+  createdAt: string
+}
+
+export interface ListAuditLogsParams {
+  page?: number
+  pageSize?: number
+  actorId?: string
+  action?: AuditAction
+  entityType?: AuditEntityType
+  fromDate?: string
+  toDate?: string
+}
+
+// 8. 通知收件人管理 (Notification Recipients)
+export interface NotificationRecipientDTO {
+  id: string
+  topic: NotificationTopic
+  email: string
+  displayName?: string
+  active: boolean
+  createdBy?: string
+  createdByName?: string
+  createdAt: string
+}
+
+export interface CreateNotificationRecipientRequest {
+  topic: NotificationTopic
+  email: string
+  displayName?: string
+  active?: boolean
+}
+
+export interface UpdateNotificationRecipientRequest {
+  topic?: NotificationTopic
+  email?: string
+  displayName?: string
+  active?: boolean
+}
+
+// 9. 通知歷史紀錄 (Notification Log)
+export interface NotificationLogDTO {
+  id: string
+  topic: NotificationTopic
+  channel: 'email' | 'sms' | 'system'
+  recipientEmails: string[]
+  subject: string
+  contentSummary?: string
+  status: 'sent' | 'failed'
+  errorMessage?: string
+  triggeredBy?: string
+  triggeredByName?: string
+  sentAt: string
+}
+
+// 10. 未回報清單 (Missing Rides)
+export interface MissingRideDTO {
+  id: string
+  caseId: string
+  caseName: string
+  serviceDate: string
+  legSeq: number
+  direction: Direction
+  departTime: string
+  vehicleId?: string
+  vehicleName?: string
+  driverName?: string
+  daysOverdue: number
+}
+
+// 11. 車輛趟數表報表 (Trip Summary Report)
+export interface TripSummaryCaseRowDTO {
+  caseId: string
+  caseCode: string
+  caseName: string
+  outboundCount: number
+  inboundCount: number
+  totalCount: number
+}
+
+export interface TripSummaryVehicleDTO {
+  vehicleId: string
+  vehicleName: string
+  plateNo: string
+  driverName?: string
+  rows: TripSummaryCaseRowDTO[]
+  subtotalOutbound: number
+  subtotalInbound: number
+  subtotalTotal: number
+}
+
+export interface TripSummaryReportDTO {
+  periodYm: string
+  region?: Region
+  generatedAt: string
+  vehicles: TripSummaryVehicleDTO[]
+  grandTotalOutbound: number
+  grandTotalInbound: number
+  grandTotal: number
+}
+

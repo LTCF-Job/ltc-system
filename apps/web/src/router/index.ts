@@ -76,6 +76,30 @@ const router = createRouter({
           meta: { title: '異常集中處理', roles: ['admin', 'staff', 'viewer'] }
         },
         {
+          path: 'rides/missing',
+          name: 'MissingRides',
+          component: () => import('@/views/rides/MissingRidesView.vue'),
+          meta: { title: '未回報清單與催報歷史', roles: ['admin', 'staff', 'viewer'] }
+        },
+        {
+          path: 'reports/trip-summary',
+          name: 'TripSummary',
+          component: () => import('@/views/reports/TripSummaryView.vue'),
+          meta: { title: '車輛趟數表', roles: ['admin', 'staff', 'viewer'] }
+        },
+        {
+          path: 'audit',
+          name: 'AuditLog',
+          component: () => import('@/views/audit/AuditLogView.vue'),
+          meta: { title: '系統稽核紀錄', roles: ['admin'] }
+        },
+        {
+          path: 'settings/notifications',
+          name: 'NotificationSettings',
+          component: () => import('@/views/settings/NotificationSettingsView.vue'),
+          meta: { title: '通知收件人管理', roles: ['admin', 'staff', 'viewer'] }
+        },
+        {
           path: 'exports',
           name: 'GovExport',
           component: () => import('@/views/exports/ExportView.vue'),
@@ -83,6 +107,7 @@ const router = createRouter({
         }
       ]
     },
+
     {
       path: '/:pathMatch(.*)*',
       redirect: '/'

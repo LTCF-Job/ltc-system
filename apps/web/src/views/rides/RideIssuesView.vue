@@ -41,10 +41,13 @@
             align="center"
           >
             <template #default="{ row }">
-              <el-button type="primary" size="small" @click="openResolveDialog(row)">
+              <el-button type="primary" size="small" @click="openResolveDialog(row as any)">
                 人工裁決
               </el-button>
             </template>
+
+
+
           </el-table-column>
         </el-table>
       </el-tab-pane>
@@ -160,7 +163,7 @@ async function fetchIssues() {
   }
 }
 
-function openResolveDialog(row: IssueRideDTO) {
+function openResolveDialog(row: any) {
   selectedIssue.value = row
   resolveForm.vehicleId = allVehicles.value[0]?.id || ''
   resolveForm.driverId = allDrivers.value[0]?.id || ''

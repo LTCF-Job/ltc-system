@@ -8,7 +8,12 @@ import type {
   RideCalendarMatrixDTO,
   ExportJobDTO,
   DashboardStatsDTO,
-  PrecheckResultDTO
+  PrecheckResultDTO,
+  AuditLogDTO,
+  NotificationRecipientDTO,
+  NotificationLogDTO,
+  MissingRideDTO,
+  TripSummaryReportDTO
 } from '@/types/api'
 
 export const mockSites: SiteDTO[] = [
@@ -265,3 +270,306 @@ export const mockDashboardStats: DashboardStatsDTO = {
   pendingFormColumnsCount: 7,
   recentExports: mockExportJobs
 }
+
+export const mockAuditLogs: AuditLogDTO[] = [
+  {
+    id: 'audit_1',
+    actorId: 'usr_admin',
+    actorName: '系統管理員',
+    actorRole: 'admin',
+    action: 'correct',
+    entityType: 'ride_records',
+    entityId: 'ride_case_1_10_1',
+    entityName: '蔡曾切 (2026-07-10 去程)',
+    beforeData: {
+      departTimeOverride: null,
+      effectiveStatus: 'boarded'
+    },
+    afterData: {
+      departTimeOverride: '10:05',
+      effectiveStatus: 'boarded',
+      reason: '司機填錯時間'
+    },
+    ipAddress: '192.168.1.100',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    createdAt: '2026-07-11 09:30:15'
+  },
+  {
+    id: 'audit_2',
+    actorId: 'usr_staff',
+    actorName: '行政承辦',
+    actorRole: 'staff',
+    action: 'reveal_pii',
+    entityType: 'cases',
+    entityId: 'case_1',
+    entityName: '蔡曾切',
+    beforeData: undefined,
+    afterData: undefined,
+    ipAddress: '192.168.1.105',
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X)',
+    createdAt: '2026-07-15 14:22:01'
+  },
+  {
+    id: 'audit_3',
+    actorId: 'usr_admin',
+    actorName: '系統管理員',
+    actorRole: 'admin',
+    action: 'resolve_conflict',
+    entityType: 'ride_records',
+    entityId: 'ride_conflict_1',
+    entityName: '葉秀珍 (2026-07-20 去程)',
+    beforeData: {
+      hasConflict: true,
+      vehicleId: null
+    },
+    afterData: {
+      hasConflict: false,
+      vehicleId: 'veh_1',
+      vehicleName: '竹北一車',
+      driverName: '郭澤威'
+    },
+    ipAddress: '192.168.1.100',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    createdAt: '2026-07-21 11:05:40'
+  },
+  {
+    id: 'audit_4',
+    actorId: 'usr_admin',
+    actorName: '系統管理員',
+    actorRole: 'admin',
+    action: 'setting_change',
+    entityType: 'notification_recipients',
+    entityId: 'rec_1',
+    entityName: 'admin@ltc.example.com',
+    beforeData: {
+      active: false
+    },
+    afterData: {
+      active: true
+    },
+    ipAddress: '192.168.1.100',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    createdAt: '2026-08-01 08:45:00'
+  },
+  {
+    id: 'audit_5',
+    actorId: 'usr_staff',
+    actorName: '行政承辦',
+    actorRole: 'staff',
+    action: 'export',
+    entityType: 'export_jobs',
+    entityId: 'job_202607_01',
+    entityName: 'gov-claim-11507-miaoli.xlsx',
+    beforeData: undefined,
+    afterData: {
+      periodYm: '11507',
+      totalCases: 42,
+      totalRows: 380,
+      fileChecksum: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+    },
+    ipAddress: '192.168.1.105',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    createdAt: '2026-08-01 10:00:15'
+  }
+]
+
+export const mockNotificationRecipients: NotificationRecipientDTO[] = [
+  {
+    id: 'rec_1',
+    topic: 'missing_report',
+    email: 'admin@ltc.example.com',
+    displayName: '系統主管理員',
+    active: true,
+    createdByName: '系統管理員',
+    createdAt: '2026-01-01 00:00:00'
+  },
+  {
+    id: 'rec_2',
+    topic: 'missing_report',
+    email: 'staff.miaoli@ltc.example.com',
+    displayName: '苗栗區行政組',
+    active: true,
+    createdByName: '系統管理員',
+    createdAt: '2026-01-05 10:30:00'
+  },
+  {
+    id: 'rec_3',
+    topic: 'driver_leave',
+    email: 'dispatch@ltc.example.com',
+    displayName: '調度中心專線',
+    active: true,
+    createdByName: '系統管理員',
+    createdAt: '2026-01-10 14:00:00'
+  },
+  {
+    id: 'rec_4',
+    topic: 'month_end',
+    email: 'finance@ltc.example.com',
+    displayName: '財務申報組',
+    active: true,
+    createdByName: '系統管理員',
+    createdAt: '2026-01-15 09:15:00'
+  },
+  {
+    id: 'rec_5',
+    topic: 'export_failed',
+    email: 'tech@ltc.example.com',
+    displayName: '資訊維運團隊',
+    active: false,
+    createdByName: '系統管理員',
+    createdAt: '2026-02-01 16:20:00'
+  }
+]
+
+export const mockNotificationLogs: NotificationLogDTO[] = [
+  {
+    id: 'nlog_1',
+    topic: 'missing_report',
+    channel: 'email',
+    recipientEmails: ['admin@ltc.example.com', 'staff.miaoli@ltc.example.com'],
+    subject: '【長照交通系統】今日未回報催報通知 (2026-08-25)',
+    contentSummary: '竹南2車 (回覆) 尚有 3 筆應搭乘趟次未提交回報，請儘速核對。',
+    status: 'sent',
+    triggeredByName: '系統定時排程 (Cloud Scheduler)',
+    sentAt: '2026-08-25 18:00:02'
+  },
+  {
+    id: 'nlog_2',
+    topic: 'month_end',
+    channel: 'email',
+    recipientEmails: ['finance@ltc.example.com'],
+    subject: '【長照交通系統】115年07月份申報資料結算提醒',
+    contentSummary: '本月已達26日，目前仍有 2 筆混車衝突未裁決，請於月底前完成處理。',
+    status: 'sent',
+    triggeredByName: '系統定時排程 (Cloud Scheduler)',
+    sentAt: '2026-07-26 09:00:00'
+  },
+  {
+    id: 'nlog_3',
+    topic: 'export_failed',
+    channel: 'email',
+    recipientEmails: ['tech@ltc.example.com'],
+    subject: '【警報】政府申報檔案產生異常',
+    contentSummary: '批次產生任務 job_fail_998 逾時失敗',
+    status: 'failed',
+    errorMessage: '無設定啟用收件人 (收件人為空)',
+    triggeredByName: '系統事件',
+    sentAt: '2026-07-20 23:15:10'
+  }
+]
+
+export const mockMissingRides: MissingRideDTO[] = [
+  {
+    id: 'mis_1',
+    caseId: 'case_1',
+    caseName: '蔡曾切',
+    serviceDate: '2026-08-24',
+    legSeq: 2,
+    direction: 'inbound',
+    departTime: '16:00',
+    vehicleId: 'veh_4',
+    vehicleName: '竹南2車',
+    driverName: '陳國華',
+    daysOverdue: 1
+  },
+  {
+    id: 'mis_2',
+    caseId: 'case_2',
+    caseName: '葉秀珍',
+    serviceDate: '2026-08-24',
+    legSeq: 4,
+    direction: 'inbound',
+    departTime: '16:30',
+    vehicleId: 'veh_1',
+    vehicleName: '竹北一車',
+    driverName: '郭澤威',
+    daysOverdue: 1
+  },
+  {
+    id: 'mis_3',
+    caseId: 'case_3',
+    caseName: '吳𣵛桂',
+    serviceDate: '2026-08-20',
+    legSeq: 1,
+    direction: 'outbound',
+    departTime: '09:10',
+    vehicleId: 'veh_1',
+    vehicleName: '竹北一車',
+    driverName: '郭澤威',
+    daysOverdue: 5
+  }
+]
+
+export const mockTripSummaryReport: TripSummaryReportDTO = {
+  periodYm: '115-07',
+  region: 'hsinchu',
+  generatedAt: '2026-08-25 15:00:00',
+  vehicles: [
+    {
+      vehicleId: 'veh_1',
+      vehicleName: '竹北一車',
+      plateNo: 'BZG-7915',
+      driverName: '郭澤威',
+      rows: [
+        {
+          caseId: 'case_2',
+          caseCode: 'C0002',
+          caseName: '葉秀珍',
+          outboundCount: 22,
+          inboundCount: 22,
+          totalCount: 44
+        },
+        {
+          caseId: 'case_3',
+          caseCode: 'C0003',
+          caseName: '吳𣵛桂',
+          outboundCount: 9,
+          inboundCount: 0,
+          totalCount: 9
+        },
+        {
+          caseId: 'case_4',
+          caseCode: 'C0004',
+          caseName: '張詹竹妹',
+          outboundCount: 15,
+          inboundCount: 15,
+          totalCount: 30
+        }
+      ],
+      subtotalOutbound: 46,
+      subtotalInbound: 37,
+      subtotalTotal: 83
+    },
+    {
+      vehicleId: 'veh_2',
+      vehicleName: '竹北二車',
+      plateNo: 'ABC-1234',
+      driverName: '林志豪',
+      rows: [
+        {
+          caseId: 'case_5',
+          caseCode: 'C0005',
+          caseName: '李國盛',
+          outboundCount: 10,
+          inboundCount: 10,
+          totalCount: 20
+        },
+        {
+          caseId: 'case_6',
+          caseCode: 'C0006',
+          caseName: '陳素貞',
+          outboundCount: 18,
+          inboundCount: 18,
+          totalCount: 36
+        }
+      ],
+      subtotalOutbound: 28,
+      subtotalInbound: 28,
+      subtotalTotal: 56
+    }
+  ],
+  grandTotalOutbound: 74,
+  grandTotalInbound: 65,
+  grandTotal: 139
+}
+

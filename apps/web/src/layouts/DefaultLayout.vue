@@ -73,14 +73,46 @@
             <el-icon><Warning /></el-icon>
             <template #title>異常集中處理</template>
           </el-menu-item>
+          <el-menu-item index="/rides/missing">
+            <el-icon><Bell /></el-icon>
+            <template #title>未回報清單</template>
+          </el-menu-item>
+        </el-sub-menu>
+
+        <el-sub-menu index="reports">
+          <template #title>
+            <el-icon><DataAnalysis /></el-icon>
+            <span>報表管理</span>
+          </template>
+          <el-menu-item index="/reports/trip-summary">
+            <el-icon><List /></el-icon>
+            <template #title>車輛趟數表</template>
+          </el-menu-item>
         </el-sub-menu>
 
         <el-menu-item index="/exports">
           <el-icon><Download /></el-icon>
           <template #title>政府申報匯出</template>
         </el-menu-item>
+
+        <el-menu-item v-if="authStore.can('admin')" index="/audit">
+          <el-icon><DocumentCopy /></el-icon>
+          <template #title>系統稽核日誌</template>
+        </el-menu-item>
+
+        <el-sub-menu index="settings">
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span>系統設定</span>
+          </template>
+          <el-menu-item index="/settings/notifications">
+            <el-icon><Bell /></el-icon>
+            <template #title>通知收件人</template>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
+
 
     <!-- 右側主體內容 -->
     <el-container>
@@ -160,8 +192,13 @@ import {
   Download,
   Fold,
   Expand,
-  ArrowDown
+  ArrowDown,
+  Bell,
+  DataAnalysis,
+  List,
+  Setting
 } from '@element-plus/icons-vue'
+
 import { useAuthStore } from '@/stores/auth'
 import { ROLE_LABELS } from '@/types/domain'
 

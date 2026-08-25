@@ -69,6 +69,8 @@
             </el-button>
           </template>
         </el-table-column>
+
+
       </el-table>
     </el-card>
   </div>
@@ -101,7 +103,7 @@ async function fetchForms() {
   }
 }
 
-async function handleSyncForm(form: FormDTO) {
+async function handleSyncForm(form: any) {
   syncingId.value = form.id
   try {
     const res = await syncForm(form.id)

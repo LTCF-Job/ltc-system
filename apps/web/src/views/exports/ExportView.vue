@@ -113,7 +113,7 @@
 
         <div v-if="currentJob.status === 'failed'" class="error-box">
           <el-alert
-            type="danger"
+            type="error"
             show-icon
             :closable="false"
             :title="currentJob.errorMessage || '匯出失敗，請重試或聯絡管理員'"

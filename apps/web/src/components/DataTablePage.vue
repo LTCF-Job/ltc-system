@@ -18,9 +18,10 @@
 
     <!-- 資料表格區塊 -->
     <el-card class="table-card" shadow="never">
-      <div v-loading="loading" class="table-container">
+      <div v-loading="!!loading" class="table-container">
         <slot name="table" />
       </div>
+
 
       <!-- 分頁器 -->
       <div v-if="(total || 0) > 0" class="pagination-container">

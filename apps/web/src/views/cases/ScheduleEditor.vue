@@ -48,12 +48,14 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="趟數型態" prop="tripPattern">
-              <el-radio-group v-model="formData.tripPattern" @change="handlePatternChange">
+              <el-radio-group v-model="formData.tripPattern" @change="(val: any) => handlePatternChange(val)">
                 <el-radio-button :value="1">單向 1 趟</el-radio-button>
                 <el-radio-button :value="2">一般 2 趟</el-radio-button>
                 <el-radio-button :value="4">四趟 (早/午去回)</el-radio-button>
               </el-radio-group>
             </el-form-item>
+
+
           </el-col>
 
           <el-col :span="12">
@@ -244,7 +246,7 @@ const rules = {
 }
 
 // 趟數切換時調整 legs 陣列
-function handlePatternChange(pattern: TripPattern) {
+function handlePatternChange(pattern: any) {
   const currentVehicle = formData.legs[0]?.vehicleId || availableVehicles.value[0]?.id || ''
 
   if (pattern === 1) {

@@ -92,6 +92,7 @@
               </el-button>
             </template>
           </el-table-column>
+
         </el-table>
       </template>
     </DataTablePage>
@@ -266,7 +267,7 @@ function openCreateDialog() {
   dialogVisible.value = true
 }
 
-function openEditDialog(row: DriverDTO) {
+function openEditDialog(row: any) {
   editingId.value = row.id
   form.name = row.name
   form.nationalId = row.nationalId
@@ -276,7 +277,7 @@ function openEditDialog(row: DriverDTO) {
   dialogVisible.value = true
 }
 
-function openAssignDialog(row: DriverDTO) {
+function openAssignDialog(row: any) {
   selectedDriverId.value = row.id
   assignForm.vehicleId = row.assignments?.[0]?.vehicleId || ''
   assignForm.startDate = new Date().toISOString().split('T')[0]
