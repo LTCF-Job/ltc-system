@@ -24,7 +24,7 @@ var (
 // AuthMiddleware 驗證傳入的 Supabase JWT Token 並將使用者角色與 ID 注入 Gin Context。
 func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 開發模式支援 Mock Header 方便本地測試與端點驗收
+		// 開發模式支援 Mock Header 方便本機測試與端點驗收
 		if cfg.AppEnv == "local" {
 			if mockRole := c.GetHeader("X-Mock-Role"); mockRole != "" {
 				actorIDStr := c.GetHeader("X-Mock-User-ID")
@@ -54,10 +54,32 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 
 		tokenStr := parts[1]
 
-		// 解析 Token Claims（支援本地未配置 JWKS 實體連線時之安全降級）
+		// 本機開發支援 mock_jwt_ 形式之憑證快速解析
+		if cfg.AppEnv == "local" && strings.HasPrefix(tokenStr, "mock_jwt_") {
+			role := "staff"
+			if strings.Contains(tokenStr, "admin") {
+				role = "admin"
+			} else if strings.Contains(tokenStr, "viewer") {
+				role = "viewer"
+			}
+			c.Set(ContextKeyActorID, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
+			c.Set(ContextKeyActorRole, role)
+			c.Set(ContextKeyUserEmail, role+"@example.com")
+			c.Next()
+			return
+		}
+
+		// 本機環境未設定 JWKS 時安全降級為模擬憑證
 		claims := jwt.MapClaims{}
 		token, _, err := new(jwt.Parser).ParseUnverified(tokenStr, claims)
 		if err != nil || token == nil {
+			if cfg.AppEnv == "local" {
+				c.Set(ContextKeyActorID, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
+				c.Set(ContextKeyActorRole, "admin")
+				c.Set(ContextKeyUserEmail, "admin@example.com")
+				c.Next()
+				return
+			}
 			RespondError(c, http.StatusUnauthorized, CodeUnauthenticated, "無效的 JWT Token", nil)
 			return
 		}
@@ -105,7 +127,7 @@ func RequireRoles(allowedRoles ...string) gin.HandlerFunc {
 			}
 		}
 
-		RespondError(c, http.StatusForbidden, CodeForbidden, "權限不足，拒絕訪問", nil)
+		RespondError(c, http.StatusForbidden, CodeForbidden, "權限不足，拒絕存取", nil)
 	}
 }
 

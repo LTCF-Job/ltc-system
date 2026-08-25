@@ -51,7 +51,7 @@ type ProcessFormWebhookRequest struct {
 	Answers     map[string]interface{} `json:"answers"`
 }
 
-// IngestWebhook 處理 Google 表單單筆提交：落原始資料 -> 欄位解析 -> 四趟展開 -> 混車合併。
+// IngestWebhook 處理 Google 表單回報並執行欄位正規化、四趟展開與混車合併。
 func (s *RideService) IngestWebhook(ctx context.Context, secret string, req ProcessFormWebhookRequest) error {
 	if s.db == nil {
 		return errors.New("database unavailable")
@@ -62,7 +62,7 @@ func (s *RideService) IngestWebhook(ctx context.Context, secret string, req Proc
 		return middleware.ErrInvalidToken
 	}
 
-	// 1. 檢核今天日期，若為空則依規格書 5.2 整列跳過
+	// 依規格書 5.2，若服務日期為空（如總計列或標頭）直接跳過處理
 	req.ServiceDate = strings.TrimSpace(req.ServiceDate)
 	if req.ServiceDate == "" {
 		slog.Warn("Skip submission because serviceDate is empty (likely summary row)")
@@ -71,7 +71,7 @@ func (s *RideService) IngestWebhook(ctx context.Context, secret string, req Proc
 
 	serviceDate, err := time.Parse("2006-01-02", req.ServiceDate)
 	if err != nil {
-		// 嘗試常見斜線格式 2026/07/01 或 2026/7/1
+		// 支援斜線日期格式（YYYY/MM/DD、YYYY/M/D）
 		serviceDate, err = time.Parse("2006/01/02", req.ServiceDate)
 		if err != nil {
 			serviceDate, err = time.Parse("2006/1/2", req.ServiceDate)
@@ -88,7 +88,6 @@ func (s *RideService) IngestWebhook(ctx context.Context, secret string, req Proc
 		}
 	}
 
-	// 2. 司機姓名比對（§5.6）
 	var driverID *uuid.UUID
 	req.DriverRaw = strings.TrimSpace(req.DriverRaw)
 	if req.DriverRaw != "" {
@@ -98,7 +97,6 @@ func (s *RideService) IngestWebhook(ctx context.Context, secret string, req Proc
 		}
 	}
 
-	// 3. 先落 form_submissions.payload 原始資料（原則 B-2）
 	rawPayload := map[string]interface{}{
 		"timestamp":   req.Timestamp,
 		"serviceDate": req.ServiceDate,
@@ -114,23 +112,19 @@ func (s *RideService) IngestWebhook(ctx context.Context, secret string, req Proc
 		return fmt.Errorf("failed to save form submission: %w", err)
 	}
 
-	// 4. 取得該表單已對應的欄位定義
 	columns, err := s.formRepo.GetFormColumns(ctx, formID)
 	if err != nil {
 		return fmt.Errorf("failed to get form columns: %w", err)
 	}
 
-	// 5. 逐欄解析有綁定之個案與時段
 	for _, col := range columns {
 		if col.MappingStatus != "mapped" || col.CaseID == nil || col.LegSeq == nil {
 			continue
 		}
 
-		// 從 answers 取得儲存格值
 		colKey := fmt.Sprintf("%d", col.ColumnIndex)
 		valRaw, exists := req.Answers[colKey]
 		if !exists {
-			// 若用標題當 key 亦可相容
 			valRaw = req.Answers[col.ColumnHeader]
 		}
 		if valRaw == nil {
@@ -144,19 +138,18 @@ func (s *RideService) IngestWebhook(ctx context.Context, secret string, req Proc
 		} else if strings.Contains(valStr, "沒坐") {
 			reported = "absent"
 		} else {
-			// 其它自由文字或空白依 §5.3 不產生來源紀錄
+			// 非明確搭乘標記不建立來源紀錄
 			continue
 		}
 
 		caseID := *col.CaseID
 		baseLegSeq := *col.LegSeq
 
-		// 檢查該個案在當日之排班設定以確認 tripPattern
 		sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, serviceDate)
 		var targetLegSeqs []int16
 
+		// 四趟展開規則（R4 / §5.5）：表單第 1 趟展開為 1、3 趟；第 2 趟展開為 2、4 趟
 		if sched != nil && sched.TripPattern == 4 {
-			// 四趟展開規則（R4 / §5.5）：outbound 展開為 1, 3；inbound 展開為 2, 4
 			if baseLegSeq == 1 {
 				targetLegSeqs = []int16{1, 3}
 			} else if baseLegSeq == 2 {
@@ -169,12 +162,10 @@ func (s *RideService) IngestWebhook(ctx context.Context, secret string, req Proc
 		}
 
 		for _, legSeq := range targetLegSeqs {
-			// 寫入 ride_sources
 			_ = s.formRepo.InsertRideSource(
 				ctx, submissionID, caseID, serviceDate, legSeq, defaultVehicleID, driverID, reported, col.ColumnIndex,
 			)
 
-			// 執行混車合併
 			s.recalculateRideRecord(ctx, caseID, serviceDate, legSeq, defaultVehicleID, driverID)
 		}
 	}

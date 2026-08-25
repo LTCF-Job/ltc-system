@@ -149,8 +149,12 @@ func main() {
 		apiV1.PATCH("/rides/:id", middleware.RequireRoles("staff", "admin"), rideH.Correct)
 		apiV1.GET("/rides/missing", middleware.RequireRoles("viewer", "staff", "admin"), taskH.GetMissingReports)
 
-		// 6. 匯出前置檢核
+		// 6. 匯出前置檢核與工作管理 (B4.3)
 		apiV1.GET("/exports/precheck", middleware.RequireRoles("staff", "admin"), exportH.Precheck)
+		apiV1.POST("/exports/precheck", middleware.RequireRoles("staff", "admin"), exportH.Precheck)
+		apiV1.GET("/exports", middleware.RequireRoles("viewer", "staff", "admin"), exportH.List)
+		apiV1.POST("/exports", middleware.RequireRoles("staff", "admin"), exportH.Create)
+		apiV1.GET("/exports/:id", middleware.RequireRoles("viewer", "staff", "admin"), exportH.Get)
 
 		// 7. 國定假日與行事曆管理 (B5.1)
 		apiV1.GET("/holidays", middleware.RequireRoles("viewer", "staff", "admin"), holidayH.List)
@@ -190,6 +194,7 @@ func main() {
 
 		// 13. 視覺化儀表板指標 (B6.4)
 		apiV1.GET("/dashboard/metrics", middleware.RequireRoles("viewer", "staff", "admin"), dashboardH.GetMetrics)
+		apiV1.GET("/dashboard/stats", middleware.RequireRoles("viewer", "staff", "admin"), dashboardH.GetStats)
 
 		// 14. 稽核紀錄查詢 (B5.5 - 僅限 admin)
 		apiV1.GET("/audit", middleware.RequireRoles("admin"), auditH.List)

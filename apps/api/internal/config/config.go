@@ -9,7 +9,7 @@ import (
 	"github.com/kelseyhightower/envconfig"
 )
 
-// Config 定義系統執行時之全部環境變數配置。
+// Config 定義系統執行時之全部環境變數設定。
 type Config struct {
 	Port                string        `envconfig:"PORT" default:"8080"`
 	AppEnv              string        `envconfig:"APP_ENV" default:"local"`

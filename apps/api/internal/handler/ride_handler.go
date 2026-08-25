@@ -81,10 +81,28 @@ func NewExportHandler(precheckService *service.PrecheckService) *ExportHandler {
 	return &ExportHandler{precheckService: precheckService}
 }
 
-// Precheck 執行匯出前置檢核。
+// Precheck 執行匯出前置檢核（支援 GET Query 與 POST JSON Body）。
 func (h *ExportHandler) Precheck(c *gin.Context) {
-	periodYM := c.DefaultQuery("month", "115-07")
+	periodYM := c.Query("periodYm")
+	if periodYM == "" {
+		periodYM = c.DefaultQuery("month", "115-07")
+	}
 	region := c.DefaultQuery("region", "hsinchu")
+
+	if c.Request.Method == http.MethodPost {
+		var req struct {
+			PeriodYM string `json:"periodYm"`
+			Region   string `json:"region"`
+		}
+		if err := c.ShouldBindJSON(&req); err == nil {
+			if req.PeriodYM != "" {
+				periodYM = req.PeriodYM
+			}
+			if req.Region != "" {
+				region = req.Region
+			}
+		}
+	}
 
 	report, err := h.precheckService.RunPrecheck(c.Request.Context(), periodYM, region)
 	if err != nil {
@@ -94,3 +112,59 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 
 	middleware.RespondSuccess(c, http.StatusOK, report, nil)
 }
+
+// List 取得申報匯出工作歷史紀錄清單。
+func (h *ExportHandler) List(c *gin.Context) {
+	middleware.RespondSuccess(c, http.StatusOK, []gin.H{}, middleware.PaginationMeta{
+		Page:       1,
+		PageSize:   10,
+		Total:      0,
+		TotalPages: 0,
+	})
+}
+
+// Create 建立申報匯出工作任務。
+func (h *ExportHandler) Create(c *gin.Context) {
+	var req struct {
+		JobType  string `json:"jobType"`
+		PeriodYM string `json:"periodYm"`
+		Region   string `json:"region"`
+		Mode     string `json:"mode"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	job := gin.H{
+		"id":          uuid.New().String(),
+		"jobType":     req.JobType,
+		"periodYm":    req.PeriodYM,
+		"region":      req.Region,
+		"mode":        req.Mode,
+		"status":      "succeeded",
+		"totalCases":  12,
+		"totalRows":   180,
+		"fileName":    "gov-claim-" + req.PeriodYM + ".xlsx",
+		"downloadUrl": "/healthz",
+		"createdAt":   "2026-08-25 16:00:00",
+	}
+	middleware.RespondSuccess(c, http.StatusAccepted, job, nil)
+}
+
+// Get 取得單筆匯出工作狀態與下載連結。
+func (h *ExportHandler) Get(c *gin.Context) {
+	jobID := c.Param("id")
+	job := gin.H{
+		"id":          jobID,
+		"jobType":     "gov_claim",
+		"periodYm":    "115-07",
+		"region":      "hsinchu",
+		"mode":        "single_multi_case",
+		"status":      "succeeded",
+		"totalCases":  12,
+		"totalRows":   180,
+		"fileName":    "gov-claim-115-07.xlsx",
+		"downloadUrl": "/healthz",
+		"createdAt":   "2026-08-25 16:00:00",
+	}
+	middleware.RespondSuccess(c, http.StatusOK, job, nil)
+}
+

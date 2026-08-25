@@ -37,7 +37,7 @@ type DashboardMetricsDTO struct {
 	ClaimFulfillmentRate    float64                   `json:"claimFulfillmentRate"`
 }
 
-// DashboardService 提供儀表板整合統計數據。
+// DashboardService 提供儀表板整合統計資料。
 type DashboardService struct {
 	db *pgxpool.Pool
 }
@@ -94,31 +94,26 @@ func (s *DashboardService) GetMetrics(ctx context.Context, periodYm string) (*Da
 		return dto, nil
 	}
 
-	// 1. 個案總數
 	_ = s.db.QueryRow(ctx, "SELECT COUNT(*) FROM cases WHERE status = 'active'").Scan(&dto.TotalCasesCount)
 
-	// 2. 當月回報趟數
 	_ = s.db.QueryRow(ctx, `
 		SELECT COUNT(*) 
 		FROM ride_records 
 		WHERE service_date >= $1 AND service_date < $2 AND effective_status = 'boarded'
 	`, startDate, endDate).Scan(&dto.ReportedTripsCount)
 
-	// 3. 待處理衝突數
 	_ = s.db.QueryRow(ctx, `
 		SELECT COUNT(*) 
 		FROM ride_records 
 		WHERE has_conflict = true AND conflict_resolved_at IS NULL
 	`).Scan(&dto.PendingConflictsCount)
 
-	// 4. 待對應表單欄位數
 	_ = s.db.QueryRow(ctx, `
 		SELECT COUNT(*) 
 		FROM form_columns 
 		WHERE mapping_status = 'pending'
 	`).Scan(&dto.PendingFormColumnsCount)
 
-	// 5. 各車當月趟數統計
 	trendRows, err := s.db.Query(ctx, `
 		SELECT v.display_name, v.plate_no, COUNT(r.id) as trips
 		FROM vehicles v
@@ -143,7 +138,6 @@ func (s *DashboardService) GetMetrics(ctx context.Context, periodYm string) (*Da
 		}
 	}
 
-	// 6. 司機出勤分佈
 	attRows, err := s.db.Query(ctx, `
 		SELECT status, COUNT(*)
 		FROM attendance_records

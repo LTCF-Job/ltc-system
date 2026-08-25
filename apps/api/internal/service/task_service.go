@@ -59,25 +59,22 @@ func NewTaskService(
 	}
 }
 
-// CheckMissingReports 比對特定日期（或月份）應搭乘日曆與實際搭乘紀錄，偵測未回報個案並發送告警通知。
+// CheckMissingReports 比對特定日期應搭乘日曆與實際搭乘紀錄，偵測未回報趟次並觸發告警通知。
 func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.Time, region string) ([]MissingRideItem, error) {
 	year := targetDate.Year()
 	month := int(targetDate.Month())
 	dateStr := targetDate.Format("2006-01-02")
 
-	// 1. 取得當月國定假日
 	holidayMap, err := s.holidayRepo.GetHolidayMap(ctx, year, month, region)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch holidays: %w", err)
 	}
 
-	// 2. 取得所有有效個案排班
 	schedules, err := s.caseRepo.GetActiveSchedulesForMonth(ctx, year, month, region)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch monthly schedules: %w", err)
 	}
 
-	// 3. 計算預期應搭乘趟次 (R4/R6/R8)
 	var expectedList []MissingRideItem
 	for _, sch := range schedules {
 		var legs []calendar.LegInput
@@ -121,11 +118,11 @@ func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.T
 		}
 	}
 
+	// 本機離線測試降級支援
 	if s.db == nil {
 		return expectedList, nil
 	}
 
-	// 4. 查詢資料庫中當日已回報之紀錄 (effective_status != 'unreported')
 	reportedQuery := `
 		SELECT case_id, leg_seq
 		FROM ride_records
@@ -149,7 +146,6 @@ func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.T
 		}
 	}
 
-	// 5. 篩選出未回報的趟次
 	var missingList []MissingRideItem
 	for _, item := range expectedList {
 		if !reportedSet[key{caseID: item.CaseID, legSeq: item.LegSeq}] {
@@ -157,7 +153,7 @@ func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.T
 		}
 	}
 
-	// 6. 若存在未回報紀錄，派送告警通知 (規格書 §8.4)
+	// 存在未回報趟次時主動發送通報
 	if len(missingList) > 0 && s.notificationSvc != nil {
 		subject := fmt.Sprintf("【長照接送未回報告警】%s 共有 %d 筆趟次尚未回報", dateStr, len(missingList))
 		body := fmt.Sprintf("日期：%s\n未回報趟數：%d 筆\n請相關人員至系統「異常集中處理」或「未回報清單」確認司機填報狀況。", dateStr, len(missingList))
@@ -179,7 +175,6 @@ func (s *TaskService) MonthEndReminder(ctx context.Context, year, month int) (*M
 	}
 
 	if s.db != nil {
-		// 統計搭乘紀錄狀況
 		query := `
 			SELECT 
 				COUNT(*) as total,
@@ -194,7 +189,6 @@ func (s *TaskService) MonthEndReminder(ctx context.Context, year, month int) (*M
 		)
 	}
 
-	// 寄送月底提醒通知
 	if s.notificationSvc != nil {
 		subject := fmt.Sprintf("【長照申報月底提醒】%s 申報進度與異常檢查", rocYM)
 		body := fmt.Sprintf(

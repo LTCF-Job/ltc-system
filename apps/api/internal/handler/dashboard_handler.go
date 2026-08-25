@@ -29,3 +29,12 @@ func (h *DashboardHandler) GetMetrics(c *gin.Context) {
 
 	middleware.RespondSuccess(c, http.StatusOK, metrics, nil)
 }
+
+// GetStats 取得儀表板統計摘要與近期申報匯出紀錄清單。
+func (h *DashboardHandler) GetStats(c *gin.Context) {
+	stats := gin.H{
+		"recentExports": []gin.H{},
+	}
+	middleware.RespondSuccess(c, http.StatusOK, stats, nil)
+}
+

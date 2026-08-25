@@ -92,7 +92,6 @@ func (s *ReportService) GetTripSummary(ctx context.Context, periodYm string, reg
 		return report, nil
 	}
 
-	// 1. 拆解民國年月或西元年月為月份起訖日
 	var startDate, endDate time.Time
 	if strings.Contains(periodYm, "-") {
 		parts := strings.Split(periodYm, "-")
@@ -119,7 +118,6 @@ func (s *ReportService) GetTripSummary(ctx context.Context, periodYm string, reg
 		endDate = startDate.AddDate(0, 1, 0)
 	}
 
-	// 2. 查詢車輛清單
 	vehQuery := "SELECT id, plate_no, display_name, region FROM vehicles WHERE 1=1"
 	args := []interface{}{}
 	argIdx := 1
@@ -155,7 +153,6 @@ func (s *ReportService) GetTripSummary(ctx context.Context, periodYm string, reg
 		}
 	}
 
-	// 3. 依車輛統計各個案搭乘趟數
 	for _, v := range vehicles {
 		vehSummary := TripSummaryVehicle{
 			VehicleID:   v.id.String(),
