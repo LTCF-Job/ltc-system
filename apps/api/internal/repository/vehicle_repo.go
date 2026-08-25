@@ -20,6 +20,9 @@ func NewVehicleRepository(db *pgxpool.Pool) *VehicleRepository {
 
 // List 取得車輛清單。
 func (r *VehicleRepository) List(ctx context.Context, region, q string, page, pageSize int) ([]VehicleEntity, int64, error) {
+	if r.db == nil {
+		return []VehicleEntity{}, 0, nil
+	}
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT id, plate_no, display_name, region, status, created_at, updated_at

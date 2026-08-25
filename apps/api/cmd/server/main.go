@@ -59,7 +59,9 @@ func main() {
 	holidayRepo := repository.NewHolidayRepository(pool)
 	notificationRepo := repository.NewNotificationRepository(pool)
 	auditRepo := repository.NewAuditRepository(pool)
-
+	maintenanceRepo := repository.NewMaintenanceRepository(pool)
+	attendanceRepo := repository.NewAttendanceRepository(pool)
+	fuelRepo := repository.NewFuelRepository(pool)
 
 	// 初始化 Services
 	masterSvc := service.NewMasterService(cfg, pool, caseRepo, siteRepo, vehicleRepo, driverRepo)
@@ -70,7 +72,10 @@ func main() {
 	holidaySvc := service.NewHolidayService(holidayRepo, auditRepo)
 	reportSvc := service.NewReportService(pool)
 	auditSvc := service.NewAuditService(auditRepo)
-
+	maintenanceSvc := service.NewMaintenanceService(maintenanceRepo, vehicleRepo, auditRepo)
+	attendanceSvc := service.NewAttendanceService(attendanceRepo, driverRepo, auditRepo)
+	fuelSvc := service.NewFuelService(fuelRepo, auditRepo)
+	dashboardSvc := service.NewDashboardService(pool)
 	taskSvc := service.NewTaskService(pool, caseRepo, holidayRepo, notificationSvc)
 
 	// 初始化 Handlers
@@ -85,6 +90,10 @@ func main() {
 	reportH := handler.NewReportHandler(reportSvc)
 	auditH := handler.NewAuditHandler(auditSvc)
 	taskH := handler.NewTaskHandler(taskSvc)
+	maintenanceH := handler.NewMaintenanceHandler(maintenanceSvc)
+	attendanceH := handler.NewAttendanceHandler(attendanceSvc)
+	fuelH := handler.NewFuelHandler(fuelSvc)
+	dashboardH := handler.NewDashboardHandler(dashboardSvc)
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -156,14 +165,36 @@ func main() {
 		apiV1.DELETE("/settings/notification-recipients/:id", middleware.RequireRoles("admin"), notificationH.DeleteRecipient)
 		apiV1.GET("/notifications/logs", middleware.RequireRoles("viewer", "staff", "admin"), notificationH.ListLogs)
 
-		// 9. 營運報表 - 車輛趟數表 (B5.4)
+		// 9. 營運報表 - 車輛趟數表 (B5.4) 與 新竹接送時刻表 (B6.1)
 		apiV1.GET("/reports/trip-summary", middleware.RequireRoles("viewer", "staff", "admin"), reportH.GetTripSummary)
 		apiV1.GET("/reports/trip-summary/export", middleware.RequireRoles("viewer", "staff", "admin"), reportH.ExportTripSummaryExcel)
+		apiV1.GET("/reports/hsinchu-schedule", middleware.RequireRoles("viewer", "staff", "admin"), reportH.GetHsinchuSchedule)
+		apiV1.GET("/reports/hsinchu-schedule/export", middleware.RequireRoles("viewer", "staff", "admin"), reportH.ExportHsinchuScheduleExcel)
 
-		// 10. 稽核紀錄查詢 (B5.5 - 僅限 admin)
+		// 10. 車輛維修保養管理與空白表下載 (B6.2)
+		apiV1.GET("/vehicles/maintenance", middleware.RequireRoles("viewer", "staff", "admin"), maintenanceH.List)
+		apiV1.POST("/vehicles/maintenance", middleware.RequireRoles("staff", "admin"), maintenanceH.Create)
+		apiV1.PATCH("/vehicles/maintenance/:id", middleware.RequireRoles("staff", "admin"), maintenanceH.Update)
+		apiV1.DELETE("/vehicles/maintenance/:id", middleware.RequireRoles("staff", "admin"), maintenanceH.Delete)
+		apiV1.GET("/vehicles/maintenance/blank-template", middleware.RequireRoles("viewer", "staff", "admin"), maintenanceH.DownloadBlankTemplate)
+
+		// 11. 司機出勤與請假登錄 (B6.3)
+		apiV1.GET("/attendance", middleware.RequireRoles("viewer", "staff", "admin"), attendanceH.GetMonthAttendance)
+		apiV1.POST("/attendance", middleware.RequireRoles("staff", "admin"), attendanceH.Upsert)
+
+		// 12. 車輛油資管理 (B6.3)
+		apiV1.GET("/fuel-logs", middleware.RequireRoles("viewer", "staff", "admin"), fuelH.List)
+		apiV1.POST("/fuel-logs", middleware.RequireRoles("staff", "admin"), fuelH.Create)
+		apiV1.PATCH("/fuel-logs/:id", middleware.RequireRoles("staff", "admin"), fuelH.Update)
+		apiV1.DELETE("/fuel-logs/:id", middleware.RequireRoles("staff", "admin"), fuelH.Delete)
+
+		// 13. 視覺化儀表板指標 (B6.4)
+		apiV1.GET("/dashboard/metrics", middleware.RequireRoles("viewer", "staff", "admin"), dashboardH.GetMetrics)
+
+		// 14. 稽核紀錄查詢 (B5.5 - 僅限 admin)
 		apiV1.GET("/audit", middleware.RequireRoles("admin"), auditH.List)
 
-		// 11. 排程與維運任務端點 (B5.2 / B5.3)
+		// 15. 排程與維運任務端點 (B5.2 / B5.3)
 		apiV1.POST("/tasks/check-missing-reports", middleware.RequireRoles("staff", "admin"), taskH.CheckMissingReports)
 		apiV1.POST("/tasks/month-end-reminder", middleware.RequireRoles("staff", "admin"), taskH.MonthEndReminder)
 	}
@@ -175,4 +206,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-

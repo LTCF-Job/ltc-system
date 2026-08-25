@@ -9,7 +9,7 @@ import (
 	"ltc-system/apps/api/internal/service"
 )
 
-// ReportHandler 處理趟數表等報表相關 HTTP 請求。
+// ReportHandler 處理趟數表與新竹接送時刻表等報表相關 HTTP 請求。
 type ReportHandler struct {
 	reportSvc *service.ReportService
 }
@@ -67,6 +67,54 @@ func (h *ReportHandler) ExportTripSummaryExcel(c *gin.Context) {
 	}
 
 	filename := fmt.Sprintf("trip-summary-%s.xlsx", periodYm)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
+}
+
+// GetHsinchuSchedule 查詢新竹接送時刻表。
+func (h *ReportHandler) GetHsinchuSchedule(c *gin.Context) {
+	var siteID, vehID *uuid.UUID
+	if sStr := c.Query("siteId"); sStr != "" {
+		if uid, err := uuid.Parse(sStr); err == nil {
+			siteID = &uid
+		}
+	}
+	if vStr := c.Query("vehicleId"); vStr != "" {
+		if uid, err := uuid.Parse(vStr); err == nil {
+			vehID = &uid
+		}
+	}
+
+	report, err := h.reportSvc.GetHsinchuSchedule(c.Request.Context(), siteID, vehID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": report})
+}
+
+// ExportHsinchuScheduleExcel 匯出新竹接送時刻表 Excel 檔案。
+func (h *ReportHandler) ExportHsinchuScheduleExcel(c *gin.Context) {
+	var siteID, vehID *uuid.UUID
+	if sStr := c.Query("siteId"); sStr != "" {
+		if uid, err := uuid.Parse(sStr); err == nil {
+			siteID = &uid
+		}
+	}
+	if vStr := c.Query("vehicleId"); vStr != "" {
+		if uid, err := uuid.Parse(vStr); err == nil {
+			vehID = &uid
+		}
+	}
+
+	excelBytes, err := h.reportSvc.GenerateHsinchuScheduleExcel(c.Request.Context(), siteID, vehID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		return
+	}
+
+	filename := "hsinchu-schedule.xlsx"
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
 }

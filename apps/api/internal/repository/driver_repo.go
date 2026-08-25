@@ -21,6 +21,9 @@ func NewDriverRepository(db *pgxpool.Pool) *DriverRepository {
 
 // List 取得司機清單。
 func (r *DriverRepository) List(ctx context.Context, region, q string, page, pageSize int) ([]DriverEntity, int64, error) {
+	if r.db == nil {
+		return []DriverEntity{}, 0, nil
+	}
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,

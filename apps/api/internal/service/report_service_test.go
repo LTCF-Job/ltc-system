@@ -25,3 +25,19 @@ func TestReportService_GenerateTripSummaryExcel(t *testing.T) {
 	sheetList := f.GetSheetList()
 	assert.NotEmpty(t, sheetList)
 }
+
+func TestReportService_GenerateHsinchuScheduleExcel(t *testing.T) {
+	svc := NewReportService(nil)
+
+	ctx := context.Background()
+	excelBytes, err := svc.GenerateHsinchuScheduleExcel(ctx, nil, nil)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, excelBytes)
+
+	f, err := excelize.OpenReader(bytes.NewReader(excelBytes))
+	assert.NoError(t, err)
+	defer f.Close()
+
+	sheetList := f.GetSheetList()
+	assert.Contains(t, sheetList, "新竹接送時刻表")
+}
