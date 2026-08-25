@@ -47,8 +47,8 @@
         </el-button>
       </el-form>
 
-      <!-- 展示模式快速身分切換 -->
-      <div class="dev-quick-login">
+      <!-- 展示模式快速身分切換：僅在明確啟用 mock 的開發／展示環境顯示 -->
+      <div v-if="isMockLoginEnabled" class="dev-quick-login">
         <el-divider>
           <span class="divider-tag">✨ 展示模式快速登入</span>
         </el-divider>
@@ -75,6 +75,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { supabase } from '@/lib/supabase'
 import type { UserRole } from '@/types/domain'
 
 const router = useRouter()
@@ -83,10 +84,11 @@ const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const isMockLoginEnabled = import.meta.env.VITE_ENABLE_MSW === 'true'
 
 const form = reactive({
-  email: 'admin@ltc.example.com',
-  password: 'password123'
+  email: isMockLoginEnabled ? 'admin@ltc.example.com' : '',
+  password: isMockLoginEnabled ? 'password123' : ''
 })
 
 const rules = {
@@ -98,17 +100,26 @@ async function handleLogin() {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
+    if (!supabase) {
+      ElMessage.error('尚未設定 Supabase 登入環境變數，請聯絡系統管理員')
+      return
+    }
     loading.value = true
     try {
-      // 依帳號決定展示角色
-      let role: UserRole = 'staff'
-      if (form.email.includes('admin')) role = 'admin'
-      else if (form.email.includes('viewer')) role = 'viewer'
-
-      authStore.setSession(`mock_jwt_${role}`, {
-        id: `usr_${role}`,
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: form.email,
-        displayName: role === 'admin' ? '系統管理員' : (role === 'staff' ? '承辦行政' : '主管檢視者'),
+        password: form.password
+      })
+      if (error || !data.session || !data.user) {
+        ElMessage.error(error?.message || '帳號或密碼錯誤')
+        return
+      }
+
+      const role = (data.user.user_metadata?.role ?? data.user.app_metadata?.role ?? 'viewer') as UserRole
+      authStore.setSession(data.session.access_token, {
+        id: data.user.id,
+        email: data.user.email || form.email,
+        displayName: data.user.user_metadata?.display_name || data.user.email || form.email,
         role
       })
 
