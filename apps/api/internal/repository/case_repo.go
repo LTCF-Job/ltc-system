@@ -282,3 +282,104 @@ func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, cas
 
 	return &s, nil
 }
+
+// ActiveCaseScheduleInfo 代表個案於指定月份之有效排班與關聯基本資訊。
+type ActiveCaseScheduleInfo struct {
+	CaseID         uuid.UUID           `json:"caseId"`
+	CaseCode       string              `json:"caseCode"`
+	CaseName       string              `json:"caseName"`
+	Region         string              `json:"region"`
+	ClaimStartDate time.Time           `json:"claimStartDate"`
+	ClaimEndDate   *time.Time          `json:"claimEndDate,omitempty"`
+	SiteID         uuid.UUID           `json:"siteId"`
+	SiteOpenDays   []int16             `json:"siteOpenDays"`
+	EffectiveFrom  time.Time           `json:"effectiveFrom"`
+	EffectiveTo    *time.Time          `json:"effectiveTo,omitempty"`
+	Weekdays       []int16             `json:"weekdays"`
+	TripPattern    int16               `json:"tripPattern"`
+	Legs           []ScheduleLegEntity `json:"legs"`
+}
+
+// GetActiveSchedulesForMonth 查詢特定月份所有在案個案的有效排班與 Legs。
+func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]ActiveCaseScheduleInfo, error) {
+	if r.db == nil {
+		return []ActiveCaseScheduleInfo{}, nil
+	}
+
+	firstDay := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	lastDay := firstDay.AddDate(0, 1, -1)
+
+	query := `
+		SELECT c.id, c.code, c.name, c.region, c.claim_start_date, c.claim_end_date,
+		       s.id as schedule_id, s.site_id, st.open_days,
+		       lower(s.effective_range) as eff_from, upper(s.effective_range) as eff_to,
+		       s.weekdays, s.trip_pattern
+		FROM cases c
+		JOIN case_schedules s ON c.id = s.case_id
+		JOIN sites st ON s.site_id = st.id
+		WHERE c.status = 'active'
+		  AND ($1 = '' OR c.region = $1)
+		  AND s.effective_range && daterange($2, $3, '[]')
+		ORDER BY c.code ASC
+	`
+	rows, err := r.db.Query(ctx, query, region, firstDay, lastDay)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query monthly active schedules: %w", err)
+	}
+	defer rows.Close()
+
+	type scheduleRow struct {
+		info       ActiveCaseScheduleInfo
+		scheduleID uuid.UUID
+	}
+	var list []scheduleRow
+
+	for rows.Next() {
+		var sr scheduleRow
+		var effTo *time.Time
+		if err := rows.Scan(
+			&sr.info.CaseID, &sr.info.CaseCode, &sr.info.CaseName, &sr.info.Region,
+			&sr.info.ClaimStartDate, &sr.info.ClaimEndDate,
+			&sr.scheduleID, &sr.info.SiteID, &sr.info.SiteOpenDays,
+			&sr.info.EffectiveFrom, &effTo,
+			&sr.info.Weekdays, &sr.info.TripPattern,
+		); err != nil {
+			return nil, err
+		}
+		sr.info.EffectiveTo = effTo
+		list = append(list, sr)
+	}
+
+	var results []ActiveCaseScheduleInfo
+	for _, item := range list {
+		legQuery := `
+			SELECT id, schedule_id, leg_seq, direction, period,
+			       to_char(depart_time, 'HH24:MI') as depart_time,
+			       to_char(arrive_time, 'HH24:MI') as arrive_time,
+			       run_no, vehicle_id, created_at
+			FROM schedule_legs
+			WHERE schedule_id = $1
+			ORDER BY leg_seq ASC
+		`
+		lRows, err := r.db.Query(ctx, legQuery, item.scheduleID)
+		if err != nil {
+			return nil, err
+		}
+		for lRows.Next() {
+			var leg ScheduleLegEntity
+			if err := lRows.Scan(
+				&leg.ID, &leg.ScheduleID, &leg.LegSeq, &leg.Direction, &leg.Period,
+				&leg.DepartTime, &leg.ArriveTime, &leg.RunNo, &leg.VehicleID, &leg.CreatedAt,
+			); err != nil {
+				lRows.Close()
+				return nil, err
+			}
+			item.info.Legs = append(item.info.Legs, leg)
+		}
+		lRows.Close()
+		results = append(results, item.info)
+	}
+
+	return results, nil
+}
+

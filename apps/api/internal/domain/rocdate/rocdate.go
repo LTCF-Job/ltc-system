@@ -52,3 +52,26 @@ func FromROC(v int) (time.Time, error) {
 func FormatROCString(v int) string {
 	return fmt.Sprintf("%07d", v)
 }
+
+// FormatROCYearMonth 將西元年與月格式化為 API 民國年月字串（例如 2026, 7 -> "115-07"）。
+func FormatROCYearMonth(year, month int) string {
+	rocYear := year - 1911
+	return fmt.Sprintf("%03d-%02d", rocYear, month)
+}
+
+// ParseROCYearMonth 解析民國年月字串（例如 "115-07" -> 2026, 7）。
+func ParseROCYearMonth(str string) (int, int, error) {
+	var rocYear, month int
+	if n, _ := fmt.Sscanf(str, "%d-%d", &rocYear, &month); n == 2 {
+		if rocYear >= 1 && month >= 1 && month <= 12 {
+			return rocYear + 1911, month, nil
+		}
+	}
+	if n, _ := fmt.Sscanf(str, "%03d%02d", &rocYear, &month); n == 2 {
+		if rocYear >= 1 && month >= 1 && month <= 12 {
+			return rocYear + 1911, month, nil
+		}
+	}
+	return 0, 0, errors.New("invalid ROC year-month format, expected RRR-MM or RRRMM")
+}
+

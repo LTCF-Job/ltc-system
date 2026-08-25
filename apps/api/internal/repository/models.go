@@ -114,3 +114,72 @@ type ScheduleLegEntity struct {
 	VehicleName string     `json:"vehicleName,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 }
+
+// HolidayEntity 代表國定假日與停駛日。
+type HolidayEntity struct {
+	HolidayDate time.Time `json:"holidayDate"`
+	Name        string    `json:"name"`
+	Region      *string   `json:"region,omitempty"`
+	Source      string    `json:"source"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// NotificationRecipientEntity 代表通知收件人設定。
+type NotificationRecipientEntity struct {
+	ID          int64     `json:"id"`
+	Topic       string    `json:"topic"`
+	Email       string    `json:"email"`
+	DisplayName *string   `json:"displayName,omitempty"`
+	Active      bool      `json:"active"`
+	CreatedBy   uuid.UUID `json:"createdBy"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// NotificationLogEntity 代表通知發送歷史留痕。
+type NotificationLogEntity struct {
+	ID      int64     `json:"id"`
+	Channel string    `json:"channel"`
+	Target  string    `json:"target"`
+	Topic   string    `json:"topic"`
+	Body    string    `json:"body"`
+	SentAt  time.Time `json:"sentAt"`
+	Success bool      `json:"success"`
+	Error   *string   `json:"error,omitempty"`
+}
+
+// AuditLogEntity 代表稽核日誌。
+type AuditLogEntity struct {
+	ID         int64       `json:"id"`
+	ActorID    *uuid.UUID  `json:"actorId,omitempty"`
+	ActorRole  *string     `json:"actorRole,omitempty"`
+	Action     string      `json:"action"`
+	EntityType string      `json:"entityType"`
+	EntityID   *string     `json:"entityId,omitempty"`
+	BeforeData interface{} `json:"beforeData,omitempty"`
+	AfterData  interface{} `json:"afterData,omitempty"`
+	IPAddress  *string     `json:"ipAddress,omitempty"`
+	UserAgent  *string     `json:"userAgent,omitempty"`
+	CreatedAt  time.Time   `json:"createdAt"`
+}
+
+// TripSummaryRow 代表個案在特定車輛的單月趟數小計。
+type TripSummaryRow struct {
+	CaseID        uuid.UUID `json:"caseId"`
+	CaseCode      string    `json:"caseCode"`
+	CaseName      string    `json:"caseName"`
+	OutboundCount int       `json:"outboundCount"`
+	InboundCount  int       `json:"inboundCount"`
+	TotalCount    int       `json:"totalCount"`
+}
+
+// VehicleTripSummary 代表單一車輛之趟數彙整。
+type VehicleTripSummary struct {
+	VehicleID          uuid.UUID        `json:"vehicleId"`
+	PlateNo            string           `json:"plateNo"`
+	DisplayName        string           `json:"displayName"`
+	Rows               []TripSummaryRow `json:"rows"`
+	TotalOutboundCount int              `json:"totalOutboundCount"`
+	TotalInboundCount  int              `json:"totalInboundCount"`
+	GrandTotalCount    int              `json:"grandTotalCount"`
+}
+
