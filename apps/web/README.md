@@ -15,7 +15,7 @@ cp .env.example .env.development
 - `VITE_SUPABASE_URL`: Supabase 專案 URL
 - `VITE_SUPABASE_ANON_KEY`: Supabase 匿名金鑰
 - `VITE_API_SPEC_URL`: OpenAPI 規範 Swagger JSON 網址
-- `VITE_ENABLE_MSW`: 是否啟用本地 MSW 模擬伺服器（`true` / `false`）
+- `VITE_ENABLE_MSW`: 是否啟用本機 MSW 模擬伺服器（`true` / `false`）
 
 ## 2. 啟動與開發指令
 
@@ -24,7 +24,7 @@ cp .env.example .env.development
 npm install
 ```
 
-啟動本地開發伺服器（含 MSW 模擬環境）：
+啟動本機開發伺服器（含 MSW 模擬環境）：
 ```bash
 npm run dev
 ```
