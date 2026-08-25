@@ -3,6 +3,7 @@ module ltc-system/apps/api
 go 1.25.0
 
 require (
+	github.com/MicahParks/keyfunc/v3 v3.8.1
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -15,6 +16,7 @@ require (
 )
 
 require (
+	github.com/MicahParks/jwkset v0.11.1 // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
 	github.com/bytedance/sonic v1.15.2 // indirect
 	github.com/bytedance/sonic/loader v0.5.2 // indirect
@@ -52,5 +54,6 @@ require (
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )

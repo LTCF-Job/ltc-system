@@ -12,7 +12,7 @@ import (
 // Config 定義系統執行時之全部環境變數設定。
 type Config struct {
 	Port                string        `envconfig:"PORT" default:"8080"`
-	AppEnv              string        `envconfig:"APP_ENV" default:"local"`
+	AppEnv              string        `envconfig:"APP_ENV" required:"true"`
 	DatabaseURL         string        `envconfig:"DATABASE_URL" default:"postgres://postgres:postgres@localhost:5432/ltc_system?sslmode=disable"`
 	DBMaxOpenConns      int           `envconfig:"DB_MAX_OPEN_CONNS" default:"5"`
 	DBMaxIdleConns      int           `envconfig:"DB_MAX_IDLE_CONNS" default:"2"`
@@ -38,6 +38,16 @@ func LoadFromEnv() (*Config, error) {
 	var cfg Config
 	if err := envconfig.Process("", &cfg); err != nil {
 		return nil, fmt.Errorf("failed to process env config: %w", err)
+	}
+
+	// APP_ENV 決定 AuthMiddleware 是否放行 mock 憑證，禁止靜默預設值以避免正式環境誤留開發後門
+	if cfg.AppEnv != "local" && cfg.AppEnv != "production" {
+		return nil, fmt.Errorf("APP_ENV must be explicitly set to \"local\" or \"production\", got %q", cfg.AppEnv)
+	}
+
+	// 正式環境缺少 JWKS 時 AuthMiddleware 會對每個請求回應 500，改為啟動時直接拒絕啟動
+	if cfg.AppEnv == "production" && cfg.SupabaseJWKSURL == "" {
+		return nil, errors.New("SUPABASE_JWKS_URL is required when APP_ENV=production")
 	}
 
 	encKey, err := base64.StdEncoding.DecodeString(cfg.EncryptionKeyB64)

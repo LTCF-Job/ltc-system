@@ -1,10 +1,13 @@
 package middleware
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -21,8 +24,48 @@ var (
 	ErrInvalidToken = errors.New("invalid ingest token")
 )
 
-// AuthMiddleware 驗證傳入的 Supabase JWT Token 並將使用者角色與 ID 注入 Gin Context。
+// newSupabaseJWKS 建立向 Supabase JWKS 端點取金鑰並自動輪替的 Keyfunc；未設定 URL 時回傳 nil。
+func newSupabaseJWKS(jwksURL string) (keyfunc.Keyfunc, error) {
+	if jwksURL == "" {
+		return nil, nil
+	}
+	// ctx 的存續期間同時控制背景自動刷新 goroutine，不可在此提前取消，需與 process 生命週期一致。
+	return keyfunc.NewDefaultCtx(context.Background(), []string{jwksURL})
+}
+
+// setActorFromClaims 將 JWT claims 中的 sub 與角色資訊注入 Gin Context。
+func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
+	sub, _ := claims.GetSubject()
+	actorID, err := uuid.Parse(sub)
+	if err != nil {
+		actorID = uuid.Nil
+	}
+
+	role := "viewer"
+	if userMetadata, ok := claims["user_metadata"].(map[string]interface{}); ok {
+		if r, ok := userMetadata["role"].(string); ok {
+			role = r
+		}
+	} else if appMetadata, ok := claims["app_metadata"].(map[string]interface{}); ok {
+		if r, ok := appMetadata["role"].(string); ok {
+			role = r
+		}
+	} else if r, ok := claims["role"].(string); ok {
+		role = r
+	}
+
+	c.Set(ContextKeyActorID, actorID)
+	c.Set(ContextKeyActorRole, role)
+}
+
+// AuthMiddleware 驗證傳入的 Supabase JWT Token 簽章並將使用者角色與 ID 注入 Gin Context。
 func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
+	jwks, err := newSupabaseJWKS(cfg.SupabaseJWKSURL)
+	if err != nil {
+		// 正式環境缺少可用 JWKS 時無法驗證任何憑證，直接 fail fast 避免帶著漏洞啟動
+		panic(fmt.Sprintf("無法初始化 Supabase JWKS (%s): %v", cfg.SupabaseJWKSURL, err))
+	}
+
 	return func(c *gin.Context) {
 		// 開發模式支援 Mock Header 方便本機測試與端點驗收
 		if cfg.AppEnv == "local" {
@@ -69,43 +112,37 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// 本機環境未設定 JWKS 時安全降級為模擬憑證
-		claims := jwt.MapClaims{}
-		token, _, err := new(jwt.Parser).ParseUnverified(tokenStr, claims)
-		if err != nil || token == nil {
-			if cfg.AppEnv == "local" {
+		// 本機且未設定 JWKS 時，安全降級為未驗證解析，僅限本機開發使用
+		if cfg.AppEnv == "local" && jwks == nil {
+			claims := jwt.MapClaims{}
+			token, _, err := new(jwt.Parser).ParseUnverified(tokenStr, claims)
+			if err != nil || token == nil {
 				c.Set(ContextKeyActorID, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
 				c.Set(ContextKeyActorRole, "admin")
 				c.Set(ContextKeyUserEmail, "admin@example.com")
 				c.Next()
 				return
 			}
+			setActorFromClaims(c, claims)
+			c.Next()
+			return
+		}
+
+		if jwks == nil {
+			RespondError(c, http.StatusInternalServerError, CodeInternalError, "伺服器未設定 JWKS，無法驗證身分", nil)
+			return
+		}
+
+		claims := jwt.MapClaims{}
+		token, err := jwt.ParseWithClaims(tokenStr, claims, jwks.Keyfunc,
+			jwt.WithValidMethods([]string{"RS256", "ES256"}),
+			jwt.WithExpirationRequired())
+		if err != nil || !token.Valid {
 			RespondError(c, http.StatusUnauthorized, CodeUnauthenticated, "無效的 JWT Token", nil)
 			return
 		}
 
-		// 取得 sub 與 role
-		sub, _ := claims.GetSubject()
-		actorID, err := uuid.Parse(sub)
-		if err != nil {
-			actorID = uuid.Nil
-		}
-
-		role := "viewer"
-		if userMetadata, ok := claims["user_metadata"].(map[string]interface{}); ok {
-			if r, ok := userMetadata["role"].(string); ok {
-				role = r
-			}
-		} else if appMetadata, ok := claims["app_metadata"].(map[string]interface{}); ok {
-			if r, ok := appMetadata["role"].(string); ok {
-				role = r
-			}
-		} else if r, ok := claims["role"].(string); ok {
-			role = r
-		}
-
-		c.Set(ContextKeyActorID, actorID)
-		c.Set(ContextKeyActorRole, role)
+		setActorFromClaims(c, claims)
 		c.Next()
 	}
 }
