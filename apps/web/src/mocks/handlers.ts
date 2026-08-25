@@ -268,7 +268,7 @@ export const handlers = [
 
   // 4. 搭乘月曆矩陣
   http.get('/api/v1/rides/calendar', () => {
-    // 構造 7 月份 1~31 日測試矩陣資料
+    // 構造 7 月份 1~31 日測試矩陣資料，涵蓋所有狀態與異常案例
     const rows = mockCases.map((c) => {
       const days: Record<string, any> = {}
       for (let day = 1; day <= 31; day++) {
@@ -280,57 +280,67 @@ export const handlers = [
 
         if (isExpected) {
           const isConflict = day === 20 && c.id === 'case_2'
-          const isCorrected = day === 10 && c.id === 'case_1'
-          const isAbsent = day === 15 && c.id === 'case_1'
+          const isCorrected = (day === 10 && c.id === 'case_1') || (day === 13 && c.id === 'case_5')
+          const isAbsent = (day === 15 && c.id === 'case_1') || (day === 18 && c.id === 'case_7')
+          const isUnreported = (day === 28 && c.id === 'case_1')
+          const isNotClaimed = day === 9 && c.id === 'case_3'
+
+          const status = isUnreported ? 'unreported' : (isAbsent ? 'absent' : 'boarded')
 
           days[dateKey] = {
             date: dateKey,
             dayOfWeek,
             isExpected: true,
-            records: (c.activeSchedule?.legs || []).map((leg) => ({
-              id: `ride_${c.id}_${day}_${leg.legSeq}`,
-              caseId: c.id,
-              caseName: c.name,
-              serviceDate: dateKey,
-              legSeq: leg.legSeq,
-              direction: leg.direction,
-              mergedStatus: isAbsent ? 'absent' : 'boarded',
-              effectiveStatus: isAbsent ? 'absent' : 'boarded',
-              hasConflict: isConflict,
-              vehicleId: leg.vehicleId,
-              vehicleName: leg.vehicleName,
-              driverName: '郭澤威',
-              scheduledDepartTime: leg.departTime,
-              scheduledDurationMin: 10,
-              departTimeOverride: isCorrected ? '10:05' : null,
-              durationMinOverride: null,
-              notClaimedAa09: false,
-              correctedAt: isCorrected ? '2026-07-11 09:30' : undefined,
-              correctedByName: isCorrected ? '行政承辦' : undefined,
-              correctionReason: isCorrected ? '司機填錯時間' : undefined,
-              sources: [
-                {
-                  id: `src_${c.id}_${day}_1`,
-                  submissionId: 'sub_1',
-                  vehicleName: leg.vehicleName,
-                  driverName: '郭澤威',
-                  reported: isAbsent ? 'absent' : 'boarded',
-                  submittedAt: `${dateKey} 17:30`
-                },
-                ...(isConflict
-                  ? [
-                      {
-                        id: `src_${c.id}_${day}_2`,
-                        submissionId: 'sub_2',
-                        vehicleName: '竹北二車',
-                        driverName: '林志豪',
-                        reported: 'boarded' as const,
-                        submittedAt: `${dateKey} 17:35`
-                      }
-                    ]
-                  : [])
-              ]
-            }))
+            records: (c.activeSchedule?.legs || []).map((leg) => {
+              const legUnreported = isUnreported || (day === 24 && c.id === 'case_2' && leg.legSeq === 4)
+              const effectiveStatus = legUnreported ? 'unreported' : (isAbsent ? 'absent' : 'boarded')
+              const legConflict = isConflict && leg.legSeq === 1
+
+              return {
+                id: `ride_${c.id}_${day}_${leg.legSeq}`,
+                caseId: c.id,
+                caseName: c.name,
+                serviceDate: dateKey,
+                legSeq: leg.legSeq,
+                direction: leg.direction,
+                mergedStatus: effectiveStatus,
+                effectiveStatus: effectiveStatus,
+                hasConflict: legConflict,
+                vehicleId: leg.vehicleId,
+                vehicleName: leg.vehicleName,
+                driverName: leg.vehicleName?.includes('竹北一') ? '郭澤威' : (leg.vehicleName?.includes('竹北二') ? '林志豪' : (leg.vehicleName?.includes('竹南1') ? '曾建宏' : (leg.vehicleName?.includes('苗栗') ? '吳秀珠' : '陳國華'))),
+                scheduledDepartTime: leg.departTime,
+                scheduledDurationMin: c.activeSchedule?.serviceDurationMin || 10,
+                departTimeOverride: isCorrected ? (c.id === 'case_1' ? '10:05' : '09:15') : null,
+                durationMinOverride: null,
+                notClaimedAa09: isNotClaimed,
+                correctedAt: isCorrected ? (c.id === 'case_1' ? '2026-07-11 09:30' : '2026-07-14 14:00') : undefined,
+                correctedByName: isCorrected ? '行政承辦' : undefined,
+                correctionReason: isCorrected ? (c.id === 'case_1' ? '司機填錯時間' : '事後補報') : undefined,
+                sources: legUnreported ? [] : [
+                  {
+                    id: `src_${c.id}_${day}_1`,
+                    submissionId: `sub_${c.id}_${day}`,
+                    vehicleName: leg.vehicleName,
+                    driverName: leg.vehicleName?.includes('竹北一') ? '郭澤威' : '陳國華',
+                    reported: isAbsent ? 'absent' as const : 'boarded' as const,
+                    submittedAt: `${dateKey} 17:30`
+                  },
+                  ...(legConflict
+                    ? [
+                        {
+                          id: `src_${c.id}_${day}_2`,
+                          submissionId: `sub_${c.id}_${day}_conflict`,
+                          vehicleName: '竹北二車',
+                          driverName: '林志豪',
+                          reported: 'boarded' as const,
+                          submittedAt: `${dateKey} 17:35`
+                        }
+                      ]
+                    : [])
+                ]
+              }
+            })
           }
         } else {
           days[dateKey] = {

@@ -18,7 +18,7 @@
       >
         <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
         <div class="el-upload__text">
-          拖曳 Excel 檔案至此，或 <em>點擊上傳</em>
+          拖曳 Excel 檔案至此，或 <em>點選上傳</em>
         </div>
         <template #tip>
           <div class="el-upload__tip">

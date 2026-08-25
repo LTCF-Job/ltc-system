@@ -113,10 +113,10 @@
         </el-row>
       </el-card>
 
-      <!-- 各時段 (Legs) 車輛與時間配置 -->
+      <!-- 各時段 (Legs) 車輛與時間設定 -->
       <el-card shadow="never" class="section-card">
         <template #header>
-          <span class="card-title">時段與車輛配置 (共 {{ formData.legs.length }} 趟)</span>
+          <span class="card-title">時段與車輛設定 (共 {{ formData.legs.length }} 趟)</span>
         </template>
 
         <div v-for="(leg, idx) in formData.legs" :key="idx" class="leg-row-box">

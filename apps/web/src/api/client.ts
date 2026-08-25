@@ -12,12 +12,16 @@ export const apiClient = axios.create({
   }
 })
 
-// 請求攔截器：附加 JWT Token
+// 請求攔截器：附加 JWT Token 與 Mock 角色標頭
 apiClient.interceptors.request.use(
   (config) => {
     const authStore = useAuthStore()
     if (authStore.token) {
       config.headers.Authorization = `Bearer ${authStore.token}`
+    }
+    if (authStore.user) {
+      config.headers['X-Mock-Role'] = authStore.user.role
+      config.headers['X-Mock-User-ID'] = authStore.user.id || '00000000-0000-0000-0000-000000000001'
     }
     return config
   },
@@ -33,9 +37,14 @@ apiClient.interceptors.response.use(
     const apiError = error.response?.data?.error
 
     if (status === 401) {
+      const wasAuthenticated = authStore.isAuthenticated
       authStore.logout()
-      router.push('/login')
-      ElMessage.error('登入憑證已過期，請重新登入')
+      if (router.currentRoute.value.path !== '/login') {
+        router.push('/login')
+        if (wasAuthenticated) {
+          ElMessage.error('登入憑證已過期，請重新登入')
+        }
+      }
       return Promise.reject(error)
     }
 

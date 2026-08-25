@@ -152,6 +152,19 @@
         </div>
 
         <div class="header-right">
+          <!-- Demo 控制中心按鈕 -->
+          <el-button
+            type="warning"
+            size="small"
+            round
+            plain
+            class="demo-center-btn"
+            @click="openDemoGuide"
+          >
+            <el-icon><Guide /></el-icon>
+            ✨ Demo 控制中心
+          </el-button>
+
           <el-tag
             :type="authStore.currentRole === 'admin' ? 'danger' : (authStore.currentRole === 'staff' ? 'primary' : 'info')"
             effect="dark"
@@ -184,6 +197,9 @@
         <router-view />
       </el-main>
     </el-container>
+
+    <!-- Demo 展示導覽抽屜 -->
+    <DemoGuideDrawer ref="demoGuideRef" />
   </el-container>
 </template>
 
@@ -210,17 +226,20 @@ import {
   Bell,
   DataAnalysis,
   List,
-  Setting
+  Setting,
+  Guide
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'
 import { ROLE_LABELS } from '@/types/domain'
+import DemoGuideDrawer from '@/components/DemoGuideDrawer.vue'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
 const isCollapse = ref(false)
+const demoGuideRef = ref<InstanceType<typeof DemoGuideDrawer>>()
 
 const activeRoute = computed(() => {
   const path = route.path
@@ -231,6 +250,10 @@ const activeRoute = computed(() => {
 const currentRouteTitle = computed(() => {
   return (route.meta.title as string) || ''
 })
+
+function openDemoGuide() {
+  demoGuideRef.value?.open()
+}
 
 function handleCommand(cmd: string) {
   if (cmd === 'logout') {

@@ -47,17 +47,20 @@
         </el-button>
       </el-form>
 
-      <!-- 開發/展示快速身分切換 -->
+      <!-- 展示模式快速身分切換 -->
       <div class="dev-quick-login">
-        <el-divider>開發演示快速身分切換</el-divider>
+        <el-divider>
+          <span class="divider-tag">✨ 展示模式快速登入</span>
+        </el-divider>
+        <p class="demo-tip">系統已預載全類型個案、排班、搭乘矩陣、異常裁決與報表資料：</p>
         <div class="quick-btns">
-          <el-button size="small" type="danger" plain @click="quickLogin('admin')">
-            管理員 (Admin)
+          <el-button size="default" type="danger" plain @click="quickLogin('admin')">
+            系統管理員 (Admin)
           </el-button>
-          <el-button size="small" type="primary" plain @click="quickLogin('staff')">
+          <el-button size="default" type="primary" plain @click="quickLogin('staff')">
             行政人員 (Staff)
           </el-button>
-          <el-button size="small" type="info" plain @click="quickLogin('viewer')">
+          <el-button size="default" type="info" plain @click="quickLogin('viewer')">
             檢視者 (Viewer)
           </el-button>
         </div>
@@ -102,8 +105,8 @@ async function handleLogin() {
       if (form.email.includes('admin')) role = 'admin'
       else if (form.email.includes('viewer')) role = 'viewer'
 
-      authStore.setSession('mock_jwt_token_sample', {
-        id: 'usr_mock_001',
+      authStore.setSession(`mock_jwt_${role}`, {
+        id: `usr_${role}`,
         email: form.email,
         displayName: role === 'admin' ? '系統管理員' : (role === 'staff' ? '承辦行政' : '主管檢視者'),
         role
@@ -156,9 +159,22 @@ function quickLogin(role: UserRole) {
 .dev-quick-login {
   margin-top: 24px;
 
+  .divider-tag {
+    font-weight: bold;
+    color: var(--el-color-warning-dark-2);
+  }
+
+  .demo-tip {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
   .quick-btns {
     display: flex;
     justify-content: space-between;
+    gap: 8px;
   }
 }
 </style>

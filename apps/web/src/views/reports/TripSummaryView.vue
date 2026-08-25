@@ -62,7 +62,7 @@
       </el-row>
     </el-card>
 
-    <!-- 總覽數據統計卡片 -->
+    <!-- 總覽資料統計卡片 -->
     <el-row :gutter="16">
       <el-col :span="8">
         <el-card shadow="hover" class="stat-card">
