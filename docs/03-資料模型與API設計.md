@@ -16,6 +16,7 @@ erDiagram
     VEHICLES ||--o{ GOOGLE_FORMS : "一車一表單"
     VEHICLES ||--o{ DRIVER_ASSIGNMENTS : ""
     DRIVERS ||--o{ DRIVER_ASSIGNMENTS : "期間對應"
+    DRIVERS ||--o{ DRIVER_LEAVES : "請假登記"
     GOOGLE_FORMS ||--o{ FORM_COLUMNS : "欄位"
     GOOGLE_FORMS ||--o{ FORM_SUBMISSIONS : "每日回覆"
     FORM_COLUMNS }o--|| CASES : "綁定"
@@ -38,35 +39,41 @@ erDiagram
 ```sql
 -- 個案
 CREATE TABLE cases (
-  id                  BIGSERIAL PRIMARY KEY,
-  code                TEXT NOT NULL UNIQUE,          -- 系統編號，如 C0123（供 Google 表單欄名使用）
-  name                TEXT NOT NULL,
-  name_normalized     TEXT NOT NULL,                 -- Unicode NFKC + 異體字正規化，供模糊比對
-  national_id_enc     BYTEA NOT NULL,                -- AES-256-GCM 密文
-  national_id_hmac    BYTEA NOT NULL UNIQUE,         -- HMAC-SHA256，供精準查詢與唯一性檢查
-  home_address        TEXT NOT NULL,
-  region              TEXT NOT NULL CHECK (region IN ('miaoli','hsinchu')),
-  ltc_level           TEXT,                          -- 長照失能等級／給付碼；人工建檔，不進政府表單 33 欄
-  service_category    SMALLINT NOT NULL DEFAULT 1 CHECK (service_category IN (1,2)),   -- 1補助 2自費
-  service_usage_type  SMALLINT NOT NULL CHECK (service_usage_type BETWEEN 1 AND 4),    -- 政府表單第 33 欄
-  claim_start_date    DATE NOT NULL,                 -- 幾號開始申報（規則 R8）
-  claim_end_date      DATE,                          -- 停案日
-  status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended','closed')),
-  note                TEXT,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                      BIGSERIAL PRIMARY KEY,
+  code                    TEXT NOT NULL UNIQUE,          -- 系統編號，如 C0123（供 Google 表單欄名使用）
+  name                    TEXT NOT NULL,
+  name_normalized         TEXT NOT NULL,                 -- Unicode NFKC + 異體字正規化，供模糊比對
+  national_id_enc         BYTEA NOT NULL,                -- AES-256-GCM 密文
+  national_id_hmac        BYTEA NOT NULL UNIQUE,         -- HMAC-SHA256，供精準查詢與唯一性檢查
+  home_address            TEXT NOT NULL,
+  region                  TEXT NOT NULL CHECK (region IN ('miaoli','hsinchu')),
+  ltc_level               TEXT,                          -- 長照失能等級／給付碼；人工建檔，不進政府表單 33 欄
+  service_category        SMALLINT NOT NULL DEFAULT 1 CHECK (service_category IN (1,2)),   -- 1補助 2自費
+  service_usage_type      SMALLINT NOT NULL CHECK (service_usage_type BETWEEN 1 AND 4),    -- 政府表單第 33 欄
+  claim_start_date        DATE NOT NULL,                 -- 幾號開始申報（規則 R8）
+  claim_end_date          DATE,                          -- 停案日
+  status                  TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended','closed')),
+  emergency_contact_name  TEXT,                          -- 緊急聯絡人姓名
+  emergency_contact_phone TEXT,                          -- 緊急聯絡人電話
+  note                    TEXT,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_cases_region_status ON cases(region, status);
 CREATE INDEX idx_cases_name_norm ON cases(name_normalized);
 
 -- 據點
 CREATE TABLE sites (
-  id          BIGSERIAL PRIMARY KEY,
-  name        TEXT NOT NULL,
-  address     TEXT NOT NULL,
-  region      TEXT NOT NULL,
-  open_days   SMALLINT[] NOT NULL DEFAULT '{1,2,3,4,5}',  -- ISO 星期：1=一 … 7=日
-  status      TEXT NOT NULL DEFAULT 'active',
+  id            BIGSERIAL PRIMARY KEY,
+  name          TEXT NOT NULL,
+  address       TEXT NOT NULL,
+  region        TEXT NOT NULL,
+  contact_name  TEXT,                                      -- 據點聯絡人
+  contact_phone TEXT,                                      -- 據點電話
+  open_days     SMALLINT[] NOT NULL DEFAULT '{1,2,3,4,5}', -- ISO 星期：1=一 … 7=日
+  status        TEXT NOT NULL DEFAULT 'active',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (name, region)
 );
 
@@ -77,7 +84,9 @@ CREATE TABLE vehicles (
   display_name  TEXT NOT NULL UNIQUE,     -- 車名，如「竹北一車」
   region        TEXT NOT NULL,
   seats         SMALLINT,
-  status        TEXT NOT NULL DEFAULT 'active'
+  status        TEXT NOT NULL DEFAULT 'active',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 司機
@@ -89,7 +98,9 @@ CREATE TABLE drivers (
   national_id_hmac  BYTEA NOT NULL UNIQUE,
   phone             TEXT,
   email             TEXT,
-  status            TEXT NOT NULL DEFAULT 'active'
+  status            TEXT NOT NULL DEFAULT 'active',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 司機與車輛的期間對應（司機會換車、代班）
@@ -100,6 +111,8 @@ CREATE TABLE driver_assignments (
   effective_from DATE NOT NULL,
   effective_to   DATE,                    -- NULL = 迄今
   is_primary     BOOLEAN NOT NULL DEFAULT true,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   EXCLUDE USING gist (
     vehicle_id WITH =,
     daterange(effective_from, COALESCE(effective_to,'infinity'::date), '[]') WITH &&
@@ -119,12 +132,14 @@ CREATE TABLE case_schedules (
   effective_from       DATE NOT NULL,
   effective_to         DATE,
   weekdays             SMALLINT[] NOT NULL,        -- 每週搭乘日，如 {1,2,3,4,5}
-  trip_pattern         SMALLINT NOT NULL CHECK (trip_pattern IN (2,4)),  -- 規則 R4
+  trip_pattern         SMALLINT NOT NULL CHECK (trip_pattern IN (1, 2, 4)),  -- 1: 單向(單去/單回), 2: 一般(早去午回), 4: 四趟 (規則 R4)
   service_code         TEXT NOT NULL DEFAULT 'BD03',
   unit_price           NUMERIC(8,2) NOT NULL DEFAULT 115,   -- 逐案人工維護，115 僅為建檔預設
   distance_km          NUMERIC(6,2) NOT NULL,               -- 人工輸入，不由地圖 API 計算
   service_duration_min SMALLINT NOT NULL DEFAULT 10,        -- 逐案人工維護，10 僅為建檔預設（規則 R3）
   note                 TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (effective_to IS NULL OR effective_to >= effective_from)
 );
 CREATE INDEX idx_sched_case_period ON case_schedules(case_id, effective_from, effective_to);
@@ -134,23 +149,29 @@ CREATE INDEX idx_sched_case_period ON case_schedules(case_id, effective_from, ef
 
 ```sql
 
--- 每個時段一列：2 趟 → 2 列，4 趟 → 4 列
+-- 每個時段一列：1 趟 → 1 列，2 趟 → 2 列，4 趟 → 4 列
 CREATE TABLE schedule_legs (
   id           BIGSERIAL PRIMARY KEY,
   schedule_id  BIGINT NOT NULL REFERENCES case_schedules(id) ON DELETE CASCADE,
   leg_seq      SMALLINT NOT NULL CHECK (leg_seq BETWEEN 1 AND 4),
+  run_no       SMALLINT NOT NULL DEFAULT 1,                                -- 車次循環趟序（第一趟、第二趟，供新竹時刻表排序）
   direction    TEXT NOT NULL CHECK (direction IN ('outbound','inbound')),  -- 去程／回程
   period       TEXT NOT NULL CHECK (period IN ('am','pm')),                -- 上午／下午段
-  depart_time  TIME NOT NULL,                                              -- 政府表單第 8、9 欄
+  depart_time  TIME NOT NULL,                                              -- 出發時間（政府表單第 8、9 欄）
+  arrive_time  TIME,                                                       -- 預估抵達時間（選填，供新竹時刻表列印使用）
   vehicle_id   BIGINT NOT NULL REFERENCES vehicles(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (schedule_id, leg_seq)
 );
 ```
 
-**設計說明**：把「2 趟 / 4 趟」統一成 leg 清單，是本系統最重要的一個抽象。匯出時不需要 `if 四趟 then ... else ...` 的分支，一律走同一條路徑展開，規則 R4 自然被涵蓋。
+**設計說明**：把「1 趟 / 2 趟 / 4 趟」統一成 leg 清單，是本系統最重要的一個抽象。匯出時不需要 `if 四趟 then ... else ...` 的分支，一律走同一條路徑展開，規則 R4 自然被涵蓋。
 
 | 趟數型態 | leg 1 | leg 2 | leg 3 | leg 4 |
 |---|---|---|---|---|
+| 1 趟 (單去) | am／去程 08:00 | — | — | — |
+| 1 趟 (單回) | am／回程 12:00 | — | — | — |
 | 2 趟 | am／去程 08:00 | am／回程 12:00 | — | — |
 | 4 趟 | am／去程 08:00 | am／回程 11:00 | pm／去程 13:00 | pm／回程 16:00 |
 
@@ -166,6 +187,7 @@ CREATE TABLE google_forms (
   ingest_secret_ref TEXT NOT NULL,             -- Secret Manager 中的密鑰名稱
   active          BOOLEAN NOT NULL DEFAULT true,
   last_synced_at  TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (spreadsheet_id, sheet_name)
 );
 
@@ -236,23 +258,34 @@ CREATE TABLE ride_records (
   conflict_resolved_by UUID,                          -- 人工指定車輛／司機者
   conflict_resolved_at TIMESTAMPTZ,
   not_claimed_aa09  BOOLEAN NOT NULL DEFAULT false,   -- 政府表單第 17 欄，勾選時輸出 '1'
-  override_reason   TEXT,                             -- 規則 R7：人工覆寫必填
-  overridden_by     UUID,
-  overridden_at     TIMESTAMPTZ,
+  -- 人工更正（文件 09 §4.7）。原 override_* 三欄已更名，語意由「覆寫申報結果」改為「更正回報錯誤」
+  depart_time_override  TIME,                         -- NULL = 沿用 schedule_legs.depart_time
+  duration_min_override SMALLINT,                     -- NULL = 沿用 case_schedules.service_duration_min
+  correction_reason TEXT,                             -- 選填更正原因
+  corrected_by      UUID,
+  corrected_at      TIMESTAMPTZ,
+  admin_note        TEXT,                             -- 日常行政備註（如個案請假事由、家屬自載等，不受更正約束限制）
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (case_id, service_date, leg_seq),
+  -- 更正原因為選填，但只要有任何一項與司機回報不同，就必須留下操作者與時間
   CHECK (
-    (effective_status = merged_status AND override_reason IS NULL)
-    OR (override_reason IS NOT NULL AND overridden_by IS NOT NULL)
+    (effective_status = merged_status
+     AND depart_time_override IS NULL
+     AND duration_min_override IS NULL
+     AND corrected_by IS NULL)
+    OR corrected_by IS NOT NULL
   ),
+  CHECK ((corrected_by IS NULL) = (corrected_at IS NULL)),
   CHECK (
     (conflict_resolved_by IS NULL) = (conflict_resolved_at IS NULL)
   )
 );
 CREATE INDEX idx_ride_records_month ON ride_records(service_date, case_id);
+CREATE INDEX idx_ride_records_date_veh ON ride_records(service_date, vehicle_id);
 ```
 
-> **`merged_status` 與 `effective_status` 分兩欄是刻意的**：前者永遠是司機回報合併後的事實，後者才是拿去申報的值。兩者不同時，資料庫層的 `CHECK` 強制必須有覆寫原因與操作者。規則 R7 的稽核需求由此得到結構性保證，而不是靠程式自律。
+> **`merged_status` 與 `effective_status` 分兩欄是刻意的**：前者永遠是司機回報合併後的事實，後者才是拿去申報的值。兩者不同時，資料庫層的 `CHECK` 強制必須有操作者與時間 —— 「誰改過什麼」的追溯性由結構保證，而不是靠程式自律。更正原因（`correction_reason`）為選填，稽核的真正依據是 `audit_log` 記錄的全欄位前後值。一般未搭乘事由（如家屬自載、住院）則填寫於 `admin_note` 欄位。
 
 ### 2.5 匯出
 
@@ -260,11 +293,11 @@ CREATE INDEX idx_ride_records_month ON ride_records(service_date, case_id);
 CREATE TABLE export_jobs (
   id          BIGSERIAL PRIMARY KEY,
   job_type    TEXT NOT NULL CHECK (job_type IN ('gov_claim','trip_summary','hsinchu_schedule','payroll','maintenance_blank')),
-  period_ym   CHAR(6) NOT NULL,               -- 民國年月，如 '11507'（補零至 6 碼便於排序）
-  scope       JSONB NOT NULL,                 -- {region, vehicleIds, caseIds, mode:'per_case'|'combined'}
+  period_ym   VARCHAR(6) NOT NULL CHECK (period_ym ~ '^1[0-9]{4,5}$'),  -- 民國年月，如 '11507'（免去 CHAR 空白填充問題）
+  scope       JSONB NOT NULL,                                           -- {region, vehicleIds, caseIds, mode:'per_case'|'combined'}
   status      TEXT NOT NULL DEFAULT 'pending'
               CHECK (status IN ('pending','running','succeeded','failed')),
-  precheck    JSONB,                          -- 前置檢核結果
+  precheck    JSONB,                                                    -- 前置檢核結果
   file_path   TEXT, file_size BIGINT, checksum TEXT,
   error       TEXT,
   created_by  UUID NOT NULL,
@@ -280,9 +313,10 @@ CREATE TABLE export_lines (
   row_no       INT NOT NULL,
   columns      JSONB NOT NULL                 -- 33 欄的完整內容
 );
+CREATE INDEX idx_export_lines_job ON export_lines(job_id, row_no);
 ```
 
-### 2.6 稽核與其他
+### 2.6 稽核、日曆、請假與其他
 
 ```sql
 CREATE TABLE audit_log (
@@ -299,46 +333,102 @@ CREATE TABLE audit_log (
 -- 僅允許 INSERT
 REVOKE UPDATE, DELETE ON audit_log FROM PUBLIC;
 
+-- 國定假日與天災停班表（供應搭乘日曆與未回報偵測使用）
+CREATE TABLE holidays (
+  id           BIGSERIAL PRIMARY KEY,
+  holiday_date DATE NOT NULL UNIQUE,
+  name         TEXT NOT NULL,
+  is_holiday   BOOLEAN NOT NULL DEFAULT true,  -- false 代表補班日（需出勤接送）
+  region       TEXT CHECK (region IN ('miaoli', 'hsinchu', 'all')), -- null 或 'all' 代表全國通用
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_holidays_date ON holidays(holiday_date);
+
+-- 司機請假登記（F10，支援日期區間、代理司機與通知連動）
+CREATE TABLE driver_leaves (
+  id                    BIGSERIAL PRIMARY KEY,
+  driver_id             BIGINT NOT NULL REFERENCES drivers(id),
+  substitute_driver_id  BIGINT REFERENCES drivers(id),          -- 代理司機
+  leave_type            TEXT NOT NULL CHECK (leave_type IN ('personal', 'sick', 'annual', 'official', 'other')),
+  start_date            DATE NOT NULL,
+  end_date              DATE NOT NULL,
+  reason                TEXT,
+  status                TEXT NOT NULL DEFAULT 'approved' CHECK (status IN ('pending', 'approved', 'cancelled')),
+  created_by            UUID NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (end_date >= start_date)
+);
+CREATE INDEX idx_driver_leaves_period ON driver_leaves(start_date, end_date, driver_id);
+
 CREATE TABLE maintenance_records (        -- F8 車輛維修保養
-  id BIGSERIAL PRIMARY KEY,
-  vehicle_id BIGINT NOT NULL REFERENCES vehicles(id),
-  occurred_on DATE NOT NULL, category TEXT, vendor TEXT,
-  amount NUMERIC(10,2), odometer INT, description TEXT,
-  created_by UUID, created_at TIMESTAMPTZ DEFAULT now()
+  id           BIGSERIAL PRIMARY KEY,
+  vehicle_id   BIGINT NOT NULL REFERENCES vehicles(id),
+  occurred_on  DATE NOT NULL,
+  category     TEXT, vendor TEXT,
+  amount       NUMERIC(10,2), odometer INT, description TEXT,
+  invoice_no   TEXT,                      -- 發票／收據號碼
+  receipt_path TEXT,                      -- 單據圖檔或 PDF
+  created_by   UUID,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE fuel_records (               -- F7 油資（司機代墊）
-  id BIGSERIAL PRIMARY KEY,
-  vehicle_id BIGINT NOT NULL REFERENCES vehicles(id),
-  driver_id BIGINT NOT NULL REFERENCES drivers(id),
-  fueled_on DATE NOT NULL, liters NUMERIC(6,2), amount NUMERIC(10,2),
-  receipt_path TEXT, settled_in_period CHAR(6)
+  id                 BIGSERIAL PRIMARY KEY,
+  vehicle_id         BIGINT NOT NULL REFERENCES vehicles(id),
+  driver_id          BIGINT NOT NULL REFERENCES drivers(id),
+  fueled_on          DATE NOT NULL,
+  liters             NUMERIC(6,2),
+  amount             NUMERIC(10,2),
+  odometer           INT,                 -- 加油當下里程（供計算每公里油耗）
+  receipt_no         TEXT,                -- 發票號碼
+  payment_method     TEXT NOT NULL DEFAULT 'advance'
+                     CHECK (payment_method IN ('advance','fleet_card','credit_card','cash')),
+  receipt_path       TEXT,
+  settled_in_period  VARCHAR(6),
+  created_by         UUID,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE attendance_records (         -- F7 出勤／請假
-  id BIGSERIAL PRIMARY KEY,
-  driver_id BIGINT NOT NULL REFERENCES drivers(id),
-  work_date DATE NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('work','leave','sick','off')),
-  note TEXT,
+CREATE TABLE attendance_records (         -- F7 出勤／請假每日明細（由排程或請假登記展開）
+  id         BIGSERIAL PRIMARY KEY,
+  driver_id  BIGINT NOT NULL REFERENCES drivers(id),
+  work_date  DATE NOT NULL,
+  status     TEXT NOT NULL CHECK (status IN ('work','leave','sick','off')),
+  note       TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (driver_id, work_date)
 );
 
--- 系統層級開關（目前唯一用途：規則 R7 人工覆寫的總閘門）
+-- 系統層級設定（保留供日後使用；規則 R7 的 allow_manual_override 已取消，不寫入 seed）
 CREATE TABLE app_settings (
   key         TEXT PRIMARY KEY,
   value       JSONB NOT NULL,
   updated_by  UUID NOT NULL,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-INSERT INTO app_settings (key, value, updated_by) VALUES
-  ('allow_manual_override', 'false'::jsonb, '00000000-0000-0000-0000-000000000000');
 
-CREATE TABLE notification_log (           -- F4
-  id BIGSERIAL PRIMARY KEY,
-  channel TEXT NOT NULL DEFAULT 'email', target TEXT NOT NULL,
-  topic TEXT NOT NULL, body TEXT NOT NULL,
-  sent_at TIMESTAMPTZ DEFAULT now(), success BOOLEAN, error TEXT
+-- 系統通知收件人清單（F4 未回報、F10 請假通知收件人）
+CREATE TABLE notification_recipients (
+  id         BIGSERIAL PRIMARY KEY,
+  name       TEXT NOT NULL,
+  email      TEXT NOT NULL UNIQUE,
+  topic      TEXT NOT NULL CHECK (topic IN ('missing_report', 'driver_leave', 'all')),
+  active     BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE notification_log (           -- F4 / F10
+  id         BIGSERIAL PRIMARY KEY,
+  channel    TEXT NOT NULL DEFAULT 'email',
+  target     TEXT NOT NULL,
+  topic      TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  sent_at    TIMESTAMPTZ DEFAULT now(),
+  success    BOOLEAN,
+  error      TEXT
 );
 ```
 
@@ -355,8 +445,8 @@ CREATE TABLE notification_log (           -- F4
 | 5 | 數量 | 固定 `1` |
 | 6 | 單價 | `case_schedules.unit_price` |
 | 7 | 服務人員身分證 | `ride_records.driver_id` → `drivers.national_id`（解密）<br>若當日無回報司機，退回 `driver_assignments` 當日主要司機 |
-| 8 / 9 | 起始時段 時／分 | `schedule_legs.depart_time` |
-| 10 / 11 | 結束時段 時／分 | `depart_time + case_schedules.service_duration_min`（跨小時需進位） |
+| 8 / 9 | 起始時段 時／分 | `COALESCE(ride_records.depart_time_override, schedule_legs.depart_time)` |
+| 10 / 11 | 結束時段 時／分 | 起始時間 + `COALESCE(ride_records.duration_min_override, case_schedules.service_duration_min)`（跨小時需進位） |
 | 12 | 備註 | 空 |
 | 13–16 | 服務人員身分證 2–5 | 空 |
 | 17 | 不申報 AA09 | `ride_records.not_claimed_aa09 ? '1' : ''`（預設不勾選） |
@@ -388,11 +478,13 @@ CREATE TABLE notification_log (           -- F4
                               suggested_case_id=模糊比對推薦)
             記錄「新欄位待對應」通知
             continue                                            # 資料已在 payload 中，不會遺失
-        if col.mapping_status != 'mapped': continue
-        if 值 not in ('有坐','沒坐'): continue
+        # 若為四趟個案（trip_pattern=4），表單去程對應 leg 1+3，回程對應 leg 2+4
+        target_legs = (case.trip_pattern == 4) ? (col.direction == 'outbound' ? [1, 3] : [2, 4])
+                    : [col.leg_seq]
 
-        寫入 ride_sources(case, date, leg_seq, vehicle, driver,
-                          reported = 有坐 ? boarded : absent)
+        for leg in target_legs:
+            寫入 ride_sources(case, date, leg, vehicle, driver,
+                              reported = 有坐 ? boarded : absent)
 
     for 受影響的 (case, date, leg_seq):
         重新合併()
@@ -412,7 +504,7 @@ CREATE TABLE notification_log (           -- F4
         # 不可被視為已裁決；已由人工指定過的（conflict_resolved_by 非空）不覆蓋
         vehicle/driver = boarded 第一筆的車與司機（無則取排班預設）
         has_conflict  = conflict
-        # 若已有人工覆寫（override_reason 非空），保留 effective_status 不動，
+        # 若已被人工更正（corrected_at 非空），保留 effective_status 與各 override 欄位不動，
         # 但在畫面標示「來源資料已變更，請重新確認」
         else effective_status = merged
 ```
@@ -445,8 +537,9 @@ CREATE TABLE notification_log (           -- F4
 | warning | 混車衝突未處理（`has_conflict = true` 且 `conflict_resolved_by IS NULL`）— 不阻擋匯出，但需列出明細 |
 | warning | 應搭日但狀態為 `unreported`（司機未回報） |
 | warning | 當月零趟數 |
-| warning | 趟數 × 單價超出個案配給額度 |
-| info | 本月有人工覆寫紀錄 N 筆（列出明細） |
+| warning | 出發時間或服務時長經人工更正，與排班設定不符（列出明細） |
+| info | 本月有更正紀錄 N 筆（列出明細） |
+| info | 個案配給額度檢查未執行（規則未提供，見文件 09 §12.2 Q7） |
 
 ### 4.4 匯出流程
 
@@ -483,7 +576,8 @@ Job:
 | PATCH | `/cases/{id}` | 修改 | staff+ |
 | POST | `/cases/{id}/reveal` | 顯示完整身分證（寫稽核） | staff+ |
 | POST | `/cases/import` | 批次匯入（沿用 `個案新增資料.xlsx` 格式），回傳預覽與錯誤清單 | staff+ |
-| GET/POST/PATCH | `/sites`、`/vehicles`、`/drivers` | 同上模式 | |
+| GET/POST/PATCH | `/sites`、`/vehicles`、`/drivers` | 據點／車輛／司機標準 CRUD | staff+ |
+| POST | `/sites/import`、`/drivers/import` | 批次匯入（自 `(參考用)交通車接送班表.xlsx` 據點工作表與標題列擷取） | staff+ |
 | GET/POST/PATCH | `/cases/{id}/schedules` | 排班設定與時段 | staff+ |
 
 ### 表單與匯入
@@ -504,17 +598,45 @@ Job:
 | GET | `/rides/conflicts?month=` | 混車衝突清單（規則 R5） |
 | GET | `/rides/missing?date=` | 未回報清單（規則 R6） |
 | POST | `/rides/{id}/resolve-conflict` | 混車衝突人工裁決，body 為 `{ vehicleId, driverId }`；寫入 `conflict_resolved_by/at` |
-| PATCH | `/rides/{id}` | 人工覆寫，**body 必含 `effectiveStatus` 與 `reason`**，缺一回 400；`allow_manual_override` 為 `false` 時一律回 **403** |
+| PATCH | `/rides/{id}` | 搭乘紀錄更正與備註。可改狀態、車輛、司機、出發時間、服務時長、趟次及 `adminNote`（日常備註）；`reason` **選填**。無旗標控管。詳見文件 09 §4.7 |
 | PATCH | `/rides/{id}/aa09` | 設定第 17 欄「不申報 AA09」旗標，body 為 `{ notClaimed: bool }` |
+
+### 人事、出勤與請假（含司機請假通知 F10）
+
+| Method | Path | 說明 | 權限 |
+|---|---|---|---|
+| GET | `/attendance?month=115-07&driverId=` | 查詢司機出勤與請假每日明細（月曆視圖） | viewer+ |
+| POST | `/drivers/{id}/leaves` | 登記司機請假（日期區間、假別、事由、代理司機），寫入 `driver_leaves` 並同步展開至 `attendance_records`，自動寄出 Email 通知業主與管理者，並寫入 `notification_log` | staff+ |
+| GET | `/drivers/{id}/leaves` | 查詢司機請假歷史紀錄（含代理司機與假別） | viewer+ |
+| PATCH/DELETE | `/drivers/{id}/leaves/{leaveId}` | 修改／取消請假申請，同步更新出勤狀態並寫稽核 | staff+ |
+
+### 車輛維修與油資（F7、F8）
+
+| Method | Path | 說明 | 權限 |
+|---|---|---|---|
+| GET | `/maintenance?month=115-07&vehicleId=` | 查詢車輛保養維修紀錄 | viewer+ |
+| POST | `/maintenance` | 登錄車輛維修保養紀錄（里程、金額、項目、發票號碼、單據上傳） | staff+ |
+| GET | `/fuel?month=115-07&vehicleId=&driverId=` | 查詢司機代墊油資紀錄與結算狀態 | viewer+ |
+| POST | `/fuel` | 登錄加油紀錄（公升數、金額、里程數、發票號碼、支付方式、收據圖檔） | staff+ |
+
+### 日曆與假日設定
+
+| Method | Path | 說明 | 權限 |
+|---|---|---|---|
+| GET | `/holidays?year=2026&region=` | 查詢年度國定假日與停班日設定 | viewer+ |
+| POST | `/holidays/import` | 批次匯入政府行政院行事曆 CSV | staff+ |
+| POST/PATCH/DELETE | `/holidays`、`/holidays/{id}` | 手動新增／調整國定假日、補班日或天災停班假（苗栗／新竹） | staff+ |
 
 ### 系統設定
 
 | Method | Path | 說明 | 權限 |
 |---|---|---|---|
-| GET | `/settings` | 讀取系統開關 | staff+ |
-| PUT | `/settings/allow-manual-override` | 開啟／關閉規則 R7 的人工覆寫總閘門，寫稽核 | admin |
+| GET | `/settings` | 讀取系統設定 | staff+ |
+| GET | `/settings/notification-recipients` | 通知收件人清單 | viewer+ |
+| POST/PATCH/DELETE | `/settings/notification-recipients` | 通知收件人維護，寫稽核 | admin |
 
-> `allow_manual_override` 預設 `false`，取得客戶書面確認後才可由管理者開啟。關閉狀態下前端不顯示覆寫入口，後端獨立再擋一次，兩層都要有。
+> **`allow_manual_override` 旗標已於 2026-08-25 取消**：規則 R7 決議不實作（文件 09 §12.2 Q9），因此不需要這道閘門，`PUT /settings/allow-manual-override` 端點也不實作。`app_settings` 資料表保留供日後其他系統開關使用，但不寫入該筆 seed 資料。
+> 通知收件人改由 `notification_recipients` 資料表管理，規格見文件 09 §8.4。
 
 ### 匯出
 
@@ -560,7 +682,7 @@ Job:
 | `/masters/*` | 據點／車輛／司機 | 標準 CRUD |
 | `/forms` | 表單管理 | 各車表單同步狀態、最後同步時間 |
 | `/forms/mappings` | **欄位對應** | 待對應佇列，左為原始欄名、右為個案選擇器，含系統推薦 |
-| `/rides` | 搭乘紀錄 | 月曆矩陣（列＝個案、欄＝日期），格內顯示 √／／／!，可點擊覆寫 |
+| `/rides` | 搭乘紀錄 | 月曆矩陣（列＝個案、欄＝日期），格內顯示 √／／／!，可點擊更正 |
 | `/rides/issues` | 異常處理 | 混車衝突、未回報、匯入錯誤集中處理 |
 | `/exports` | 報表匯出 | 選年月與範圍 → 檢核結果 → 產檔 → 下載；歷史匯出紀錄 |
 | `/reports/*` | 趟數表／時刻表／薪資 | |
