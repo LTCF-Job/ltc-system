@@ -88,6 +88,24 @@ const router = createRouter({
           meta: { title: '車輛趟數表', roles: ['admin', 'staff', 'viewer'] }
         },
         {
+          path: 'reports/hsinchu-schedule',
+          name: 'HsinchuSchedule',
+          component: () => import('@/views/reports/HsinchuScheduleView.vue'),
+          meta: { title: '新竹接送時刻表', roles: ['admin', 'staff', 'viewer'] }
+        },
+        {
+          path: 'vehicles/maintenance',
+          name: 'VehicleMaintenance',
+          component: () => import('@/views/vehicles/MaintenanceView.vue'),
+          meta: { title: '車輛維修保養', roles: ['admin', 'staff', 'viewer'] }
+        },
+        {
+          path: 'attendance',
+          name: 'AttendanceFuel',
+          component: () => import('@/views/attendance/AttendanceFuelView.vue'),
+          meta: { title: '出勤與油資登錄', roles: ['admin', 'staff', 'viewer'] }
+        },
+        {
           path: 'audit',
           name: 'AuditLog',
           component: () => import('@/views/audit/AuditLogView.vue'),

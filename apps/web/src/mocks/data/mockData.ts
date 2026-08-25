@@ -13,7 +13,12 @@ import type {
   NotificationRecipientDTO,
   NotificationLogDTO,
   MissingRideDTO,
-  TripSummaryReportDTO
+  TripSummaryReportDTO,
+  MaintenanceLogDTO,
+  MonthAttendanceReportDTO,
+  FuelLogDTO,
+  HsinchuScheduleReportDTO,
+  DashboardMetricsDTO
 } from '@/types/api'
 
 export const mockSites: SiteDTO[] = [
@@ -571,5 +576,204 @@ export const mockTripSummaryReport: TripSummaryReportDTO = {
   grandTotalOutbound: 74,
   grandTotalInbound: 65,
   grandTotal: 139
+}
+
+export const mockMaintenanceLogs: MaintenanceLogDTO[] = [
+  {
+    id: 'maint_1',
+    vehicleId: 'veh_1',
+    vehicleName: '竹北一車',
+    plateNo: 'BZG-7915',
+    serviceDate: '2026-07-10',
+    mileage: 52000,
+    items: '五萬公里大保養、機油更換、變速箱油、煞車油',
+    vendor: '竹北正大保修廠',
+    cost: 8500,
+    note: '更換四輪來令片，狀況良好',
+    createdBy: '系統管理員',
+    createdAt: '2026-07-10 17:00:00'
+  },
+  {
+    id: 'maint_2',
+    vehicleId: 'veh_4',
+    vehicleName: '竹南2車',
+    plateNo: 'GHI-9012',
+    serviceDate: '2026-07-22',
+    mileage: 38400,
+    items: '定期機油更換、冷氣濾網清潔',
+    vendor: '頭份順益原廠',
+    cost: 3200,
+    note: '胎壓偵測器校正',
+    createdBy: '行政承辦',
+    createdAt: '2026-07-22 16:30:00'
+  }
+]
+
+export const mockAttendanceReport: MonthAttendanceReportDTO = {
+  periodYm: '115-07',
+  daysInMonth: 31,
+  drivers: [
+    {
+      driverId: 'drv_1',
+      driverCode: 'D0001',
+      driverName: '郭澤威',
+      region: 'hsinchu',
+      days: {
+        '2026-07-01': { date: '2026-07-01', status: 'work' },
+        '2026-07-02': { date: '2026-07-02', status: 'work' },
+        '2026-07-03': { date: '2026-07-03', status: 'work' },
+        '2026-07-06': { date: '2026-07-06', status: 'work' },
+        '2026-07-07': { date: '2026-07-07', status: 'leave', note: '家中有事請事假' },
+        '2026-07-08': { date: '2026-07-08', status: 'work' }
+      },
+      workDays: 21,
+      leaveDays: 1,
+      sickDays: 0,
+      offDays: 9
+    },
+    {
+      driverId: 'drv_2',
+      driverCode: 'D0002',
+      driverName: '林志豪',
+      region: 'hsinchu',
+      days: {
+        '2026-07-01': { date: '2026-07-01', status: 'work' },
+        '2026-07-02': { date: '2026-07-02', status: 'work' },
+        '2026-07-03': { date: '2026-07-03', status: 'work' },
+        '2026-07-15': { date: '2026-07-15', status: 'sick', note: '流感發燒' }
+      },
+      workDays: 20,
+      leaveDays: 0,
+      sickDays: 1,
+      offDays: 10
+    },
+    {
+      driverId: 'drv_3',
+      driverCode: 'D0003',
+      driverName: '陳國華',
+      region: 'miaoli',
+      days: {
+        '2026-07-01': { date: '2026-07-01', status: 'work' },
+        '2026-07-02': { date: '2026-07-02', status: 'work' }
+      },
+      workDays: 22,
+      leaveDays: 0,
+      sickDays: 0,
+      offDays: 9
+    }
+  ]
+}
+
+export const mockFuelLogs: FuelLogDTO[] = [
+  {
+    id: 'fuel_1',
+    vehicleId: 'veh_1',
+    vehicleName: '竹北一車',
+    plateNo: 'BZG-7915',
+    driverId: 'drv_1',
+    driverName: '郭澤威',
+    fuelDate: '2026-07-05',
+    liters: 45.2,
+    cost: 1450,
+    createdBy: '郭澤威',
+    createdAt: '2026-07-05 18:00:00'
+  },
+  {
+    id: 'fuel_2',
+    vehicleId: 'veh_1',
+    vehicleName: '竹北一車',
+    plateNo: 'BZG-7915',
+    driverId: 'drv_1',
+    driverName: '郭澤威',
+    fuelDate: '2026-07-18',
+    liters: 48.0,
+    cost: 1530,
+    createdBy: '郭澤威',
+    createdAt: '2026-07-18 17:30:00'
+  },
+  {
+    id: 'fuel_3',
+    vehicleId: 'veh_4',
+    vehicleName: '竹南2車',
+    plateNo: 'GHI-9012',
+    driverId: 'drv_3',
+    driverName: '陳國華',
+    fuelDate: '2026-07-12',
+    liters: 40.5,
+    cost: 1290,
+    createdBy: '陳國華',
+    createdAt: '2026-07-12 18:20:00'
+  }
+]
+
+export const mockHsinchuScheduleReport: HsinchuScheduleReportDTO = {
+  generatedAt: '2026-08-25 15:30:00',
+  siteName: '竹北日照中心',
+  vehicleName: '竹北一車',
+  outbound: [
+    {
+      direction: 'outbound',
+      runNo: 1,
+      caseCode: 'C0002',
+      caseName: '葉秀珍',
+      note: '早去午回',
+      departTime: '08:30',
+      origin: '新竹縣竹北市中正西路50號',
+      arriveTime: '08:45',
+      destination: '竹北日照中心',
+      vehicleName: '竹北一車',
+      siteName: '竹北日照中心'
+    },
+    {
+      direction: 'outbound',
+      runNo: 1,
+      caseCode: 'C0003',
+      caseName: '吳𣵛桂',
+      note: '去程竹1車',
+      departTime: '08:45',
+      origin: '新竹縣竹北市博愛街264號',
+      arriveTime: '09:00',
+      destination: '竹北日照中心',
+      vehicleName: '竹北一車',
+      siteName: '竹北日照中心'
+    }
+  ],
+  inbound: [
+    {
+      direction: 'inbound',
+      runNo: 1,
+      caseCode: 'C0002',
+      caseName: '葉秀珍',
+      departTime: '16:30',
+      origin: '竹北日照中心',
+      arriveTime: '16:45',
+      destination: '新竹縣竹北市中正西路50號',
+      vehicleName: '竹北一車',
+      siteName: '竹北日照中心'
+    }
+  ]
+}
+
+export const mockDashboardMetrics: DashboardMetricsDTO = {
+  currentMonth: '115-07',
+  totalCasesCount: 42,
+  reportedTripsCount: 380,
+  unreportedVehiclesToday: 1,
+  pendingConflictsCount: 1,
+  pendingFormColumnsCount: 2,
+  attendanceDistribution: {
+    workCount: 63,
+    leaveCount: 2,
+    sickCount: 1,
+    offCount: 28,
+    leavePercentage: 4.5
+  },
+  vehicleTripTrends: [
+    { vehicleName: '竹北一車', plateNo: 'BZG-7915', tripCount: 83 },
+    { vehicleName: '竹北二車', plateNo: 'ABC-1234', tripCount: 56 },
+    { vehicleName: '竹南1車', plateNo: 'DEF-5678', tripCount: 112 },
+    { vehicleName: '竹南2車', plateNo: 'GHI-9012', tripCount: 129 }
+  ],
+  claimFulfillmentRate: 98.2
 }
 

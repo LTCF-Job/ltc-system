@@ -193,6 +193,7 @@ export interface DriverAssignmentDTO {
 
 export interface DriverDTO {
   id: string
+  code?: string
   name: string
   nameNormalized?: string
   nationalId: string
@@ -555,4 +556,144 @@ export interface TripSummaryReportDTO {
   grandTotalInbound: number
   grandTotal: number
 }
+
+// 12. 新竹接送時刻表 (Hsinchu Schedule Report)
+export interface HsinchuScheduleItemDTO {
+  direction: Direction
+  runNo: number
+  caseCode: string
+  caseName: string
+  note?: string
+  departTime: string
+  origin: string
+  arriveTime?: string
+  destination: string
+  vehicleName: string
+  siteName: string
+}
+
+export interface HsinchuScheduleReportDTO {
+  generatedAt: string
+  siteName?: string
+  vehicleName?: string
+  outbound: HsinchuScheduleItemDTO[]
+  inbound: HsinchuScheduleItemDTO[]
+}
+
+// 13. 車輛維修保養 (Vehicle Maintenance)
+export interface MaintenanceLogDTO {
+  id: string
+  vehicleId: string
+  vehicleName?: string
+  plateNo?: string
+  serviceDate: string
+  mileage: number
+  items: string
+  vendor?: string
+  cost: number
+  receiptUrl?: string
+  note?: string
+  createdBy: string
+  createdAt: string
+}
+
+export interface CreateMaintenanceRequest {
+  vehicleId: string
+  serviceDate: string
+  mileage: number
+  items: string
+  vendor?: string
+  cost: number
+  receiptUrl?: string
+  note?: string
+}
+
+export interface UpdateMaintenanceRequest extends Partial<CreateMaintenanceRequest> {}
+
+// 14. 司機出勤與請假 (Attendance)
+export interface DriverDayAttendanceDTO {
+  date: string
+  status: 'work' | 'leave' | 'sick' | 'off'
+  note?: string
+}
+
+export interface DriverMonthAttendanceDTO {
+  driverId: string
+  driverCode: string
+  driverName: string
+  region: Region
+  days: Record<string, DriverDayAttendanceDTO>
+  workDays: number
+  leaveDays: number
+  sickDays: number
+  offDays: number
+}
+
+export interface MonthAttendanceReportDTO {
+  periodYm: string
+  daysInMonth: number
+  drivers: DriverMonthAttendanceDTO[]
+}
+
+export interface UpsertAttendanceRequest {
+  driverId: string
+  recordDate: string
+  status: 'work' | 'leave' | 'sick' | 'off'
+  note?: string
+}
+
+// 15. 車輛油資 (Fuel Logs)
+export interface FuelLogDTO {
+  id: string
+  vehicleId: string
+  vehicleName?: string
+  plateNo?: string
+  driverId?: string
+  driverName?: string
+  fuelDate: string
+  liters: number
+  cost: number
+  receiptUrl?: string
+  createdBy: string
+  createdAt: string
+}
+
+export interface CreateFuelLogRequest {
+  vehicleId: string
+  driverId?: string
+  fuelDate: string
+  liters: number
+  cost: number
+  receiptUrl?: string
+}
+
+export interface UpdateFuelLogRequest extends Partial<CreateFuelLogRequest> {}
+
+// 16. 完整版營運儀表板指標 (Dashboard Advanced Metrics)
+export interface AttendanceDistributionDTO {
+  workCount: number
+  leaveCount: number
+  sickCount: number
+  offCount: number
+  leavePercentage: number
+}
+
+export interface VehicleTripTrendItemDTO {
+  vehicleName: string
+  plateNo: string
+  tripCount: number
+}
+
+export interface DashboardMetricsDTO {
+  currentMonth: string
+  totalCasesCount: number
+  reportedTripsCount: number
+  unreportedVehiclesToday: number
+  pendingConflictsCount: number
+  pendingFormColumnsCount: number
+  attendanceDistribution: AttendanceDistributionDTO
+  vehicleTripTrends: VehicleTripTrendItemDTO[]
+  claimFulfillmentRate: number
+}
+
 

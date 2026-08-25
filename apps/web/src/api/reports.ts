@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { TripSummaryReportDTO } from '@/types/api'
+import type { TripSummaryReportDTO, HsinchuScheduleReportDTO } from '@/types/api'
 
 export async function getTripSummaryReport(params: {
   periodYm: string
@@ -15,6 +15,23 @@ export async function exportTripSummaryExcel(params: {
   vehicleId?: string
 }): Promise<Blob> {
   return apiClient.get('/reports/trip-summary/export', {
+    params,
+    responseType: 'blob'
+  })
+}
+
+export async function getHsinchuSchedule(params?: {
+  siteId?: string
+  vehicleId?: string
+}): Promise<HsinchuScheduleReportDTO> {
+  return apiClient.get('/reports/hsinchu-schedule', { params })
+}
+
+export async function exportHsinchuScheduleExcel(params?: {
+  siteId?: string
+  vehicleId?: string
+}): Promise<Blob> {
+  return apiClient.get('/reports/hsinchu-schedule/export', {
     params,
     responseType: 'blob'
   })

@@ -187,3 +187,20 @@ export const AUDIT_ENTITY_LABELS: Record<AuditEntityType, string> = {
   app_settings: '系統設定'
 }
 
+export type AttendanceStatus = 'work' | 'leave' | 'sick' | 'off'
+
+export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
+  work: '出勤',
+  leave: '事假',
+  sick: '病假',
+  off: '休假'
+}
+
+export const ATTENDANCE_STATUS_TAGS: Record<AttendanceStatus, string> = {
+  work: 'success',
+  leave: 'warning',
+  sick: 'danger',
+  off: 'info'
+}
+
+

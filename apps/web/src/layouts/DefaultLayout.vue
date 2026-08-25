@@ -88,7 +88,21 @@
             <el-icon><List /></el-icon>
             <template #title>車輛趟數表</template>
           </el-menu-item>
+          <el-menu-item index="/reports/hsinchu-schedule">
+            <el-icon><DocumentCopy /></el-icon>
+            <template #title>新竹接送時刻表</template>
+          </el-menu-item>
         </el-sub-menu>
+
+        <el-menu-item index="/vehicles/maintenance">
+          <el-icon><Management /></el-icon>
+          <template #title>車輛維修保養</template>
+        </el-menu-item>
+
+        <el-menu-item index="/attendance">
+          <el-icon><Calendar /></el-icon>
+          <template #title>出勤與油資管理</template>
+        </el-menu-item>
 
         <el-menu-item index="/exports">
           <el-icon><Download /></el-icon>
