@@ -12,10 +12,10 @@ cp .env.example .env.development
 
 變數說明：
 - `VITE_API_BASE_URL`: 後端 API 基礎路徑（預設 `/api/v1`）
-- `VITE_SUPABASE_URL`: Supabase 專案 URL
-- `VITE_SUPABASE_ANON_KEY`: Supabase 匿名金鑰
+- `VITE_SUPABASE_URL`: Supabase 專案網址，登入頁呼叫 `signInWithPassword` 取得真實 JWT 用；正式環境必填
+- `VITE_SUPABASE_ANON_KEY`: Supabase 專案 anon public key；正式環境必填
 - `VITE_API_SPEC_URL`: OpenAPI 規範 Swagger JSON 網址
-- `VITE_ENABLE_MSW`: 是否啟用本機 MSW 模擬伺服器（`true` / `false`）
+- `VITE_ENABLE_MSW`: 是否啟用本機 MSW 模擬伺服器與展示模式快速登入（`true` / `false`）；正式環境必須為 `false` 或不設定
 
 ## 2. 啟動與開發指令
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -105,15 +106,19 @@ func main() {
 	r.Use(gin.Recovery())
 	r.Use(middleware.SlogLoggerMiddleware())
 
-	// CORS 設定
+	// CORS 設定：正式環境限制為白名單網域，本機開發維持全放行以配合任意 port 測試
 	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowAllOrigins = true
+	if cfg.AppEnv == "production" {
+		corsConfig.AllowOrigins = strings.Split(cfg.AllowedOrigins, ",")
+	} else {
+		corsConfig.AllowAllOrigins = true
+	}
 	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Ingest-Token", "X-Mock-Role", "X-Mock-User-ID"}
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	r.Use(cors.New(corsConfig))
 
-	// 健康檢查端點 (健康檢查不走 JWT)
-	r.GET("/healthz", func(c *gin.Context) {
+	// 健康檢查端點 (健康檢查不走 JWT)。避免使用 /healthz：Cloud Run 預設網域的 Google 前端會保留攔截此精確路徑，導致外部請求收不到回應。
+	r.GET("/api/health", func(c *gin.Context) {
 		dbStatus := "connected"
 		if pool == nil || pool.Ping(c.Request.Context()) != nil {
 			dbStatus = "disconnected"

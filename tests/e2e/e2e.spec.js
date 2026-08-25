@@ -56,7 +56,7 @@ async function runE2ESuite() {
     { name: '前端首頁 Web (Port 3000)', url: `${webBase}/`, method: 'GET', expectedStatus: [200, 304] },
     
     // 2. 健康檢查
-    { name: '後端健康檢查 (GET /healthz)', url: 'http://localhost:8080/healthz', method: 'GET', expectedStatus: [200] },
+    { name: '後端健康檢查 (GET /api/health)', url: 'http://localhost:8080/api/health', method: 'GET', expectedStatus: [200] },
 
     // 3. 總覽儀表板
     { name: '儀表板統計 (GET /dashboard/stats)', url: `${apiBase}/dashboard/stats`, method: 'GET', expectedStatus: [200] },

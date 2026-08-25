@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'apps/api/**'
+      - 'apps/web/**'
+      - 'tests/**'
+      - 'docker-compose*.yml'
+      - '.github/workflows/**'
+  push:
+    branches: [develop, main]
+    paths:
+      - 'apps/api/**'
+      - 'apps/web/**'
+      - 'tests/**'
+      - 'docker-compose*.yml'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API test and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -race
+
+      - name: Build server and migration binaries
+        run: |
+          go build ./cmd/server
+          go build ./cmd/migrate
+
+  web:
+    name: Web type-check and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Build
+        run: npm run build

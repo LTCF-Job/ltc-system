@@ -20,6 +20,7 @@ type Config struct {
 	HMACKeyB64          string        `envconfig:"HMAC_KEY" default:"MDkwODAwMDcwNjA1MDQwMzA5MDgwMDA3MDYwNTA0MDM="`       // 32 bytes base64 for dev
 	SupabaseJWKSURL     string        `envconfig:"SUPABASE_JWKS_URL"`
 	SupabaseProjectRef  string        `envconfig:"SUPABASE_PROJECT_REF"`
+	AllowedOrigins      string        `envconfig:"ALLOWED_ORIGINS"`
 	StorageBucket       string        `envconfig:"STORAGE_BUCKET" default:"ltc-exports"`
 	StorageSignedURLTTL time.Duration `envconfig:"STORAGE_SIGNED_URL_TTL" default:"24h"`
 	GoogleSAJSON        string        `envconfig:"GOOGLE_SA_JSON"`
@@ -48,6 +49,11 @@ func LoadFromEnv() (*Config, error) {
 	// 正式環境缺少 JWKS 時 AuthMiddleware 會對每個請求回應 500，改為啟動時直接拒絕啟動
 	if cfg.AppEnv == "production" && cfg.SupabaseJWKSURL == "" {
 		return nil, errors.New("SUPABASE_JWKS_URL is required when APP_ENV=production")
+	}
+
+	// 正式環境未設定白名單時 CORS 會退回全放行，改為啟動時直接拒絕啟動
+	if cfg.AppEnv == "production" && cfg.AllowedOrigins == "" {
+		return nil, errors.New("ALLOWED_ORIGINS is required when APP_ENV=production")
 	}
 
 	encKey, err := base64.StdEncoding.DecodeString(cfg.EncryptionKeyB64)
