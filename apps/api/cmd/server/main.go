@@ -52,6 +52,7 @@ func main() {
 	}
 
 	// 初始化 Repositories
+	regionRepo := repository.NewRegionRepository(pool)
 	caseRepo := repository.NewCaseRepository(pool)
 	siteRepo := repository.NewSiteRepository(pool)
 	vehicleRepo := repository.NewVehicleRepository(pool)
@@ -69,6 +70,7 @@ func main() {
 	taskRepo := repository.NewTaskRepository(pool)
 
 	// 初始化 Services
+	regionSvc := service.NewRegionService(regionRepo, auditRepo)
 	masterSvc := service.NewMasterService(cfg, caseRepo, siteRepo, vehicleRepo, driverRepo, auditRepo)
 	importSvc := service.NewImportService(masterSvc, siteRepo, vehicleRepo, driverRepo, caseRepo)
 	rideSvc := service.NewRideService(formRepo, driverRepo, caseRepo, vehicleRepo, auditRepo)
@@ -85,6 +87,7 @@ func main() {
 	taskSvc := service.NewTaskService(taskRepo, caseRepo, holidayRepo, notificationSvc)
 
 	// 初始化 Handlers
+	regionH := handler.NewRegionHandler(regionSvc)
 	caseH := handler.NewCaseHandler(caseRepo, masterSvc, importSvc)
 	siteH := handler.NewSiteHandler(siteRepo)
 	vehicleH := handler.NewVehicleHandler(vehicleRepo)
@@ -138,9 +141,18 @@ func main() {
 	apiV1 := r.Group("/api/v1")
 	apiV1.Use(middleware.AuthMiddleware(cfg))
 	{
+		// 0. 區域主檔
+		apiV1.GET("/regions", middleware.RequireRoles("viewer", "staff", "admin"), regionH.List)
+		apiV1.GET("/regions/:id", middleware.RequireRoles("viewer", "staff", "admin"), regionH.Get)
+		apiV1.POST("/regions", middleware.RequireRoles("staff", "admin"), regionH.Create)
+		apiV1.PATCH("/regions/:id", middleware.RequireRoles("staff", "admin"), regionH.Update)
+		apiV1.DELETE("/regions/:id", middleware.RequireRoles("admin"), regionH.Delete)
+
 		// 1. 個案主檔與排班
+
 		apiV1.GET("/cases", middleware.RequireRoles("viewer", "staff", "admin"), caseH.List)
 		apiV1.POST("/cases", middleware.RequireRoles("staff", "admin"), caseH.Create)
+		apiV1.GET("/cases/template", middleware.RequireRoles("viewer", "staff", "admin"), caseH.DownloadTemplate)
 		apiV1.GET("/cases/:id", middleware.RequireRoles("viewer", "staff", "admin"), caseH.Get)
 		apiV1.PATCH("/cases/:id", middleware.RequireRoles("staff", "admin"), caseH.Update)
 		apiV1.POST("/cases/:id/reveal", middleware.RequireRoles("staff", "admin"), caseH.Reveal)
@@ -181,6 +193,7 @@ func main() {
 		apiV1.GET("/rides/missing", middleware.RequireRoles("viewer", "staff", "admin"), taskH.GetMissingReports)
 		apiV1.GET("/rides/:id", middleware.RequireRoles("viewer", "staff", "admin"), rideH.GetRecord)
 		apiV1.PATCH("/rides/:id", middleware.RequireRoles("staff", "admin"), rideH.Correct)
+		apiV1.POST("/rides/manual-report", middleware.RequireRoles("staff", "admin"), rideH.ManualReport)
 		apiV1.POST("/rides/:id/resolve-conflict", middleware.RequireRoles("staff", "admin"), rideH.ResolveConflict)
 
 		// 7. 匯出前置檢核與工作管理 (B4.3)

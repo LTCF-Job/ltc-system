@@ -69,15 +69,16 @@ type DriverEntity struct {
 
 // DriverAssignmentEntity 代表 driver_assignments 資料表實體。
 type DriverAssignmentEntity struct {
-	ID            uuid.UUID  `json:"id"`
-	DriverID      uuid.UUID  `json:"driverId"`
-	DriverName    string     `json:"driverName,omitempty"`
-	VehicleID     uuid.UUID  `json:"vehicleId"`
-	VehicleName   string     `json:"vehicleName,omitempty"`
-	IsPrimary     bool       `json:"isPrimary"`
-	EffectiveFrom time.Time  `json:"effectiveFrom"`
-	EffectiveTo   *time.Time `json:"effectiveTo,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
+	ID             uuid.UUID  `json:"id"`
+	DriverID       uuid.UUID  `json:"driverId"`
+	DriverName     string     `json:"driverName,omitempty"`
+	VehicleID      uuid.UUID  `json:"vehicleId"`
+	VehicleName    string     `json:"vehicleName,omitempty"`
+	VehiclePlateNo string     `json:"vehiclePlateNo,omitempty"`
+	IsPrimary      bool       `json:"isPrimary"`
+	EffectiveFrom  time.Time  `json:"effectiveFrom"`
+	EffectiveTo    *time.Time `json:"effectiveTo,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
 }
 
 // CaseScheduleEntity 代表 case_schedules 與 schedule_legs 之組合排班實體。
@@ -185,4 +186,17 @@ type VehicleTripSummary struct {
 	TotalInboundCount  int              `json:"totalInboundCount"`
 	GrandTotalCount    int              `json:"grandTotalCount"`
 }
+
+// RegionEntity 代表 regions 資料表實體。
+type RegionEntity struct {
+	ID          uuid.UUID `json:"id"`
+	Code        string    `json:"code"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Status      string    `json:"status"`
+	SortOrder   int       `json:"sortOrder"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
 
