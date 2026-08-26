@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: production-web
+  group: deploy-web-${{ github.event.workflow_run.head_branch || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -19,10 +19,10 @@ jobs:
     if: >-
       (github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main') ||
+      contains(fromJSON('["develop", "main"]'), github.event.workflow_run.head_branch)) ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: production
+    environment: ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'production' || 'develop' }}
     defaults:
       run:
         working-directory: apps/web
@@ -30,6 +30,7 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ENV: ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'production' || 'preview' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,10 +46,20 @@ jobs:
         run: npm install --global vercel
 
       - name: Pull Vercel environment info
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        run: vercel pull --yes --environment="$VERCEL_ENV" --token="$VERCEL_TOKEN"
 
       - name: Build
-        run: vercel build --prod --token="$VERCEL_TOKEN"
+        run: |
+          if [ "$VERCEL_ENV" = "production" ]; then
+            vercel build --prod --token="$VERCEL_TOKEN"
+          else
+            vercel build --token="$VERCEL_TOKEN"
+          fi
 
       - name: Deploy prebuilt output
-        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        run: |
+          if [ "$VERCEL_ENV" = "production" ]; then
+            vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+          else
+            vercel deploy --prebuilt --token="$VERCEL_TOKEN"
+          fi

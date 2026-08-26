@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: production-api
+  group: deploy-api-${{ github.event.workflow_run.head_branch || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -20,6 +20,7 @@ env:
   ARTIFACT_REPOSITORY: ${{ vars.ARTIFACT_REPOSITORY }}
   API_SERVICE: ${{ vars.API_SERVICE || 'ltc-api' }}
   MIGRATION_JOB: ${{ vars.MIGRATION_JOB || 'ltc-api-migrate' }}
+  IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   deploy:
@@ -27,10 +28,10 @@ jobs:
     if: >-
       (github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main') ||
+      contains(fromJSON('["develop", "main"]'), github.event.workflow_run.head_branch)) ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: production
+    environment: ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'production' || 'develop' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,6 +76,3 @@ jobs:
             --region "$GCP_REGION" \
             --image "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/api:${IMAGE_TAG}" \
             --platform managed
-
-env:
-  IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
