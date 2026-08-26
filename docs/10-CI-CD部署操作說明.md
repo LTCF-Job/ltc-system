@@ -45,12 +45,18 @@ migration job 與 API service 共用同一份 config（`apps/api/internal/config
 | 名稱 | 內容 |
 |---|---|
 | `GCP_WIF_PROVIDER` | Google Cloud Workload Identity Federation provider resource name |
-| `GCP_DEPLOY_SA` | 允許 Cloud Build、Artifact Registry、Cloud Run 部署的 service account email |
+| `GCP_DEPLOY_SA` | 允許 Cloud Build、Artifact Registry、Cloud Run 部署的 service account email，IAM 角色需求見下方「Cloud Run 前置條件」 |
 
 ## Cloud Run 前置條件
 
 先在 Google Cloud 建立並設定：
 
+0. `GCP_DEPLOY_SA` 這個 service account 除了送出 Cloud Build、部署 Cloud Run 的權限，**還要加 `roles/logging.viewer`**（Logs Viewer）。`deploy-api.yml` 的 `gcloud builds submit` 預設會即時串流建置 log，若 SA 沒有讀 log 權限，指令會直接失敗並顯示 `This tool can only stream logs if you are Viewer/Owner of the project`——即使 Cloud Build 本身有被成功觸發、建置繼續在背景跑，GitHub Actions 這一步還是會判定失敗、擋住後續部署步驟。實際起碼要有：
+   - `roles/cloudbuild.builds.editor`（送出並管理 Cloud Build 建置）
+   - `roles/run.admin`（部署 Cloud Run service／job）
+   - `roles/artifactregistry.writer`（推送映像檔到 Artifact Registry）
+   - `roles/iam.serviceAccountUser`（Cloud Run 服務需要用這個 SA 執行時）
+   - `roles/logging.viewer`（**串流 Cloud Build log 用，最容易漏掉**）
 1. Artifact Registry repository，名稱需與 `ARTIFACT_REPOSITORY` 相同。
 2. Cloud Run API service，名稱需與 `API_SERVICE` 相同。
 3. Cloud Run Job，名稱需與 `MIGRATION_JOB` 相同，執行指令設定為 `/app/migrate up`。
