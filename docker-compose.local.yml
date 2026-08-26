@@ -33,13 +33,20 @@ services:
   web:
     build:
       context: ./apps/web
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: ltc-web
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "3000:5173"
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_API_TARGET=http://api:8080
     depends_on:
       - api
+
 
 volumes:
   pgdata:
