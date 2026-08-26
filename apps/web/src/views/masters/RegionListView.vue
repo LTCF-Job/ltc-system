@@ -12,7 +12,7 @@
       <template #filter>
         <el-input
           v-model="filters.q"
-          placeholder="搜尋區域代碼／名稱／說明"
+          placeholder="搜尋地區代碼／名稱／說明"
           clearable
           style="width: 260px"
           @keyup.enter="handleSearch"
@@ -34,34 +34,15 @@
         <el-button @click="handleReset">重設</el-button>
       </template>
 
-      <!-- 操作按鈕與拖曳提示 -->
+      <!-- 操作按鈕 -->
       <template #actions>
-        <el-tag
-          v-if="!isSearching"
-          type="info"
-          effect="plain"
-          class="drag-hint-tag"
-        >
-          <el-icon><Rank /></el-icon>
-          按住「排序」欄位上下拖曳可直接調整區域順序
-        </el-tag>
-        <el-tag
-          v-else
-          type="warning"
-          effect="plain"
-          class="drag-hint-tag"
-        >
-          <el-icon><InfoFilled /></el-icon>
-          篩選模式下暫停拖曳排序，點選「重設」即可恢復
-        </el-tag>
-
         <el-button
           v-if="authStore.can('staff')"
           type="primary"
           @click="openCreateDialog"
         >
           <el-icon><Plus /></el-icon>
-          新增區域
+          新增地區
         </el-button>
       </template>
 
@@ -111,7 +92,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="code" label="區域代碼" width="160">
+          <el-table-column prop="code" label="地區代碼" width="160">
             <template #default="{ row }">
               <el-tag size="small" type="info" class="font-mono">
                 {{ row.code }}
@@ -119,7 +100,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="name" label="區域名稱" min-width="150">
+          <el-table-column prop="name" label="地區名稱" min-width="150">
             <template #default="{ row }">
               <span class="font-bold text-gray-800">{{ row.name }}</span>
             </template>
@@ -191,12 +172,12 @@
     <!-- 新增/編輯彈窗 -->
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId ? '編輯區域設定' : '新增營運區域'"
+      :title="editingId ? '編輯地區設定' : '新增營運地區'"
       width="540px"
       destroy-on-close
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-form-item label="區域代碼" prop="code">
+        <el-form-item label="地區代碼" prop="code">
           <el-input
             v-model="form.code"
             :disabled="!!editingId"
@@ -207,7 +188,7 @@
           </div>
         </el-form-item>
 
-        <el-form-item label="區域名稱" prop="name">
+        <el-form-item label="地區名稱" prop="name">
           <el-input v-model="form.name" placeholder="如：臺北市、臺中市" />
         </el-form-item>
 
@@ -238,7 +219,7 @@
             v-model="form.description"
             type="textarea"
             :rows="3"
-            placeholder="請輸入區域備註或涵蓋範圍說明"
+            placeholder="請輸入地區備註或涵蓋範圍說明"
           />
         </el-form-item>
       </el-form>

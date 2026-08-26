@@ -57,8 +57,11 @@
           <el-button size="default" type="danger" plain @click="quickLogin('admin')">
             系統管理員 (Admin)
           </el-button>
-          <el-button size="default" type="primary" plain @click="quickLogin('staff')">
-            行政人員 (Staff)
+          <el-button size="default" type="primary" plain @click="quickLogin('dispatcher')">
+            調度員 (Dispatcher)
+          </el-button>
+          <el-button size="default" type="success" plain @click="quickLogin('driver')">
+            司機 (Driver)
           </el-button>
           <el-button size="default" type="info" plain @click="quickLogin('viewer')">
             檢視者 (Viewer)
@@ -76,7 +79,7 @@ import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
-import type { UserRole } from '@/types/domain'
+import { ROLE_LABELS, type UserRole } from '@/types/domain'
 
 const router = useRouter()
 const route = useRoute()
@@ -133,13 +136,21 @@ async function handleLogin() {
 }
 
 function quickLogin(role: UserRole) {
+  const nameMap: Record<UserRole, string> = {
+    admin: '系統管理員 (王大明)',
+    dispatcher: '調度員 (李調度)',
+    driver: '司機 (張司機)',
+    staff: '行政人員 (陳專員)',
+    viewer: '主管檢視者 (林督導)'
+  }
+
   authStore.setSession(`mock_jwt_${role}`, {
     id: `usr_${role}`,
     email: `${role}@ltc.example.com`,
-    displayName: role === 'admin' ? '系統管理員' : (role === 'staff' ? '承辦行政' : '主管檢視者'),
+    displayName: nameMap[role] || '測試使用者',
     role
   })
-  ElMessage.success(`已快速切換為【${role === 'admin' ? '系統管理員' : (role === 'staff' ? '行政人員' : '檢視者')}】`)
+  ElMessage.success(`已快速切換為【${ROLE_LABELS[role] || role}】身分`)
   const redirect = (route.query.redirect as string) || '/'
   router.push(redirect)
 }
