@@ -21,109 +21,117 @@
           <template #title>總覽儀表板</template>
         </el-menu-item>
 
-        <el-sub-menu index="masters">
+        <el-sub-menu v-if="authStore.hasPermission('masters_regions') || authStore.hasPermission('masters_cases') || authStore.hasPermission('masters_sites') || authStore.hasPermission('masters_vehicles') || authStore.hasPermission('masters_drivers')" index="masters">
           <template #title>
             <el-icon><Management /></el-icon>
             <span>主檔資料</span>
           </template>
-          <el-menu-item index="/masters/regions">
+          <el-menu-item v-if="authStore.hasPermission('masters_regions')" index="/masters/regions">
             <el-icon><MapLocation /></el-icon>
-            <template #title>區域管理</template>
+            <template #title>地區管理</template>
           </el-menu-item>
-          <el-menu-item index="/cases">
+          <el-menu-item v-if="authStore.hasPermission('masters_cases')" index="/cases">
             <el-icon><User /></el-icon>
             <template #title>個案管理</template>
           </el-menu-item>
-          <el-menu-item index="/masters/sites">
+          <el-menu-item v-if="authStore.hasPermission('masters_sites')" index="/masters/sites">
             <el-icon><Location /></el-icon>
             <template #title>據點管理</template>
           </el-menu-item>
-          <el-menu-item index="/masters/vehicles">
+          <el-menu-item v-if="authStore.hasPermission('masters_vehicles')" index="/masters/vehicles">
             <el-icon><Van /></el-icon>
             <template #title>車輛管理</template>
           </el-menu-item>
-          <el-menu-item index="/masters/drivers">
+          <el-menu-item v-if="authStore.hasPermission('masters_drivers')" index="/masters/drivers">
             <el-icon><Avatar /></el-icon>
             <template #title>司機管理</template>
           </el-menu-item>
         </el-sub-menu>
 
 
-        <el-sub-menu index="forms">
+        <el-sub-menu v-if="authStore.hasPermission('forms_sync') || authStore.hasPermission('forms_mappings')" index="forms">
           <template #title>
             <el-icon><DocumentCopy /></el-icon>
             <span>表單管理</span>
           </template>
-          <el-menu-item index="/forms">
+          <el-menu-item v-if="authStore.hasPermission('forms_sync')" index="/forms">
             <el-icon><Refresh /></el-icon>
             <template #title>表單同步狀態</template>
           </el-menu-item>
-          <el-menu-item index="/forms/mappings">
+          <el-menu-item v-if="authStore.hasPermission('forms_mappings')" index="/forms/mappings">
             <el-icon><Connection /></el-icon>
             <template #title>欄位對應設定</template>
           </el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="rides">
+        <el-sub-menu v-if="authStore.hasPermission('rides_calendar') || authStore.hasPermission('rides_issues') || authStore.hasPermission('rides_missing')" index="rides">
           <template #title>
             <el-icon><Calendar /></el-icon>
             <span>搭乘紀錄</span>
           </template>
-          <el-menu-item index="/rides">
+          <el-menu-item v-if="authStore.hasPermission('rides_calendar')" index="/rides">
             <el-icon><Grid /></el-icon>
             <template #title>搭乘月曆矩陣</template>
           </el-menu-item>
-          <el-menu-item index="/rides/issues">
+          <el-menu-item v-if="authStore.hasPermission('rides_issues')" index="/rides/issues">
             <el-icon><Warning /></el-icon>
             <template #title>異常集中處理</template>
           </el-menu-item>
-          <el-menu-item index="/rides/missing">
+          <el-menu-item v-if="authStore.hasPermission('rides_missing')" index="/rides/missing">
             <el-icon><Bell /></el-icon>
             <template #title>未回報清單</template>
           </el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="reports">
+        <el-sub-menu v-if="authStore.hasPermission('reports_trip_summary') || authStore.hasPermission('reports_hsinchu_schedule')" index="reports">
           <template #title>
             <el-icon><DataAnalysis /></el-icon>
             <span>報表管理</span>
           </template>
-          <el-menu-item index="/reports/trip-summary">
+          <el-menu-item v-if="authStore.hasPermission('reports_trip_summary')" index="/reports/trip-summary">
             <el-icon><List /></el-icon>
             <template #title>車輛趟數表</template>
           </el-menu-item>
-          <el-menu-item index="/reports/hsinchu-schedule">
+          <el-menu-item v-if="authStore.hasPermission('reports_hsinchu_schedule')" index="/reports/hsinchu-schedule">
             <el-icon><DocumentCopy /></el-icon>
             <template #title>新竹接送時刻表</template>
           </el-menu-item>
         </el-sub-menu>
 
-        <el-menu-item index="/vehicles/maintenance">
+        <el-menu-item v-if="authStore.hasPermission('vehicles_maintenance')" index="/vehicles/maintenance">
           <el-icon><Management /></el-icon>
           <template #title>車輛維修保養</template>
         </el-menu-item>
 
-        <el-menu-item index="/attendance">
+        <el-menu-item v-if="authStore.hasPermission('attendance_fuel')" index="/attendance">
           <el-icon><Calendar /></el-icon>
           <template #title>出勤與油資管理</template>
         </el-menu-item>
 
-        <el-menu-item index="/exports">
+        <el-menu-item v-if="authStore.hasPermission('exports')" index="/exports">
           <el-icon><Download /></el-icon>
           <template #title>政府申報匯出</template>
         </el-menu-item>
 
-        <el-menu-item v-if="authStore.can('admin')" index="/audit">
+        <el-menu-item v-if="authStore.hasPermission('audit_logs')" index="/audit">
           <el-icon><DocumentCopy /></el-icon>
-          <template #title>系統稽核日誌</template>
+          <template #title>系統操作紀錄</template>
         </el-menu-item>
 
-        <el-sub-menu index="settings">
+        <el-sub-menu v-if="authStore.hasPermission('settings_users') || authStore.hasPermission('settings_roles') || authStore.hasPermission('settings_notifications')" index="settings">
           <template #title>
             <el-icon><Setting /></el-icon>
             <span>系統設定</span>
           </template>
-          <el-menu-item index="/settings/notifications">
+          <el-menu-item v-if="authStore.hasPermission('settings_users')" index="/settings/users">
+            <el-icon><User /></el-icon>
+            <template #title>使用者管理</template>
+          </el-menu-item>
+          <el-menu-item v-if="authStore.hasPermission('settings_roles')" index="/settings/roles">
+            <el-icon><Avatar /></el-icon>
+            <template #title>角色身分管理</template>
+          </el-menu-item>
+          <el-menu-item v-if="authStore.hasPermission('settings_notifications')" index="/settings/notifications">
             <el-icon><Bell /></el-icon>
             <template #title>通知收件人</template>
           </el-menu-item>
@@ -170,11 +178,11 @@
           </el-button>
 
           <el-tag
-            :type="authStore.currentRole === 'admin' ? 'danger' : (authStore.currentRole === 'staff' ? 'primary' : 'info')"
+            :type="authStore.currentRole === 'admin' ? 'danger' : (authStore.currentRole === 'dispatcher' || authStore.currentRole === 'staff' ? 'primary' : 'info')"
             effect="dark"
             size="small"
           >
-            {{ ROLE_LABELS[authStore.currentRole] }}
+            {{ ROLE_LABELS[authStore.currentRole] || authStore.currentRole }}
           </el-tag>
           <el-dropdown trigger="click" @command="handleCommand">
             <span class="user-dropdown-link">
@@ -186,6 +194,10 @@
               <el-dropdown-menu>
                 <el-dropdown-item command="profile" disabled>
                   帳號：{{ authStore.user?.email }}
+                </el-dropdown-item>
+                <el-dropdown-item command="change-password">
+                  <el-icon><Lock /></el-icon>
+                  修改個人密碼
                 </el-dropdown-item>
                 <el-dropdown-item divided command="logout">
                   登出系統
@@ -204,6 +216,9 @@
 
     <!-- Demo 展示導覽抽屜 -->
     <DemoGuideDrawer ref="demoGuideRef" />
+
+    <!-- 修改個人密碼彈窗 -->
+    <ChangePasswordDialog ref="changePasswordDialogRef" />
   </el-container>
 </template>
 
@@ -232,12 +247,14 @@ import {
   List,
   Setting,
   Guide,
-  MapLocation
+  MapLocation,
+  Lock
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'
 import { ROLE_LABELS } from '@/types/domain'
 import DemoGuideDrawer from '@/components/DemoGuideDrawer.vue'
+import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -245,6 +262,7 @@ const authStore = useAuthStore()
 
 const isCollapse = ref(false)
 const demoGuideRef = ref<InstanceType<typeof DemoGuideDrawer>>()
+const changePasswordDialogRef = ref<InstanceType<typeof ChangePasswordDialog>>()
 
 const activeRoute = computed(() => {
   const path = route.path
@@ -264,6 +282,8 @@ function handleCommand(cmd: string) {
   if (cmd === 'logout') {
     authStore.logout()
     router.push('/login')
+  } else if (cmd === 'change-password') {
+    changePasswordDialogRef.value?.open()
   }
 }
 </script>

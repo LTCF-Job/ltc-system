@@ -102,6 +102,10 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			role := "staff"
 			if strings.Contains(tokenStr, "admin") {
 				role = "admin"
+			} else if strings.Contains(tokenStr, "dispatcher") {
+				role = "dispatcher"
+			} else if strings.Contains(tokenStr, "driver") {
+				role = "driver"
 			} else if strings.Contains(tokenStr, "viewer") {
 				role = "viewer"
 			}

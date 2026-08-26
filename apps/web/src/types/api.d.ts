@@ -14,7 +14,8 @@ import type {
   ServiceUsageType,
   NotificationTopic,
   AuditAction,
-  AuditEntityType
+  AuditEntityType,
+  SystemPermissions
 } from './domain'
 
 // 共通分頁與錯誤結構
@@ -53,6 +54,35 @@ export interface UserDTO {
   email: string
   displayName: string
   role: UserRole
+  phone?: string
+  status?: 'active' | 'inactive'
+  customPermissions?: SystemPermissions | null
+  lastLoginAt?: string
+  createdAt?: string
+}
+
+export interface CreateUserRequest {
+  email: string
+  displayName: string
+  role: UserRole
+  phone?: string
+  password?: string
+  status?: 'active' | 'inactive'
+  customPermissions?: SystemPermissions | null
+}
+
+export interface UpdateUserRequest {
+  email?: string
+  displayName?: string
+  role?: UserRole
+  phone?: string
+  status?: 'active' | 'inactive'
+  customPermissions?: SystemPermissions | null
+}
+
+export interface ChangePasswordRequest {
+  oldPassword?: string
+  newPassword?: string
 }
 
 export interface AuthSession {
@@ -251,10 +281,31 @@ export interface FormDTO {
   formId: string
   title: string
   sheetUrl?: string
+  vehicleId?: string
+  vehicleName?: string
+  region?: Region
+  sheetTabs?: string[]
+  activeTab?: string
+  syncedMonths?: string[]
   lastSyncedAt?: string
   totalColumns: number
   pendingColumns: number
   hasSyncAlert?: boolean
+}
+
+export interface CreateFormAssociationRequest {
+  title: string
+  sheetUrl: string
+  vehicleId?: string
+  region?: Region
+  sheetTabs?: string[]
+  activeTab?: string
+}
+
+export interface SyncFormOptions {
+  month?: string
+  sheetTab?: string
+  force?: boolean
 }
 
 export interface FormColumnDTO {
@@ -517,9 +568,14 @@ export interface ListAuditLogsParams {
 }
 
 // 8. 通知收件人管理 (Notification Recipients)
+export type RecipientTargetType = 'role' | 'user' | 'custom'
+
 export interface NotificationRecipientDTO {
   id: string
   topic: NotificationTopic
+  recipientType?: RecipientTargetType
+  targetRole?: UserRole
+  userId?: string
   email: string
   displayName?: string
   active: boolean
@@ -530,6 +586,9 @@ export interface NotificationRecipientDTO {
 
 export interface CreateNotificationRecipientRequest {
   topic: NotificationTopic
+  recipientType?: RecipientTargetType
+  targetRole?: UserRole
+  userId?: string
   email: string
   displayName?: string
   active?: boolean
@@ -537,6 +596,9 @@ export interface CreateNotificationRecipientRequest {
 
 export interface UpdateNotificationRecipientRequest {
   topic?: NotificationTopic
+  recipientType?: RecipientTargetType
+  targetRole?: UserRole
+  userId?: string
   email?: string
   displayName?: string
   active?: boolean
