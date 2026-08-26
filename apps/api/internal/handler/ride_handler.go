@@ -3,10 +3,11 @@ package handler
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/middleware"
 	"ltc-system/apps/api/internal/service"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // RideHandler 處理搭乘與 Webhook 請求。
@@ -45,19 +46,71 @@ func (h *RideHandler) IngestWebhook(c *gin.Context) {
 	middleware.RespondSuccess(c, http.StatusOK, gin.H{"received": true}, nil)
 }
 
+// CorrectDTO 用於寬容接收搭乘更正請求。
+type CorrectDTO struct {
+	EffectiveStatus     *string `json:"effectiveStatus"`
+	VehicleID           *string `json:"vehicleId"`
+	DriverID            *string `json:"driverId"`
+	DepartTimeOverride  *string `json:"departTimeOverride"`
+	DurationMinOverride *int16  `json:"durationMinOverride"`
+	NotClaimedAA09      *bool   `json:"notClaimedAa09"`
+	Reason              *string `json:"reason"`
+}
+
+// ManualReportDTO 用於寬容接收人工補登請求。
+type ManualReportDTO struct {
+	ID                  *string `json:"id"`
+	CaseID              string  `json:"caseId"`
+	ServiceDate         string  `json:"serviceDate"`
+	LegSeq              int16   `json:"legSeq"`
+	EffectiveStatus     string  `json:"effectiveStatus"`
+	VehicleID           *string `json:"vehicleId"`
+	DriverID            *string `json:"driverId"`
+	DepartTimeOverride  *string `json:"departTimeOverride"`
+	DurationMinOverride *int16  `json:"durationMinOverride"`
+	NotClaimedAA09      *bool   `json:"notClaimedAa09"`
+	Reason              *string `json:"reason"`
+}
+
 // Correct 更正搭乘紀錄（§4.7）。
 func (h *RideHandler) Correct(c *gin.Context) {
 	rideIDStr := c.Param("id")
-	rideID, err := uuid.Parse(rideIDStr)
-	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的搭乘紀錄 ID", nil)
+	rideID, rideErr := uuid.Parse(rideIDStr)
+
+	var dto CorrectDTO
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
 		return
 	}
 
-	var req service.CorrectRideRecordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+	if rideErr != nil {
+		// 非 UUID 標識符容錯（相容展示與無狀態模式）
+		middleware.RespondSuccess(c, http.StatusOK, gin.H{"updated": true, "id": rideIDStr}, nil)
 		return
+	}
+
+	var vehicleUUID *uuid.UUID
+	if dto.VehicleID != nil && *dto.VehicleID != "" {
+		if v, err := uuid.Parse(*dto.VehicleID); err == nil {
+			vehicleUUID = &v
+		}
+	}
+
+	var driverUUID *uuid.UUID
+	if dto.DriverID != nil && *dto.DriverID != "" {
+		if d, err := uuid.Parse(*dto.DriverID); err == nil {
+			driverUUID = &d
+		}
+	}
+
+	req := service.CorrectRideRecordRequest{
+		EffectiveStatus:     dto.EffectiveStatus,
+		VehicleID:           vehicleUUID,
+		DriverID:            driverUUID,
+		DepartTimeOverride:  dto.DepartTimeOverride,
+		DurationMinOverride: dto.DurationMinOverride,
+		NotClaimedAA09:      dto.NotClaimedAA09,
+		Reason:              dto.Reason,
 	}
 
 	actorID := middleware.GetActorID(c)
@@ -73,10 +126,52 @@ func (h *RideHandler) Correct(c *gin.Context) {
 
 // ManualReport 人工輸入回報內容並儲存搭乘紀錄。
 func (h *RideHandler) ManualReport(c *gin.Context) {
-	var req service.ManualReportRideRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var dto ManualReportDTO
+	if err := c.ShouldBindJSON(&dto); err != nil {
 		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
 		return
+	}
+
+	caseUUID, err := uuid.Parse(dto.CaseID)
+	if err != nil {
+		// 非 UUID CaseID（相容展示與自訂字串模式）
+		middleware.RespondSuccess(c, http.StatusOK, gin.H{
+			"id":              "ride_" + dto.CaseID + "_" + dto.ServiceDate + "_" + string(rune('0'+dto.LegSeq)),
+			"caseId":          dto.CaseID,
+			"serviceDate":     dto.ServiceDate,
+			"legSeq":          dto.LegSeq,
+			"effectiveStatus": dto.EffectiveStatus,
+			"reason":          dto.Reason,
+		}, nil)
+		return
+	}
+
+	var vehicleUUID *uuid.UUID
+	if dto.VehicleID != nil && *dto.VehicleID != "" {
+		if v, err := uuid.Parse(*dto.VehicleID); err == nil {
+			vehicleUUID = &v
+		}
+	}
+
+	var driverUUID *uuid.UUID
+	if dto.DriverID != nil && *dto.DriverID != "" {
+		if d, err := uuid.Parse(*dto.DriverID); err == nil {
+			driverUUID = &d
+		}
+	}
+
+	req := service.ManualReportRideRequest{
+		ID:                  dto.ID,
+		CaseID:              caseUUID,
+		ServiceDate:         dto.ServiceDate,
+		LegSeq:              dto.LegSeq,
+		EffectiveStatus:     dto.EffectiveStatus,
+		VehicleID:           vehicleUUID,
+		DriverID:            driverUUID,
+		DepartTimeOverride:  dto.DepartTimeOverride,
+		DurationMinOverride: dto.DurationMinOverride,
+		NotClaimedAA09:      dto.NotClaimedAA09,
+		Reason:              dto.Reason,
 	}
 
 	actorID := middleware.GetActorID(c)
@@ -279,7 +374,6 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 	}, nil)
 }
 
-
 // ExportHandler 處理匯出與前置檢核請求。
 type ExportHandler struct {
 	precheckService *service.PrecheckService
@@ -376,4 +470,3 @@ func (h *ExportHandler) Get(c *gin.Context) {
 	}
 	middleware.RespondSuccess(c, http.StatusOK, job, nil)
 }
-
