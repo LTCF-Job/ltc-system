@@ -1,60 +1,51 @@
-# 長照交通接送後台系統 — 前端應用程式 (@ltc/web)
+# apps/web
 
-本專案為長照交通接送後台系統的前端 SPA 應用程式，使用 Vue 3 + Vite + TypeScript + Element Plus 建置。
+Vue 3（Composition API）+ TypeScript + Vite 前端 SPA。UI 元件庫用 Element Plus（自動 import），狀態管理用 Pinia，路由用 Vue Router。
 
-## 1. 環境變數設定
-
-請複製 `.env.example` 為 `.env.development`：
+## 跑起來
 
 ```bash
 cp .env.example .env.development
-```
-
-變數說明：
-- `VITE_API_BASE_URL`: 後端 API 基礎路徑（預設 `/api/v1`）
-- `VITE_SUPABASE_URL`: Supabase 專案網址，登入頁呼叫 `signInWithPassword` 取得真實 JWT 用；正式環境必填
-- `VITE_SUPABASE_ANON_KEY`: Supabase 專案 anon public key；正式環境必填
-- `VITE_API_SPEC_URL`: OpenAPI 規範 Swagger JSON 網址
-- `VITE_ENABLE_MSW`: 是否啟用本機 MSW 模擬伺服器與展示模式快速登入（`true` / `false`）；正式環境必須為 `false` 或不設定
-
-## 2. 啟動與開發指令
-
-安裝相依套件：
-```bash
 npm install
-```
-
-啟動本機開發伺服器（含 MSW 模擬環境）：
-```bash
 npm run dev
 ```
 
-執行型別檢查：
-```bash
-npm run type-check
+`.env.development` 常用變數：
+
+```
+VITE_API_BASE_URL=/api/v1        # API base path，本機開發搭配 vite proxy 用相對路徑就好
+VITE_API_TARGET=http://localhost:8080   # vite dev server 把 /api 轉發到這裡（見 vite.config.ts）
+VITE_SUPABASE_URL=                # Supabase 專案網址，登入頁 signInWithPassword 用；正式環境必填
+VITE_SUPABASE_ANON_KEY=           # Supabase anon public key；正式環境必填
+VITE_ENABLE_MSW=true              # 開啟 MSW mock，本機開發、後端還沒好時用
 ```
 
-建置生產打包檔案：
+其他指令：
+
 ```bash
-npm run build
+npm run type-check   # vue-tsc --noEmit
+npm run build         # type-check + vite build
+npm run gen:types    # 依 VITE_API_SPEC_URL 指向的 OpenAPI spec 重新產生 src/types/api.d.ts，後端 API 改了記得跑這個
 ```
 
-## 3. 產出 API 型別指令
+## 技術文件
 
-當後端 OpenAPI 規範更新時，執行以下指令重新產生 `src/types/api.d.ts`：
+這份 README 只放怎麼跑起來。架構、頁面、功能流程分開放在 [`docs/tech/`](../../docs/tech/README.md)：
+
+- [前端框架與專案結構](../../docs/tech/frontend-framework.md)
+- [前端頁面總覽](../../docs/tech/frontend-pages.md)
+- [前端核心功能流程](../../docs/tech/frontend-flows.md)
+
+## Docker
+
 ```bash
-npm run gen:types
+docker build -t ltc-web .
 ```
 
-## 4. Docker 容器化建置
+或用專案根目錄的 compose 一次啟動含 Postgres、API：
 
-獨立建置前端映像檔：
 ```bash
-docker build -t ltc-web ./apps/web
+docker compose -f ../../docker-compose.local.yml up -d --build
 ```
 
-透過專案根目錄之 Docker Compose 啟動完整環境（含 Postgres、API 與 Web）：
-```bash
-docker compose up -d --build
-```
-啟動後前端可透過 `http://localhost:3000` 瀏覽，Nginx 會自動將 `/api/` 請求反向代理至後端 API 服務。
+啟動後前端在 `http://localhost:3000`，容器內跑 Nginx 把 `/api/` 反向代理到後端。
