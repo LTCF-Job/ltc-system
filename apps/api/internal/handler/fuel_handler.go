@@ -51,7 +51,9 @@ func (h *FuelHandler) List(c *gin.Context) {
 		}
 	}
 
-	list, total, err := h.fuelSvc.List(c.Request.Context(), page, pageSize, vehicleID, driverID, startDate, endDate)
+	q := c.Query("q")
+
+	list, total, err := h.fuelSvc.List(c.Request.Context(), page, pageSize, vehicleID, driverID, startDate, endDate, q)
 	if err != nil {
 		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
 		return

@@ -152,6 +152,16 @@ func (h *CaseHandler) ImportExcel(c *gin.Context) {
 	middleware.RespondSuccess(c, http.StatusOK, preview, nil)
 }
 
+// DownloadTemplate 下載個案批次匯入 CSV 範本。
+func (h *CaseHandler) DownloadTemplate(c *gin.Context) {
+	csvContent := "\uFEFF個案姓名*,身分證字號*,申報地區*(苗栗/新竹),住家地址*,開始申報日*(YYYY-MM-DD),服務類別*(1:補助/2:自費),服務使用類型*(1:社區長照/2:社區據點/3:輔具中心/4:身障日照),所屬據點*,每週搭乘日*(如 1,2,3,4,5),趟數型態*(1:單趟/2:來回/4:四趟),去程時間(HH:mm),回程時間(HH:mm),申報單價(元),單趟里程(公里),服務時長(分鐘)\r\n" +
+		"張曾阿妹,A202559750,苗栗,苗栗縣竹南鎮大營路123號,2026-07-01,1,2,竹南日照據點,\"1,2,3,4,5\",2,09:00,16:00,115,5.0,10\r\n" +
+		"李國盛,J123458899,新竹,新竹縣竹北市文興路一段200號,2026-07-01,2,1,竹北日照中心,\"1,3,5\",2,09:30,15:30,200,8.0,20\r\n"
+
+	c.Header("Content-Disposition", "attachment; filename=\"個案批次匯入範本.csv\"")
+	c.Data(http.StatusOK, "text/csv; charset=utf-8", []byte(csvContent))
+}
+
 // Get 取得單筆個案主檔明細。
 func (h *CaseHandler) Get(c *gin.Context) {
 	idStr := c.Param("id")

@@ -254,6 +254,21 @@ type CorrectRideRecordRequest struct {
 	Reason              *string    `json:"reason"`
 }
 
+// ManualReportRideRequest 代表人工補登或編輯回報內容之請求結構體。
+type ManualReportRideRequest struct {
+	ID                  *string    `json:"id"`
+	CaseID              uuid.UUID  `json:"caseId"`
+	ServiceDate         string     `json:"serviceDate"`
+	LegSeq              int16      `json:"legSeq"`
+	EffectiveStatus     string     `json:"effectiveStatus"`
+	VehicleID           *uuid.UUID `json:"vehicleId"`
+	DriverID            *uuid.UUID `json:"driverId"`
+	DepartTimeOverride  *string    `json:"departTimeOverride"`
+	DurationMinOverride *int16     `json:"durationMinOverride"`
+	NotClaimedAA09      *bool      `json:"notClaimedAa09"`
+	Reason              *string    `json:"reason"`
+}
+
 // CorrectRideRecord 人工更正搭乘紀錄並寫入稽核留痕（§4.7）。
 func (s *RideService) CorrectRideRecord(
 	ctx context.Context,
@@ -286,3 +301,85 @@ func (s *RideService) CorrectRideRecord(
 
 	return nil
 }
+
+// ManualReportRide 人工輸入回報內容並儲存搭乘紀錄。
+func (s *RideService) ManualReportRide(
+	ctx context.Context,
+	req ManualReportRideRequest,
+	actorID uuid.UUID,
+	actorRole, ip, ua string,
+) (*repository.RideRecordEntity, error) {
+	if req.EffectiveStatus != "boarded" && req.EffectiveStatus != "absent" {
+		return nil, fmt.Errorf("無效的搭乘狀態：%s", req.EffectiveStatus)
+	}
+
+	serviceDate, err := time.Parse("2006-01-02", req.ServiceDate)
+	if err != nil {
+		return nil, fmt.Errorf("無效的服務日期格式：%s", req.ServiceDate)
+	}
+
+	// 車輛未指定時由排班回退取得預設車輛
+	var vehicleID uuid.UUID
+	if req.VehicleID != nil && *req.VehicleID != uuid.Nil {
+		vehicleID = *req.VehicleID
+	} else if s.caseRepo != nil {
+		sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, req.CaseID, serviceDate)
+		if sched != nil {
+			for _, l := range sched.Legs {
+				if l.LegSeq == req.LegSeq && l.VehicleID != nil {
+					vehicleID = *l.VehicleID
+					break
+				}
+			}
+		}
+	}
+
+	existingRec, _ := s.formRepo.GetRideRecordForSlot(ctx, req.CaseID, serviceDate, req.LegSeq)
+	now := time.Now().UTC()
+
+	rec := repository.RideRecordEntity{
+		CaseID:              req.CaseID,
+		ServiceDate:         serviceDate,
+		LegSeq:              req.LegSeq,
+		MergedStatus:        req.EffectiveStatus,
+		EffectiveStatus:     req.EffectiveStatus,
+		VehicleID:           vehicleID,
+		DriverID:            req.DriverID,
+		HasConflict:         false,
+		DepartTimeOverride:  req.DepartTimeOverride,
+		DurationMinOverride: req.DurationMinOverride,
+		CorrectedBy:         &actorID,
+		CorrectedAt:         &now,
+		CorrectionReason:    req.Reason,
+	}
+	if req.NotClaimedAA09 != nil {
+		rec.NotClaimedAA09 = *req.NotClaimedAA09
+	}
+
+	if existingRec != nil {
+		rec.ID = existingRec.ID
+	} else {
+		rec.ID = uuid.New()
+	}
+
+	if err := s.formRepo.UpsertRideRecord(ctx, &rec); err != nil {
+		return nil, fmt.Errorf("failed to upsert ride record: %w", err)
+	}
+
+	if s.auditRepo != nil {
+		entityIDStr := rec.ID.String()
+		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+			ActorID:    &actorID,
+			ActorRole:  &actorRole,
+			Action:     "manual_report",
+			EntityType: "ride_records",
+			EntityID:   &entityIDStr,
+			AfterData:  req,
+			IPAddress:  &ip,
+			UserAgent:  &ua,
+		})
+	}
+
+	return &rec, nil
+}
+

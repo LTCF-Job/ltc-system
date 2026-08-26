@@ -30,7 +30,7 @@ func (r *DriverRepository) List(ctx context.Context, region, q string, page, pag
 		       email, region, status, created_at, updated_at
 		FROM drivers
 		WHERE ($1 = '' OR region = $1)
-		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR code ILIKE '%' || $2 || '%')
+		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR code ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
 		ORDER BY code ASC
 		LIMIT $3 OFFSET $4
 	`
@@ -56,7 +56,7 @@ func (r *DriverRepository) List(ctx context.Context, region, q string, page, pag
 	countQuery := `
 		SELECT COUNT(*) FROM drivers
 		WHERE ($1 = '' OR region = $1)
-		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR code ILIKE '%' || $2 || '%')
+		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR code ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
 	`
 	_ = r.db.QueryRow(ctx, countQuery, region, q).Scan(&total)
 

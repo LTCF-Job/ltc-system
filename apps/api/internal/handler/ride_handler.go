@@ -71,6 +71,26 @@ func (h *RideHandler) Correct(c *gin.Context) {
 	middleware.RespondSuccess(c, http.StatusOK, gin.H{"updated": true}, nil)
 }
 
+// ManualReport 人工輸入回報內容並儲存搭乘紀錄。
+func (h *RideHandler) ManualReport(c *gin.Context) {
+	var req service.ManualReportRideRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		return
+	}
+
+	actorID := middleware.GetActorID(c)
+	actorRole := middleware.GetActorRole(c)
+
+	rec, err := h.rideService.ManualReportRide(c.Request.Context(), req, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
+	if err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		return
+	}
+
+	middleware.RespondSuccess(c, http.StatusOK, rec, nil)
+}
+
 // GetRecord 取得單筆搭乘紀錄。
 func (h *RideHandler) GetRecord(c *gin.Context) {
 	rideID := c.Param("id")

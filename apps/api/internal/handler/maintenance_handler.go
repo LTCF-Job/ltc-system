@@ -47,7 +47,9 @@ func (h *MaintenanceHandler) List(c *gin.Context) {
 		}
 	}
 
-	list, total, err := h.maintenanceSvc.List(c.Request.Context(), page, pageSize, vehicleID, startDate, endDate)
+	q := c.Query("q")
+
+	list, total, err := h.maintenanceSvc.List(c.Request.Context(), page, pageSize, vehicleID, startDate, endDate, q)
 	if err != nil {
 		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
 		return

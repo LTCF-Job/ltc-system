@@ -26,8 +26,8 @@ func NewFuelService(
 }
 
 // List 查詢油資紀錄清單。
-func (s *FuelService) List(ctx context.Context, page, pageSize int, vehicleID, driverID *uuid.UUID, startDate, endDate *time.Time) ([]repository.FuelLogEntity, int, error) {
-	return s.fuelRepo.List(ctx, page, pageSize, vehicleID, driverID, startDate, endDate)
+func (s *FuelService) List(ctx context.Context, page, pageSize int, vehicleID, driverID *uuid.UUID, startDate, endDate *time.Time, q string) ([]repository.FuelLogEntity, int, error) {
+	return s.fuelRepo.List(ctx, page, pageSize, vehicleID, driverID, startDate, endDate, q)
 }
 
 // Create 新增油資紀錄並寫入稽核日誌。

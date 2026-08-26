@@ -32,8 +32,8 @@ func NewMaintenanceService(
 }
 
 // List 查詢維修保養紀錄清單。
-func (s *MaintenanceService) List(ctx context.Context, page, pageSize int, vehicleID *uuid.UUID, startDate, endDate *time.Time) ([]repository.MaintenanceLogEntity, int, error) {
-	return s.maintenanceRepo.List(ctx, page, pageSize, vehicleID, startDate, endDate)
+func (s *MaintenanceService) List(ctx context.Context, page, pageSize int, vehicleID *uuid.UUID, startDate, endDate *time.Time, q string) ([]repository.MaintenanceLogEntity, int, error) {
+	return s.maintenanceRepo.List(ctx, page, pageSize, vehicleID, startDate, endDate, q)
 }
 
 // Create 新增維修保養紀錄並記錄稽核留痕。

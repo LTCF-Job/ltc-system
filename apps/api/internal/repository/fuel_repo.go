@@ -35,8 +35,8 @@ func NewFuelRepository(db *pgxpool.Pool) *FuelRepository {
 	return &FuelRepository{db: db}
 }
 
-// List 查詢油資紀錄清單，支援分頁與車輛／司機／日期篩選。
-func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID, driverID *uuid.UUID, startDate, endDate *time.Time) ([]FuelLogEntity, int, error) {
+// List 查詢油資紀錄清單，支援分頁與車輛／司機／日期／關鍵字模糊篩選。
+func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID, driverID *uuid.UUID, startDate, endDate *time.Time, q string) ([]FuelLogEntity, int, error) {
 	if r.db == nil {
 		return []FuelLogEntity{}, 0, nil
 	}
@@ -65,8 +65,13 @@ func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID
 		args = append(args, *endDate)
 		argIdx++
 	}
+	if q != "" {
+		whereClause += fmt.Sprintf(" AND (v.plate_no ILIKE '%%' || $%d || '%%' OR v.display_name ILIKE '%%' || $%d || '%%' OR COALESCE(d.name, '') ILIKE '%%' || $%d || '%%')", argIdx, argIdx, argIdx)
+		args = append(args, q)
+		argIdx++
+	}
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM fuel_logs f %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM fuel_logs f JOIN vehicles v ON v.id = f.vehicle_id LEFT JOIN drivers d ON d.id = f.driver_id %s", whereClause)
 	var total int
 	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count fuel logs: %w", err)

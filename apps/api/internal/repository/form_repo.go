@@ -191,9 +191,10 @@ func (r *FormRepository) UpsertRideRecord(ctx context.Context, rec *RideRecordEn
 		INSERT INTO ride_records (
 			id, case_id, service_date, leg_seq, merged_status, effective_status,
 			vehicle_id, driver_id, has_conflict, conflict_resolved_at, conflict_resolved_by,
+			depart_time_override, duration_min_override,
 			not_claimed_aa09, corrected_by, corrected_at, correction_reason
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
 		)
 		ON CONFLICT (case_id, service_date, leg_seq) DO UPDATE
 		SET merged_status = EXCLUDED.merged_status,
@@ -201,6 +202,14 @@ func (r *FormRepository) UpsertRideRecord(ctx context.Context, rec *RideRecordEn
 		    vehicle_id = EXCLUDED.vehicle_id,
 		    driver_id = EXCLUDED.driver_id,
 		    has_conflict = EXCLUDED.has_conflict,
+		    conflict_resolved_at = EXCLUDED.conflict_resolved_at,
+		    conflict_resolved_by = EXCLUDED.conflict_resolved_by,
+		    depart_time_override = COALESCE(EXCLUDED.depart_time_override, ride_records.depart_time_override),
+		    duration_min_override = COALESCE(EXCLUDED.duration_min_override, ride_records.duration_min_override),
+		    not_claimed_aa09 = EXCLUDED.not_claimed_aa09,
+		    corrected_by = EXCLUDED.corrected_by,
+		    corrected_at = EXCLUDED.corrected_at,
+		    correction_reason = EXCLUDED.correction_reason,
 		    updated_at = now()
 		RETURNING created_at, updated_at
 	`
@@ -210,6 +219,7 @@ func (r *FormRepository) UpsertRideRecord(ctx context.Context, rec *RideRecordEn
 	return r.db.QueryRow(ctx, query,
 		rec.ID, rec.CaseID, rec.ServiceDate, rec.LegSeq, rec.MergedStatus, rec.EffectiveStatus,
 		rec.VehicleID, rec.DriverID, rec.HasConflict, rec.ConflictResolvedAt, rec.ConflictResolvedBy,
+		rec.DepartTimeOverride, rec.DurationMinOverride,
 		rec.NotClaimedAA09, rec.CorrectedBy, rec.CorrectedAt, rec.CorrectionReason,
 	).Scan(&rec.CreatedAt, &rec.UpdatedAt)
 }

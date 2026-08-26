@@ -36,8 +36,8 @@ func NewMaintenanceRepository(db *pgxpool.Pool) *MaintenanceRepository {
 	return &MaintenanceRepository{db: db}
 }
 
-// List 查詢維修保養紀錄清單，支援分頁與車輛／日期篩選。
-func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, vehicleID *uuid.UUID, startDate, endDate *time.Time) ([]MaintenanceLogEntity, int, error) {
+// List 查詢維修保養紀錄清單，支援分頁與車輛／日期／關鍵字模糊篩選。
+func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, vehicleID *uuid.UUID, startDate, endDate *time.Time, q string) ([]MaintenanceLogEntity, int, error) {
 	if r.db == nil {
 		return []MaintenanceLogEntity{}, 0, nil
 	}
@@ -61,8 +61,13 @@ func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, ve
 		args = append(args, *endDate)
 		argIdx++
 	}
+	if q != "" {
+		whereClause += fmt.Sprintf(" AND (m.items ILIKE '%%' || $%d || '%%' OR COALESCE(m.vendor, '') ILIKE '%%' || $%d || '%%' OR COALESCE(m.note, '') ILIKE '%%' || $%d || '%%' OR v.plate_no ILIKE '%%' || $%d || '%%' OR v.display_name ILIKE '%%' || $%d || '%%')", argIdx, argIdx, argIdx, argIdx, argIdx)
+		args = append(args, q)
+		argIdx++
+	}
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM maintenance_logs m %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM maintenance_logs m JOIN vehicles v ON v.id = m.vehicle_id %s", whereClause)
 	var total int
 	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count maintenance logs: %w", err)
