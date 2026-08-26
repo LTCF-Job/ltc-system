@@ -1,5 +1,6 @@
 import type {
   CaseDTO,
+  RegionDTO,
   SiteDTO,
   VehicleDTO,
   DriverDTO,
@@ -19,6 +20,33 @@ import type {
   HsinchuScheduleReportDTO,
   DashboardMetricsDTO
 } from '@/types/api'
+
+// 區域主檔展示資料：涵蓋全台灣 22 縣市
+export const mockRegions: RegionDTO[] = [
+  { id: 'reg_1', code: 'hsinchu', name: '新竹縣', description: '新竹縣營運區域', status: 'active', sortOrder: 1, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_2', code: 'hsinchu_city', name: '新竹市', description: '新竹市營運區域', status: 'active', sortOrder: 2, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_3', code: 'miaoli', name: '苗栗縣', description: '苗栗縣營運區域', status: 'active', sortOrder: 3, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_4', code: 'taipei', name: '臺北市', description: '臺北市營運區域', status: 'active', sortOrder: 4, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_5', code: 'new_taipei', name: '新北市', description: '新北市營運區域', status: 'active', sortOrder: 5, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_6', code: 'keelung', name: '基隆市', description: '基隆市營運區域', status: 'active', sortOrder: 6, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_7', code: 'taoyuan', name: '桃園市', description: '桃園市營運區域', status: 'active', sortOrder: 7, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_8', code: 'taichung', name: '臺中市', description: '臺中市營運區域', status: 'active', sortOrder: 8, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_9', code: 'changhua', name: '彰化縣', description: '彰化縣營運區域', status: 'active', sortOrder: 9, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_10', code: 'nantou', name: '南投縣', description: '南投縣營運區域', status: 'active', sortOrder: 10, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_11', code: 'yunlin', name: '雲林縣', description: '雲林縣營運區域', status: 'active', sortOrder: 11, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_12', code: 'chiayi_city', name: '嘉義市', description: '嘉義市營運區域', status: 'active', sortOrder: 12, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_13', code: 'chiayi', name: '嘉義縣', description: '嘉義縣營運區域', status: 'active', sortOrder: 13, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_14', code: 'tainan', name: '臺南市', description: '臺南市營運區域', status: 'active', sortOrder: 14, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_15', code: 'kaohsiung', name: '高雄市', description: '高雄市營運區域', status: 'active', sortOrder: 15, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_16', code: 'pingtung', name: '屏東縣', description: '屏東縣營運區域', status: 'active', sortOrder: 16, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_17', code: 'yilan', name: '宜蘭縣', description: '宜蘭縣營運區域', status: 'active', sortOrder: 17, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_18', code: 'hualien', name: '花蓮縣', description: '花蓮縣營運區域', status: 'active', sortOrder: 18, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_19', code: 'taitung', name: '臺東縣', description: '臺東縣營運區域', status: 'active', sortOrder: 19, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_20', code: 'penghu', name: '澎湖縣', description: '澎湖縣營運區域', status: 'active', sortOrder: 20, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_21', code: 'kinmen', name: '金門縣', description: '金門縣營運區域', status: 'active', sortOrder: 21, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_22', code: 'lienchiang', name: '連江縣', description: '連江縣營運區域', status: 'active', sortOrder: 22, createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+]
+
 
 // 據點主檔展示資料：涵蓋新竹與苗栗、不同機構型態與營業日排程
 export const mockSites: SiteDTO[] = [
@@ -45,69 +73,69 @@ export const mockDrivers: DriverDTO[] = [
   {
     id: 'drv_1',
     name: '郭澤威',
-    nationalId: 'G12***6465',
-    phone: '0912-345678',
+    nationalId: 'G123456465',
+    phone: '0912345678',
     email: 'driver1@ltc.example.com',
     active: true,
     createdAt: '2026-01-01',
     assignments: [
-      { id: 'asgn_1', driverId: 'drv_1', vehicleId: 'veh_1', vehicleName: '竹北一車', startDate: '2026-01-01', isPrimary: true }
+      { id: 'asgn_1', driverId: 'drv_1', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-01-01', isPrimary: true }
     ]
   },
   {
     id: 'drv_2',
     name: '林志豪',
-    nationalId: 'J12***9988',
-    phone: '0922-111222',
+    nationalId: 'J123459988',
+    phone: '0922111222',
     email: 'driver2@ltc.example.com',
     active: true,
     createdAt: '2026-01-01',
     assignments: [
-      { id: 'asgn_2', driverId: 'drv_2', vehicleId: 'veh_2', vehicleName: '竹北二車', startDate: '2026-01-01', isPrimary: true },
-      { id: 'asgn_2_sub', driverId: 'drv_2', vehicleId: 'veh_1', vehicleName: '竹北一車', startDate: '2026-07-01', isPrimary: false }
+      { id: 'asgn_2', driverId: 'drv_2', vehicleId: 'veh_2', vehicleName: '竹北二車', vehiclePlateNo: 'ABC-1234', plateNo: 'ABC-1234', startDate: '2026-01-01', isPrimary: true },
+      { id: 'asgn_2_sub', driverId: 'drv_2', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-07-01', isPrimary: false }
     ]
   },
   {
     id: 'drv_3',
     name: '陳國華',
-    nationalId: 'K12***8177',
-    phone: '0933-444555',
+    nationalId: 'K123458177',
+    phone: '0933444555',
     email: 'driver3@ltc.example.com',
     active: true,
     createdAt: '2026-01-01',
     assignments: [
-      { id: 'asgn_3', driverId: 'drv_3', vehicleId: 'veh_4', vehicleName: '竹南2車', startDate: '2026-01-01', isPrimary: true }
+      { id: 'asgn_3', driverId: 'drv_3', vehicleId: 'veh_4', vehicleName: '竹南2車', vehiclePlateNo: 'GHI-9012', plateNo: 'GHI-9012', startDate: '2026-01-01', isPrimary: true }
     ]
   },
   {
     id: 'drv_4',
     name: '曾建宏',
-    nationalId: 'O12***3321',
-    phone: '0955-666777',
+    nationalId: 'O123453321',
+    phone: '0955666777',
     email: 'driver4@ltc.example.com',
     active: true,
     createdAt: '2026-02-01',
     assignments: [
-      { id: 'asgn_4', driverId: 'drv_4', vehicleId: 'veh_3', vehicleName: '竹南1車', startDate: '2026-02-01', isPrimary: true }
+      { id: 'asgn_4', driverId: 'drv_4', vehicleId: 'veh_3', vehicleName: '竹南1車', vehiclePlateNo: 'DEF-5678', plateNo: 'DEF-5678', startDate: '2026-02-01', isPrimary: true }
     ]
   },
   {
     id: 'drv_5',
     name: '吳秀珠',
-    nationalId: 'J22***7788',
-    phone: '0966-888999',
+    nationalId: 'J223457788',
+    phone: '0966888999',
     email: 'driver5@ltc.example.com',
     active: true,
     createdAt: '2026-03-01',
     assignments: [
-      { id: 'asgn_5', driverId: 'drv_5', vehicleId: 'veh_6', vehicleName: '苗栗市1車', startDate: '2026-03-01', isPrimary: true }
+      { id: 'asgn_5', driverId: 'drv_5', vehicleId: 'veh_6', vehicleName: '苗栗市1車', vehiclePlateNo: 'MNO-7890', plateNo: 'MNO-7890', startDate: '2026-03-01', isPrimary: true }
     ]
   },
   {
     id: 'drv_6',
     name: '黃建民',
-    nationalId: 'H12***4455',
-    phone: '0977-123456',
+    nationalId: 'H123454455',
+    phone: '0977123456',
     email: 'driver6@ltc.example.com',
     active: false,
     createdAt: '2026-01-15',
@@ -123,6 +151,7 @@ export const mockCases: CaseDTO[] = [
     code: 'C0001',
     name: '蔡曾切',
     nationalId: 'A202559750',
+    phone: '0912345678',
     homeAddress: '苗栗縣竹南鎮大營路123號',
     region: 'miaoli',
     serviceCategory: 1,
@@ -155,6 +184,7 @@ export const mockCases: CaseDTO[] = [
     code: 'C0002',
     name: '葉秀珍',
     nationalId: 'J220123344',
+    phone: '0922333444',
     homeAddress: '新竹縣竹北市中正西路50號',
     region: 'hsinchu',
     serviceCategory: 1,
@@ -189,6 +219,7 @@ export const mockCases: CaseDTO[] = [
     code: 'C0003',
     name: '吳𣵛桂',
     nationalId: 'H229875566',
+    phone: '0933555666',
     homeAddress: '新竹縣竹北市福興東路二段88號',
     region: 'hsinchu',
     serviceCategory: 1,
@@ -220,6 +251,7 @@ export const mockCases: CaseDTO[] = [
     code: 'C0004',
     name: '張詹竹妹',
     nationalId: 'O201121122',
+    phone: '0955777888',
     homeAddress: '新竹縣竹北市三民路15號',
     region: 'hsinchu',
     serviceCategory: 1,
@@ -252,6 +284,7 @@ export const mockCases: CaseDTO[] = [
     code: 'C0005',
     name: '李國盛',
     nationalId: 'J123458899',
+    phone: '0966999000',
     homeAddress: '新竹縣竹北市文興路一段200號',
     region: 'hsinchu',
     serviceCategory: 2,
@@ -284,6 +317,7 @@ export const mockCases: CaseDTO[] = [
     code: 'C0006',
     name: '陳素貞',
     nationalId: 'J221234411',
+    phone: '0977111222',
     homeAddress: '新竹縣竹北市縣政九路80號',
     region: 'hsinchu',
     serviceCategory: 1,
@@ -316,6 +350,7 @@ export const mockCases: CaseDTO[] = [
     code: 'C0007',
     name: '黃天賜',
     nationalId: 'K123459900',
+    phone: '0988333444',
     homeAddress: '苗栗縣竹南鎮延平路66號',
     region: 'miaoli',
     serviceCategory: 1,
@@ -348,6 +383,7 @@ export const mockCases: CaseDTO[] = [
     code: 'C0008',
     name: '彭阿土',
     nationalId: 'K102342233',
+    phone: '0911555666',
     homeAddress: '苗栗縣苗栗市中正路500號',
     region: 'miaoli',
     serviceCategory: 2,
@@ -382,6 +418,7 @@ export const mockCases: CaseDTO[] = [
     code: 'C0009',
     name: '邱美蘭',
     nationalId: 'J203456677',
+    phone: '0928777888',
     homeAddress: '新竹縣湖口鄉達生路33號',
     region: 'hsinchu',
     serviceCategory: 1,
@@ -413,6 +450,7 @@ export const mockCases: CaseDTO[] = [
     code: 'C0010',
     name: '林阿祥',
     nationalId: 'K124561234',
+    phone: '0937999000',
     homeAddress: '苗栗縣竹南鎮光復路88號',
     region: 'miaoli',
     serviceCategory: 1,

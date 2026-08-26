@@ -1,10 +1,102 @@
 import { http, HttpResponse } from 'msw'
-import { mockSites, mockVehicles, mockDrivers } from '../data/mockData'
+import { mockRegions, mockSites, mockVehicles, mockDrivers } from '../data/mockData'
 
 export const mastersHandlers = [
+  // 區域主檔
+  http.get('/api/v1/regions', ({ request }) => {
+    const url = new URL(request.url)
+    const isAll = url.searchParams.get('all') === 'true'
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+    const status = url.searchParams.get('status')
+
+    let filtered = [...mockRegions]
+    if (q) {
+      filtered = filtered.filter(
+        (r) =>
+          r.code.toLowerCase().includes(q) ||
+          r.name.toLowerCase().includes(q) ||
+          (r.description && r.description.toLowerCase().includes(q))
+      )
+    }
+    if (status) {
+      filtered = filtered.filter((r) => r.status === status)
+    }
+
+    // 依 sortOrder 與 code 排序
+    filtered.sort((a, b) => (a.sortOrder - b.sortOrder) || a.code.localeCompare(b.code))
+
+    if (isAll) {
+      return HttpResponse.json({ data: filtered })
+    }
+
+    return HttpResponse.json({
+      data: filtered,
+      meta: {
+        total: filtered.length,
+        page: 1,
+        pageSize: 100,
+        totalPages: 1
+      }
+    })
+  }),
+
+  http.post('/api/v1/regions', async ({ request }) => {
+    const body = (await request.json()) as any
+    const existing = mockRegions.find(r => r.code.toLowerCase() === body.code?.toLowerCase())
+    if (existing) {
+      return HttpResponse.json({ error: { code: 'VALIDATION_FAILED', message: '區域代碼已存在' } }, { status: 409 })
+    }
+    const newReg = {
+      id: `reg_${Date.now()}`,
+      code: body.code.toLowerCase(),
+      name: body.name,
+      description: body.description || '',
+      status: body.status || 'active',
+      sortOrder: Number(body.sortOrder) || mockRegions.length + 1,
+      createdAt: new Date().toISOString().slice(0, 10),
+      updatedAt: new Date().toISOString().slice(0, 10)
+    }
+    mockRegions.push(newReg)
+    return HttpResponse.json({ data: newReg }, { status: 201 })
+  }),
+
+  http.patch('/api/v1/regions/:id', async ({ params, request }) => {
+    const reg = mockRegions.find((item) => item.id === params.id)
+    if (!reg) return new HttpResponse(null, { status: 404 })
+    const body = (await request.json()) as any
+    if (body.name !== undefined) reg.name = body.name
+    if (body.description !== undefined) reg.description = body.description
+    if (body.status !== undefined) reg.status = body.status
+    if (body.sortOrder !== undefined) reg.sortOrder = Number(body.sortOrder)
+    reg.updatedAt = new Date().toISOString().slice(0, 10)
+    return HttpResponse.json({ data: reg })
+  }),
+
+  http.delete('/api/v1/regions/:id', ({ params }) => {
+    const idx = mockRegions.findIndex((item) => item.id === params.id)
+    if (idx !== -1) mockRegions.splice(idx, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   // 據點主檔
-  http.get('/api/v1/sites', () => {
-    return HttpResponse.json({ data: mockSites, meta: { total: mockSites.length } })
+  http.get('/api/v1/sites', ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+    const region = url.searchParams.get('region')
+
+    let filtered = [...mockSites]
+    if (q) {
+      filtered = filtered.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.address.toLowerCase().includes(q)
+      )
+    }
+    if (region) {
+      filtered = filtered.filter((s) => s.region === region)
+    }
+
+    return HttpResponse.json({ data: filtered, meta: { total: filtered.length } })
   }),
 
   http.post('/api/v1/sites', async ({ request }) => {
@@ -29,8 +121,29 @@ export const mastersHandlers = [
   }),
 
   // 車輛主檔
-  http.get('/api/v1/vehicles', () => {
-    return HttpResponse.json({ data: mockVehicles, meta: { total: mockVehicles.length } })
+  http.get('/api/v1/vehicles', ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+    const region = url.searchParams.get('region')
+    const activeStr = url.searchParams.get('active')
+
+    let filtered = [...mockVehicles]
+    if (q) {
+      filtered = filtered.filter(
+        (v) =>
+          v.plateNo.toLowerCase().includes(q) ||
+          v.displayName.toLowerCase().includes(q)
+      )
+    }
+    if (region) {
+      filtered = filtered.filter((v) => v.region === region)
+    }
+    if (activeStr !== null && activeStr !== '') {
+      const active = activeStr === 'true'
+      filtered = filtered.filter((v) => v.active === active)
+    }
+
+    return HttpResponse.json({ data: filtered, meta: { total: filtered.length } })
   }),
 
   http.post('/api/v1/vehicles', async ({ request }) => {
@@ -55,8 +168,28 @@ export const mastersHandlers = [
   }),
 
   // 司機主檔
-  http.get('/api/v1/drivers', () => {
-    return HttpResponse.json({ data: mockDrivers, meta: { total: mockDrivers.length } })
+  http.get('/api/v1/drivers', ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+    const activeStr = url.searchParams.get('active')
+
+    let filtered = [...mockDrivers]
+    if (q) {
+      filtered = filtered.filter(
+        (d) =>
+          d.name.toLowerCase().includes(q) ||
+          (d.code && d.code.toLowerCase().includes(q)) ||
+          (d.nationalId && d.nationalId.toLowerCase().includes(q)) ||
+          (d.phone && d.phone.includes(q)) ||
+          (d.email && d.email.toLowerCase().includes(q))
+      )
+    }
+    if (activeStr !== null && activeStr !== '') {
+      const active = activeStr === 'true'
+      filtered = filtered.filter((d) => d.active === active)
+    }
+
+    return HttpResponse.json({ data: filtered, meta: { total: filtered.length } })
   }),
 
   http.post('/api/v1/drivers', async ({ request }) => {
@@ -100,6 +233,8 @@ export const mastersHandlers = [
         driverId: d.id,
         vehicleId: body.vehicleId,
         vehicleName: veh?.displayName,
+        vehiclePlateNo: veh?.plateNo,
+        plateNo: veh?.plateNo,
         startDate: body.startDate,
         endDate: body.endDate,
         isPrimary: body.isPrimary

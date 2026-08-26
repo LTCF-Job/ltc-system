@@ -1,6 +1,9 @@
 import { apiClient } from './client'
 import type {
   Paged,
+  RegionDTO,
+  CreateRegionRequest,
+  UpdateRegionRequest,
   SiteDTO,
   CreateSiteRequest,
   UpdateSiteRequest,
@@ -12,6 +15,34 @@ import type {
   UpdateDriverRequest,
   DryRunImportResultDTO
 } from '@/types/api'
+
+// 區域 Regions
+export async function listRegions(params?: {
+  page?: number
+  pageSize?: number
+  q?: string
+  status?: string
+  all?: boolean
+}): Promise<Paged<RegionDTO>> {
+  return apiClient.get('/regions', { params })
+}
+
+export async function listAllRegions(): Promise<{ data: RegionDTO[] }> {
+  return apiClient.get('/regions', { params: { all: true } })
+}
+
+export async function createRegion(data: CreateRegionRequest): Promise<RegionDTO> {
+  return apiClient.post('/regions', data)
+}
+
+export async function updateRegion(id: string, data: UpdateRegionRequest): Promise<RegionDTO> {
+  return apiClient.patch(`/regions/${id}`, data)
+}
+
+export async function deleteRegion(id: string): Promise<void> {
+  return apiClient.delete(`/regions/${id}`)
+}
+
 
 // 據點 Sites
 export async function listSites(params?: {

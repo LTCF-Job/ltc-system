@@ -31,7 +31,13 @@ const router = createRouter({
           path: 'cases/:id',
           name: 'CaseDetail',
           component: () => import('@/views/cases/CaseDetailView.vue'),
-          meta: { title: '個案明細與排班', roles: ['admin', 'staff', 'viewer'] }
+          meta: { title: '個案編輯', roles: ['admin', 'staff', 'viewer'] }
+        },
+        {
+          path: 'masters/regions',
+          name: 'RegionList',
+          component: () => import('@/views/masters/RegionListView.vue'),
+          meta: { title: '區域管理', roles: ['admin', 'staff', 'viewer'] }
         },
         {
           path: 'masters/sites',
@@ -39,6 +45,7 @@ const router = createRouter({
           component: () => import('@/views/masters/SiteListView.vue'),
           meta: { title: '據點管理', roles: ['admin', 'staff', 'viewer'] }
         },
+
         {
           path: 'masters/vehicles',
           name: 'VehicleList',

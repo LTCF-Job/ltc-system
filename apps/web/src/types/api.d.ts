@@ -95,6 +95,7 @@ export interface CaseDTO {
   name: string
   nameNormalized?: string
   nationalId: string
+  phone?: string
   homeAddress: string
   region: Region
   ltcLevel?: string
@@ -111,6 +112,7 @@ export interface CaseDTO {
 export interface CreateCaseRequest {
   name: string
   nationalId: string
+  phone?: string
   homeAddress: string
   region: Region
   ltcLevel?: string
@@ -144,7 +146,33 @@ export interface CreateScheduleRequest {
   }>
 }
 
-// 主檔：據點、車輛、司機
+// 主檔：區域、據點、車輛、司機
+export interface RegionDTO {
+  id: string
+  code: string
+  name: string
+  description?: string
+  status: 'active' | 'inactive'
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateRegionRequest {
+  code: string
+  name: string
+  description?: string
+  status?: 'active' | 'inactive'
+  sortOrder?: number
+}
+
+export interface UpdateRegionRequest {
+  name?: string
+  description?: string
+  status?: 'active' | 'inactive'
+  sortOrder?: number
+}
+
 export interface SiteDTO {
   id: string
   name: string
@@ -153,6 +181,7 @@ export interface SiteDTO {
   openDays: number[]
   createdAt: string
 }
+
 
 export interface CreateSiteRequest {
   name: string
@@ -186,6 +215,8 @@ export interface DriverAssignmentDTO {
   driverId: string
   vehicleId: string
   vehicleName?: string
+  vehiclePlateNo?: string
+  plateNo?: string
   startDate: string
   endDate?: string
   isPrimary: boolean
@@ -339,6 +370,20 @@ export interface ResolveConflictRequest {
   reason?: string
 }
 
+export interface ManualReportRideRequest {
+  id?: string
+  caseId: string
+  serviceDate: string
+  legSeq: number
+  effectiveStatus: EffectiveRideStatus
+  vehicleId?: string
+  driverId?: string
+  departTimeOverride?: string | null
+  durationMinOverride?: number | null
+  notClaimedAa09?: boolean
+  reason?: string
+}
+
 export interface IssueRideDTO {
   id: string
   caseId: string
@@ -468,6 +513,7 @@ export interface ListAuditLogsParams {
   entityType?: AuditEntityType
   fromDate?: string
   toDate?: string
+  q?: string
 }
 
 // 8. 通知收件人管理 (Notification Recipients)

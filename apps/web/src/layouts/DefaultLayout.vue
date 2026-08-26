@@ -26,6 +26,10 @@
             <el-icon><Management /></el-icon>
             <span>主檔資料</span>
           </template>
+          <el-menu-item index="/masters/regions">
+            <el-icon><MapLocation /></el-icon>
+            <template #title>區域管理</template>
+          </el-menu-item>
           <el-menu-item index="/cases">
             <el-icon><User /></el-icon>
             <template #title>個案管理</template>
@@ -43,6 +47,7 @@
             <template #title>司機管理</template>
           </el-menu-item>
         </el-sub-menu>
+
 
         <el-sub-menu index="forms">
           <template #title>
@@ -226,7 +231,8 @@ import {
   DataAnalysis,
   List,
   Setting,
-  Guide
+  Guide,
+  MapLocation
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'

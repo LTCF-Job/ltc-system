@@ -8,12 +8,56 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   viewer: '檢視者'
 }
 
-export type Region = 'miaoli' | 'hsinchu'
+export type Region =
+  | 'hsinchu'
+  | 'hsinchu_city'
+  | 'miaoli'
+  | 'taipei'
+  | 'new_taipei'
+  | 'keelung'
+  | 'taoyuan'
+  | 'taichung'
+  | 'changhua'
+  | 'nantou'
+  | 'yunlin'
+  | 'chiayi_city'
+  | 'chiayi'
+  | 'tainan'
+  | 'kaohsiung'
+  | 'pingtung'
+  | 'yilan'
+  | 'hualien'
+  | 'taitung'
+  | 'penghu'
+  | 'kinmen'
+  | 'lienchiang'
+  | (string & {})
 
-export const REGION_LABELS: Record<Region, string> = {
-  miaoli: '苗栗',
-  hsinchu: '新竹'
+export const REGION_LABELS: Record<string, string> = {
+  hsinchu: '新竹縣',
+  hsinchu_city: '新竹市',
+  miaoli: '苗栗縣',
+  taipei: '臺北市',
+  new_taipei: '新北市',
+  keelung: '基隆市',
+  taoyuan: '桃園市',
+  taichung: '臺中市',
+  changhua: '彰化縣',
+  nantou: '南投縣',
+  yunlin: '雲林縣',
+  chiayi_city: '嘉義市',
+  chiayi: '嘉義縣',
+  tainan: '臺南市',
+  kaohsiung: '高雄市',
+  pingtung: '屏東縣',
+  yilan: '宜蘭縣',
+  hualien: '花蓮縣',
+  taitung: '臺東縣',
+  penghu: '澎湖縣',
+  kinmen: '金門縣',
+  lienchiang: '連江縣'
 }
+
 
 export type CaseStatus = 'active' | 'suspended' | 'closed'
 
