@@ -33,7 +33,7 @@
               </el-tag>
             </div>
             <div class="source-sub">
-              回報時間：{{ src.submittedAt }}
+              回報時間：{{ formatDateTime(src.submittedAt) }}
             </div>
           </div>
         </div>
@@ -179,6 +179,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { patchRideRecord } from '@/api/rides'
 import { listVehicles, listDrivers } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
+import { formatDateTime } from '@/utils/formatters'
 import { CORRECTION_REASONS } from '@/types/domain'
 import type { RideRecordDTO, VehicleDTO, DriverDTO, PatchRideRequest } from '@/types/api'
 

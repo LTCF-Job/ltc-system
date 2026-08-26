@@ -25,12 +25,17 @@
             v-model="regionFilter"
             placeholder="全部區域"
             clearable
-            style="width: 130px"
+            filterable
+            style="width: 140px"
             @change="fetchMatrix"
           >
             <el-option label="全部區域" value="" />
-            <el-option label="苗栗" value="miaoli" />
-            <el-option label="新竹" value="hsinchu" />
+            <el-option
+              v-for="(label, key) in REGION_LABELS"
+              :key="key"
+              :label="label"
+              :value="key"
+            />
           </el-select>
 
           <el-input
@@ -97,13 +102,13 @@
         <el-table-column
           prop="region"
           label="區域"
-          width="70"
+          width="85"
           fixed="left"
           align="center"
         >
           <template #default="{ row }">
             <el-tag size="small" :type="row.region === 'miaoli' ? 'warning' : 'primary'">
-              {{ REGION_LABELS[row.region as 'miaoli' | 'hsinchu'] }}
+              {{ REGION_LABELS[row.region] || row.region }}
             </el-tag>
           </template>
         </el-table-column>

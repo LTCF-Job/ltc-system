@@ -8,6 +8,27 @@
       <h2>異常搭乘集中處理</h2>
     </div>
 
+    <!-- 篩選列 -->
+    <el-card shadow="never" class="filter-card mb-3" style="margin-bottom: 12px;">
+      <el-row :gutter="16" align="middle">
+        <el-col :span="18" style="display: flex; gap: 8px;">
+          <el-input
+            v-model="issueQuery"
+            placeholder="搜尋個案姓名／涉及車輛／說明"
+            clearable
+            style="width: 260px;"
+            @keyup.enter="fetchIssues"
+          />
+          <el-button type="primary" icon="Search" @click="fetchIssues">
+            查詢
+          </el-button>
+          <el-button @click="handleReset">
+            重設
+          </el-button>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <el-tabs v-model="activeTab" type="border-card" class="issues-tabs" @tab-change="fetchIssues">
       <!-- 分頁 1：混車衝突 -->
       <el-tab-pane label="混車衝突待裁決" name="conflict">
@@ -63,9 +84,12 @@
             </template>
           </el-table-column>
           <el-table-column prop="description" label="說明" min-width="260" />
-          <el-table-column label="操作" width="120" align="center">
+          <el-table-column label="操作" width="160" align="center">
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="$router.push(`/cases/${row.caseId}`)">
+              <el-button link type="primary" size="small" @click="$router.push('/rides/missing')">
+                前往回報
+              </el-button>
+              <el-button link type="info" size="small" @click="$router.push(`/cases/${row.caseId}`)">
                 查看排班
               </el-button>
             </template>
@@ -135,6 +159,7 @@ import type { IssueRideDTO, VehicleDTO, DriverDTO } from '@/types/api'
 const authStore = useAuthStore()
 const activeTab = ref<'conflict' | 'unreported' | 'import_error'>('conflict')
 const loading = ref(false)
+const issueQuery = ref('')
 const issueList = ref<IssueRideDTO[]>([])
 
 const allVehicles = ref<VehicleDTO[]>([])
@@ -155,12 +180,18 @@ async function fetchIssues() {
   try {
     const res = await listIssueRides({
       issueType: activeTab.value,
-      pageSize: 50
+      pageSize: 50,
+      q: issueQuery.value || undefined
     })
     issueList.value = res.data
   } finally {
     loading.value = false
   }
+}
+
+function handleReset() {
+  issueQuery.value = ''
+  fetchIssues()
 }
 
 function openResolveDialog(row: any) {

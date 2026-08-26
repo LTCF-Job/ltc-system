@@ -3,8 +3,26 @@ import { mockCases, mockMissingRides } from '../data/mockData'
 
 export const ridesHandlers = [
   // 搭乘月曆矩陣
-  http.get('/api/v1/rides/calendar', () => {
-    const rows = mockCases.map((c) => {
+  http.get('/api/v1/rides/calendar', ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+    const region = url.searchParams.get('region')
+
+    let sourceCases = [...mockCases]
+    if (q) {
+      sourceCases = sourceCases.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.code.toLowerCase().includes(q) ||
+          (c.nationalId && c.nationalId.toLowerCase().includes(q)) ||
+          (c.homeAddress && c.homeAddress.toLowerCase().includes(q))
+      )
+    }
+    if (region) {
+      sourceCases = sourceCases.filter((c) => c.region === region)
+    }
+
+    const rows = sourceCases.map((c) => {
       const days: Record<string, any> = {}
       for (let day = 1; day <= 31; day++) {
         const dayStr = String(day).padStart(2, '0')
@@ -119,6 +137,44 @@ export const ridesHandlers = [
     })
   }),
 
+  // 人工補登回報
+  http.post('/api/v1/rides/manual-report', async ({ request }) => {
+    const body = (await request.json()) as any
+    const rideId = body.id || `ride_${body.caseId}_${body.serviceDate}_${body.legSeq}`
+
+    // 搭乘狀態已確認時自未回報清單中排除
+    if (body.effectiveStatus === 'boarded' || body.effectiveStatus === 'absent') {
+      const idx = mockMissingRides.findIndex(
+        (r) =>
+          (body.id && r.id === body.id) ||
+          (r.caseId === body.caseId && r.serviceDate === body.serviceDate && r.legSeq === body.legSeq)
+      )
+      if (idx !== -1) {
+        mockMissingRides.splice(idx, 1)
+      }
+    }
+
+    return HttpResponse.json({
+      data: {
+        id: rideId,
+        caseId: body.caseId,
+        serviceDate: body.serviceDate,
+        legSeq: body.legSeq,
+        effectiveStatus: body.effectiveStatus,
+        mergedStatus: body.effectiveStatus,
+        vehicleId: body.vehicleId,
+        driverId: body.driverId,
+        departTimeOverride: body.departTimeOverride,
+        durationMinOverride: body.durationMinOverride,
+        notClaimedAa09: body.notClaimedAa09 || false,
+        correctedAt: new Date().toISOString(),
+        correctedByName: '當前使用者',
+        correctionReason: body.reason,
+        sources: []
+      }
+    })
+  }),
+
   http.post('/api/v1/rides/:id/resolve-conflict', async ({ params, request }) => {
     const body = (await request.json()) as any
     return HttpResponse.json({
@@ -133,65 +189,95 @@ export const ridesHandlers = [
   http.get('/api/v1/rides/issues', ({ request }) => {
     const url = new URL(request.url)
     const type = url.searchParams.get('issueType') || 'conflict'
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
+    let conflictList = [
+      {
+        id: 'ride_conflict_1',
+        caseId: 'case_2',
+        caseName: '葉秀珍',
+        serviceDate: '2026-07-20',
+        legSeq: 1,
+        issueType: 'conflict',
+        hasConflict: true,
+        description: '竹北一車與竹北二車皆回報「有坐」，需指定正確承載車輛',
+        vehicles: ['竹北一車', '竹北二車']
+      }
+    ]
+
+    let unreportedList = [
+      {
+        id: 'ride_unrep_1',
+        caseId: 'case_1',
+        caseName: '蔡曾切',
+        serviceDate: '2026-07-15',
+        legSeq: 2,
+        issueType: 'unreported',
+        hasConflict: false,
+        description: '07/15 第 2 趟（回程）司機尚未提交表單回覆',
+        vehicles: ['苗栗一車']
+      }
+    ]
+
+    let errorList = [
+      {
+        id: 'err_1',
+        caseId: 'case_unknown',
+        caseName: '去程到07/21',
+        serviceDate: '2026-07-21',
+        legSeq: 1,
+        issueType: 'import_error',
+        hasConflict: false,
+        description: '搭乘欄填寫非標準字串「去程到07/21」，無法自動解析為有坐/沒坐',
+        vehicles: []
+      }
+    ]
+
+    if (q) {
+      const matchItem = (item: any) =>
+        item.caseName.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.vehicles.some((v: string) => v.toLowerCase().includes(q))
+
+      conflictList = conflictList.filter(matchItem)
+      unreportedList = unreportedList.filter(matchItem)
+      errorList = errorList.filter(matchItem)
+    }
 
     if (type === 'conflict') {
       return HttpResponse.json({
-        data: [
-          {
-            id: 'ride_conflict_1',
-            caseId: 'case_2',
-            caseName: '葉秀珍',
-            serviceDate: '2026-07-20',
-            legSeq: 1,
-            issueType: 'conflict',
-            hasConflict: true,
-            description: '竹北一車與竹北二車皆回報「有坐」，需指定正確承載車輛',
-            vehicles: ['竹北一車', '竹北二車']
-          }
-        ],
-        meta: { total: 1 }
+        data: conflictList,
+        meta: { total: conflictList.length }
       })
     } else if (type === 'unreported') {
       return HttpResponse.json({
-        data: [
-          {
-            id: 'ride_unrep_1',
-            caseId: 'case_1',
-            caseName: '蔡曾切',
-            serviceDate: '2026-07-15',
-            legSeq: 2,
-            issueType: 'unreported',
-            hasConflict: false,
-            description: '07/15 第 2 趟（回程）司機尚未提交表單回覆'
-          }
-        ],
-        meta: { total: 1 }
+        data: unreportedList,
+        meta: { total: unreportedList.length }
       })
     }
 
     return HttpResponse.json({
-      data: [
-        {
-          id: 'err_1',
-          caseId: 'case_unknown',
-          caseName: '去程到07/21',
-          serviceDate: '2026-07-21',
-          legSeq: 1,
-          issueType: 'import_error',
-          hasConflict: false,
-          description: '搭乘欄填寫非標準字串「去程到07/21」，無法自動解析為有坐/沒坐'
-        }
-      ],
-      meta: { total: 1 }
+      data: errorList,
+      meta: { total: errorList.length }
     })
   }),
 
   http.get('/api/v1/rides/missing', ({ request }) => {
     const url = new URL(request.url)
     const vehicleId = url.searchParams.get('vehicleId')
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
     let list = [...mockMissingRides]
     if (vehicleId) {
       list = list.filter((r) => r.vehicleId === vehicleId)
+    }
+    if (q) {
+      list = list.filter(
+        (r) =>
+          r.caseName.toLowerCase().includes(q) ||
+          (r.vehicleName && r.vehicleName.toLowerCase().includes(q)) ||
+          (r.driverName && r.driverName.toLowerCase().includes(q))
+      )
     }
     return HttpResponse.json({
       data: list,
