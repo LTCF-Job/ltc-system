@@ -19,8 +19,10 @@ import type {
   FuelLogDTO,
   HsinchuScheduleReportDTO,
   DashboardMetricsDTO,
-  UserDTO
+  UserDTO,
+  RoleDTO
 } from '@/types/api'
+import { DEFAULT_ROLE_PERMISSIONS } from '@/types/domain'
 
 // 區域主檔展示資料：涵蓋全台灣 22 縣市
 export const mockRegions: RegionDTO[] = [
@@ -599,6 +601,97 @@ export const mockUsers: UserDTO[] = [
   }
 ]
 
+// 角色身分展示資料：包含系統內建核心角色與示範自訂角色
+export const mockRoles: RoleDTO[] = [
+  {
+    id: 'role_admin',
+    key: 'admin',
+    name: '系統管理員',
+    description: '具備全系統最高權限，可管理使用者帳號、角色、稽核紀錄與所有主檔及申報功能。',
+    tagType: 'danger',
+    isSystem: true,
+    permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS.admin)),
+    createdAt: '2026-01-01 00:00:00',
+    updatedAt: '2026-01-01 00:00:00'
+  },
+  {
+    id: 'role_dispatcher',
+    key: 'dispatcher',
+    name: '調度員',
+    description: '負責日常派車、個案管理、搭乘月曆排程、異常處理、表單同步與申報資料匯出。',
+    tagType: 'primary',
+    isSystem: true,
+    permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS.dispatcher)),
+    createdAt: '2026-01-01 00:00:00',
+    updatedAt: '2026-01-01 00:00:00'
+  },
+  {
+    id: 'role_driver',
+    key: 'driver',
+    name: '司機',
+    description: '負責每日出勤登錄、車輛維修紀錄填寫與個人接送趟次狀況檢視。',
+    tagType: 'success',
+    isSystem: true,
+    permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS.driver)),
+    createdAt: '2026-01-01 00:00:00',
+    updatedAt: '2026-01-01 00:00:00'
+  },
+  {
+    id: 'role_staff',
+    key: 'staff',
+    name: '行政人員',
+    description: '負責行政文書、主檔維護、搭乘資料校對及一般報表產出。',
+    tagType: 'primary',
+    isSystem: true,
+    permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS.staff)),
+    createdAt: '2026-01-01 00:00:00',
+    updatedAt: '2026-01-01 00:00:00'
+  },
+  {
+    id: 'role_viewer',
+    key: 'viewer',
+    name: '檢視者',
+    description: '僅具備全系統營運資料之唯讀檢視權限，無法進行任何新增、修改或刪除操作。',
+    tagType: 'info',
+    isSystem: true,
+    permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS.viewer)),
+    createdAt: '2026-01-01 00:00:00',
+    updatedAt: '2026-01-01 00:00:00'
+  },
+  {
+    id: 'role_auditor',
+    key: 'auditor',
+    name: '外部稽核督導',
+    description: '專門負責政府評鑑抽查、搭乘日誌校驗與系統操作稽核之唯讀進階身分。',
+    tagType: 'warning',
+    isSystem: false,
+    permissions: {
+      dashboard: { view: true, edit: false },
+      masters_regions: { view: true, edit: false },
+      masters_cases: { view: true, edit: false },
+      masters_sites: { view: true, edit: false },
+      masters_vehicles: { view: true, edit: false },
+      masters_drivers: { view: true, edit: false },
+      forms_sync: { view: true, edit: false },
+      forms_mappings: { view: true, edit: false },
+      rides_calendar: { view: true, edit: false },
+      rides_issues: { view: true, edit: false },
+      rides_missing: { view: true, edit: false },
+      reports_trip_summary: { view: true, edit: false },
+      reports_hsinchu_schedule: { view: true, edit: false },
+      vehicles_maintenance: { view: true, edit: false },
+      attendance_fuel: { view: true, edit: false },
+      exports: { view: true, edit: false },
+      audit_logs: { view: true, edit: false },
+      settings_notifications: { view: true, edit: false },
+      settings_users: { view: false, edit: false },
+      settings_roles: { view: false, edit: false }
+    },
+    createdAt: '2026-02-20 11:30:00',
+    updatedAt: '2026-02-20 11:30:00'
+  }
+]
+
 // 智慧欄位對應展示資料：涵蓋 4 種欄位種類 (meta, ride, issue, unknown) 與 3 種對應狀態 (pending, mapped, ignored)
 export const mockFormColumns: FormColumnDTO[] = [
   {
@@ -957,15 +1050,13 @@ export const mockAuditLogs: AuditLogDTO[] = [
   }
 ]
 
-// 通知收件人展示資料：涵蓋指定角色 (role)、指定使用者 (user) 與自訂外部信箱 (custom)
+// 通知收件人展示資料：自訂外部信箱
 export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   {
     id: 'rec_1',
     topic: 'missing_report',
-    recipientType: 'role',
-    targetRole: 'admin',
     email: 'admin@ltc.example.com',
-    displayName: '全體系統管理員',
+    displayName: '系統管理組',
     active: true,
     createdByName: '系統管理員',
     createdAt: '2026-01-01 00:00:00'
@@ -973,10 +1064,8 @@ export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   {
     id: 'rec_2',
     topic: 'missing_report',
-    recipientType: 'role',
-    targetRole: 'dispatcher',
     email: 'dispatcher@ltc.example.com',
-    displayName: '全體調度員',
+    displayName: '苗栗調度中心',
     active: true,
     createdByName: '系統管理員',
     createdAt: '2026-01-05 10:30:00'
@@ -984,10 +1073,8 @@ export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   {
     id: 'rec_3',
     topic: 'driver_leave',
-    recipientType: 'role',
-    targetRole: 'dispatcher',
-    email: 'dispatcher@ltc.example.com',
-    displayName: '調度中心專線 (全體調度組)',
+    email: 'dispatch_lead@ltc.example.com',
+    displayName: '調度組長',
     active: true,
     createdByName: '系統管理員',
     createdAt: '2026-01-10 14:00:00'
@@ -995,10 +1082,8 @@ export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   {
     id: 'rec_4',
     topic: 'month_end',
-    recipientType: 'user',
-    userId: 'usr_viewer_1',
-    email: 'viewer@ltc.example.com',
-    displayName: '林督導 (主管檢視者)',
+    email: 'supervisor@gov.example.tw',
+    displayName: '長照督導辦公室',
     active: true,
     createdByName: '系統管理員',
     createdAt: '2026-01-15 09:15:00'
@@ -1006,7 +1091,6 @@ export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   {
     id: 'rec_5',
     topic: 'export_failed',
-    recipientType: 'custom',
     email: 'tech@ltc.example.com',
     displayName: '外部資訊維運團隊',
     active: true,

@@ -7,58 +7,156 @@
       class="rule-alert"
     >
       <template #title>
-        <span class="font-bold">權限套用規則：個人設定 ＞ 角色身分設定</span>
+        <span class="font-bold">權限套用規則：個人設定 ＞ 角色身分設定 ＞ 系統預設</span>
       </template>
-      系統以使用者為中心進行權限裁決。若使用者擁有個人自訂權限，則優先套用個人設定；若無個人設定，系統自動繼承並套用下方定義之角色預設權限配置。
+      系統以使用者為中心進行權限裁決。若使用者擁有個人自訂權限，則優先套用個人設定；若無個人設定，系統自動繼承並套用所屬角色之預設模組權限配置。
     </el-alert>
+
+    <!-- 頂部搜尋與動作列 -->
+    <div class="toolbar-card">
+      <div class="toolbar-left">
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜尋角色名稱或說明"
+          prefix-icon="Search"
+          clearable
+          style="width: 280px"
+        />
+        <el-tag type="info" effect="plain" class="total-tag">
+          共 {{ filteredRoles.length }} 個角色身分
+        </el-tag>
+      </div>
+
+      <div class="toolbar-right">
+        <el-button type="primary" icon="Plus" @click="openCreateDialog">
+          新增自訂角色
+        </el-button>
+      </div>
+    </div>
 
     <!-- 角色卡片清單 -->
     <el-row :gutter="16" class="role-cards-row">
       <el-col
-        v-for="role in roleList"
-        :key="role.key"
+        v-for="role in filteredRoles"
+        :key="role.id || role.key"
         :xs="24"
         :sm="12"
-        :md="6"
+        :md="8"
+        :lg="6"
+        style="margin-bottom: 16px"
       >
         <el-card
           shadow="hover"
           class="role-card"
-          :class="{ 'is-selected': selectedRoleKey === role.key }"
-          @click="selectedRoleKey = role.key"
+          :class="{ 'is-selected': selectedRole?.key === role.key || selectedRole?.id === role.id }"
+          @click="selectedRole = role"
         >
           <div class="role-card-header">
-            <el-tag :type="role.tagType" effect="dark" size="default">
-              {{ role.label }}
-            </el-tag>
-            <span class="role-key font-mono">{{ role.key }}</span>
+            <div class="header-tag-group">
+              <el-tag :type="role.tagType" effect="dark" size="default" class="role-main-tag">
+                {{ role.name }}
+              </el-tag>
+              <el-tag v-if="role.isSystem" size="small" type="info" effect="plain">
+                系統內建
+              </el-tag>
+            </div>
           </div>
-          <p class="role-desc">{{ role.description }}</p>
+
+          <p class="role-desc" :title="role.description">{{ role.description || '無詳細說明' }}</p>
+
           <div class="role-stat">
-            <span class="stat-item">
-              可檢視模組：<strong>{{ countRolePerms(role.key).views }}</strong> / {{ SYSTEM_MODULES.length }}
-            </span>
-            <span class="stat-item">
-              具編輯權限：<strong>{{ countRolePerms(role.key).edits }}</strong> / {{ SYSTEM_MODULES.length }}
-            </span>
+            <div class="stat-row">
+              <span class="stat-label">綁定使用者：</span>
+              <el-tag size="small" :type="(role.userCount || 0) > 0 ? 'success' : 'info'" effect="plain">
+                {{ role.userCount || 0 }} 人
+              </el-tag>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">模組檢視／操作：</span>
+              <span class="stat-val">
+                <strong>{{ countRolePerms(role.permissions).views }}</strong> 檢視 /
+                <strong>{{ countRolePerms(role.permissions).edits }}</strong> 編輯
+              </span>
+            </div>
+          </div>
+
+          <div class="role-actions" @click.stop>
+            <el-button
+              type="primary"
+              link
+              size="small"
+              icon="Edit"
+              @click="openEditDialog(role)"
+            >
+              編輯設定
+            </el-button>
+            <el-button
+              type="success"
+              link
+              size="small"
+              icon="CopyDocument"
+              @click="openCopyDialog(role)"
+            >
+              複製建立
+            </el-button>
+            <el-tooltip
+              v-if="role.isSystem"
+              content="系統內建核心角色不可刪除"
+              placement="top"
+            >
+              <span>
+                <el-button
+                  type="danger"
+                  link
+                  size="small"
+                  icon="Delete"
+                  disabled
+                >
+                  刪除
+                </el-button>
+              </span>
+            </el-tooltip>
+            <el-button
+              v-else
+              type="danger"
+              link
+              size="small"
+              icon="Delete"
+              @click="handleDeleteRole(role)"
+            >
+              刪除
+            </el-button>
           </div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- 角色權限矩陣清單 -->
-    <el-card shadow="never" class="matrix-card">
+    <!-- 角色模組權限矩陣檢視卡片 -->
+    <el-card v-if="selectedRole" shadow="never" class="matrix-card">
       <template #header>
         <div class="matrix-header">
-          <div>
+          <div class="matrix-title-box">
             <span class="matrix-title">
-              【{{ ROLE_LABELS[selectedRoleKey] }}】預設功能模組權限矩陣
+              【{{ selectedRole.name }}】功能模組權限矩陣
             </span>
-            <span class="matrix-subtitle font-mono">({{ selectedRoleKey }})</span>
+            <el-tag v-if="selectedRole.isSystem" size="small" type="info" effect="plain" style="margin-left: 8px">
+              系統內建角色
+            </el-tag>
           </div>
-          <el-tag :type="getRoleTagType(selectedRoleKey)" effect="plain">
-            共支援 {{ countRolePerms(selectedRoleKey).views }} 項檢視、{{ countRolePerms(selectedRoleKey).edits }} 項操作
-          </el-tag>
+          <div class="matrix-header-right">
+            <el-tag :type="selectedRole.tagType" effect="plain">
+              支援 {{ countRolePerms(selectedRole.permissions).views }} 項檢視、{{ countRolePerms(selectedRole.permissions).edits }} 項操作
+            </el-tag>
+            <el-button
+              type="primary"
+              size="small"
+              icon="Edit"
+              plain
+              @click="openEditDialog(selectedRole)"
+            >
+              修改此角色權限
+            </el-button>
+          </div>
         </div>
       </template>
 
@@ -69,23 +167,23 @@
         size="small"
         style="width: 100%"
       >
-        <el-table-column prop="categoryName" label="分類" width="120" align="center">
+        <el-table-column prop="categoryName" label="分類" width="130" align="center">
           <template #default="{ row }">
             <el-tag size="small" effect="plain" type="info">{{ row.categoryName }}</el-tag>
           </template>
         </el-table-column>
 
-        <el-table-column prop="name" label="功能模組名稱" min-width="180">
+        <el-table-column prop="name" label="功能模組名稱" min-width="200">
           <template #default="{ row }">
             <span class="font-bold">{{ row.name }}</span>
             <span class="font-mono text-muted" style="margin-left: 6px; font-size: 12px">({{ row.id }})</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="檢視權限 (View)" width="160" align="center">
+        <el-table-column label="檢視權限 (View)" width="180" align="center">
           <template #default="{ row }">
             <el-tag
-              v-if="DEFAULT_ROLE_PERMISSIONS[selectedRoleKey]?.[row.id]?.view"
+              v-if="selectedRole?.permissions?.[row.id]?.view"
               type="success"
               size="small"
               effect="dark"
@@ -98,10 +196,10 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="編輯權限 (Edit)" width="160" align="center">
+        <el-table-column label="編輯／操作權限 (Edit)" width="180" align="center">
           <template #default="{ row }">
             <el-tag
-              v-if="DEFAULT_ROLE_PERMISSIONS[selectedRoleKey]?.[row.id]?.edit"
+              v-if="selectedRole?.permissions?.[row.id]?.edit"
               type="primary"
               size="small"
               effect="dark"
@@ -115,72 +213,212 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- 新增 / 編輯 / 複製角色 Dialog -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      width="820px"
+      destroy-on-close
+      top="5vh"
+    >
+      <el-form
+        ref="formRef"
+        :model="form"
+        :rules="formRules"
+        label-width="100px"
+        label-position="right"
+      >
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="角色名稱" prop="name">
+              <el-input v-model="form.name" placeholder="如：外部稽核員、車隊專員" />
+            </el-form-item>
+          </el-col>
+
+          <el-col :span="12">
+            <el-form-item label="標籤色彩" prop="tagType">
+              <el-select v-model="form.tagType" placeholder="請選擇標籤樣式" style="width: 100%">
+                <el-option
+                  v-for="color in tagColorOptions"
+                  :key="color.value"
+                  :label="color.label"
+                  :value="color.value"
+                >
+                  <el-tag :type="color.value" size="small" effect="dark" style="margin-right: 8px">
+                    {{ color.label }}
+                  </el-tag>
+                  <span style="color: var(--el-text-color-secondary); font-size: 12px">{{ color.desc }}</span>
+                </el-option>
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="角色說明" prop="description">
+          <el-input
+            v-model="form.description"
+            placeholder="請輸入此角色在系統中之職掌說明"
+          />
+        </el-form-item>
+
+        <!-- 權限矩陣配置區塊 -->
+        <div class="perm-config-box">
+          <div class="perm-config-header">
+            <div class="perm-config-title">
+              <el-icon><Setting /></el-icon>
+              <span>模組權限矩陣配置</span>
+            </div>
+
+            <div class="perm-quick-actions">
+              <el-button size="small" @click="handleBatchSet(true, false)">全選檢視</el-button>
+              <el-button size="small" type="primary" plain @click="handleBatchSet(true, true)">全選編輯</el-button>
+              <el-button size="small" type="info" plain @click="handleBatchSet(false, false)">全部清空</el-button>
+              
+              <el-select
+                v-model="templateRoleKey"
+                placeholder="複製既有角色..."
+                size="small"
+                style="width: 160px; margin-left: 8px"
+                @change="handleApplyTemplate"
+              >
+                <el-option
+                  v-for="r in roleList"
+                  :key="r.id || r.key"
+                  :label="r.name"
+                  :value="r.id || r.key"
+                />
+              </el-select>
+            </div>
+          </div>
+
+          <el-table
+            :data="SYSTEM_MODULES"
+            border
+            stripe
+            size="small"
+            style="width: 100%"
+            max-height="360px"
+          >
+            <el-table-column prop="categoryName" label="分類" width="110" align="center">
+              <template #default="{ row }">
+                <el-tag size="small" effect="plain" type="info">{{ row.categoryName }}</el-tag>
+              </template>
+            </el-table-column>
+
+            <el-table-column prop="name" label="功能區塊模組" min-width="160" />
+
+            <el-table-column label="顯示／檢視" width="120" align="center">
+              <template #default="{ row }">
+                <el-checkbox
+                  v-model="formPermissions[row.id].view"
+                  @change="onViewPermChange(row.id)"
+                >
+                  檢視
+                </el-checkbox>
+              </template>
+            </el-table-column>
+
+            <el-table-column label="操作／編輯" width="120" align="center">
+              <template #default="{ row }">
+                <el-checkbox
+                  v-model="formPermissions[row.id].edit"
+                  :disabled="!formPermissions[row.id].view"
+                  @change="onEditPermChange(row.id)"
+                >
+                  編輯
+                </el-checkbox>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-form>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="submitting" @click="handleSubmit">
+            儲存角色設定
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Check, Close } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { Check, Close, Plus, Search, Edit, Delete, CopyDocument, Setting } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import {
-  ROLE_LABELS,
+  listRoles,
+  createRole,
+  updateRole,
+  deleteRole
+} from '@/api/roles'
+import {
   SYSTEM_MODULES,
   DEFAULT_ROLE_PERMISSIONS,
-  type UserRole
+  type RoleTagType,
+  type RoleItem,
+  type SystemPermissions
 } from '@/types/domain'
+import type { RoleDTO } from '@/types/api'
 
-const selectedRoleKey = ref<UserRole>('dispatcher')
+const roleList = ref<RoleDTO[]>([])
+const loading = ref(false)
+const searchQuery = ref('')
+const selectedRole = ref<RoleDTO | null>(null)
 
-interface RoleInfoItem {
-  key: UserRole
-  label: string
-  tagType: 'danger' | 'primary' | 'success' | 'warning' | 'info'
-  description: string
-}
+const dialogVisible = ref(false)
+const isEditing = ref(false)
+const editingId = ref<string | null>(null)
+const editingRoleIsSystem = ref(false)
+const submitting = ref(false)
+const formRef = ref<FormInstance>()
+const templateRoleKey = ref('')
 
-const roleList: RoleInfoItem[] = [
-  {
-    key: 'admin',
-    label: '系統管理員',
-    tagType: 'danger',
-    description: '具備全系統最高權限，可管理使用者帳號、角色、稽核紀錄與所有主檔及申報功能。'
-  },
-  {
-    key: 'dispatcher',
-    label: '調度員',
-    tagType: 'primary',
-    description: '負責日常派車、個案管理、搭乘月曆排程、異常處理、表單同步與申報資料匯出。'
-  },
-  {
-    key: 'driver',
-    label: '司機',
-    tagType: 'success',
-    description: '負責每日出勤登錄、車輛維修紀錄填寫與個人接送趟次狀況檢視。'
-  },
-  {
-    key: 'viewer',
-    label: '檢視者',
-    tagType: 'info',
-    description: '僅具備全系統營運資料之唯讀檢視權限，無法進行任何新增、修改或刪除操作。'
-  }
+const tagColorOptions: { label: string; value: RoleTagType; desc: string }[] = [
+  { label: '藍色 (Primary)', value: 'primary', desc: '適用於核心調度與專員' },
+  { label: '綠色 (Success)', value: 'success', desc: '適用於司機與執行人員' },
+  { label: '橘色 (Warning)', value: 'warning', desc: '適用於外部稽核與臨時身分' },
+  { label: '紅色 (Danger)', value: 'danger', desc: '適用於管理人員與高權限' },
+  { label: '灰色 (Info)', value: 'info', desc: '適用於唯讀檢視者' }
 ]
 
-function getRoleTagType(role: UserRole): 'danger' | 'primary' | 'success' | 'warning' | 'info' {
-  switch (role) {
-    case 'admin':
-      return 'danger'
-    case 'dispatcher':
-    case 'staff':
-      return 'primary'
-    case 'driver':
-      return 'success'
-    case 'viewer':
-    default:
-      return 'info'
-  }
+const form = reactive({
+  name: '',
+  description: '',
+  tagType: 'primary' as RoleTagType
+})
+
+const formPermissions = ref<SystemPermissions>({})
+
+const formRules = {
+  name: [{ required: true, message: '請輸入角色名稱', trigger: 'blur' }],
+  tagType: [{ required: true, message: '請選擇標籤色彩', trigger: 'change' }]
 }
 
-function countRolePerms(roleKey: UserRole) {
-  const perms = DEFAULT_ROLE_PERMISSIONS[roleKey] || {}
+const dialogTitle = computed(() => {
+  if (isEditing.value) {
+    return `編輯角色身分 - 【${form.name}】`
+  }
+  return '新增自訂角色身分'
+})
+
+const filteredRoles = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return roleList.value
+  return roleList.value.filter(
+    (r) =>
+      r.name.toLowerCase().includes(q) ||
+      r.key.toLowerCase().includes(q) ||
+      (r.description && r.description.toLowerCase().includes(q))
+  )
+})
+
+function countRolePerms(perms?: SystemPermissions) {
+  if (!perms) return { views: 0, edits: 0 }
   let views = 0
   let edits = 0
   for (const m of SYSTEM_MODULES) {
@@ -189,6 +427,210 @@ function countRolePerms(roleKey: UserRole) {
   }
   return { views, edits }
 }
+
+function initEmptyPermissions(): SystemPermissions {
+  const p: SystemPermissions = {}
+  for (const m of SYSTEM_MODULES) {
+    p[m.id] = { view: false, edit: false }
+  }
+  return p
+}
+
+async function fetchRoles() {
+  loading.value = true
+  try {
+    const list = await listRoles()
+    roleList.value = list
+
+    // 保持目前選取的角色；若無選取則預設選取第一個 (或 dispatcher)
+    if (selectedRole.value) {
+      const found = list.find((r) => r.key === selectedRole.value?.key)
+      selectedRole.value = found || list[0] || null
+    } else {
+      const defaultItem = list.find((r) => r.key === 'dispatcher') || list[0] || null
+      selectedRole.value = defaultItem
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '載入角色清單失敗')
+  } finally {
+    loading.value = false
+  }
+}
+
+function openCreateDialog() {
+  isEditing.value = false
+  editingId.value = null
+  editingRoleIsSystem.value = false
+  templateRoleKey.value = ''
+  form.name = ''
+  form.description = ''
+  form.tagType = 'primary'
+  formPermissions.value = initEmptyPermissions()
+  dialogVisible.value = true
+}
+
+function openEditDialog(role: RoleDTO) {
+  isEditing.value = true
+  editingId.value = role.id || role.key
+  editingRoleIsSystem.value = role.isSystem
+  templateRoleKey.value = ''
+  form.name = role.name
+  form.description = role.description || ''
+  form.tagType = role.tagType || 'primary'
+  
+  // 複製現有權限並確保 20 個模組都有鍵值
+  const p = initEmptyPermissions()
+  if (role.permissions) {
+    for (const m of SYSTEM_MODULES) {
+      if (role.permissions[m.id]) {
+        p[m.id] = {
+          view: !!role.permissions[m.id].view,
+          edit: !!role.permissions[m.id].edit
+        }
+      }
+    }
+  }
+  formPermissions.value = p
+  dialogVisible.value = true
+}
+
+function openCopyDialog(role: RoleDTO) {
+  isEditing.value = false
+  editingId.value = null
+  editingRoleIsSystem.value = false
+  templateRoleKey.value = ''
+  form.name = `${role.name} (複製)`
+  form.description = role.description || ''
+  form.tagType = role.tagType || 'primary'
+
+  const p = initEmptyPermissions()
+  if (role.permissions) {
+    for (const m of SYSTEM_MODULES) {
+      if (role.permissions[m.id]) {
+        p[m.id] = {
+          view: !!role.permissions[m.id].view,
+          edit: !!role.permissions[m.id].edit
+        }
+      }
+    }
+  }
+  formPermissions.value = p
+  dialogVisible.value = true
+}
+
+function handleBatchSet(viewVal: boolean, editVal: boolean) {
+  for (const m of SYSTEM_MODULES) {
+    formPermissions.value[m.id] = {
+      view: viewVal,
+      edit: editVal
+    }
+  }
+}
+
+function handleApplyTemplate(roleIdOrKey: string) {
+  const target = roleList.value.find((r) => r.id === roleIdOrKey || r.key === roleIdOrKey)
+  if (!target || !target.permissions) return
+  for (const m of SYSTEM_MODULES) {
+    formPermissions.value[m.id] = {
+      view: !!target.permissions[m.id]?.view,
+      edit: !!target.permissions[m.id]?.edit
+    }
+  }
+  ElMessage.info(`已套用【${target.name}】之權限配置範本`)
+}
+
+function onViewPermChange(moduleId: string) {
+  if (!formPermissions.value[moduleId].view) {
+    formPermissions.value[moduleId].edit = false
+  }
+}
+
+function onEditPermChange(moduleId: string) {
+  if (formPermissions.value[moduleId].edit) {
+    formPermissions.value[moduleId].view = true
+  }
+}
+
+async function handleSubmit() {
+  if (!formRef.value) return
+  await formRef.value.validate(async (valid) => {
+    if (!valid) return
+    submitting.value = true
+    try {
+      if (isEditing.value && editingId.value) {
+        await updateRole(editingId.value, {
+          name: form.name,
+          description: form.description,
+          tagType: form.tagType,
+          permissions: formPermissions.value
+        })
+        ElMessage.success(`角色「${form.name}」已成功更新`)
+      } else {
+        await createRole({
+          name: form.name,
+          description: form.description,
+          tagType: form.tagType,
+          permissions: formPermissions.value
+        })
+        ElMessage.success(`自訂角色「${form.name}」建立成功`)
+      }
+      dialogVisible.value = false
+      await fetchRoles()
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message || err.message || '儲存角色失敗'
+      ElMessage.error(msg)
+    } finally {
+      submitting.value = false
+    }
+  })
+}
+
+async function handleDeleteRole(role: RoleDTO) {
+  if (role.isSystem) {
+    ElMessage.warning('系統內建角色受系統保護，不可刪除')
+    return
+  }
+
+  if ((role.userCount || 0) > 0) {
+    ElMessageBox.alert(
+      `目前尚有 ${role.userCount} 位使用者正在使用「${role.name}」角色。請先前往「使用者管理」將這些使用者調派至其他角色後，方可刪除此角色。`,
+      '無法刪除角色',
+      {
+        type: 'warning',
+        confirmButtonText: '我知道了'
+      }
+    )
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `確定要刪除角色「${role.name}」嗎？此操作將同時記錄於系統操作紀錄。`,
+      '確認刪除自訂角色',
+      {
+        confirmButtonText: '確定刪除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await deleteRole(role.id || role.key)
+    ElMessage.success(`角色「${role.name}」已成功刪除`)
+    if (selectedRole.value?.key === role.key || selectedRole.value?.id === role.id) {
+      selectedRole.value = null
+    }
+    await fetchRoles()
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      const msg = err.response?.data?.error?.message || err.message || '刪除失敗'
+      ElMessage.error(msg)
+    }
+  }
+}
+
+onMounted(() => {
+  fetchRoles()
+})
 </script>
 
 <style scoped>
@@ -200,6 +642,26 @@ function countRolePerms(roleKey: UserRole) {
 
 .rule-alert {
   border-radius: 8px;
+}
+
+.toolbar-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--el-bg-color);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color-light);
+
+  .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    .total-tag {
+      font-size: 13px;
+    }
+  }
 }
 
 .font-bold {
@@ -223,9 +685,12 @@ function countRolePerms(roleKey: UserRole) {
   border-radius: 8px;
   transition: all 0.2s ease;
   height: 100%;
+  display: flex;
+  flex-direction: column;
 
   &:hover {
     transform: translateY(-2px);
+    box-shadow: var(--el-box-shadow-light);
   }
 
   &.is-selected {
@@ -239,6 +704,16 @@ function countRolePerms(roleKey: UserRole) {
     align-items: center;
     margin-bottom: 8px;
 
+    .header-tag-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      .role-main-tag {
+        font-weight: bold;
+      }
+    }
+
     .role-key {
       font-size: 12px;
       color: var(--el-text-color-secondary);
@@ -249,22 +724,43 @@ function countRolePerms(roleKey: UserRole) {
     font-size: 13px;
     color: var(--el-text-color-regular);
     line-height: 1.4;
-    min-height: 52px;
+    height: 40px;
     margin-bottom: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
 
   .role-stat {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     font-size: 12px;
     color: var(--el-text-color-secondary);
     border-top: 1px dashed var(--el-border-color-lighter);
     padding-top: 8px;
+    margin-bottom: 10px;
 
-    strong {
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .stat-val strong {
       color: var(--el-color-primary);
     }
+  }
+
+  .role-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--el-border-color-lighter);
+    padding-top: 8px;
+    margin-top: auto;
   }
 }
 
@@ -275,6 +771,11 @@ function countRolePerms(roleKey: UserRole) {
     display: flex;
     justify-content: space-between;
     align-items: center;
+
+    .matrix-title-box {
+      display: flex;
+      align-items: center;
+    }
 
     .matrix-title {
       font-size: 16px;
@@ -287,6 +788,43 @@ function countRolePerms(roleKey: UserRole) {
       color: var(--el-text-color-secondary);
       margin-left: 6px;
     }
+
+    .matrix-header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+  }
+}
+
+.perm-config-box {
+  margin-top: 16px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  padding: 12px;
+  background-color: var(--el-fill-color-lighter);
+
+  .perm-config-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+
+    .perm-config-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: bold;
+      font-size: 14px;
+      color: var(--el-text-color-primary);
+    }
+
+    .perm-quick-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
   }
 }
 </style>
+

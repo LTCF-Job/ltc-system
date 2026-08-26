@@ -90,6 +90,35 @@ export interface AuthSession {
   accessToken: string
 }
 
+// 角色身分管理
+export interface RoleDTO {
+  id: string
+  key: string
+  name: string
+  description: string
+  tagType: 'danger' | 'primary' | 'success' | 'warning' | 'info'
+  isSystem: boolean
+  permissions: SystemPermissions
+  userCount?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CreateRoleRequest {
+  key?: string
+  name: string
+  description?: string
+  tagType?: 'danger' | 'primary' | 'success' | 'warning' | 'info'
+  permissions: SystemPermissions
+}
+
+export interface UpdateRoleRequest {
+  name?: string
+  description?: string
+  tagType?: 'danger' | 'primary' | 'success' | 'warning' | 'info'
+  permissions?: SystemPermissions
+}
+
 // 個案與排班
 export interface ScheduleLegDTO {
   id: string
@@ -602,6 +631,17 @@ export interface UpdateNotificationRecipientRequest {
   email?: string
   displayName?: string
   active?: boolean
+}
+
+export interface BatchCreateNotificationRecipientsRequest {
+  topic: NotificationTopic
+  recipients: Array<{
+    recipientType?: RecipientTargetType
+    targetRole?: UserRole
+    userId?: string
+    email: string
+    displayName?: string
+  }>
 }
 
 // 9. 通知歷史紀錄 (Notification Log)

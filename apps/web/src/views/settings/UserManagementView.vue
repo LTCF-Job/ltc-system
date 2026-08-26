@@ -21,15 +21,19 @@
           v-model="queryRole"
           placeholder="身分角色"
           clearable
-          style="width: 140px"
+          style="width: 150px"
           @change="fetchUsers"
         >
           <el-option
-            v-for="(label, roleKey) in ROLE_LABELS"
-            :key="roleKey"
-            :label="label"
-            :value="roleKey"
-          />
+            v-for="r in roleList"
+            :key="r.key"
+            :label="r.name"
+            :value="r.key"
+          >
+            <el-tag :type="r.tagType" size="small" effect="plain">
+              {{ r.name }}
+            </el-tag>
+          </el-option>
         </el-select>
 
         <el-button type="primary" icon="Search" @click="fetchUsers">查詢</el-button>
@@ -55,10 +59,10 @@
 
           <el-table-column prop="email" label="電子郵件 / 帳號" min-width="200" />
 
-          <el-table-column label="身分角色" width="130" align="center">
+          <el-table-column label="身分角色" width="140" align="center">
             <template #default="{ row }">
               <el-tag :type="getRoleTagType((row as any).role)">
-                {{ (ROLE_LABELS as any)[(row as any).role] || (row as any).role }}
+                {{ getRoleDisplayName((row as any).role) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -153,15 +157,14 @@
         <el-form-item label="身分角色" prop="role">
           <el-select v-model="form.role" placeholder="請選擇身分角色" style="width: 100%">
             <el-option
-              v-for="(label, rKey) in ROLE_LABELS"
-              :key="rKey"
-              :label="label"
-              :value="rKey"
+              v-for="r in roleList"
+              :key="r.key"
+              :label="r.name"
+              :value="r.key"
             >
-              <span style="float: left">{{ label }}</span>
-              <span style="float: right; color: var(--el-text-color-secondary); font-size: 13px">
-                {{ rKey }}
-              </span>
+              <el-tag :type="r.tagType" size="small" effect="plain">
+                {{ r.name }}
+              </el-tag>
             </el-option>
           </el-select>
         </el-form-item>
@@ -209,7 +212,7 @@
             <span class="font-bold">權限套用規則：個人設定 ＞ 角色預設</span>
           </template>
           當此使用者具備自訂設定時優先採用；若無自訂設定則套用
-          <strong>【{{ ROLE_LABELS[selectedUser.role] }}】</strong>
+          <strong>【{{ getRoleDisplayName(selectedUser.role) }}】</strong>
           之角色預設權限。
         </el-alert>
 
@@ -219,7 +222,7 @@
             <span class="perm-user-email">({{ selectedUser.email }})</span>
           </div>
           <el-button size="small" type="warning" plain @click="handleResetToRoleDefault">
-            重設為【{{ ROLE_LABELS[selectedUser.role] }}】角色預設
+            重設為【{{ getRoleDisplayName(selectedUser.role) }}】角色預設
           </el-button>
         </div>
 
@@ -279,21 +282,24 @@ import {
   updateUserPermissions,
   deleteUser
 } from '@/api/users'
+import { listRoles } from '@/api/roles'
 import { formatDateTime } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/auth'
-import type { UserDTO } from '@/types/api'
+import type { UserDTO, RoleDTO } from '@/types/api'
 import {
   ROLE_LABELS,
   SYSTEM_MODULES,
   DEFAULT_ROLE_PERMISSIONS,
   type UserRole,
-  type SystemPermissions
+  type SystemPermissions,
+  type RoleTagType
 } from '@/types/domain'
 
 const authStore = useAuthStore()
 const currentUserId = computed(() => authStore.user?.id)
 
 const users = ref<UserDTO[]>([])
+const roleList = ref<RoleDTO[]>([])
 const loading = ref(false)
 const total = ref(0)
 const page = ref(1)
@@ -342,8 +348,18 @@ const selectedUser = ref<UserDTO | null>(null)
 const tempPermissions = ref<SystemPermissions>({})
 const savingPerms = ref(false)
 
-function getRoleTagType(role: UserRole): 'danger' | 'primary' | 'success' | 'warning' | 'info' {
-  switch (role) {
+function getRoleDisplayName(roleKey?: string): string {
+  if (!roleKey) return '未知角色'
+  const role = roleList.value.find((r) => r.key === roleKey)
+  if (role) return role.name
+  return (ROLE_LABELS as any)[roleKey] || roleKey
+}
+
+function getRoleTagType(roleKey?: string): RoleTagType {
+  if (!roleKey) return 'info'
+  const role = roleList.value.find((r) => r.key === roleKey)
+  if (role && role.tagType) return role.tagType
+  switch (roleKey) {
     case 'admin':
       return 'danger'
     case 'dispatcher':
@@ -354,6 +370,15 @@ function getRoleTagType(role: UserRole): 'danger' | 'primary' | 'success' | 'war
     case 'viewer':
     default:
       return 'info'
+  }
+}
+
+async function fetchRoles() {
+  try {
+    const list = await listRoles()
+    roleList.value = list
+  } catch {
+    // 若載入失敗維持空清單
   }
 }
 
@@ -473,20 +498,28 @@ async function handleDelete(user: UserDTO) {
 }
 
 // 權限設定邏輯
+function getRoleDefaultPermissions(roleKey: string): SystemPermissions {
+  const role = roleList.value.find((r) => r.key === roleKey)
+  if (role && role.permissions) {
+    return role.permissions
+  }
+  return DEFAULT_ROLE_PERMISSIONS[roleKey as UserRole] || DEFAULT_ROLE_PERMISSIONS.viewer
+}
+
 function openPermissionDrawer(user: UserDTO) {
   selectedUser.value = user
   const initialPerms: SystemPermissions = {}
 
   // 取得角色預設
-  const roleDefault = DEFAULT_ROLE_PERMISSIONS[user.role] || DEFAULT_ROLE_PERMISSIONS.viewer
+  const roleDefault = getRoleDefaultPermissions(user.role)
   const custom = user.customPermissions || {}
 
   for (const m of SYSTEM_MODULES) {
     const isCustomized = custom[m.id] !== undefined
     const base = isCustomized ? custom[m.id] : roleDefault[m.id] || { view: false, edit: false }
     initialPerms[m.id] = {
-      view: base.view,
-      edit: base.edit
+      view: !!base.view,
+      edit: !!base.edit
     }
   }
 
@@ -503,14 +536,14 @@ function onViewPermChange(modId: string) {
 
 function handleResetToRoleDefault() {
   if (!selectedUser.value) return
-  const roleDefault = DEFAULT_ROLE_PERMISSIONS[selectedUser.value.role] || DEFAULT_ROLE_PERMISSIONS.viewer
+  const roleDefault = getRoleDefaultPermissions(selectedUser.value.role)
   const resetPerms: SystemPermissions = {}
   for (const m of SYSTEM_MODULES) {
     const base = roleDefault[m.id] || { view: false, edit: false }
-    resetPerms[m.id] = { view: base.view, edit: base.edit }
+    resetPerms[m.id] = { view: !!base.view, edit: !!base.edit }
   }
   tempPermissions.value = resetPerms
-  ElMessage.info(`已載入【${ROLE_LABELS[selectedUser.value.role]}】角色之預設權限配置`)
+  ElMessage.info(`已載入【${getRoleDisplayName(selectedUser.value.role)}】角色之預設權限配置`)
 }
 
 async function handleSavePermissions() {
@@ -527,6 +560,7 @@ async function handleSavePermissions() {
 }
 
 onMounted(() => {
+  fetchRoles()
   fetchUsers()
 })
 </script>

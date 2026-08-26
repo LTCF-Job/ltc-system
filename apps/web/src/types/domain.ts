@@ -1,13 +1,34 @@
 // 全系統列舉常數與正體中文標籤對照表（集中管理，禁止在視圖模板寫死）
 
-export type UserRole = 'admin' | 'dispatcher' | 'driver' | 'staff' | 'viewer'
+export type UserRole =
+  | 'admin'
+  | 'dispatcher'
+  | 'driver'
+  | 'staff'
+  | 'viewer'
+  | (string & {})
 
-export const ROLE_LABELS: Record<UserRole, string> = {
+export const ROLE_LABELS: Record<string, string> = {
   admin: '系統管理員',
   dispatcher: '調度員',
   driver: '司機',
   staff: '行政人員',
   viewer: '檢視者'
+}
+
+export type RoleTagType = 'danger' | 'primary' | 'success' | 'warning' | 'info'
+
+export interface RoleItem {
+  id: string
+  key: string
+  name: string
+  description: string
+  tagType: RoleTagType
+  isSystem: boolean
+  permissions: SystemPermissions
+  userCount?: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 export type Region =

@@ -6,7 +6,8 @@ import {
   mockNotificationRecipients,
   mockNotificationLogs,
   mockMissingRides,
-  mockUsers
+  mockUsers,
+  mockRoles
 } from '../data/mockData'
 
 export const systemHandlers = [
@@ -70,7 +71,6 @@ export const systemHandlers = [
         (r) =>
           r.email.toLowerCase().includes(q) ||
           (r.displayName && r.displayName.toLowerCase().includes(q)) ||
-          (r.targetRole && r.targetRole.toLowerCase().includes(q)) ||
           (r.createdByName && r.createdByName.toLowerCase().includes(q))
       )
     }
@@ -80,11 +80,8 @@ export const systemHandlers = [
   http.post('/api/v1/settings/notification-recipients', async ({ request }) => {
     const body = (await request.json()) as any
     const newRecipient = {
-      id: `rec_${Date.now()}`,
+      id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       topic: body.topic,
-      recipientType: body.recipientType || 'custom',
-      targetRole: body.targetRole || undefined,
-      userId: body.userId || undefined,
       email: body.email,
       displayName: body.displayName || '',
       active: body.active !== undefined ? body.active : true,
@@ -93,6 +90,90 @@ export const systemHandlers = [
     }
     mockNotificationRecipients.push(newRecipient)
     return HttpResponse.json(newRecipient)
+  }),
+
+  // 批次新增外部信箱收件人
+  http.post('/api/v1/settings/notification-recipients/batch', async ({ request }) => {
+    const body = (await request.json()) as any
+    const topic = body.topic
+    const incomingRecipients = (body.recipients || []) as any[]
+
+    const createdList: any[] = []
+    for (const item of incomingRecipients) {
+      // 避免同一主題下重複加入相同 email
+      const duplicate = mockNotificationRecipients.some(
+        (r) => r.topic === topic && r.email.toLowerCase() === item.email.toLowerCase()
+      )
+
+      if (!duplicate) {
+        const newRecipient = {
+          id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          topic,
+          email: item.email,
+          displayName: item.displayName || '',
+          active: true,
+          createdByName: '系統管理員',
+          createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+        }
+        mockNotificationRecipients.push(newRecipient)
+        createdList.push(newRecipient)
+      }
+    }
+
+    if (createdList.length > 0) {
+      mockAuditLogs.unshift({
+        id: `audit_${Date.now()}`,
+        actorId: 'usr_admin',
+        actorName: '系統管理員',
+        actorRole: 'admin',
+        action: 'create',
+        entityType: 'notification_recipients',
+        entityId: topic,
+        entityName: `批次新增通知信箱 (${createdList.length} 筆)`,
+        beforeData: undefined,
+        afterData: { topic, addedCount: createdList.length, recipients: createdList.map((c) => c.displayName || c.email) },
+        ipAddress: '127.0.0.1',
+        userAgent: 'Mock Agent',
+        createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      })
+    }
+
+    return HttpResponse.json(createdList)
+  }),
+
+  // 批次刪除通知收件人
+  http.post('/api/v1/settings/notification-recipients/batch-delete', async ({ request }) => {
+    const body = (await request.json()) as any
+    const ids = (body.ids || []) as string[]
+    let deletedCount = 0
+
+    for (const id of ids) {
+      const idx = mockNotificationRecipients.findIndex((r) => r.id === id)
+      if (idx !== -1) {
+        mockNotificationRecipients.splice(idx, 1)
+        deletedCount++
+      }
+    }
+
+    if (deletedCount > 0) {
+      mockAuditLogs.unshift({
+        id: `audit_${Date.now()}`,
+        actorId: 'usr_admin',
+        actorName: '系統管理員',
+        actorRole: 'admin',
+        action: 'delete',
+        entityType: 'notification_recipients',
+        entityId: ids.join(','),
+        entityName: `批次刪除通知收件人 (${deletedCount} 位)`,
+        beforeData: { deletedIds: ids },
+        afterData: undefined,
+        ipAddress: '127.0.0.1',
+        userAgent: 'Mock Agent',
+        createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      })
+    }
+
+    return HttpResponse.json({ count: deletedCount })
   }),
 
   http.patch('/api/v1/settings/notification-recipients/:id', async ({ params, request }) => {
@@ -317,6 +398,147 @@ export const systemHandlers = [
       userAgent: 'Mock Agent',
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
     })
+    return HttpResponse.json({ success: true })
+  }),
+
+  // 角色身分管理 (CRUD)
+  http.get('/api/v1/roles', ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
+    let list = mockRoles.map((role) => {
+      const userCount = mockUsers.filter((u) => u.role === role.key).length
+      return { ...role, userCount }
+    })
+
+    if (q) {
+      list = list.filter(
+        (r) =>
+          r.name.toLowerCase().includes(q) ||
+          r.key.toLowerCase().includes(q) ||
+          (r.description && r.description.toLowerCase().includes(q))
+      )
+    }
+
+    return HttpResponse.json(list)
+  }),
+
+  http.get('/api/v1/roles/:id', ({ params }) => {
+    const role = mockRoles.find((r) => r.id === params.id || r.key === params.id)
+    if (!role) return new HttpResponse(null, { status: 404 })
+    const userCount = mockUsers.filter((u) => u.role === role.key).length
+    return HttpResponse.json({ ...role, userCount })
+  }),
+
+  http.post('/api/v1/roles', async ({ request }) => {
+    const body = (await request.json()) as any
+    const id = `role_${Date.now()}`
+    const key = body.key ? String(body.key).trim().toLowerCase() : id
+
+    const newRole = {
+      id,
+      key,
+      name: body.name || '自訂角色',
+      description: body.description || '',
+      tagType: body.tagType || 'primary',
+      isSystem: false,
+      permissions: body.permissions || {},
+      userCount: 0,
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    }
+    mockRoles.push(newRole)
+
+    mockAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actorId: 'usr_admin',
+      actorName: '系統管理員',
+      actorRole: 'admin',
+      action: 'create',
+      entityType: 'roles',
+      entityId: newRole.id,
+      entityName: newRole.name,
+      beforeData: undefined,
+      afterData: newRole,
+      ipAddress: '127.0.0.1',
+      userAgent: 'Mock Agent',
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    })
+
+    return HttpResponse.json(newRole)
+  }),
+
+  http.patch('/api/v1/roles/:id', async ({ params, request }) => {
+    const role = mockRoles.find((r) => r.id === params.id || r.key === params.id)
+    if (!role) return new HttpResponse(null, { status: 404 })
+    const body = (await request.json()) as any
+    const before = JSON.parse(JSON.stringify(role))
+
+    if (body.name !== undefined) role.name = body.name
+    if (body.description !== undefined) role.description = body.description
+    if (body.tagType !== undefined) role.tagType = body.tagType
+    if (body.permissions !== undefined) role.permissions = body.permissions
+    role.updatedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
+
+    const userCount = mockUsers.filter((u) => u.role === role.key).length
+    const responseData = { ...role, userCount }
+
+    mockAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actorId: 'usr_admin',
+      actorName: '系統管理員',
+      actorRole: 'admin',
+      action: 'update',
+      entityType: 'roles',
+      entityId: role.id,
+      entityName: role.name,
+      beforeData: before,
+      afterData: role,
+      ipAddress: '127.0.0.1',
+      userAgent: 'Mock Agent',
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    })
+
+    return HttpResponse.json(responseData)
+  }),
+
+  http.delete('/api/v1/roles/:id', ({ params }) => {
+    const idx = mockRoles.findIndex((r) => r.id === params.id || r.key === params.id)
+    if (idx === -1) return new HttpResponse(null, { status: 404 })
+
+    const target = mockRoles[idx]
+    if (target.isSystem) {
+      return HttpResponse.json(
+        { error: { message: `「${target.name}」為系統內建核心角色，受系統保護禁止刪除` } },
+        { status: 400 }
+      )
+    }
+
+    const boundUsers = mockUsers.filter((u) => u.role === target.key)
+    if (boundUsers.length > 0) {
+      return HttpResponse.json(
+        { error: { message: `目前尚有 ${boundUsers.length} 位使用者被指派為此角色，請先將使用者轉移至其他身分後再執行刪除` } },
+        { status: 400 }
+      )
+    }
+
+    const removed = mockRoles.splice(idx, 1)[0]
+    mockAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actorId: 'usr_admin',
+      actorName: '系統管理員',
+      actorRole: 'admin',
+      action: 'delete',
+      entityType: 'roles',
+      entityId: removed.id,
+      entityName: removed.name,
+      beforeData: removed,
+      afterData: undefined,
+      ipAddress: '127.0.0.1',
+      userAgent: 'Mock Agent',
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    })
+
     return HttpResponse.json({ success: true })
   })
 ]
