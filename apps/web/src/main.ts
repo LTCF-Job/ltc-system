@@ -7,6 +7,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
 import '@/styles/element-overrides.scss'
+import { restoreDemoModeOnBoot } from '@/lib/demoMode'
 
 async function prepareApp() {
   if (import.meta.env.VITE_ENABLE_MSW === 'true') {
@@ -14,7 +15,10 @@ async function prepareApp() {
     await worker.start({
       onUnhandledRequest: 'bypass'
     })
+    return
   }
+  // 重新整理頁面時還原展示帳號的 mock 攔截狀態（見 syncDemoModeForLogin）
+  await restoreDemoModeOnBoot()
 }
 
 prepareApp().then(() => {
