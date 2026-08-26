@@ -1,0 +1,38 @@
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: ltc-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      APP_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required (Supabase transaction pooler, port 6543)}
+      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-5}
+      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-2}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      HMAC_KEY: ${HMAC_KEY:?HMAC_KEY is required}
+      SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:-}
+      SUPABASE_PROJECT_REF: ${SUPABASE_PROJECT_REF:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required (comma-separated frontend origins)}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-ltc-exports}
+      STORAGE_SIGNED_URL_TTL: ${STORAGE_SIGNED_URL_TTL:-24h}
+      GOOGLE_SA_JSON: ${GOOGLE_SA_JSON:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      NOTIFY_FROM: ${NOTIFY_FROM:-noreply@ltc.example.com}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: ltc-web
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api

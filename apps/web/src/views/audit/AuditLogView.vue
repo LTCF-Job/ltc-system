@@ -1,0 +1,535 @@
+<template>
+  <div class="audit-log-view">
+    <DataTablePage
+      :loading="loading"
+      :total="total"
+      :page="page"
+      :page-size="pageSize"
+      @page-change="onPageChange"
+      @size-change="onSizeChange"
+    >
+      <template #filter>
+        <el-input
+          v-model="queryKeyword"
+          placeholder="搜尋操作者／實體編號／動作"
+          clearable
+          style="width: 240px;"
+          @keyup.enter="fetchAuditLogs"
+        />
+
+        <el-select
+          v-model="queryAction"
+          placeholder="動作類型"
+          clearable
+          style="width: 150px;"
+          @change="fetchAuditLogs"
+        >
+          <el-option
+            v-for="(label, key) in AUDIT_ACTION_LABELS"
+            :key="key"
+            :label="label"
+            :value="key"
+          />
+        </el-select>
+
+        <el-select
+          v-model="queryEntityType"
+          placeholder="異動實體"
+          clearable
+          style="width: 150px;"
+          @change="fetchAuditLogs"
+        >
+          <el-option
+            v-for="(label, key) in AUDIT_ENTITY_LABELS"
+            :key="key"
+            :label="label"
+            :value="key"
+          />
+        </el-select>
+
+        <el-button type="primary" icon="Search" @click="fetchAuditLogs">
+          查詢
+        </el-button>
+        <el-button @click="handleReset">
+          重設
+        </el-button>
+      </template>
+
+      <template #table>
+        <el-table :data="auditList" stripe border style="width: 100%;">
+          <el-table-column prop="createdAt" label="操作時間" width="170" sortable align="center">
+            <template #default="{ row }">
+              <span>{{ formatDateTime(row.createdAt) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作者" width="140" align="center">
+            <template #default="{ row }">
+              <el-tag
+                size="small"
+                :type="getActorTagType((row as any).actorRole)"
+              >
+                {{ getActorDisplayName(row) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="動作" width="140" align="center">
+            <template #default="{ row }">
+              <el-tag :type="getActionTagType((row as any).action)">
+                {{ (AUDIT_ACTION_LABELS as any)[(row as any).action] || (row as any).action }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="實體種類" width="130" align="center">
+            <template #default="{ row }">
+              <el-tag effect="plain" type="info">
+                {{ (AUDIT_ENTITY_LABELS as any)[(row as any).entityType] || (row as any).entityType }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="entityName" label="操作對象" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ (row as any).entityName || (row as any).entityId || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="ipAddress" label="IP 位址" width="130" align="center" />
+          <el-table-column label="操作" width="120" fixed="right" align="center">
+            <template #default="{ row }">
+              <el-button
+                v-if="(row as any).beforeData || (row as any).afterData"
+                type="primary"
+                link
+                icon="View"
+                @click="openDetail(row as any)"
+              >
+                異動前後
+              </el-button>
+              <span v-else class="text-muted">-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+    </DataTablePage>
+
+    <!-- 異動前後比較彈窗 -->
+    <el-dialog
+      v-model="detailVisible"
+      title="系統操作紀錄異動詳情"
+      width="820px"
+      destroy-on-close
+    >
+      <div v-if="selectedLog" class="dialog-content">
+        <el-descriptions :column="2" border style="margin-bottom: 16px;">
+          <el-descriptions-item label="操作時間">{{ formatDateTime(selectedLog.createdAt) }}</el-descriptions-item>
+          <el-descriptions-item label="操作者">
+            <el-tag
+              size="small"
+              :type="getActorTagType(selectedLog.actorRole)"
+            >
+              {{ getActorDisplayName(selectedLog) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="動作類型">
+            <el-tag size="small" :type="getActionTagType(selectedLog.action)">
+              {{ AUDIT_ACTION_LABELS[selectedLog.action] || selectedLog.action }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="目標實體">
+            {{ AUDIT_ENTITY_LABELS[selectedLog.entityType] || selectedLog.entityType }}
+            <span v-if="selectedLog.entityName" class="entity-badge">({{ selectedLog.entityName }})</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="來源 IP" :span="2">{{ selectedLog.ipAddress || '未知' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <!-- 結構化中文欄位對照比較表 -->
+        <div class="diff-table-container">
+          <div class="diff-header">
+            <span class="diff-title">
+              <el-icon><DocumentCopy /></el-icon>
+              區塊與欄位異動對照
+            </span>
+          </div>
+
+          <el-table
+            :data="computedDiffList"
+            border
+            stripe
+            size="small"
+            style="width: 100%;"
+            max-height="400"
+          >
+            <el-table-column label="所屬區塊" width="130" align="center">
+              <template #default="{ row }">
+                <el-tag effect="plain" type="info" size="small">
+                  {{ row.section }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="欄位名稱" min-width="150">
+              <template #default="{ row }">
+                <span class="field-label">{{ row.label }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="異動前 (Before)" min-width="190">
+              <template #default="{ row }">
+                <span :class="['diff-val', row.status === 'deleted' || row.status === 'modified' ? 'diff-old' : '']">
+                  {{ row.beforeText }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="異動後 (After)" min-width="190">
+              <template #default="{ row }">
+                <span :class="['diff-val', row.status === 'created' || row.status === 'modified' ? 'diff-new' : '']">
+                  {{ row.afterText }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="狀態" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.tagType">
+                  {{ row.statusText }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="detailVisible = false">關閉</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import DataTablePage from '@/components/DataTablePage.vue'
+import { listAuditLogs } from '@/api/audit'
+import { formatDateTime } from '@/utils/formatters'
+import type { AuditLogDTO } from '@/types/api'
+import {
+  AUDIT_ACTION_LABELS,
+  AUDIT_ENTITY_LABELS,
+  AUDIT_FIELD_LABELS,
+  AUDIT_FIELD_SECTIONS,
+  AUDIT_VALUE_LABELS,
+  ROLE_LABELS,
+  REGION_LABELS,
+  SERVICE_CATEGORY_LABELS,
+  SERVICE_USAGE_TYPE_LABELS,
+  NOTIFICATION_TOPIC_LABELS,
+  SYSTEM_MODULES,
+  type AuditAction,
+  type AuditEntityType
+} from '@/types/domain'
+import { DocumentCopy } from '@element-plus/icons-vue'
+
+const auditList = ref<AuditLogDTO[]>([])
+const loading = ref(false)
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+
+const queryKeyword = ref('')
+const queryAction = ref<AuditAction | undefined>(undefined)
+const queryEntityType = ref<AuditEntityType | undefined>(undefined)
+
+const detailVisible = ref(false)
+const selectedLog = ref<AuditLogDTO | null>(null)
+
+function getActionTagType(action: AuditAction): 'primary' | 'success' | 'warning' | 'info' | 'danger' {
+  switch (action) {
+    case 'create':
+    case 'import':
+      return 'success'
+    case 'update':
+    case 'correct':
+    case 'resolve_conflict':
+      return 'warning'
+    case 'delete':
+    case 'reveal_pii':
+      return 'danger'
+    case 'login':
+      return 'info'
+    case 'export':
+      return 'primary'
+    default:
+      return 'info'
+  }
+}
+
+function getActorTagType(role?: string): 'danger' | 'primary' | 'info' {
+  if (role === 'admin') return 'danger'
+  if (role === 'dispatcher' || role === 'staff') return 'primary'
+  return 'info'
+}
+
+function getActorDisplayName(row?: { actorRole?: string; actorName?: string } | null): string {
+  if (!row) return '系統'
+  if (row.actorRole && (ROLE_LABELS as any)[row.actorRole]) {
+    return (ROLE_LABELS as any)[row.actorRole]
+  }
+  return row.actorName || '系統'
+}
+
+// 格式化欄位數值為繁體中文親切文字
+function formatFieldValue(val: any, key?: string): string {
+  if (val === undefined || val === null) return '（無）'
+
+  // 布林值處理
+  if (typeof val === 'boolean') {
+    if (key === 'active') return val ? '啟用' : '停用'
+    if (key === 'hasConflict' || key === 'has_conflict') return val ? '有衝突' : '無衝突'
+    return val ? '是' : '否'
+  }
+
+  // 依欄位 key 進行特定列舉或字串對照
+  if (typeof val === 'string' || typeof val === 'number') {
+    const strVal = String(val)
+
+    if (key === 'role' || key === 'actorRole') {
+      return (ROLE_LABELS as any)[strVal] || strVal
+    }
+    if (key === 'region') {
+      return (REGION_LABELS as any)[strVal] || strVal
+    }
+    if (key === 'serviceCategory' || key === 'service_category') {
+      return (SERVICE_CATEGORY_LABELS as any)[Number(strVal)] ? `類別 ${strVal} (${(SERVICE_CATEGORY_LABELS as any)[Number(strVal)]})` : strVal
+    }
+    if (key === 'serviceUsageType' || key === 'service_usage_type') {
+      return (SERVICE_USAGE_TYPE_LABELS as any)[Number(strVal)] || strVal
+    }
+    if (key === 'topic') {
+      return (NOTIFICATION_TOPIC_LABELS as any)[strVal] || strVal
+    }
+
+    // 通用數值常數中文化字典對照
+    if (AUDIT_VALUE_LABELS[strVal]) {
+      return AUDIT_VALUE_LABELS[strVal]
+    }
+
+    // 地區對照
+    if (REGION_LABELS[strVal]) {
+      return REGION_LABELS[strVal]
+    }
+
+    // 角色對照
+    if ((ROLE_LABELS as any)[strVal]) {
+      return (ROLE_LABELS as any)[strVal]
+    }
+
+    return strVal
+  }
+
+  // 陣列與物件結構化處理
+  if (typeof val === 'object') {
+    if (Array.isArray(val)) {
+      if (val.length === 0) return '（空清單）'
+      return val.map((item) => formatFieldValue(item, key)).join('、')
+    }
+
+    // 自訂模組權限物件呈現
+    if (key === 'customPermissions' || key === 'custom_permissions') {
+      const entries = Object.entries(val)
+      const readable = entries
+        .filter(([_, p]: any) => p && (p.view || p.edit))
+        .map(([modId, p]: any) => {
+          const mod = SYSTEM_MODULES.find((m) => m.id === modId)
+          const modName = mod ? mod.name : modId
+          const permText = p.edit ? '可編輯' : '僅檢視'
+          return `${modName}(${permText})`
+        })
+      return readable.length > 0 ? readable.join('、') : '（未啟用任何模組權限）'
+    }
+
+    // 一般物件結構化為「欄位: 數值」
+    const pairs = Object.entries(val).map(([subKey, subVal]) => {
+      const subLabel = AUDIT_FIELD_LABELS[subKey] || subKey
+      return `${subLabel}: ${formatFieldValue(subVal, subKey)}`
+    })
+    return pairs.length > 0 ? pairs.join('；') : '（無詳細內容）'
+  }
+
+  return String(val)
+}
+
+// 計算異動前後欄位比對清單
+interface DiffRowItem {
+  key: string
+  section: string
+  label: string
+  beforeText: string
+  afterText: string
+  status: 'created' | 'modified' | 'deleted' | 'unchanged'
+  statusText: string
+  tagType: 'success' | 'warning' | 'danger' | 'info'
+}
+
+const computedDiffList = computed<DiffRowItem[]>(() => {
+  if (!selectedLog.value) return []
+  const before = selectedLog.value.beforeData || {}
+  const after = selectedLog.value.afterData || {}
+
+  const allKeys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)]))
+  const results: DiffRowItem[] = []
+
+  for (const k of allKeys) {
+    const hasBefore = Object.prototype.hasOwnProperty.call(before, k)
+    const hasAfter = Object.prototype.hasOwnProperty.call(after, k)
+    const beforeVal = before[k]
+    const afterVal = after[k]
+
+    let status: 'created' | 'modified' | 'deleted' | 'unchanged' = 'unchanged'
+    let statusText = '未變更'
+    let tagType: 'success' | 'warning' | 'danger' | 'info' = 'info'
+
+    if (!hasBefore && hasAfter) {
+      status = 'created'
+      statusText = '新增'
+      tagType = 'success'
+    } else if (hasBefore && !hasAfter) {
+      status = 'deleted'
+      statusText = '刪除'
+      tagType = 'danger'
+    } else if (JSON.stringify(beforeVal) !== JSON.stringify(afterVal)) {
+      status = 'modified'
+      statusText = '已修改'
+      tagType = 'warning'
+    }
+
+    const section = AUDIT_FIELD_SECTIONS[k] || '基本資料'
+    const label = AUDIT_FIELD_LABELS[k] || k
+
+    results.push({
+      key: k,
+      section,
+      label,
+      beforeText: hasBefore ? formatFieldValue(beforeVal, k) : '（未設定）',
+      afterText: hasAfter ? formatFieldValue(afterVal, k) : '（已刪除）',
+      status,
+      statusText,
+      tagType
+    })
+  }
+
+  // 將有異動的欄位排在最前面
+  return results.sort((a, b) => {
+    const scoreA = a.status === 'modified' ? 3 : a.status === 'created' ? 2 : a.status === 'deleted' ? 1 : 0
+    const scoreB = b.status === 'modified' ? 3 : b.status === 'created' ? 2 : b.status === 'deleted' ? 1 : 0
+    return scoreB - scoreA
+  })
+})
+
+async function fetchAuditLogs() {
+  loading.value = true
+  try {
+    const res = await listAuditLogs({
+      page: page.value,
+      pageSize: pageSize.value,
+      action: queryAction.value,
+      entityType: queryEntityType.value,
+      q: queryKeyword.value || undefined
+    })
+    auditList.value = res.data
+    total.value = res.meta?.total || res.data.length
+  } finally {
+    loading.value = false
+  }
+}
+
+function handleReset() {
+  queryKeyword.value = ''
+  queryAction.value = undefined
+  queryEntityType.value = undefined
+  page.value = 1
+  fetchAuditLogs()
+}
+
+function onPageChange(p: number) {
+  page.value = p
+  fetchAuditLogs()
+}
+
+function onSizeChange(size: number) {
+  pageSize.value = size
+  page.value = 1
+  fetchAuditLogs()
+}
+
+function openDetail(log: AuditLogDTO) {
+  selectedLog.value = log
+  detailVisible.value = true
+}
+
+onMounted(() => {
+  fetchAuditLogs()
+})
+</script>
+
+<style scoped>
+.audit-log-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.text-muted {
+  color: var(--el-text-color-placeholder);
+}
+
+.entity-badge {
+  font-weight: normal;
+  color: var(--el-text-color-secondary);
+  margin-left: 4px;
+}
+
+.dialog-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-table-container {
+  margin-top: 8px;
+
+  .diff-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+
+    .diff-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: var(--el-text-color-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+  }
+}
+
+.field-label {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.diff-val {
+  font-family: inherit;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.diff-old {
+  color: var(--el-color-danger);
+  background-color: #fff1f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.diff-new {
+  color: var(--el-color-success);
+  background-color: #f6ffed;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+</style>

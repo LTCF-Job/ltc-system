@@ -1,1 +1,8 @@
 source/
+.env
+.env.local
+apps/api/.env
+apps/web/.env
+.env.prod
+.env.deploy
+TODO
