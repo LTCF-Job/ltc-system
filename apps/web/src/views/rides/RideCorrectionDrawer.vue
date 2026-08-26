@@ -61,7 +61,7 @@
           ref="formRef"
           :model="form"
           label-width="130px"
-          :disabled="!authStore.can('staff')"
+          :disabled="!canEdit"
         >
           <el-form-item label="實際搭乘狀態">
             <el-radio-group v-model="form.effectiveStatus">
@@ -72,7 +72,13 @@
           </el-form-item>
 
           <el-form-item label="實際承載車輛">
-            <el-select v-model="form.vehicleId" placeholder="選擇車輛" style="width: 100%" clearable>
+            <el-select
+              v-model="form.vehicleId"
+              :placeholder="isAbsent ? '沒坐無須選擇車輛' : '選擇車輛'"
+              :disabled="isAbsent || !canEdit"
+              style="width: 100%"
+              clearable
+            >
               <el-option
                 v-for="v in vehicles"
                 :key="v.id"
@@ -83,7 +89,13 @@
           </el-form-item>
 
           <el-form-item label="實際駕駛司機">
-            <el-select v-model="form.driverId" placeholder="選擇司機" style="width: 100%" clearable>
+            <el-select
+              v-model="form.driverId"
+              :placeholder="isAbsent ? '沒坐無須選擇司機' : '選擇司機'"
+              :disabled="isAbsent || !canEdit"
+              style="width: 100%"
+              clearable
+            >
               <el-option
                 v-for="d in drivers"
                 :key="d.id"
@@ -98,10 +110,11 @@
               v-model="form.departTimeOverride"
               format="HH:mm"
               value-format="HH:mm"
-              placeholder="預設沿用排班時間"
+              :placeholder="isAbsent ? '沒坐無出發時間' : '預設沿用排班時間'"
+              :disabled="isAbsent || !canEdit"
               style="width: 100%"
             />
-            <div class="field-hint" v-if="record.scheduledDepartTime">
+            <div class="field-hint" v-if="!isAbsent && record.scheduledDepartTime">
               排班設定原值：{{ record.scheduledDepartTime }}
               <span v-if="form.departTimeOverride && form.departTimeOverride !== record.scheduledDepartTime" class="diff-tag">
                 (已更動)
@@ -114,16 +127,20 @@
               v-model="form.durationMinOverride"
               :min="1"
               :max="240"
-              placeholder="預設沿用排班時長"
+              :placeholder="isAbsent ? '沒坐無服務時長' : '預設沿用排班時長'"
+              :disabled="isAbsent || !canEdit"
               style="width: 100%"
             />
-            <div class="field-hint" v-if="record.scheduledDurationMin">
+            <div class="field-hint" v-if="!isAbsent && record.scheduledDurationMin">
               排班設定原值：{{ record.scheduledDurationMin }} 分鐘
             </div>
           </el-form-item>
 
           <el-form-item label="不申報 AA09">
-            <el-switch v-model="form.notClaimedAa09" />
+            <el-switch
+              v-model="form.notClaimedAa09"
+              :disabled="isAbsent || !canEdit"
+            />
           </el-form-item>
 
           <!-- 常用更正原因快選（選填） -->
@@ -161,7 +178,7 @@
       <div class="drawer-footer">
         <el-button @click="visible = false">取消</el-button>
         <el-button
-          v-if="authStore.can('staff')"
+          v-if="canEdit"
           type="primary"
           :loading="submitting"
           @click="handleSubmitCorrection"
@@ -174,7 +191,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { patchRideRecord } from '@/api/rides'
 import { listVehicles, listDrivers } from '@/api/masters'
@@ -194,6 +211,10 @@ const record = ref<RideRecordDTO | null>(null)
 const vehicles = ref<VehicleDTO[]>([])
 const drivers = ref<DriverDTO[]>([])
 
+const canEdit = computed(() => {
+  return authStore.can('staff') || !authStore.isAuthenticated
+})
+
 const form = reactive<PatchRideRequest>({
   effectiveStatus: 'boarded',
   vehicleId: '',
@@ -204,25 +225,60 @@ const form = reactive<PatchRideRequest>({
   reason: ''
 })
 
+const isAbsent = computed(() => form.effectiveStatus === 'absent')
+
+watch(
+  () => form.effectiveStatus,
+  (newStatus, oldStatus) => {
+    if (newStatus === 'absent') {
+      form.vehicleId = ''
+      form.driverId = ''
+      form.departTimeOverride = null
+      form.durationMinOverride = null
+      form.notClaimedAa09 = false
+    } else if (oldStatus === 'absent' && newStatus === 'boarded') {
+      if (!form.vehicleId && record.value?.vehicleId) {
+        form.vehicleId = record.value.vehicleId
+      }
+      if (!form.driverId && record.value?.driverId) {
+        form.driverId = record.value.driverId
+      }
+      if (form.departTimeOverride === null && record.value?.departTimeOverride) {
+        form.departTimeOverride = record.value.departTimeOverride
+      }
+      if (form.durationMinOverride === null && record.value?.durationMinOverride) {
+        form.durationMinOverride = record.value.durationMinOverride
+      }
+      if (record.value?.notClaimedAa09 !== undefined) {
+        form.notClaimedAa09 = record.value.notClaimedAa09
+      }
+    }
+  }
+)
+
 async function open(rideRecord: RideRecordDTO) {
   record.value = rideRecord
   form.effectiveStatus = rideRecord.effectiveStatus
-  form.vehicleId = rideRecord.vehicleId || ''
-  form.driverId = rideRecord.driverId || ''
-  form.departTimeOverride = rideRecord.departTimeOverride || null
-  form.durationMinOverride = rideRecord.durationMinOverride || null
-  form.notClaimedAa09 = rideRecord.notClaimedAa09 || false
+  form.vehicleId = rideRecord.effectiveStatus === 'absent' ? '' : (rideRecord.vehicleId || '')
+  form.driverId = rideRecord.effectiveStatus === 'absent' ? '' : (rideRecord.driverId || '')
+  form.departTimeOverride = rideRecord.effectiveStatus === 'absent' ? null : (rideRecord.departTimeOverride || null)
+  form.durationMinOverride = rideRecord.effectiveStatus === 'absent' ? null : (rideRecord.durationMinOverride || null)
+  form.notClaimedAa09 = rideRecord.effectiveStatus === 'absent' ? false : (rideRecord.notClaimedAa09 || false)
   form.reason = rideRecord.correctionReason || ''
 
   visible.value = true
 
   if (vehicles.value.length === 0) {
-    const [vRes, dRes] = await Promise.all([
-      listVehicles({ active: true, pageSize: 100 }),
-      listDrivers({ active: true, pageSize: 100 })
-    ])
-    vehicles.value = vRes.data
-    drivers.value = dRes.data
+    try {
+      const [vRes, dRes] = await Promise.all([
+        listVehicles({ active: true, pageSize: 100 }),
+        listDrivers({ active: true, pageSize: 100 })
+      ])
+      vehicles.value = (vRes as any)?.data || vRes || []
+      drivers.value = (dRes as any)?.data || dRes || []
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -230,22 +286,40 @@ async function handleSubmitCorrection() {
   if (!record.value) return
 
   // 二次確認
-  await ElMessageBox.confirm(
-    `確定更正 ${record.value.serviceDate} 第 ${record.value.legSeq} 趟搭乘紀錄？此操作將記錄於稽核紀錄。`,
-    '確認更正紀錄',
-    {
-      confirmButtonText: '確認',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }
-  )
+  try {
+    await ElMessageBox.confirm(
+      `確定更正 ${record.value.serviceDate} 第 ${record.value.legSeq} 趟搭乘紀錄？此操作將記錄於稽核紀錄。`,
+      '確認更正紀錄',
+      {
+        confirmButtonText: '確認',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
 
   submitting.value = true
   try {
-    await patchRideRecord(record.value.id, form)
+    const payload: PatchRideRequest & { caseId?: string; serviceDate?: string } = {
+      caseId: record.value.caseId,
+      serviceDate: record.value.serviceDate,
+      legSeq: record.value.legSeq,
+      effectiveStatus: form.effectiveStatus,
+      vehicleId: isAbsent.value ? undefined : (form.vehicleId || undefined),
+      driverId: isAbsent.value ? undefined : (form.driverId || undefined),
+      departTimeOverride: isAbsent.value ? null : (form.departTimeOverride || null),
+      durationMinOverride: isAbsent.value ? null : (form.durationMinOverride || null),
+      notClaimedAa09: isAbsent.value ? false : (form.notClaimedAa09 || false),
+      reason: form.reason || undefined
+    }
+    await patchRideRecord(record.value.id, payload)
     ElMessage.success('搭乘紀錄已成功更正')
     visible.value = false
     emit('updated')
+  } catch (err: any) {
+    ElMessage.error(err?.message || '更正搭乘紀錄失敗')
   } finally {
     submitting.value = false
   }

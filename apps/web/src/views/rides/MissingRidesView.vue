@@ -239,7 +239,8 @@
           <el-form-item label="實際承載車輛">
             <el-select
               v-model="reportForm.vehicleId"
-              placeholder="請選擇承載車輛"
+              :placeholder="isReportAbsent ? '沒坐無須選擇車輛' : '請選擇承載車輛'"
+              :disabled="isReportAbsent"
               filterable
               clearable
               style="width: 100%;"
@@ -256,7 +257,8 @@
           <el-form-item label="實際駕駛司機">
             <el-select
               v-model="reportForm.driverId"
-              placeholder="請選擇駕駛司機"
+              :placeholder="isReportAbsent ? '沒坐無須選擇司機' : '請選擇駕駛司機'"
+              :disabled="isReportAbsent"
               filterable
               clearable
               style="width: 100%;"
@@ -275,7 +277,8 @@
               v-model="reportForm.departTimeOverride"
               format="HH:mm"
               value-format="HH:mm"
-              placeholder="預設沿用排班時間"
+              :placeholder="isReportAbsent ? '沒坐無出發時間' : '預設沿用排班時間'"
+              :disabled="isReportAbsent"
               style="width: 100%;"
             />
           </el-form-item>
@@ -285,13 +288,17 @@
               v-model="reportForm.durationMinOverride"
               :min="1"
               :max="240"
-              placeholder="預設 10 分鐘"
+              :placeholder="isReportAbsent ? '沒坐無服務時長' : '預設 10 分鐘'"
+              :disabled="isReportAbsent"
               style="width: 100%;"
             />
           </el-form-item>
 
           <el-form-item label="不申報 AA09">
-            <el-switch v-model="reportForm.notClaimedAa09" />
+            <el-switch
+              v-model="reportForm.notClaimedAa09"
+              :disabled="isReportAbsent"
+            />
           </el-form-item>
 
           <el-form-item label="回報備註 / 原因">
@@ -334,7 +341,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
 import DataTablePage from '@/components/DataTablePage.vue'
@@ -387,6 +394,30 @@ const reportForm = reactive<ManualReportRideRequest>({
   reason: '司機口頭回報'
 })
 
+const isReportAbsent = computed(() => reportForm.effectiveStatus === 'absent')
+
+watch(
+  () => reportForm.effectiveStatus,
+  (newStatus, oldStatus) => {
+    if (newStatus === 'absent') {
+      reportForm.vehicleId = ''
+      reportForm.driverId = ''
+      reportForm.departTimeOverride = null
+      reportForm.durationMinOverride = null
+      reportForm.notClaimedAa09 = false
+    } else if (oldStatus === 'absent' && newStatus === 'boarded' && currentReportRow.value) {
+      reportForm.vehicleId = currentReportRow.value.vehicleId || ''
+      if (currentReportRow.value.driverName && drivers.value.length > 0) {
+        const matched = drivers.value.find((d) => d.name === currentReportRow.value?.driverName)
+        reportForm.driverId = matched ? matched.id : ''
+      }
+      reportForm.departTimeOverride = currentReportRow.value.departTime || null
+      reportForm.durationMinOverride = 10
+      reportForm.notClaimedAa09 = false
+    }
+  }
+)
+
 // 通知歷史資料
 const logQuery = ref('')
 const logList = ref<NotificationLogDTO[]>([])
@@ -425,8 +456,8 @@ async function fetchMissingRides() {
       vehicleId: selectedVehicle.value,
       q: missingQuery.value || undefined
     })
-    missingList.value = res.data
-    missingTotal.value = res.meta?.total || res.data.length
+    missingList.value = res.data || []
+    missingTotal.value = res.meta?.total || res.data?.length || 0
   } finally {
     loadingMissing.value = false
   }
@@ -528,11 +559,11 @@ async function handleSubmitReport() {
       serviceDate: reportForm.serviceDate,
       legSeq: reportForm.legSeq,
       effectiveStatus: reportForm.effectiveStatus,
-      vehicleId: reportForm.vehicleId || undefined,
-      driverId: reportForm.driverId || undefined,
-      departTimeOverride: reportForm.departTimeOverride || undefined,
-      durationMinOverride: reportForm.durationMinOverride || undefined,
-      notClaimedAa09: reportForm.notClaimedAa09,
+      vehicleId: isReportAbsent.value ? undefined : (reportForm.vehicleId || undefined),
+      driverId: isReportAbsent.value ? undefined : (reportForm.driverId || undefined),
+      departTimeOverride: isReportAbsent.value ? undefined : (reportForm.departTimeOverride || undefined),
+      durationMinOverride: isReportAbsent.value ? undefined : (reportForm.durationMinOverride || undefined),
+      notClaimedAa09: isReportAbsent.value ? false : reportForm.notClaimedAa09,
       reason: reportForm.reason || undefined
     })
 
