@@ -2,63 +2,60 @@
   <div class="notification-settings-view">
     <el-card shadow="never" class="settings-card">
       <!-- 頂部篩選與操作列 -->
-      <el-row :gutter="16" justify="space-between" align="middle" style="margin-bottom: 16px;">
-        <el-col :span="19">
-          <div class="filter-wrapper">
-            <el-input
-              v-model="searchQuery"
-              placeholder="搜尋信箱／顯示名稱／角色"
-              clearable
-              style="width: 220px;"
-              @keyup.enter="fetchRecipients"
+      <div class="toolbar-wrapper">
+        <div class="filter-wrapper">
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜尋信箱／顯示名稱"
+            clearable
+            style="width: 240px;"
+            @keyup.enter="fetchRecipients"
+          />
+
+          <el-select
+            v-model="selectedTopic"
+            placeholder="通知主題篩選"
+            clearable
+            style="width: 180px;"
+            @change="fetchRecipients"
+          >
+            <el-option
+              v-for="(label, key) in NOTIFICATION_TOPIC_LABELS"
+              :key="key"
+              :label="label"
+              :value="key"
             />
+          </el-select>
 
-            <el-select
-              v-model="selectedTopic"
-              placeholder="通知主題篩選"
-              clearable
-              style="width: 160px;"
-              @change="fetchRecipients"
-            >
-              <el-option
-                v-for="(label, key) in NOTIFICATION_TOPIC_LABELS"
-                :key="key"
-                :label="label"
-                :value="key"
-              />
-            </el-select>
+          <el-button type="primary" icon="Search" @click="fetchRecipients">
+            查詢
+          </el-button>
+          <el-button icon="Refresh" @click="handleReset">
+            重設
+          </el-button>
+        </div>
 
-            <el-select
-              v-model="selectedRecipientType"
-              placeholder="收件類型篩選"
-              clearable
-              style="width: 150px;"
-              @change="fetchRecipients"
-            >
-              <el-option label="指定角色群組" value="role" />
-              <el-option label="系統使用者" value="user" />
-              <el-option label="自訂外部信箱" value="custom" />
-            </el-select>
+        <div class="actions-wrapper">
+          <el-button
+            v-if="authStore.can('admin') && selectedTableRows.length > 0"
+            type="danger"
+            plain
+            icon="Delete"
+            @click="handleBatchDelete"
+          >
+            批次刪除 ({{ selectedTableRows.length }})
+          </el-button>
 
-            <el-button type="primary" icon="Search" @click="fetchRecipients">
-              查詢
-            </el-button>
-            <el-button @click="handleReset">
-              重設
-            </el-button>
-          </div>
-        </el-col>
-        <el-col :span="5" class="actions-col">
           <el-button
             v-if="authStore.can('admin')"
             type="primary"
             icon="Plus"
-            @click="openCreateDialog"
+            @click="openAddDialog"
           >
-            新增收件人
+            新增外部信箱
           </el-button>
-        </el-col>
-      </el-row>
+        </div>
+      </div>
 
       <!-- 收件人清單表格 -->
       <el-table
@@ -67,8 +64,16 @@
         stripe
         border
         style="width: 100%;"
+        @selection-change="handleTableSelectionChange"
       >
-        <el-table-column label="通知主題" width="150">
+        <el-table-column
+          v-if="authStore.can('admin')"
+          type="selection"
+          width="48"
+          align="center"
+        />
+
+        <el-table-column label="通知主題" width="160">
           <template #default="{ row }">
             <el-tag :type="getTopicTagType(row.topic as NotificationTopic)">
               {{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}
@@ -76,48 +81,20 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="收件類型" width="130" align="center">
+        <el-table-column prop="email" label="通知電子信箱 (Email)" min-width="240">
           <template #default="{ row }">
-            <el-tag
-              v-if="row.recipientType === 'role' || (!row.recipientType && row.targetRole)"
-              type="primary"
-              size="small"
-            >
-              角色群組
-            </el-tag>
-            <el-tag
-              v-else-if="row.recipientType === 'user' || row.userId"
-              type="success"
-              size="small"
-            >
-              系統使用者
-            </el-tag>
-            <el-tag
-              v-else
-              type="info"
-              size="small"
-            >
-              自訂外部信箱
-            </el-tag>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="收件對象 / 角色" min-width="220">
-          <template #default="{ row }">
-            <div class="target-cell">
-              <el-tag
-                v-if="row.targetRole || row.recipientType === 'role'"
-                size="small"
-                :type="row.targetRole === 'admin' ? 'danger' : ((row.targetRole === 'dispatcher' || row.targetRole === 'staff') ? 'primary' : 'info')"
-              >
-                {{ (ROLE_LABELS as any)[row.targetRole] || row.targetRole || '角色' }}
-              </el-tag>
-              <span class="target-title">{{ row.displayName }}</span>
+            <div class="email-cell">
+              <el-icon class="email-icon"><Message /></el-icon>
+              <span class="email-text">{{ row.email }}</span>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column prop="email" label="通知電子信箱 (Email)" min-width="220" />
+        <el-table-column prop="displayName" label="顯示名稱 / 備註" min-width="180">
+          <template #default="{ row }">
+            <span>{{ row.displayName || '-' }}</span>
+          </template>
+        </el-table-column>
 
         <el-table-column label="啟用狀態" width="110" align="center">
           <template #default="{ row }">
@@ -128,11 +105,13 @@
             />
           </template>
         </el-table-column>
+
         <el-table-column prop="createdAt" label="建立時間" width="170" align="center">
           <template #default="{ row }">
             <span>{{ formatDateTime(row.createdAt) }}</span>
           </template>
         </el-table-column>
+
         <el-table-column
           v-if="authStore.can('admin')"
           label="操作"
@@ -152,21 +131,121 @@
       </el-table>
     </el-card>
 
-    <!-- 新增 / 編輯彈窗 -->
+    <!-- 新增外部信箱彈窗（支援多行換行輸入） -->
     <el-dialog
-      v-model="dialogVisible"
-      :title="isEdit ? '編輯通知收件人' : '新增通知收件人'"
-      width="560px"
+      v-model="addDialogVisible"
+      title="新增外部信箱"
+      width="620px"
+      destroy-on-close
+      top="6vh"
+    >
+      <div class="add-dialog-content">
+        <el-form label-position="top">
+          <el-form-item label="通知主題" required>
+            <el-select
+              v-model="addTopic"
+              placeholder="請選擇通知主題"
+              style="width: 100%;"
+            >
+              <el-option
+                v-for="(label, key) in NOTIFICATION_TOPIC_LABELS"
+                :key="key"
+                :label="label"
+                :value="key"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="輸入外部信箱（支援直接貼上多行 Email，或「姓名 <信箱>」格式）：" required>
+            <el-input
+              v-model="rawEmailsInput"
+              type="textarea"
+              :rows="7"
+              placeholder="例如：&#10;supervisor@external.org&#10;王顧問 <consultant@example.com>&#10;李專員 officer@gov.tw&#10;a email@example.com"
+              class="email-textarea"
+            />
+          </el-form-item>
+        </el-form>
+
+        <!-- 即時解析結果預覽 -->
+        <div v-if="parsedEmailItems.length > 0" class="preview-panel">
+          <div class="preview-header">
+            <span class="preview-title">解析預覽結果</span>
+            <div class="preview-counts">
+              <el-tag type="success" size="small" effect="plain">
+                有效 {{ validParsedEmails.length }} 筆
+              </el-tag>
+              <el-tag v-if="invalidCount > 0" type="danger" size="small" effect="plain">
+                格式不符 {{ invalidCount }} 筆
+              </el-tag>
+              <el-tag v-if="duplicateCount > 0" type="warning" size="small" effect="plain">
+                重複 {{ duplicateCount }} 筆
+              </el-tag>
+            </div>
+          </div>
+
+          <div class="parsed-list">
+            <div
+              v-for="(item, idx) in parsedEmailItems"
+              :key="idx"
+              class="parsed-row"
+              :class="{
+                'is-valid': item.isValid && !item.isDuplicate,
+                'is-duplicate': item.isDuplicate,
+                'is-invalid': !item.isValid
+              }"
+            >
+              <template v-if="item.isValid && !item.isDuplicate">
+                <el-icon class="status-icon success"><CircleCheckFilled /></el-icon>
+                <span class="parsed-name font-bold">{{ item.displayName }}</span>
+                <span class="parsed-email">&lt;{{ item.email }}&gt;</span>
+              </template>
+              <template v-else-if="item.isDuplicate">
+                <el-icon class="status-icon warning"><WarningFilled /></el-icon>
+                <span class="parsed-name">{{ item.displayName }}</span>
+                <span class="parsed-email">&lt;{{ item.email }}&gt;</span>
+                <el-tag type="warning" size="small" class="badge-tag">重複信箱</el-tag>
+              </template>
+              <template v-else>
+                <el-icon class="status-icon danger"><CircleCloseFilled /></el-icon>
+                <span class="parsed-raw">{{ item.raw }}</span>
+                <el-tag type="danger" size="small" class="badge-tag">格式無效</el-tag>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="addDialogVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="addSubmitting"
+            :disabled="validParsedEmails.length === 0"
+            @click="handleSaveAdd"
+          >
+            確認新增 (共 {{ validParsedEmails.length }} 筆)
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 單筆編輯外部信箱彈窗 -->
+    <el-dialog
+      v-model="editDialogVisible"
+      title="編輯外部信箱"
+      width="500px"
       destroy-on-close
     >
       <el-form
-        ref="formRef"
-        :model="formModel"
-        :rules="formRules"
+        ref="editFormRef"
+        :model="editFormModel"
+        :rules="editFormRules"
         label-width="110px"
       >
         <el-form-item label="通知主題" prop="topic">
-          <el-select v-model="formModel.topic" placeholder="請選擇主題" style="width: 100%;">
+          <el-select v-model="editFormModel.topic" placeholder="請選擇主題" style="width: 100%;">
             <el-option
               v-for="(label, key) in NOTIFICATION_TOPIC_LABELS"
               :key="key"
@@ -176,103 +255,28 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="收件類型" prop="recipientType">
-          <el-radio-group v-model="formModel.recipientType" @change="onRecipientTypeChange">
-            <el-radio-button label="role">指定角色群組</el-radio-button>
-            <el-radio-button label="user">系統使用者</el-radio-button>
-            <el-radio-button label="custom">自訂外部信箱</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-
-        <!-- 類型一：指定角色群組 -->
-        <template v-if="formModel.recipientType === 'role'">
-          <el-form-item label="選擇目標角色" prop="targetRole">
-            <el-select
-              v-model="formModel.targetRole"
-              placeholder="請選擇目標角色"
-              style="width: 100%;"
-              @change="onTargetRoleChange"
-            >
-              <el-option
-                v-for="(label, key) in ROLE_LABELS"
-                :key="key"
-                :label="label"
-                :value="key"
-              >
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span>{{ label }}</span>
-                  <el-tag size="small" type="info">{{ getRoleUserCount(key) }} 位成員</el-tag>
-                </div>
-              </el-option>
-            </el-select>
-          </el-form-item>
-
-          <el-form-item label="目前角色成員">
-            <div class="role-members-preview">
-              <span v-if="roleMembersPreview.length === 0" class="text-muted">（目前此角色尚無任何在職使用者）</span>
-              <el-tag
-                v-for="u in roleMembersPreview"
-                :key="u.id"
-                size="small"
-                type="info"
-                style="margin-right: 6px; margin-bottom: 4px;"
-              >
-                {{ u.displayName || u.email }}
-              </el-tag>
-            </div>
-          </el-form-item>
-        </template>
-
-        <!-- 類型二：指定個別使用者 -->
-        <template v-if="formModel.recipientType === 'user'">
-          <el-form-item label="選擇使用者" prop="userId">
-            <el-select
-              v-model="formModel.userId"
-              placeholder="請搜尋或選擇使用者"
-              filterable
-              style="width: 100%;"
-              @change="onUserSelectChange"
-            >
-              <el-option
-                v-for="u in userList"
-                :key="u.id"
-                :label="`${u.displayName} (${u.email})`"
-                :value="u.id"
-              >
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span>{{ u.displayName }} <small style="color: #999;">({{ u.email }})</small></span>
-                  <el-tag size="small" :type="u.role === 'admin' ? 'danger' : 'primary'">{{ (ROLE_LABELS as any)[u.role] || u.role }}</el-tag>
-                </div>
-              </el-option>
-            </el-select>
-          </el-form-item>
-        </template>
-
         <el-form-item label="顯示名稱" prop="displayName">
           <el-input
-            v-model="formModel.displayName"
-            placeholder="例如 全體調度組 / 王大明"
+            v-model="editFormModel.displayName"
+            placeholder="例如：衛生局承辦人 / 王督導"
           />
         </el-form-item>
 
         <el-form-item label="通知電子信箱" prop="email">
           <el-input
-            v-model="formModel.email"
-            placeholder="例如 dispatch@ltc.example.com"
+            v-model="editFormModel.email"
+            placeholder="例如：officer@gov.example.tw"
           />
-          <div v-if="formModel.recipientType === 'role'" class="form-tip">
-            💡 此信箱為通知發送目標（可設定群組轉發信箱或個別代表信箱）
-          </div>
         </el-form-item>
 
         <el-form-item label="啟用狀態" prop="active">
-          <el-switch v-model="formModel.active" />
+          <el-switch v-model="editFormModel.active" />
         </el-form-item>
       </el-form>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editSaving" @click="handleSaveEdit">
           確定存檔
         </el-button>
       </template>
@@ -284,82 +288,64 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Message, CircleCheckFilled, CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
 import {
   listNotificationRecipients,
-  createNotificationRecipient,
+  batchCreateNotificationRecipients,
   updateNotificationRecipient,
-  deleteNotificationRecipient
+  deleteNotificationRecipient,
+  batchDeleteNotificationRecipients
 } from '@/api/notifications'
-import { listUsers } from '@/api/users'
-import type { NotificationRecipientDTO, UserDTO, RecipientTargetType } from '@/types/api'
+import type { NotificationRecipientDTO } from '@/types/api'
 import {
   NOTIFICATION_TOPIC_LABELS,
-  ROLE_LABELS,
-  type NotificationTopic,
-  type UserRole
+  type NotificationTopic
 } from '@/types/domain'
+
+interface ParsedEmailItem {
+  email: string
+  displayName: string
+  raw: string
+  isValid: boolean
+  isDuplicate: boolean
+}
 
 const authStore = useAuthStore()
 
 const recipientList = ref<NotificationRecipientDTO[]>([])
-const userList = ref<UserDTO[]>([])
 const loading = ref(false)
 const searchQuery = ref('')
 const selectedTopic = ref<string | undefined>(undefined)
-const selectedRecipientType = ref<string | undefined>(undefined)
+const selectedTableRows = ref<NotificationRecipientDTO[]>([])
 
-const dialogVisible = ref(false)
-const isEdit = ref(false)
-const currentId = ref<string | null>(null)
-const saving = ref(false)
-const formRef = ref<FormInstance>()
+// 新增外部信箱彈窗狀態
+const addDialogVisible = ref(false)
+const addTopic = ref<NotificationTopic>('missing_report')
+const rawEmailsInput = ref('')
+const addSubmitting = ref(false)
 
-const formModel = reactive<{
+// 編輯外部信箱彈窗狀態
+const editDialogVisible = ref(false)
+const currentEditId = ref<string | null>(null)
+const editSaving = ref(false)
+const editFormRef = ref<FormInstance>()
+
+const editFormModel = reactive<{
   topic: NotificationTopic
-  recipientType: RecipientTargetType
-  targetRole?: UserRole
-  userId?: string
   email: string
   displayName: string
   active: boolean
 }>({
   topic: 'missing_report',
-  recipientType: 'role',
-  targetRole: 'admin',
-  userId: '',
-  email: 'admin@ltc.example.com',
-  displayName: '全體系統管理員',
+  email: '',
+  displayName: '',
   active: true
 })
 
-const formRules: FormRules = {
+const editFormRules: FormRules = {
   topic: [{ required: true, message: '請選擇通知主題', trigger: 'change' }],
-  targetRole: [
-    {
-      validator: (_rule, value, callback) => {
-        if (formModel.recipientType === 'role' && !value) {
-          callback(new Error('請選擇目標角色'))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'change'
-    }
-  ],
-  userId: [
-    {
-      validator: (_rule, value, callback) => {
-        if (formModel.recipientType === 'user' && !value) {
-          callback(new Error('請選擇系統使用者'))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'change'
-    }
-  ],
   displayName: [{ required: true, message: '請輸入顯示名稱', trigger: 'blur' }],
   email: [
     { required: true, message: '請輸入電子信箱', trigger: 'blur' },
@@ -367,23 +353,67 @@ const formRules: FormRules = {
   ]
 }
 
-const roleMembersPreview = computed(() => {
-  if (!formModel.targetRole) return []
-  return userList.value.filter((u) => u.role === formModel.targetRole)
+// 解析外部信箱輸入（支援換行與姓名信箱格式）
+const parsedEmailItems = computed<ParsedEmailItem[]>(() => {
+  if (!rawEmailsInput.value.trim()) return []
+
+  const lines = rawEmailsInput.value.split(/\r?\n/)
+  const results: ParsedEmailItem[] = []
+  const seenEmails = new Set<string>()
+  const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+
+    const match = trimmed.match(emailRegex)
+    if (match) {
+      const email = match[1].trim().toLowerCase()
+      // 移除 Email 與外圍符號以提取自訂姓名
+      let namePart = trimmed
+        .replace(match[1], '')
+        .replace(/[<>()[\]:;,]/g, ' ')
+        .trim()
+
+      const displayName = namePart || email
+      const isDuplicate = seenEmails.has(email)
+      seenEmails.add(email)
+
+      results.push({
+        email,
+        displayName,
+        raw: trimmed,
+        isValid: true,
+        isDuplicate
+      })
+    } else {
+      results.push({
+        email: '',
+        displayName: trimmed,
+        raw: trimmed,
+        isValid: false,
+        isDuplicate: false
+      })
+    }
+  }
+
+  return results
 })
 
-function getRoleUserCount(roleKey: string): number {
-  return userList.value.filter((u) => u.role === roleKey).length
-}
+const validParsedEmails = computed(() => {
+  return parsedEmailItems.value.filter((item) => item.isValid && !item.isDuplicate)
+})
+
+const invalidCount = computed(() => {
+  return parsedEmailItems.value.filter((item) => !item.isValid).length
+})
+
+const duplicateCount = computed(() => {
+  return parsedEmailItems.value.filter((item) => item.isDuplicate).length
+})
 
 const filteredRecipientList = computed(() => {
-  return recipientList.value.filter((r) => {
-    if (selectedRecipientType.value) {
-      const type = r.recipientType || (r.targetRole ? 'role' : (r.userId ? 'user' : 'custom'))
-      if (type !== selectedRecipientType.value) return false
-    }
-    return true
-  })
+  return recipientList.value
 })
 
 function getTopicTagType(topic: NotificationTopic): 'primary' | 'success' | 'warning' | 'info' | 'danger' {
@@ -401,20 +431,12 @@ function getTopicTagType(topic: NotificationTopic): 'primary' | 'success' | 'war
   }
 }
 
-async function fetchUsers() {
-  try {
-    userList.value = await listUsers()
-  } catch {
-    // 降級處理
-  }
-}
-
+// 載入收件信箱清單
 async function fetchRecipients() {
   loading.value = true
   try {
     const list = await listNotificationRecipients({
       topic: selectedTopic.value,
-      recipientType: selectedRecipientType.value,
       q: searchQuery.value || undefined
     })
     recipientList.value = list
@@ -428,110 +450,74 @@ async function fetchRecipients() {
 function handleReset() {
   searchQuery.value = ''
   selectedTopic.value = undefined
-  selectedRecipientType.value = undefined
   fetchRecipients()
 }
 
-function onRecipientTypeChange(type: any) {
-  if (type === 'role') {
-    if (!formModel.targetRole) {
-      formModel.targetRole = 'admin'
-    }
-    onTargetRoleChange(formModel.targetRole)
-  } else if (type === 'user') {
-    if (formModel.userId) {
-      onUserSelectChange(formModel.userId)
-    } else if (userList.value.length > 0) {
-      formModel.userId = userList.value[0].id
-      onUserSelectChange(formModel.userId)
-    }
-  } else {
-    formModel.targetRole = undefined
-    formModel.userId = undefined
-    if (formModel.displayName.startsWith('全體')) {
-      formModel.displayName = ''
-    }
+function handleTableSelectionChange(selection: NotificationRecipientDTO[]) {
+  selectedTableRows.value = selection
+}
+
+function openAddDialog() {
+  addTopic.value = (selectedTopic.value as NotificationTopic) || 'missing_report'
+  rawEmailsInput.value = ''
+  addDialogVisible.value = true
+}
+
+async function handleSaveAdd() {
+  if (validParsedEmails.value.length === 0) return
+
+  addSubmitting.value = true
+  try {
+    const payload = validParsedEmails.value.map((item) => ({
+      email: item.email,
+      displayName: item.displayName
+    }))
+
+    await batchCreateNotificationRecipients({
+      topic: addTopic.value,
+      recipients: payload
+    })
+
+    ElMessage.success(`成功新增 ${payload.length} 筆外部收件信箱！`)
+    addDialogVisible.value = false
+    fetchRecipients()
+  } catch (error: any) {
+    ElMessage.error(error?.message || '新增收件信箱失敗')
+  } finally {
+    addSubmitting.value = false
   }
-}
-
-function onTargetRoleChange(role: UserRole) {
-  const roleName = (ROLE_LABELS as any)[role] || role
-  formModel.displayName = `全體${roleName}`
-  const user = userList.value.find((u) => u.role === role)
-  formModel.email = user ? user.email : `${role}@ltc.example.com`
-}
-
-function onUserSelectChange(userId: string) {
-  const user = userList.value.find((u) => u.id === userId)
-  if (user) {
-    formModel.displayName = user.displayName
-    formModel.email = user.email
-    formModel.targetRole = user.role
-  }
-}
-
-function openCreateDialog() {
-  isEdit.value = false
-  currentId.value = null
-  formModel.topic = 'missing_report'
-  formModel.recipientType = 'role'
-  formModel.targetRole = 'admin'
-  formModel.userId = ''
-  formModel.displayName = '全體系統管理員'
-  const adminUser = userList.value.find((u) => u.role === 'admin')
-  formModel.email = adminUser ? adminUser.email : 'admin@ltc.example.com'
-  formModel.active = true
-  dialogVisible.value = true
 }
 
 function openEditDialog(row: any) {
-  isEdit.value = true
-  currentId.value = row.id
-  formModel.topic = row.topic
-  formModel.recipientType = row.recipientType || (row.targetRole ? 'role' : (row.userId ? 'user' : 'custom'))
-  formModel.targetRole = row.targetRole || 'admin'
-  formModel.userId = row.userId || ''
-  formModel.email = row.email
-  formModel.displayName = row.displayName || ''
-  formModel.active = row.active
-  dialogVisible.value = true
+  currentEditId.value = row.id
+  editFormModel.topic = row.topic
+  editFormModel.email = row.email
+  editFormModel.displayName = row.displayName || ''
+  editFormModel.active = row.active
+  editDialogVisible.value = true
 }
 
-async function handleSave() {
-  if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
+async function handleSaveEdit() {
+  if (!editFormRef.value) return
+  await editFormRef.value.validate(async (valid) => {
     if (!valid) return
-    saving.value = true
+    editSaving.value = true
     try {
-      if (isEdit.value && currentId.value) {
-        await updateNotificationRecipient(currentId.value, {
-          topic: formModel.topic,
-          recipientType: formModel.recipientType,
-          targetRole: formModel.recipientType === 'role' ? formModel.targetRole : undefined,
-          userId: formModel.recipientType === 'user' ? formModel.userId : undefined,
-          email: formModel.email,
-          displayName: formModel.displayName,
-          active: formModel.active
+      if (currentEditId.value) {
+        await updateNotificationRecipient(currentEditId.value, {
+          topic: editFormModel.topic,
+          email: editFormModel.email,
+          displayName: editFormModel.displayName,
+          active: editFormModel.active
         })
-        ElMessage.success('收件人資料已更新！')
-      } else {
-        await createNotificationRecipient({
-          topic: formModel.topic,
-          recipientType: formModel.recipientType,
-          targetRole: formModel.recipientType === 'role' ? formModel.targetRole : undefined,
-          userId: formModel.recipientType === 'user' ? formModel.userId : undefined,
-          email: formModel.email,
-          displayName: formModel.displayName,
-          active: formModel.active
-        })
-        ElMessage.success('成功新增收件人！')
+        ElMessage.success('外部收件信箱已更新！')
+        editDialogVisible.value = false
+        fetchRecipients()
       }
-      dialogVisible.value = false
-      fetchRecipients()
     } catch (error: any) {
       ElMessage.error(error?.message || '儲存失敗')
     } finally {
-      saving.value = false
+      editSaving.value = false
     }
   })
 }
@@ -539,8 +525,8 @@ async function handleSave() {
 async function handleToggleActive(row: any, targetVal: boolean) {
   const topicLabel = (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic
   const confirmMsg = targetVal
-    ? `確定啟用「${topicLabel}」的收件對象 ${row.displayName || row.email}？`
-    : `確定停用「${topicLabel}」的收件對象 ${row.displayName || row.email}？停用後此類通知不再寄給此收件對象。`
+    ? `確定啟用「${topicLabel}」的收件信箱 ${row.displayName || row.email}？`
+    : `確定停用「${topicLabel}」的收件信箱 ${row.displayName || row.email}？停用後此類通知不再發送至此信箱。`
 
   try {
     await ElMessageBox.confirm(confirmMsg, '狀態變更確認', {
@@ -551,7 +537,7 @@ async function handleToggleActive(row: any, targetVal: boolean) {
 
     await updateNotificationRecipient(row.id, { active: targetVal })
     row.active = targetVal
-    ElMessage.success(`收件對象已${targetVal ? '啟用' : '停用'}`)
+    ElMessage.success(`收件信箱已${targetVal ? '啟用' : '停用'}`)
   } catch (err: any) {
     if (err !== 'cancel') {
       ElMessage.error(err?.message || '操作失敗')
@@ -562,7 +548,7 @@ async function handleToggleActive(row: any, targetVal: boolean) {
 async function handleDelete(row: any) {
   try {
     await ElMessageBox.confirm(
-      `確定刪除通知收件對象「${row.displayName || row.email}」？刪除後無法復原。`,
+      `確定刪除通知收件信箱「${row.displayName || row.email}」？刪除後無法復原。`,
       '刪除確認',
       {
         confirmButtonText: '確定刪除',
@@ -572,7 +558,7 @@ async function handleDelete(row: any) {
     )
 
     await deleteNotificationRecipient(row.id)
-    ElMessage.success('收件人已成功刪除！')
+    ElMessage.success('收件信箱已成功刪除！')
     fetchRecipients()
   } catch (err: any) {
     if (err !== 'cancel') {
@@ -581,9 +567,35 @@ async function handleDelete(row: any) {
   }
 }
 
+async function handleBatchDelete() {
+  const count = selectedTableRows.value.length
+  if (count === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `確定要批次刪除選取的 ${count} 筆通知收件信箱嗎？刪除後無法復原。`,
+      '批次刪除確認',
+      {
+        confirmButtonText: '確定刪除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    const ids = selectedTableRows.value.map((r) => r.id)
+    await batchDeleteNotificationRecipients(ids)
+    ElMessage.success(`已成功批次刪除 ${count} 筆收件信箱！`)
+    selectedTableRows.value = []
+    fetchRecipients()
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(err?.message || '批次刪除失敗')
+    }
+  }
+}
+
 onMounted(() => {
   fetchRecipients()
-  fetchUsers()
 })
 </script>
 
@@ -598,6 +610,15 @@ onMounted(() => {
   border-radius: 8px;
 }
 
+.toolbar-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .filter-wrapper {
   display: flex;
   align-items: center;
@@ -605,40 +626,140 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
-.actions-col {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.target-cell {
+.actions-wrapper {
   display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+.email-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .email-icon {
+    color: var(--el-color-primary);
+    font-size: 15px;
+  }
+
+  .email-text {
+    font-weight: 500;
+  }
+}
+
+.font-bold {
+  font-weight: bold;
+}
+
+/* 新增外部信箱彈窗樣式 */
+.add-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  :deep(.el-form-item__label) {
+    font-weight: 600;
+    line-height: 1.5;
+    margin-bottom: 6px;
+  }
+}
+
+.email-textarea {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.preview-panel {
+  border: 1px solid var(--el-border-color-light);
+  background-color: var(--el-fill-color-lighter);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.target-title {
-  font-weight: 500;
-}
-
-.role-members-preview {
+.preview-header {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  min-height: 32px;
-  padding: 4px 8px;
-  background-color: var(--el-fill-color-light);
+
+  .preview-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+  }
+
+  .preview-counts {
+    display: flex;
+    gap: 6px;
+  }
+}
+
+.parsed-list {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.parsed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-extra-light);
   border-radius: 4px;
-}
-
-.form-tip {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin-top: 4px;
-  line-height: 1.4;
-}
-
-.text-muted {
-  color: var(--el-text-color-placeholder);
   font-size: 13px;
+
+  .status-icon {
+    font-size: 14px;
+
+    &.success {
+      color: var(--el-color-success);
+    }
+    &.warning {
+      color: var(--el-color-warning);
+    }
+    &.danger {
+      color: var(--el-color-danger);
+    }
+  }
+
+  .parsed-name {
+    color: var(--el-text-color-primary);
+  }
+
+  .parsed-email {
+    color: var(--el-text-color-secondary);
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+  }
+
+  .parsed-raw {
+    color: var(--el-text-color-secondary);
+  }
+
+  .badge-tag {
+    margin-left: auto;
+  }
+
+  &.is-invalid {
+    background-color: var(--el-color-danger-light-9);
+    border-color: var(--el-color-danger-light-7);
+  }
+
+  &.is-duplicate {
+    background-color: var(--el-color-warning-light-9);
+    border-color: var(--el-color-warning-light-7);
+  }
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style>

@@ -3,6 +3,7 @@ import type {
   NotificationRecipientDTO,
   CreateNotificationRecipientRequest,
   UpdateNotificationRecipientRequest,
+  BatchCreateNotificationRecipientsRequest,
   NotificationLogDTO,
   Paged
 } from '@/types/api'
@@ -24,6 +25,12 @@ export async function createNotificationRecipient(
   return apiClient.post('/settings/notification-recipients', data)
 }
 
+export async function batchCreateNotificationRecipients(
+  data: BatchCreateNotificationRecipientsRequest
+): Promise<NotificationRecipientDTO[]> {
+  return apiClient.post('/settings/notification-recipients/batch', data)
+}
+
 export async function updateNotificationRecipient(
   id: string,
   data: UpdateNotificationRecipientRequest
@@ -33,6 +40,10 @@ export async function updateNotificationRecipient(
 
 export async function deleteNotificationRecipient(id: string): Promise<void> {
   return apiClient.delete(`/settings/notification-recipients/${id}`)
+}
+
+export async function batchDeleteNotificationRecipients(ids: string[]): Promise<{ count: number }> {
+  return apiClient.post('/settings/notification-recipients/batch-delete', { ids })
 }
 
 // 通知歷史紀錄
