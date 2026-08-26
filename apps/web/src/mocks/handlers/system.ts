@@ -5,7 +5,8 @@ import {
   mockAuditLogs,
   mockNotificationRecipients,
   mockNotificationLogs,
-  mockMissingRides
+  mockMissingRides,
+  mockUsers
 } from '../data/mockData'
 
 export const systemHandlers = [
@@ -69,6 +70,7 @@ export const systemHandlers = [
         (r) =>
           r.email.toLowerCase().includes(q) ||
           (r.displayName && r.displayName.toLowerCase().includes(q)) ||
+          (r.targetRole && r.targetRole.toLowerCase().includes(q)) ||
           (r.createdByName && r.createdByName.toLowerCase().includes(q))
       )
     }
@@ -80,6 +82,9 @@ export const systemHandlers = [
     const newRecipient = {
       id: `rec_${Date.now()}`,
       topic: body.topic,
+      recipientType: body.recipientType || 'custom',
+      targetRole: body.targetRole || undefined,
+      userId: body.userId || undefined,
       email: body.email,
       displayName: body.displayName || '',
       active: body.active !== undefined ? body.active : true,
@@ -152,5 +157,166 @@ export const systemHandlers = [
       triggeredCount: mockMissingRides.length,
       message: `已成功執行未回報檢核，並發送催報通知至收件人信箱。`
     })
+  }),
+
+  // 使用者帳號與權限管理
+  http.get('/api/v1/users', ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+    const role = url.searchParams.get('role')
+
+    let list = [...mockUsers]
+    if (role) {
+      list = list.filter((u) => u.role === role)
+    }
+    if (q) {
+      list = list.filter(
+        (u) =>
+          u.displayName.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          (u.phone && u.phone.includes(q))
+      )
+    }
+    return HttpResponse.json(list)
+  }),
+
+  http.get('/api/v1/users/:id', ({ params }) => {
+    const user = mockUsers.find((u) => u.id === params.id)
+    if (!user) return new HttpResponse(null, { status: 404 })
+    return HttpResponse.json(user)
+  }),
+
+  http.post('/api/v1/users', async ({ request }) => {
+    const body = (await request.json()) as any
+    const newUser = {
+      id: `usr_${Date.now()}`,
+      email: body.email,
+      displayName: body.displayName,
+      role: body.role || 'dispatcher',
+      phone: body.phone || '',
+      status: body.status || 'active',
+      customPermissions: body.customPermissions || null,
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      lastLoginAt: undefined
+    }
+    mockUsers.unshift(newUser)
+
+    // 寫入系統操作日誌留痕
+    mockAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actorId: 'usr_admin',
+      actorName: '系統管理員',
+      actorRole: 'admin',
+      action: 'create',
+      entityType: 'users',
+      entityId: newUser.id,
+      entityName: newUser.displayName,
+      beforeData: undefined,
+      afterData: {
+        email: newUser.email,
+        displayName: newUser.displayName,
+        role: newUser.role,
+        status: newUser.status
+      },
+      ipAddress: '127.0.0.1',
+      userAgent: 'Mock Agent',
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    })
+
+    return HttpResponse.json(newUser)
+  }),
+
+  http.patch('/api/v1/users/:id', async ({ params, request }) => {
+    const user = mockUsers.find((u) => u.id === params.id)
+    if (!user) return new HttpResponse(null, { status: 404 })
+    const body = (await request.json()) as any
+    const before = { ...user }
+    Object.assign(user, body)
+
+    mockAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actorId: 'usr_admin',
+      actorName: '系統管理員',
+      actorRole: 'admin',
+      action: 'update',
+      entityType: 'users',
+      entityId: user.id,
+      entityName: user.displayName,
+      beforeData: before,
+      afterData: user,
+      ipAddress: '127.0.0.1',
+      userAgent: 'Mock Agent',
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    })
+
+    return HttpResponse.json(user)
+  }),
+
+  http.put('/api/v1/users/:id/permissions', async ({ params, request }) => {
+    const user = mockUsers.find((u) => u.id === params.id)
+    if (!user) return new HttpResponse(null, { status: 404 })
+    const body = (await request.json()) as any
+    const before = user.customPermissions ? { ...user.customPermissions } : null
+    user.customPermissions = body.permissions
+
+    mockAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actorId: 'usr_admin',
+      actorName: '系統管理員',
+      actorRole: 'admin',
+      action: 'setting_change',
+      entityType: 'users',
+      entityId: user.id,
+      entityName: `${user.displayName} (自訂權限變更)`,
+      beforeData: before || { mode: '套用角色預設' },
+      afterData: user.customPermissions || { mode: '重設為角色預設' },
+      ipAddress: '127.0.0.1',
+      userAgent: 'Mock Agent',
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    })
+
+    return HttpResponse.json(user)
+  }),
+
+  http.delete('/api/v1/users/:id', ({ params }) => {
+    const idx = mockUsers.findIndex((u) => u.id === params.id)
+    if (idx !== -1) {
+      const removed = mockUsers.splice(idx, 1)[0]
+      mockAuditLogs.unshift({
+        id: `audit_${Date.now()}`,
+        actorId: 'usr_admin',
+        actorName: '系統管理員',
+        actorRole: 'admin',
+        action: 'delete',
+        entityType: 'users',
+        entityId: removed.id,
+        entityName: removed.displayName,
+        beforeData: removed,
+        afterData: undefined,
+        ipAddress: '127.0.0.1',
+        userAgent: 'Mock Agent',
+        createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      })
+    }
+    return HttpResponse.json({ success: true })
+  }),
+
+  http.post('/api/v1/auth/change-password', async () => {
+    mockAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actorId: 'usr_current',
+      actorName: '當前使用者',
+      actorRole: 'user',
+      action: 'update',
+      entityType: 'users',
+      entityId: 'usr_current',
+      entityName: '個人密碼修改',
+      beforeData: { status: '舊密碼驗證通過' },
+      afterData: { status: '新密碼已啟用' },
+      ipAddress: '127.0.0.1',
+      userAgent: 'Mock Agent',
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    })
+    return HttpResponse.json({ success: true })
   })
 ]

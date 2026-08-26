@@ -18,7 +18,8 @@ import type {
   MonthAttendanceReportDTO,
   FuelLogDTO,
   HsinchuScheduleReportDTO,
-  DashboardMetricsDTO
+  DashboardMetricsDTO,
+  UserDTO
 } from '@/types/api'
 
 // 區域主檔展示資料：涵蓋全台灣 22 縣市
@@ -479,12 +480,123 @@ export const mockCases: CaseDTO[] = [
   }
 ]
 
-// Google 表單展示資料：涵蓋正常同步與需要對帳警示狀態
+// Google 表單展示資料：涵蓋正常同步與需要對帳警示狀態、多分頁與已同步月份
 export const mockForms: FormDTO[] = [
-  { id: 'form_1', formId: 'zhubei_car_1', title: '竹北一車 (回覆)', sheetUrl: 'https://docs.google.com/spreadsheets/d/1', lastSyncedAt: '2026-08-25 14:00', totalColumns: 56, pendingColumns: 3, hasSyncAlert: false },
-  { id: 'form_2', formId: 'zhunan_car_2', title: '竹南2車 (回覆)', sheetUrl: 'https://docs.google.com/spreadsheets/d/2', lastSyncedAt: '2026-08-25 14:05', totalColumns: 62, pendingColumns: 0, hasSyncAlert: false },
-  { id: 'form_3', formId: 'zhubei_car_2', title: '竹北二車 (回覆)', sheetUrl: 'https://docs.google.com/spreadsheets/d/3', lastSyncedAt: '2026-08-22 09:00', totalColumns: 48, pendingColumns: 5, hasSyncAlert: true },
-  { id: 'form_4', formId: 'miaoli_car_1', title: '苗栗市1車 (回覆)', sheetUrl: 'https://docs.google.com/spreadsheets/d/4', lastSyncedAt: '2026-08-25 15:30', totalColumns: 36, pendingColumns: 1, hasSyncAlert: false }
+  {
+    id: 'form_1',
+    formId: 'zhubei_car_1',
+    title: '竹北一車每日接送回報表',
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRmG1uY1b/edit',
+    vehicleId: 'veh_1',
+    vehicleName: '竹北一車',
+    region: 'hsinchu',
+    sheetTabs: ['8月回報', '7月回報', '工作表1'],
+    activeTab: '8月回報',
+    syncedMonths: ['2026-07', '2026-08'],
+    lastSyncedAt: '2026-08-25 14:00',
+    totalColumns: 56,
+    pendingColumns: 3,
+    hasSyncAlert: false
+  },
+  {
+    id: 'form_2',
+    formId: 'zhunan_car_2',
+    title: '竹南2車每日接送回報表',
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/2BxiMVs0XRmG2uY2c/edit',
+    vehicleId: 'veh_2',
+    vehicleName: '竹南2車',
+    region: 'miaoli',
+    sheetTabs: ['8月回報', '7月回報'],
+    activeTab: '8月回報',
+    syncedMonths: ['2026-07'],
+    lastSyncedAt: '2026-08-25 14:05',
+    totalColumns: 62,
+    pendingColumns: 0,
+    hasSyncAlert: false
+  },
+  {
+    id: 'form_3',
+    formId: 'zhubei_car_2',
+    title: '竹北二車每日接送回報表',
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/3BxiMVs0XRmG3uY3d/edit',
+    vehicleId: 'veh_3',
+    vehicleName: '竹北二車',
+    region: 'hsinchu',
+    sheetTabs: ['8月回報', '去程回報', '回程回報'],
+    activeTab: '8月回報',
+    syncedMonths: ['2026-07'],
+    lastSyncedAt: '2026-08-22 09:00',
+    totalColumns: 48,
+    pendingColumns: 5,
+    hasSyncAlert: true
+  },
+  {
+    id: 'form_4',
+    formId: 'miaoli_car_1',
+    title: '苗栗市1車每日接送回報表',
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/4BxiMVs0XRmG4uY4e/edit',
+    vehicleId: 'veh_4',
+    vehicleName: '苗栗市1車',
+    region: 'miaoli',
+    sheetTabs: ['8月回報', '7月回報'],
+    activeTab: '8月回報',
+    syncedMonths: ['2026-07', '2026-08'],
+    lastSyncedAt: '2026-08-25 15:30',
+    totalColumns: 36,
+    pendingColumns: 1,
+    hasSyncAlert: false
+  }
+]
+
+// 系統使用者展示資料：涵蓋系統管理員、調度員、司機、檢視者
+export const mockUsers: UserDTO[] = [
+  {
+    id: 'usr_admin',
+    email: 'admin@ltc.example.com',
+    displayName: '系統管理員 (王大明)',
+    role: 'admin',
+    phone: '0912-111-222',
+    status: 'active',
+    customPermissions: null,
+    lastLoginAt: '2026-08-26 09:15:00',
+    createdAt: '2026-01-01 08:00:00'
+  },
+  {
+    id: 'usr_dispatcher_1',
+    email: 'dispatcher@ltc.example.com',
+    displayName: '調度員 (李調度)',
+    role: 'dispatcher',
+    phone: '0922-333-444',
+    status: 'active',
+    customPermissions: null,
+    lastLoginAt: '2026-08-26 08:45:00',
+    createdAt: '2026-01-10 09:00:00'
+  },
+  {
+    id: 'usr_driver_1',
+    email: 'driver@ltc.example.com',
+    displayName: '司機 (張司機)',
+    role: 'driver',
+    phone: '0933-555-666',
+    status: 'active',
+    customPermissions: {
+      attendance_fuel: { view: true, edit: true },
+      vehicles_maintenance: { view: true, edit: true }
+    },
+    lastLoginAt: '2026-08-25 17:30:00',
+    createdAt: '2026-02-01 08:30:00'
+  },
+  {
+    id: 'usr_viewer_1',
+    email: 'viewer@ltc.example.com',
+    displayName: '主管檢視者 (林督導)',
+    role: 'viewer',
+    phone: '0944-777-888',
+    status: 'active',
+    customPermissions: null,
+    lastLoginAt: '2026-08-24 16:20:00',
+    createdAt: '2026-02-15 10:00:00'
+  }
 ]
 
 // 智慧欄位對應展示資料：涵蓋 4 種欄位種類 (meta, ride, issue, unknown) 與 3 種對應狀態 (pending, mapped, ignored)
@@ -667,8 +779,27 @@ export const mockDashboardStats: DashboardStatsDTO = {
   recentExports: mockExportJobs
 }
 
-// 稽核日誌展示資料：涵蓋所有 9 種動作 (create, update, delete, reveal_pii, correct, resolve_conflict, export, setting_change, import) 與所有 8 種實體
+// 系統操作紀錄展示資料：涵蓋登入 (login)、主檔 CUD、更正 (correct)、衝突裁決 (resolve_conflict)、匯出 (export) 與設定變更
 export const mockAuditLogs: AuditLogDTO[] = [
+  {
+    id: 'audit_0',
+    actorId: 'usr_admin',
+    actorName: '系統管理員',
+    actorRole: 'admin',
+    action: 'login',
+    entityType: 'auth',
+    entityId: 'usr_admin',
+    entityName: '系統管理員 (admin@ltc.example.com)',
+    beforeData: undefined,
+    afterData: {
+      email: 'admin@ltc.example.com',
+      role: 'admin',
+      loginTime: '2026-08-26 09:15:00'
+    },
+    ipAddress: '192.168.1.100',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    createdAt: '2026-08-26 09:15:00'
+  },
   {
     id: 'audit_1',
     actorId: 'usr_admin',
@@ -826,13 +957,15 @@ export const mockAuditLogs: AuditLogDTO[] = [
   }
 ]
 
-// 通知收件人展示資料：涵蓋所有 4 種通知主題與啟用/停用狀態
+// 通知收件人展示資料：涵蓋指定角色 (role)、指定使用者 (user) 與自訂外部信箱 (custom)
 export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   {
     id: 'rec_1',
     topic: 'missing_report',
+    recipientType: 'role',
+    targetRole: 'admin',
     email: 'admin@ltc.example.com',
-    displayName: '系統主管理員',
+    displayName: '全體系統管理員',
     active: true,
     createdByName: '系統管理員',
     createdAt: '2026-01-01 00:00:00'
@@ -840,8 +973,10 @@ export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   {
     id: 'rec_2',
     topic: 'missing_report',
-    email: 'staff.miaoli@ltc.example.com',
-    displayName: '苗栗區行政組',
+    recipientType: 'role',
+    targetRole: 'dispatcher',
+    email: 'dispatcher@ltc.example.com',
+    displayName: '全體調度員',
     active: true,
     createdByName: '系統管理員',
     createdAt: '2026-01-05 10:30:00'
@@ -849,8 +984,10 @@ export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   {
     id: 'rec_3',
     topic: 'driver_leave',
-    email: 'dispatch@ltc.example.com',
-    displayName: '調度中心專線',
+    recipientType: 'role',
+    targetRole: 'dispatcher',
+    email: 'dispatcher@ltc.example.com',
+    displayName: '調度中心專線 (全體調度組)',
     active: true,
     createdByName: '系統管理員',
     createdAt: '2026-01-10 14:00:00'
@@ -858,8 +995,10 @@ export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   {
     id: 'rec_4',
     topic: 'month_end',
-    email: 'finance@ltc.example.com',
-    displayName: '財務申報組',
+    recipientType: 'user',
+    userId: 'usr_viewer_1',
+    email: 'viewer@ltc.example.com',
+    displayName: '林督導 (主管檢視者)',
     active: true,
     createdByName: '系統管理員',
     createdAt: '2026-01-15 09:15:00'
@@ -867,8 +1006,9 @@ export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   {
     id: 'rec_5',
     topic: 'export_failed',
+    recipientType: 'custom',
     email: 'tech@ltc.example.com',
-    displayName: '資訊維運團隊',
+    displayName: '外部資訊維運團隊',
     active: true,
     createdByName: '系統管理員',
     createdAt: '2026-02-01 16:20:00'

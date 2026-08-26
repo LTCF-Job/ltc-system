@@ -10,6 +10,8 @@ import type {
 // 通知收件人管理
 export async function listNotificationRecipients(params?: {
   topic?: string
+  recipientType?: string
+  targetRole?: string
   active?: boolean
   q?: string
 }): Promise<NotificationRecipientDTO[]> {
