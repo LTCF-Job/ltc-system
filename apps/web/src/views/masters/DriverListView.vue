@@ -20,7 +20,7 @@
 
         <el-select
           v-model="filters.active"
-          placeholder="營運狀態"
+          placeholder="狀態"
           clearable
           style="width: 130px"
           @change="handleSearch"
@@ -50,29 +50,54 @@
       <template #table>
         <el-table :data="drivers" border stripe style="width: 100%">
           <el-table-column prop="name" label="司機姓名" width="120" />
-          <el-table-column label="身分證字號" width="160">
+          <el-table-column prop="nationalId" label="身分證字號" width="140" align="center">
             <template #default="{ row }">
-              <MaskedId
-                :masked-value="row.nationalId"
-                :on-reveal="() => fetchPlainId(row.id)"
-              />
+              <span class="font-mono">{{ row.nationalId || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="phone" label="聯絡電話" width="130" />
-          <el-table-column prop="email" label="電子信箱" min-width="180" />
-          <el-table-column label="目前指派主要車輛" min-width="160">
+          <el-table-column prop="phone" label="聯絡電話" width="130" align="center">
             <template #default="{ row }">
-              <span v-if="row.assignments && row.assignments.length > 0">
-                {{ row.assignments[0].vehicleName || '已指派車輛' }}
-              </span>
+              <span>{{ row.phone || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="email" label="電子信箱" min-width="180" />
+          <el-table-column label="目前指派主要車輛" min-width="180">
+            <template #default="{ row }">
+              <div v-if="getPrimaryVehicleDisplay(row)" class="assigned-vehicle-info">
+                <span class="vehicle-name">{{ getPrimaryVehicleDisplay(row)?.name }}</span>
+                <span v-if="getPrimaryVehicleDisplay(row)?.plateNo" class="vehicle-plate font-mono">
+                  ({{ getPrimaryVehicleDisplay(row)?.plateNo }})
+                </span>
+              </div>
               <el-tag v-else size="small" type="info">未指派</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="active" label="狀態" width="90">
+          <el-table-column prop="active" label="狀態" width="130" align="center">
             <template #default="{ row }">
-              <el-tag size="small" :type="row.active ? 'success' : 'info'">
-                {{ row.active ? '在職' : '離職' }}
-              </el-tag>
+              <el-tooltip
+                v-if="authStore.can('staff')"
+                :content="row.active ? '目前為在職中，點選切換為已離職' : '目前為已離職，點選切換為在職中'"
+                placement="top"
+                :show-after="300"
+              >
+                <button
+                  type="button"
+                  class="status-toggle-pill"
+                  :class="row.active ? 'is-active' : 'is-inactive'"
+                  @click="handleQuickToggleActive(row as any, !row.active)"
+                >
+                  <span class="status-indicator-dot"></span>
+                  <span class="status-label-text">{{ row.active ? '在職中' : '已離職' }}</span>
+                </button>
+              </el-tooltip>
+              <div
+                v-else
+                class="status-toggle-pill is-readonly"
+                :class="row.active ? 'is-active' : 'is-inactive'"
+              >
+                <span class="status-indicator-dot"></span>
+                <span class="status-label-text">{{ row.active ? '在職中' : '已離職' }}</span>
+              </div>
             </template>
           </el-table-column>
 
@@ -114,13 +139,26 @@
           <el-input v-model="form.nationalId" placeholder="1 碼英文 + 9 碼數字" />
         </el-form-item>
         <el-form-item label="聯絡電話" prop="phone">
-          <el-input v-model="form.phone" placeholder="如：0912-345678" />
+          <el-input v-model="form.phone" placeholder="如：0912345678" />
         </el-form-item>
         <el-form-item label="電子信箱" prop="email">
           <el-input v-model="form.email" placeholder="通知寄送用信箱" />
         </el-form-item>
-        <el-form-item label="在職狀態" prop="active">
-          <el-switch v-model="form.active" />
+        <el-form-item label="狀態" prop="active">
+          <el-radio-group v-model="form.active" class="status-radio-group">
+            <el-radio-button :value="true">
+              <div class="radio-pill active-pill">
+                <span class="radio-dot"></span>
+                <span>在職中</span>
+              </div>
+            </el-radio-button>
+            <el-radio-button :value="false">
+              <div class="radio-pill inactive-pill">
+                <span class="radio-dot"></span>
+                <span>已離職</span>
+              </div>
+            </el-radio-button>
+          </el-radio-group>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -176,14 +214,12 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import MaskedId from '@/components/MaskedId.vue'
 import DataTablePage from '@/components/DataTablePage.vue'
 import {
   listDrivers,
   createDriver,
   updateDriver,
   deleteDriver,
-  revealDriverId,
   assignDriverVehicle,
   listVehicles
 } from '@/api/masters'
@@ -256,9 +292,14 @@ const {
   }
 })
 
-async function fetchPlainId(driverId: string): Promise<string> {
-  const res = await revealDriverId(driverId)
-  return res.nationalId
+async function handleQuickToggleActive(row: DriverDTO, newActive: boolean) {
+  try {
+    await updateDriver(row.id, { active: newActive })
+    row.active = newActive
+    ElMessage.success(`已將司機「${row.name}」狀態更新為 ${newActive ? '在職' : '離職'}`)
+  } catch (err: any) {
+    ElMessage.error(err.message || '更新司機狀態失敗')
+  }
 }
 
 function openCreateDialog() {
@@ -281,9 +322,30 @@ function openEditDialog(row: any) {
   dialogVisible.value = true
 }
 
+function getPrimaryVehicleDisplay(row: any): { name: string; plateNo: string } | null {
+  if (!row.assignments || row.assignments.length === 0) return null
+  const primary = row.assignments.find((a: any) => a.isPrimary) || row.assignments[0]
+  const veh = allVehicles.value.find((v) => v.id === primary.vehicleId)
+
+  const name = veh?.displayName || primary.vehicleName || ''
+  const plateNo = veh?.plateNo || primary.vehiclePlateNo || primary.plateNo || ''
+
+  if (name && plateNo) {
+    return { name, plateNo }
+  }
+  if (name) {
+    return { name, plateNo: '' }
+  }
+  if (plateNo) {
+    return { name: plateNo, plateNo: '' }
+  }
+  return { name: '已指派車輛', plateNo: '' }
+}
+
 function openAssignDialog(row: any) {
   selectedDriverId.value = row.id
-  assignForm.vehicleId = row.assignments?.[0]?.vehicleId || ''
+  const primary = row.assignments?.find((a: any) => a.isPrimary) || row.assignments?.[0]
+  assignForm.vehicleId = primary?.vehicleId || ''
   assignForm.startDate = new Date().toISOString().split('T')[0]
   assignForm.endDate = ''
   assignDialogVisible.value = true
@@ -355,3 +417,131 @@ onMounted(async () => {
 
 executeFetch()
 </script>
+
+<style scoped>
+/* 狀態互動切換按鈕 / 膠囊標籤 */
+.status-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  outline: none;
+  background: transparent;
+  user-select: none;
+  line-height: 1;
+}
+
+.status-toggle-pill.is-active {
+  background-color: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.status-toggle-pill.is-active:hover {
+  background-color: #d1fae5;
+  border-color: #6ee7b7;
+  color: #065f46;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(5, 150, 105, 0.18);
+}
+
+.status-toggle-pill.is-inactive {
+  background-color: #f3f4f6;
+  color: #4b5563;
+  border-color: #e5e7eb;
+}
+
+.status-toggle-pill.is-inactive:hover {
+  background-color: #e5e7eb;
+  border-color: #d1d5db;
+  color: #1f2937;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+}
+
+.status-toggle-pill.is-readonly {
+  cursor: default;
+  pointer-events: none;
+}
+
+.status-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.is-active .status-indicator-dot {
+  background-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+
+.is-inactive .status-indicator-dot {
+  background-color: #9ca3af;
+}
+
+.status-label-text {
+  letter-spacing: 0.02em;
+}
+
+/* 彈窗內狀態單選群組 */
+.status-radio-group :deep(.el-radio-button__inner) {
+  padding: 8px 16px;
+  border-radius: 6px !important;
+  margin-right: 8px;
+  border: 1px solid #dcdfe6 !important;
+}
+
+.status-radio-group :deep(.el-radio-button:first-child .el-radio-button__inner) {
+  border-left: 1px solid #dcdfe6 !important;
+}
+
+.status-radio-group :deep(.el-radio-button.is-active .el-radio-button__inner) {
+  background-color: #f0fdf4;
+  border-color: #10b981 !important;
+  color: #047857;
+  box-shadow: none !important;
+}
+
+.radio-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.radio-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #9ca3af;
+}
+
+.active-pill .radio-dot {
+  background-color: #10b981;
+}
+
+.inactive-pill .radio-dot {
+  background-color: #6b7280;
+}
+
+.assigned-vehicle-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vehicle-plate {
+  color: #606266;
+  font-size: 13px;
+}
+</style>

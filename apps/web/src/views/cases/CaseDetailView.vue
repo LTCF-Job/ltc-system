@@ -1,47 +1,11 @@
 <template>
   <div v-loading="loading" class="case-detail-view">
-    <!-- 頂部標題與操作 -->
+    <!-- 頂部返回 -->
     <div class="page-header">
-      <div class="title-group">
-        <el-button link @click="$router.push('/cases')">
-          <el-icon><ArrowLeft /></el-icon>
-          返回清單
-        </el-button>
-        <h2>{{ caseData?.name || '個案明細' }}</h2>
-        <el-tag v-if="caseData" :type="caseData.status === 'active' ? 'success' : 'info'">
-          {{ CASE_STATUS_LABELS[caseData.status] }}
-        </el-tag>
-        <el-tag v-if="caseData" :type="caseData.region === 'miaoli' ? 'warning' : 'primary'">
-          {{ REGION_LABELS[caseData.region] }}
-        </el-tag>
-      </div>
-
-      <div class="action-group">
-        <el-button
-          v-if="authStore.can('staff') && caseData?.status === 'active'"
-          type="warning"
-          plain
-          @click="handleToggleStatus('suspended')"
-        >
-          暫停服務
-        </el-button>
-        <el-button
-          v-if="authStore.can('staff') && caseData?.status === 'suspended'"
-          type="success"
-          plain
-          @click="handleToggleStatus('active')"
-        >
-          恢復在案
-        </el-button>
-        <el-button
-          v-if="authStore.can('staff')"
-          type="danger"
-          plain
-          @click="handleDeleteCase"
-        >
-          刪除個案
-        </el-button>
-      </div>
+      <el-button link @click="$router.push('/cases')">
+        <el-icon><ArrowLeft /></el-icon>
+        返回清單
+      </el-button>
     </div>
 
     <!-- 分頁導覽：基本資料 / 排班設定 / 搭乘月曆 -->
@@ -55,25 +19,63 @@
           :disabled="!authStore.can('staff')"
         >
           <el-descriptions title="系統與身分資訊" :column="2" border style="margin-bottom: 20px">
+            <template #extra>
+              <div class="descriptions-actions">
+                <el-button
+                  v-if="authStore.can('staff')"
+                  type="danger"
+                  plain
+                  @click="handleDeleteCase"
+                >
+                  刪除個案
+                </el-button>
+              </div>
+            </template>
             <el-descriptions-item label="個案編號">{{ caseData?.code }}</el-descriptions-item>
             <el-descriptions-item label="身分證字號">
               <span class="font-mono font-bold">{{ caseData?.nationalId }}</span>
             </el-descriptions-item>
-            <el-descriptions-item label="建立時間">{{ caseData?.createdAt }}</el-descriptions-item>
-            <el-descriptions-item label="最後更新">{{ caseData?.updatedAt }}</el-descriptions-item>
+            <el-descriptions-item label="目前狀態">
+              <el-tag
+                v-if="caseData"
+                :type="caseData.status === 'active' ? 'success' : (caseData.status === 'suspended' ? 'warning' : 'danger')"
+              >
+                {{ CASE_STATUS_LABELS[caseData.status] || caseData.status }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="建立時間">{{ formatDateTime(caseData?.createdAt) }}</el-descriptions-item>
+            <el-descriptions-item label="最後更新" :span="2">{{ formatDateTime(caseData?.updatedAt) }}</el-descriptions-item>
           </el-descriptions>
 
           <el-row :gutter="20">
-            <el-col :span="12">
+            <el-col :span="6">
               <el-form-item label="個案姓名" prop="name">
                 <el-input v-model="editForm.name" />
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :span="6">
+              <el-form-item label="聯絡電話" prop="phone">
+                <el-input v-model="editForm.phone" placeholder="如：0912345678" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="6">
               <el-form-item label="申報地區" prop="region">
-                <el-select v-model="editForm.region" style="width: 100%">
-                  <el-option value="miaoli" label="苗栗" />
-                  <el-option value="hsinchu" label="新竹" />
+                <el-select v-model="editForm.region" filterable style="width: 100%">
+                  <el-option
+                    v-for="(label, key) in REGION_LABELS"
+                    :key="key"
+                    :value="key"
+                    :label="label"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="6">
+              <el-form-item label="個案狀態" prop="status">
+                <el-select v-model="editForm.status" style="width: 100%">
+                  <el-option value="active" label="在案" />
+                  <el-option value="suspended" label="暫停" />
+                  <el-option value="closed" label="停案" />
                 </el-select>
               </el-form-item>
             </el-col>
@@ -147,7 +149,7 @@
           :case-id="caseData.id"
           :region="caseData.region"
           :schedule="caseData.activeSchedule"
-          @saved="fetchDetail"
+          @saved="handleScheduleSaved"
         />
       </el-tab-pane>
     </el-tabs>
@@ -162,6 +164,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import ScheduleEditor from './ScheduleEditor.vue'
 import { getCase, updateCase, deleteCase, getCaseSchedule } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
+import { formatDateTime } from '@/utils/formatters'
 import { CASE_STATUS_LABELS, REGION_LABELS } from '@/types/domain'
 import type { CaseDTO, UpdateCaseRequest } from '@/types/api'
 
@@ -177,12 +180,14 @@ const caseData = ref<CaseDTO | null>(null)
 
 const editForm = reactive<UpdateCaseRequest>({
   name: '',
+  phone: '',
   region: 'miaoli',
   homeAddress: '',
   serviceCategory: 1,
   serviceUsageType: 2,
   claimStartDate: '',
-  claimEndDate: ''
+  claimEndDate: '',
+  status: 'active'
 })
 
 async function fetchDetail() {
@@ -205,12 +210,14 @@ async function fetchDetail() {
 
     caseData.value = res
     editForm.name = res.name || ''
+    editForm.phone = res.phone || ''
     editForm.region = res.region || 'miaoli'
     editForm.homeAddress = res.homeAddress || ''
     editForm.serviceCategory = res.serviceCategory || 1
     editForm.serviceUsageType = res.serviceUsageType || 2
     editForm.claimStartDate = res.claimStartDate ? String(res.claimStartDate).slice(0, 10) : ''
     editForm.claimEndDate = res.claimEndDate ? String(res.claimEndDate).slice(0, 10) : ''
+    editForm.status = res.status || 'active'
   } catch (err: any) {
     ElMessage.error(err.message || '載入個案明細失敗')
   } finally {
@@ -223,27 +230,14 @@ async function handleUpdateCase() {
   try {
     await updateCase(caseId.value, editForm)
     ElMessage.success('個案基本資料已更新')
-    fetchDetail()
+    router.push('/cases')
   } finally {
     saving.value = false
   }
 }
 
-async function handleToggleStatus(newStatus: 'active' | 'suspended') {
-  const actionText = newStatus === 'suspended' ? '暫停服務' : '恢復在案'
-  await ElMessageBox.confirm(
-    `確定將個案「${caseData.value?.name}」變更為「${actionText}」？`,
-    '確認操作',
-    {
-      confirmButtonText: '確定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }
-  )
-
-  await updateCase(caseId.value, { status: newStatus })
-  ElMessage.success(`個案已${actionText}`)
-  fetchDetail()
+function handleScheduleSaved() {
+  router.push('/cases')
 }
 
 async function handleDeleteCase() {
@@ -298,28 +292,15 @@ onMounted(() => {
 
 .page-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   background-color: #ffffff;
   padding: 16px 20px;
   border-radius: 8px;
+}
 
-  .title-group {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-
-    h2 {
-      margin: 0;
-      font-size: 20px;
-      color: var(--el-color-primary);
-    }
-  }
-
-  .action-group {
-    display: flex;
-    gap: 10px;
-  }
+.descriptions-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .detail-tabs {

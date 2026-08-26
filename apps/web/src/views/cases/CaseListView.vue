@@ -12,9 +12,9 @@
       <template #filter>
         <el-input
           v-model="filters.q"
-          placeholder="搜尋個案姓名／編號／身分證"
+          placeholder="搜尋姓名／編號／身分證／電話／地址"
           clearable
-          style="width: 240px"
+          style="width: 270px"
           @keyup.enter="handleSearch"
         />
 
@@ -22,12 +22,17 @@
           v-model="filters.region"
           placeholder="全部區域"
           clearable
-          style="width: 130px"
+          filterable
+          style="width: 140px"
           @change="handleSearch"
         >
           <el-option label="全部區域" value="" />
-          <el-option label="苗栗" value="miaoli" />
-          <el-option label="新竹" value="hsinchu" />
+          <el-option
+            v-for="(label, key) in REGION_LABELS"
+            :key="key"
+            :label="label"
+            :value="key"
+          />
         </el-select>
 
         <el-select
@@ -86,7 +91,12 @@
           <el-table-column prop="name" label="姓名" width="110" />
           <el-table-column prop="nationalId" label="身分證字號" width="130" align="center">
             <template #default="{ row }">
-              <span class="font-mono">{{ row.nationalId || row.nationalIdMasked || '-' }}</span>
+              <span class="font-mono">{{ row.nationalId || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="phone" label="聯絡電話" width="130" align="center">
+            <template #default="{ row }">
+              <span>{{ row.phone || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="region" label="區域" width="115" align="center">
@@ -108,12 +118,13 @@
                   </el-tag>
                 </span>
                 <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="miaoli">
-                      <el-tag size="small" type="warning">苗栗</el-tag>
-                    </el-dropdown-item>
-                    <el-dropdown-item command="hsinchu">
-                      <el-tag size="small" type="primary">新竹</el-tag>
+                  <el-dropdown-menu style="max-height: 240px; overflow-y: auto;">
+                    <el-dropdown-item
+                      v-for="(label, key) in REGION_LABELS"
+                      :key="key"
+                      :command="key"
+                    >
+                      <span>{{ label }}</span>
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -176,7 +187,7 @@
           </el-table-column>
           <el-table-column prop="homeAddress" label="住家地址" min-width="190" show-overflow-tooltip />
 
-          <el-table-column label="操作" width="220" fixed="right" align="center">
+          <el-table-column label="操作" width="140" fixed="right" align="center">
             <template #default="{ row }">
               <el-button
                 link
@@ -184,15 +195,7 @@
                 size="small"
                 @click="$router.push(`/cases/${row.id}?tab=basic`)"
               >
-                編輯明細
-              </el-button>
-              <el-button
-                link
-                type="success"
-                size="small"
-                @click="$router.push(`/cases/${row.id}?tab=schedule`)"
-              >
-                排班設定
+                編輯
               </el-button>
               <el-button
                 v-if="authStore.can('staff')"
@@ -239,11 +242,23 @@
         <el-form-item label="身分證字號" prop="nationalId">
           <el-input v-model="createForm.nationalId" placeholder="1 碼英文字母 + 9 碼數字" />
         </el-form-item>
+        <el-form-item label="聯絡電話" prop="phone">
+          <el-input v-model="createForm.phone" placeholder="如：0912345678" />
+        </el-form-item>
         <el-form-item label="申報區域" prop="region">
-          <el-radio-group v-model="createForm.region">
-            <el-radio value="miaoli">苗栗</el-radio>
-            <el-radio value="hsinchu">新竹</el-radio>
-          </el-radio-group>
+          <el-select
+            v-model="createForm.region"
+            placeholder="請選擇區域"
+            filterable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="(label, key) in REGION_LABELS"
+              :key="key"
+              :label="label"
+              :value="key"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="住家地址" prop="homeAddress">
           <el-input v-model="createForm.homeAddress" placeholder="請輸入住家地址" />
@@ -418,6 +433,7 @@ const createFormRef = ref<FormInstance>()
 const createForm = reactive<CreateCaseRequest>({
   name: '',
   nationalId: '',
+  phone: '',
   region: 'miaoli',
   homeAddress: '',
   claimStartDate: new Date().toISOString().split('T')[0],
@@ -437,6 +453,7 @@ const createRules = {
 function openCreateDialog() {
   createForm.name = ''
   createForm.nationalId = ''
+  createForm.phone = ''
   createForm.homeAddress = ''
   createForm.region = 'miaoli'
   createForm.claimStartDate = new Date().toISOString().split('T')[0]

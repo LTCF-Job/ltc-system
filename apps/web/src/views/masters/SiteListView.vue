@@ -22,12 +22,17 @@
           v-model="filters.region"
           placeholder="全部區域"
           clearable
-          style="width: 130px"
+          filterable
+          style="width: 140px"
           @change="handleSearch"
         >
           <el-option label="全部區域" value="" />
-          <el-option label="苗栗" value="miaoli" />
-          <el-option label="新竹" value="hsinchu" />
+          <el-option
+            v-for="(label, key) in REGION_LABELS"
+            :key="key"
+            :label="label"
+            :value="key"
+          />
         </el-select>
 
         <el-button type="primary" @click="handleSearch">查詢</el-button>
@@ -50,10 +55,10 @@
       <template #table>
         <el-table :data="sites" border stripe style="width: 100%">
           <el-table-column prop="name" label="據點名稱" width="160" />
-          <el-table-column prop="region" label="區域" width="100">
+          <el-table-column prop="region" label="區域" width="120" align="center">
             <template #default="{ row }">
               <el-tag size="small" :type="row.region === 'miaoli' ? 'warning' : 'primary'">
-                {{ REGION_LABELS[row.region as Region] }}
+                {{ REGION_LABELS[row.region as Region] || row.region }}
               </el-tag>
             </template>
           </el-table-column>
@@ -97,10 +102,19 @@
           <el-input v-model="form.name" placeholder="如：竹北日照中心" />
         </el-form-item>
         <el-form-item label="所屬區域" prop="region">
-          <el-radio-group v-model="form.region">
-            <el-radio value="miaoli">苗栗</el-radio>
-            <el-radio value="hsinchu">新竹</el-radio>
-          </el-radio-group>
+          <el-select
+            v-model="form.region"
+            placeholder="請選擇區域"
+            filterable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="(label, key) in REGION_LABELS"
+              :key="key"
+              :label="label"
+              :value="key"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="據點地址" prop="address">
           <el-input v-model="form.address" placeholder="請輸入完整地址" />
