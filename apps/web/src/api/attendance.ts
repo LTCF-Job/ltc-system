@@ -8,8 +8,8 @@ import type {
   Paged
 } from '@/types/api'
 
-export async function getMonthAttendance(month?: string, driverId?: string): Promise<MonthAttendanceReportDTO> {
-  return apiClient.get('/attendance', { params: { month, driverId } })
+export async function getMonthAttendance(month?: string, driverId?: string, q?: string): Promise<MonthAttendanceReportDTO> {
+  return apiClient.get('/attendance', { params: { month, driverId, q } })
 }
 
 export async function upsertAttendance(data: UpsertAttendanceRequest): Promise<any> {
@@ -23,6 +23,7 @@ export async function listFuelLogs(params?: {
   driverId?: string
   startDate?: string
   endDate?: string
+  q?: string
 }): Promise<Paged<FuelLogDTO>> {
   const res = await apiClient.get<FuelLogDTO[]>('/fuel-logs', { params })
   return {

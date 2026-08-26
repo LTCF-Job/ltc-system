@@ -4,20 +4,29 @@
     <el-card class="filter-card" shadow="never">
       <el-row :gutter="16" justify="space-between" align="middle">
         <el-col :span="18">
-          <div class="filter-wrapper">
+          <div class="filter-wrapper" style="display: flex; gap: 8px; align-items: center;">
             <el-date-picker
               v-model="queryMonth"
               type="month"
               value-format="YYYY-MM"
               placeholder="選擇申報月份"
-              style="width: 160px;"
+              style="width: 150px;"
               @change="fetchReport"
+            />
+
+            <el-input
+              v-model="queryKeyword"
+              placeholder="搜尋車輛／車牌／司機"
+              clearable
+              style="width: 200px;"
+              @keyup.enter="fetchReport"
             />
 
             <el-select
               v-model="queryRegion"
               placeholder="選擇區域"
               clearable
+              filterable
               style="width: 140px;"
               @change="fetchReport"
             >
@@ -33,7 +42,7 @@
               v-model="queryVehicle"
               placeholder="指定車輛"
               clearable
-              style="width: 180px;"
+              style="width: 150px;"
               @change="fetchReport"
             >
               <el-option
@@ -46,6 +55,9 @@
 
             <el-button type="primary" icon="Search" @click="fetchReport">
               查詢報表
+            </el-button>
+            <el-button @click="handleReset">
+              重設
             </el-button>
           </div>
         </el-col>
@@ -144,6 +156,7 @@ import type { TripSummaryReportDTO, VehicleDTO } from '@/types/api'
 import { REGION_LABELS } from '@/types/domain'
 
 const queryMonth = ref('2026-07')
+const queryKeyword = ref('')
 const queryRegion = ref<string | undefined>(undefined)
 const queryVehicle = ref<string | undefined>(undefined)
 const vehicleOptions = ref<VehicleDTO[]>([])
@@ -167,7 +180,8 @@ async function fetchReport() {
     const res = await getTripSummaryReport({
       periodYm: queryMonth.value,
       region: queryRegion.value,
-      vehicleId: queryVehicle.value
+      vehicleId: queryVehicle.value,
+      q: queryKeyword.value || undefined
     })
     reportData.value = res
   } catch (error: any) {
@@ -175,6 +189,13 @@ async function fetchReport() {
   } finally {
     loading.value = false
   }
+}
+
+function handleReset() {
+  queryKeyword.value = ''
+  queryRegion.value = undefined
+  queryVehicle.value = undefined
+  fetchReport()
 }
 
 async function handleExportExcel() {

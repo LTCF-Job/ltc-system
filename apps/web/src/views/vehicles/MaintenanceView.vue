@@ -9,11 +9,19 @@
         </div>
 
         <div class="action-section">
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜尋車牌／車名／保養廠／項目／備註"
+            clearable
+            style="width: 240px"
+            @keyup.enter="fetchList"
+          />
+
           <el-select
             v-model="queryVehicleId"
             placeholder="全部車輛"
             clearable
-            style="width: 170px"
+            style="width: 150px"
             @change="fetchList"
           >
             <el-option
@@ -35,9 +43,11 @@
             @change="fetchList"
           />
 
-          <el-button type="primary" plain @click="fetchList">
-            <el-icon><Refresh /></el-icon>
-            重新整理
+          <el-button type="primary" icon="Search" @click="fetchList">
+            查詢
+          </el-button>
+          <el-button @click="handleReset">
+            重設
           </el-button>
 
           <el-button type="info" @click="handleDownloadBlank" :loading="downloadingBlank">
@@ -238,6 +248,7 @@ const saving = ref(false)
 const downloadingBlank = ref(false)
 
 const vehicles = ref<VehicleDTO[]>([])
+const searchQuery = ref('')
 const queryVehicleId = ref<string>()
 const dateRange = ref<[string, string]>()
 
@@ -286,7 +297,8 @@ async function fetchList() {
       pageSize: pageSize.value,
       vehicleId: queryVehicleId.value,
       startDate: dateRange.value?.[0],
-      endDate: dateRange.value?.[1]
+      endDate: dateRange.value?.[1],
+      q: searchQuery.value || undefined
     })
     records.value = res.data
     total.value = res.meta.total
@@ -295,6 +307,14 @@ async function fetchList() {
   } finally {
     loading.value = false
   }
+}
+
+function handleReset() {
+  searchQuery.value = ''
+  queryVehicleId.value = undefined
+  dateRange.value = undefined
+  page.value = 1
+  fetchList()
 }
 
 function openCreateDialog() {

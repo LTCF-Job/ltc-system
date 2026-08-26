@@ -4,12 +4,20 @@
       <!-- 頂部篩選與操作列 -->
       <el-row :gutter="16" justify="space-between" align="middle" style="margin-bottom: 16px;">
         <el-col :span="18">
-          <div class="filter-wrapper">
+          <div class="filter-wrapper" style="display: flex; gap: 8px;">
+            <el-input
+              v-model="searchQuery"
+              placeholder="搜尋信箱／顯示名稱"
+              clearable
+              style="width: 220px;"
+              @keyup.enter="fetchRecipients"
+            />
+
             <el-select
               v-model="selectedTopic"
               placeholder="通知主題篩選"
               clearable
-              style="width: 180px;"
+              style="width: 160px;"
               @change="fetchRecipients"
             >
               <el-option
@@ -19,6 +27,13 @@
                 :value="key"
               />
             </el-select>
+
+            <el-button type="primary" icon="Search" @click="fetchRecipients">
+              查詢
+            </el-button>
+            <el-button @click="handleReset">
+              重設
+            </el-button>
           </div>
         </el-col>
         <el-col :span="6" class="actions-col">
@@ -59,7 +74,11 @@
             />
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="建立時間" width="170" />
+        <el-table-column prop="createdAt" label="建立時間" width="170" align="center">
+          <template #default="{ row }">
+            <span>{{ formatDateTime(row.createdAt) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column
           v-if="authStore.can('admin')"
           label="操作"
@@ -138,6 +157,7 @@ import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { formatDateTime } from '@/utils/formatters'
 import {
   listNotificationRecipients,
   createNotificationRecipient,
@@ -154,6 +174,7 @@ const authStore = useAuthStore()
 
 const recipientList = ref<NotificationRecipientDTO[]>([])
 const loading = ref(false)
+const searchQuery = ref('')
 const selectedTopic = ref<string | undefined>(undefined)
 
 const dialogVisible = ref(false)
@@ -201,7 +222,8 @@ async function fetchRecipients() {
   loading.value = true
   try {
     const list = await listNotificationRecipients({
-      topic: selectedTopic.value
+      topic: selectedTopic.value,
+      q: searchQuery.value || undefined
     })
     recipientList.value = list
   } catch (error: any) {
@@ -209,6 +231,12 @@ async function fetchRecipients() {
   } finally {
     loading.value = false
   }
+}
+
+function handleReset() {
+  searchQuery.value = ''
+  selectedTopic.value = undefined
+  fetchRecipients()
 }
 
 function openCreateDialog() {

@@ -3,7 +3,18 @@
     <el-card shadow="never" class="table-card">
       <template #header>
         <div class="card-header">
-          <span class="title">Google 表單同步管理 (共 {{ forms.length }} 份表單)</span>
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <span class="title">Google 表單同步管理 (共 {{ forms.length }} 份表單)</span>
+            <el-input
+              v-model="searchQuery"
+              placeholder="搜尋表單名稱／表單 ID"
+              clearable
+              style="width: 240px"
+              @keyup.enter="fetchForms"
+            />
+            <el-button type="primary" icon="Search" @click="fetchForms">查詢</el-button>
+            <el-button @click="handleReset">重設</el-button>
+          </div>
           <el-button
             v-if="authStore.can('staff')"
             type="primary"
@@ -28,10 +39,10 @@
       <el-table :data="forms" border stripe v-loading="loading">
         <el-table-column prop="title" label="表單名稱" min-width="180" />
         <el-table-column prop="formId" label="表單 ID" width="180" />
-        <el-table-column label="最後同步時間" width="180">
+        <el-table-column label="最後同步時間" min-width="180" align="center">
           <template #default="{ row }">
             <span :class="{ 'text-danger font-bold': row.hasSyncAlert }">
-              {{ row.lastSyncedAt || '從未同步' }}
+              {{ formatDateTime(row.lastSyncedAt, '從未同步') }}
             </span>
             <el-tag v-if="row.hasSyncAlert" type="danger" size="small" style="margin-left: 6px">
               逾 48h
@@ -81,12 +92,14 @@ import { ref, computed, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { listForms, syncForm } from '@/api/forms'
+import { formatDateTime } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/auth'
 import type { FormDTO } from '@/types/api'
 
 const authStore = useAuthStore()
 const forms = ref<FormDTO[]>([])
 const loading = ref(false)
+const searchQuery = ref('')
 const syncingId = ref<string | null>(null)
 const syncingAll = ref(false)
 
@@ -97,10 +110,17 @@ const hasOutdatedForms = computed(() => {
 async function fetchForms() {
   loading.value = true
   try {
-    forms.value = await listForms()
+    forms.value = await listForms({
+      q: searchQuery.value || undefined
+    })
   } finally {
     loading.value = false
   }
+}
+
+function handleReset() {
+  searchQuery.value = ''
+  fetchForms()
 }
 
 async function handleSyncForm(form: any) {

@@ -5,6 +5,7 @@ export async function getTripSummaryReport(params: {
   periodYm: string
   region?: string
   vehicleId?: string
+  q?: string
 }): Promise<TripSummaryReportDTO> {
   return apiClient.get('/reports/trip-summary', { params })
 }
@@ -23,6 +24,7 @@ export async function exportTripSummaryExcel(params: {
 export async function getHsinchuSchedule(params?: {
   siteId?: string
   vehicleId?: string
+  q?: string
 }): Promise<HsinchuScheduleReportDTO> {
   return apiClient.get('/reports/hsinchu-schedule', { params })
 }

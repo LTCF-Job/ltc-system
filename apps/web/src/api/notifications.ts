@@ -11,6 +11,7 @@ import type {
 export async function listNotificationRecipients(params?: {
   topic?: string
   active?: boolean
+  q?: string
 }): Promise<NotificationRecipientDTO[]> {
   return apiClient.get('/settings/notification-recipients', { params })
 }
@@ -38,6 +39,7 @@ export async function listNotificationLogs(params?: {
   pageSize?: number
   topic?: string
   status?: string
+  q?: string
 }): Promise<Paged<NotificationLogDTO>> {
   return apiClient.get('/notifications/logs', { params })
 }

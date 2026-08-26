@@ -197,13 +197,17 @@
 
           <el-table :data="recentExports" border stripe size="small">
             <el-table-column prop="periodYm" label="申報年月" width="100" />
-            <el-table-column prop="region" label="區域" width="80" align="center">
+            <el-table-column prop="region" label="區域" width="90" align="center">
               <template #default="{ row }">
-                {{ row.region ? REGION_LABELS[row.region as 'miaoli'|'hsinchu'] : '全區' }}
+                {{ row.region ? (REGION_LABELS[row.region] || row.region) : '全區' }}
               </template>
             </el-table-column>
             <el-table-column prop="totalRows" label="總趟數" width="80" align="center" />
-            <el-table-column prop="createdAt" label="匯出時間" min-width="150" />
+            <el-table-column prop="createdAt" label="匯出時間" min-width="170" align="center">
+              <template #default="{ row }">
+                <span>{{ formatDateTime(row.createdAt) }}</span>
+              </template>
+            </el-table-column>
             <el-table-column label="狀態" width="90" align="center">
               <template #default="{ row }">
                 <el-tag size="small" :type="row.status === 'succeeded' ? 'success' : 'danger'">
@@ -261,6 +265,7 @@ import {
 
 import { getDashboardMetrics } from '@/api/dashboard'
 import { getDashboardStats } from '@/api/exports'
+import { formatDateTime } from '@/utils/formatters'
 import { REGION_LABELS, EXPORT_STATUS_LABELS } from '@/types/domain'
 import type { DashboardMetricsDTO, ExportJobDTO } from '@/types/api'
 

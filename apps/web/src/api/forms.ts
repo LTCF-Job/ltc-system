@@ -6,8 +6,8 @@ import type {
   BatchMappingRequest
 } from '@/types/api'
 
-export async function listForms(): Promise<FormDTO[]> {
-  return apiClient.get('/forms')
+export async function listForms(params?: { q?: string }): Promise<FormDTO[]> {
+  return apiClient.get('/forms', { params })
 }
 
 export async function syncForm(formId: string): Promise<{ syncedRows: number; newColumns: number }> {

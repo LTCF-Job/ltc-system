@@ -12,6 +12,7 @@ export async function listMaintenance(params?: {
   vehicleId?: string
   startDate?: string
   endDate?: string
+  q?: string
 }): Promise<Paged<MaintenanceLogDTO>> {
   const res = await apiClient.get<MaintenanceLogDTO[]>('/vehicles/maintenance', { params })
   return {

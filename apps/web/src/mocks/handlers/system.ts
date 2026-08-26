@@ -23,12 +23,25 @@ export const systemHandlers = [
     const url = new URL(request.url)
     const action = url.searchParams.get('action')
     const entityType = url.searchParams.get('entityType')
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
     let list = [...mockAuditLogs]
     if (action) {
       list = list.filter((a) => a.action === action)
     }
     if (entityType) {
       list = list.filter((a) => a.entityType === entityType)
+    }
+    if (q) {
+      list = list.filter(
+        (a) =>
+          a.action.toLowerCase().includes(q) ||
+          a.entityType.toLowerCase().includes(q) ||
+          (a.entityId && a.entityId.toLowerCase().includes(q)) ||
+          ((a as any).actorName && (a as any).actorName.toLowerCase().includes(q)) ||
+          ((a as any).beforeData && JSON.stringify((a as any).beforeData).toLowerCase().includes(q)) ||
+          ((a as any).afterData && JSON.stringify((a as any).afterData).toLowerCase().includes(q))
+      )
     }
     return HttpResponse.json({
       data: list,
@@ -45,9 +58,19 @@ export const systemHandlers = [
   http.get('/api/v1/settings/notification-recipients', ({ request }) => {
     const url = new URL(request.url)
     const topic = url.searchParams.get('topic')
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
     let list = [...mockNotificationRecipients]
     if (topic) {
       list = list.filter((r) => r.topic === topic)
+    }
+    if (q) {
+      list = list.filter(
+        (r) =>
+          r.email.toLowerCase().includes(q) ||
+          (r.displayName && r.displayName.toLowerCase().includes(q)) ||
+          (r.createdByName && r.createdByName.toLowerCase().includes(q))
+      )
     }
     return HttpResponse.json(list)
   }),
@@ -85,9 +108,20 @@ export const systemHandlers = [
   http.get('/api/v1/notifications/logs', ({ request }) => {
     const url = new URL(request.url)
     const topic = url.searchParams.get('topic')
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
     let list = [...mockNotificationLogs]
     if (topic) {
       list = list.filter((l) => l.topic === topic)
+    }
+    if (q) {
+      list = list.filter(
+        (l) =>
+          l.subject.toLowerCase().includes(q) ||
+          (l.contentSummary && l.contentSummary.toLowerCase().includes(q)) ||
+          (l.recipientEmails && l.recipientEmails.some((e) => e.toLowerCase().includes(q))) ||
+          (l.triggeredByName && l.triggeredByName.toLowerCase().includes(q))
+      )
     }
     return HttpResponse.json({
       data: list,

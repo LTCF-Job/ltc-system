@@ -32,11 +32,21 @@
 
           <el-col :span="12">
             <el-form-item label="申報地區">
-              <el-radio-group v-model="form.region">
-                <el-radio value="">全部地區</el-radio>
-                <el-radio value="miaoli">苗栗</el-radio>
-                <el-radio value="hsinchu">新竹</el-radio>
-              </el-radio-group>
+              <el-select
+                v-model="form.region"
+                placeholder="全部地區"
+                clearable
+                filterable
+                style="width: 180px"
+              >
+                <el-option label="全部地區" value="" />
+                <el-option
+                  v-for="(label, key) in REGION_LABELS"
+                  :key="key"
+                  :label="label"
+                  :value="key"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
@@ -59,6 +69,7 @@
             :loading="checking"
             @click="handleRunPrecheck"
           >
+            <el-icon><Warning /></el-icon>
             執行前置檢核
           </el-button>
 
@@ -67,7 +78,8 @@
             :loading="exporting"
             @click="handleStartExport"
           >
-            開始產生匯出檔
+            <el-icon><Download /></el-icon>
+            開始產生申報檔
           </el-button>
         </div>
       </el-form>
@@ -130,9 +142,9 @@
 
       <el-table :data="historyJobs" border stripe v-loading="loadingHistory">
         <el-table-column prop="periodYm" label="申報年月" width="110" />
-        <el-table-column prop="region" label="區域" width="90">
+        <el-table-column prop="region" label="區域" width="100" align="center">
           <template #default="{ row }">
-            {{ row.region ? REGION_LABELS[row.region as 'miaoli'|'hsinchu'] : '全區' }}
+            {{ row.region ? (REGION_LABELS[row.region] || row.region) : '全區' }}
           </template>
         </el-table-column>
         <el-table-column label="模式" width="140">
@@ -142,7 +154,11 @@
         </el-table-column>
         <el-table-column prop="totalCases" label="個案數" width="90" align="center" />
         <el-table-column prop="totalRows" label="總趟數" width="90" align="center" />
-        <el-table-column prop="createdAt" label="產生時間" min-width="160" />
+        <el-table-column prop="createdAt" label="產生時間" min-width="170" align="center">
+          <template #default="{ row }">
+            <span>{{ formatDateTime(row.createdAt) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="狀態" width="100" align="center">
           <template #default="{ row }">
             <el-tag size="small" :type="row.status === 'succeeded' ? 'success' : 'danger'">
@@ -173,6 +189,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PrecheckResult from '@/components/PrecheckResult.vue'
+import { formatDateTime } from '@/utils/formatters'
 import {
   precheckExport,
   createExportJob,

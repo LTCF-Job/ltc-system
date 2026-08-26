@@ -9,11 +9,19 @@
         </div>
 
         <div class="action-section">
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜尋個案姓名／代碼／地址"
+            clearable
+            style="width: 220px"
+            @keyup.enter="fetchSchedule"
+          />
+
           <el-select
             v-model="selectedSiteId"
             placeholder="全部據點"
             clearable
-            style="width: 180px"
+            style="width: 150px"
             @change="fetchSchedule"
           >
             <el-option
@@ -28,7 +36,7 @@
             v-model="selectedVehicleId"
             placeholder="全部車輛"
             clearable
-            style="width: 180px"
+            style="width: 150px"
             @change="fetchSchedule"
           >
             <el-option
@@ -39,9 +47,11 @@
             />
           </el-select>
 
-          <el-button type="primary" plain @click="fetchSchedule">
-            <el-icon><Refresh /></el-icon>
-            重新整理
+          <el-button type="primary" icon="Search" @click="fetchSchedule">
+            查詢
+          </el-button>
+          <el-button @click="handleReset">
+            重設
           </el-button>
 
           <el-button type="success" @click="handleExportExcel" :loading="exporting">
@@ -61,7 +71,7 @@
     <div class="print-header">
       <h1 class="print-title">長照交通接送 新竹區搭車順序時刻表</h1>
       <div class="print-meta">
-        <span>產生時間：{{ scheduleData?.generatedAt || '-' }}</span>
+        <span>產生時間：{{ formatDateTime(scheduleData?.generatedAt) }}</span>
         <span>區域：新竹區</span>
       </div>
     </div>
@@ -188,6 +198,7 @@ import {
 import { ElMessage } from 'element-plus'
 import { getHsinchuSchedule, exportHsinchuScheduleExcel } from '@/api/reports'
 import { listSites, listVehicles } from '@/api/masters'
+import { formatDateTime } from '@/utils/formatters'
 import type { HsinchuScheduleReportDTO, SiteDTO, VehicleDTO } from '@/types/api'
 
 const loading = ref(false)
@@ -196,6 +207,7 @@ const scheduleData = ref<HsinchuScheduleReportDTO | null>(null)
 
 const sites = ref<SiteDTO[]>([])
 const vehicles = ref<VehicleDTO[]>([])
+const searchQuery = ref('')
 const selectedSiteId = ref<string>()
 const selectedVehicleId = ref<string>()
 
@@ -217,13 +229,21 @@ async function fetchSchedule() {
   try {
     scheduleData.value = await getHsinchuSchedule({
       siteId: selectedSiteId.value,
-      vehicleId: selectedVehicleId.value
+      vehicleId: selectedVehicleId.value,
+      q: searchQuery.value || undefined
     })
   } catch (err: any) {
     ElMessage.error(err.message || '查詢新竹接送時刻表失敗')
   } finally {
     loading.value = false
   }
+}
+
+function handleReset() {
+  searchQuery.value = ''
+  selectedSiteId.value = undefined
+  selectedVehicleId.value = undefined
+  fetchSchedule()
 }
 
 async function handleExportExcel() {

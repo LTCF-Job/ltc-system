@@ -9,11 +9,19 @@
       @size-change="onSizeChange"
     >
       <template #filter>
+        <el-input
+          v-model="queryKeyword"
+          placeholder="搜尋操作者／實體編號／動作"
+          clearable
+          style="width: 240px;"
+          @keyup.enter="fetchAuditLogs"
+        />
+
         <el-select
           v-model="queryAction"
           placeholder="動作類型"
           clearable
-          style="width: 170px;"
+          style="width: 150px;"
           @change="fetchAuditLogs"
         >
           <el-option
@@ -28,7 +36,7 @@
           v-model="queryEntityType"
           placeholder="異動實體"
           clearable
-          style="width: 170px;"
+          style="width: 150px;"
           @change="fetchAuditLogs"
         >
           <el-option
@@ -42,11 +50,18 @@
         <el-button type="primary" icon="Search" @click="fetchAuditLogs">
           查詢
         </el-button>
+        <el-button @click="handleReset">
+          重設
+        </el-button>
       </template>
 
       <template #table>
         <el-table :data="auditList" stripe border style="width: 100%;">
-          <el-table-column prop="createdAt" label="操作時間" width="170" sortable />
+          <el-table-column prop="createdAt" label="操作時間" width="170" sortable align="center">
+            <template #default="{ row }">
+              <span>{{ formatDateTime(row.createdAt) }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="操作者" width="160">
             <template #default="{ row }">
               <span>{{ (row as any).actorName || '系統' }}</span>
@@ -108,7 +123,7 @@
     >
       <div v-if="selectedLog" class="dialog-content">
         <el-descriptions :column="2" border style="margin-bottom: 16px;">
-          <el-descriptions-item label="操作時間">{{ selectedLog.createdAt }}</el-descriptions-item>
+          <el-descriptions-item label="操作時間">{{ formatDateTime(selectedLog.createdAt) }}</el-descriptions-item>
           <el-descriptions-item label="操作人員">{{ selectedLog.actorName }} ({{ selectedLog.actorRole }})</el-descriptions-item>
           <el-descriptions-item label="動作類型">{{ AUDIT_ACTION_LABELS[selectedLog.action] }}</el-descriptions-item>
           <el-descriptions-item label="目標實體">{{ AUDIT_ENTITY_LABELS[selectedLog.entityType] }} ({{ selectedLog.entityName || selectedLog.entityId }})</el-descriptions-item>
@@ -145,6 +160,7 @@
 import { ref, onMounted } from 'vue'
 import DataTablePage from '@/components/DataTablePage.vue'
 import { listAuditLogs } from '@/api/audit'
+import { formatDateTime } from '@/utils/formatters'
 import type { AuditLogDTO } from '@/types/api'
 import {
   AUDIT_ACTION_LABELS,
@@ -160,6 +176,7 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 
+const queryKeyword = ref('')
 const queryAction = ref<AuditAction | undefined>(undefined)
 const queryEntityType = ref<AuditEntityType | undefined>(undefined)
 
@@ -185,7 +202,6 @@ function getActionTagType(action: AuditAction): 'primary' | 'success' | 'warning
   }
 }
 
-
 async function fetchAuditLogs() {
   loading.value = true
   try {
@@ -193,13 +209,22 @@ async function fetchAuditLogs() {
       page: page.value,
       pageSize: pageSize.value,
       action: queryAction.value,
-      entityType: queryEntityType.value
+      entityType: queryEntityType.value,
+      q: queryKeyword.value || undefined
     })
     auditList.value = res.data
     total.value = res.meta?.total || res.data.length
   } finally {
     loading.value = false
   }
+}
+
+function handleReset() {
+  queryKeyword.value = ''
+  queryAction.value = undefined
+  queryEntityType.value = undefined
+  page.value = 1
+  fetchAuditLogs()
 }
 
 function onPageChange(p: number) {

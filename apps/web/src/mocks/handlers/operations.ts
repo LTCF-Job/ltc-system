@@ -12,9 +12,21 @@ export const operationsHandlers = [
   http.get('/api/v1/vehicles/maintenance', ({ request }) => {
     const url = new URL(request.url)
     const vehicleId = url.searchParams.get('vehicleId')
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
     let list = [...mockMaintenanceLogs]
     if (vehicleId) {
       list = list.filter((m) => m.vehicleId === vehicleId)
+    }
+    if (q) {
+      list = list.filter(
+        (m) =>
+          (m.vehicleName && m.vehicleName.toLowerCase().includes(q)) ||
+          (m.plateNo && m.plateNo.toLowerCase().includes(q)) ||
+          (m.items && m.items.toLowerCase().includes(q)) ||
+          (m.vendor && m.vendor.toLowerCase().includes(q)) ||
+          (m.note && m.note.toLowerCase().includes(q))
+      )
     }
     return HttpResponse.json({
       data: list,
@@ -78,9 +90,18 @@ export const operationsHandlers = [
   http.get('/api/v1/attendance', ({ request }) => {
     const url = new URL(request.url)
     const driverId = url.searchParams.get('driverId')
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
     const report = { ...mockAttendanceReport }
     if (driverId) {
       report.drivers = report.drivers.filter((d) => d.driverId === driverId)
+    }
+    if (q) {
+      report.drivers = report.drivers.filter(
+        (d) =>
+          d.driverName.toLowerCase().includes(q) ||
+          d.driverCode.toLowerCase().includes(q)
+      )
     }
     return HttpResponse.json(report)
   }),
@@ -102,9 +123,19 @@ export const operationsHandlers = [
   http.get('/api/v1/fuel-logs', ({ request }) => {
     const url = new URL(request.url)
     const vehicleId = url.searchParams.get('vehicleId')
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
     let list = [...mockFuelLogs]
     if (vehicleId) {
       list = list.filter((f) => f.vehicleId === vehicleId)
+    }
+    if (q) {
+      list = list.filter(
+        (f) =>
+          (f.vehicleName && f.vehicleName.toLowerCase().includes(q)) ||
+          (f.plateNo && f.plateNo.toLowerCase().includes(q)) ||
+          (f.driverName && f.driverName.toLowerCase().includes(q))
+      )
     }
     return HttpResponse.json({
       data: list,

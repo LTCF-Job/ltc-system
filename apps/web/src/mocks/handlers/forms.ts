@@ -2,8 +2,18 @@ import { http, HttpResponse } from 'msw'
 import { mockForms, mockFormColumns } from '../data/mockData'
 
 export const formsHandlers = [
-  http.get('/api/v1/forms', () => {
-    return HttpResponse.json(mockForms)
+  http.get('/api/v1/forms', ({ request }) => {
+    const url = new URL(request.url)
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+    let list = [...mockForms]
+    if (q) {
+      list = list.filter(
+        (f) =>
+          f.title.toLowerCase().includes(q) ||
+          f.formId.toLowerCase().includes(q)
+      )
+    }
+    return HttpResponse.json(list)
   }),
 
   http.post('/api/v1/forms/:id/sync', () => {

@@ -6,22 +6,30 @@
         <div class="tab-content" v-loading="attendanceLoading">
           <!-- 出勤過濾與統計列 -->
           <div class="filter-header">
-            <div class="left-controls">
+            <div class="left-controls" style="display: flex; gap: 8px; align-items: center;">
               <el-date-picker
                 v-model="attendanceMonth"
                 type="month"
                 placeholder="選擇月份"
                 value-format="YYYY-MM"
                 :clearable="false"
-                style="width: 150px"
+                style="width: 140px"
                 @change="fetchAttendance"
+              />
+
+              <el-input
+                v-model="attendanceQuery"
+                placeholder="搜尋司機姓名／代碼"
+                clearable
+                style="width: 180px"
+                @keyup.enter="fetchAttendance"
               />
 
               <el-select
                 v-model="selectedDriverId"
                 placeholder="全部司機"
                 clearable
-                style="width: 160px"
+                style="width: 140px"
                 @change="fetchAttendance"
               >
                 <el-option
@@ -32,9 +40,11 @@
                 />
               </el-select>
 
-              <el-button type="primary" plain @click="fetchAttendance">
-                <el-icon><Refresh /></el-icon>
-                重新整理
+              <el-button type="primary" icon="Search" @click="fetchAttendance">
+                查詢
+              </el-button>
+              <el-button @click="handleResetAttendance">
+                重設
               </el-button>
             </div>
 
@@ -125,12 +135,20 @@
           <!-- 油資過濾與統計卡片 -->
           <div class="fuel-top-section">
             <div class="filter-header">
-              <div class="left-controls">
+              <div class="left-controls" style="display: flex; gap: 8px; align-items: center;">
+                <el-input
+                  v-model="fuelQuery"
+                  placeholder="搜尋車牌／車名／司機"
+                  clearable
+                  style="width: 180px"
+                  @keyup.enter="fetchFuelLogs"
+                />
+
                 <el-select
                   v-model="fuelVehicleId"
                   placeholder="全部車輛"
                   clearable
-                  style="width: 160px"
+                  style="width: 140px"
                   @change="fetchFuelLogs"
                 >
                   <el-option
@@ -145,7 +163,7 @@
                   v-model="fuelDriverId"
                   placeholder="全部司機"
                   clearable
-                  style="width: 160px"
+                  style="width: 140px"
                   @change="fetchFuelLogs"
                 >
                   <el-option
@@ -163,13 +181,15 @@
                   start-placeholder="開始日期"
                   end-placeholder="結束日期"
                   value-format="YYYY-MM-DD"
-                  style="width: 240px"
+                  style="width: 230px"
                   @change="fetchFuelLogs"
                 />
 
-                <el-button type="primary" plain @click="fetchFuelLogs">
-                  <el-icon><Refresh /></el-icon>
-                  重新整理
+                <el-button type="primary" icon="Search" @click="fetchFuelLogs">
+                  查詢
+                </el-button>
+                <el-button @click="handleResetFuel">
+                  重設
                 </el-button>
               </div>
 
@@ -435,6 +455,7 @@ const activeTab = ref('attendance')
 const attendanceLoading = ref(false)
 const attendanceSaving = ref(false)
 const attendanceMonth = ref(new Date().toISOString().slice(0, 7))
+const attendanceQuery = ref('')
 const selectedDriverId = ref<string>()
 const attendanceReport = ref<MonthAttendanceReportDTO | null>(null)
 
@@ -461,6 +482,7 @@ const totalAttendanceStats = computed(() => {
 // --- 油資相關狀態 ---
 const fuelLoading = ref(false)
 const fuelSaving = ref(false)
+const fuelQuery = ref('')
 const fuelVehicleId = ref<string>()
 const fuelDriverId = ref<string>()
 const fuelDateRange = ref<[string, string]>()
@@ -515,13 +537,20 @@ async function fetchAttendance() {
   try {
     attendanceReport.value = await getMonthAttendance(
       attendanceMonth.value,
-      selectedDriverId.value
+      selectedDriverId.value,
+      attendanceQuery.value || undefined
     )
   } catch (err: any) {
     ElMessage.error(err.message || '查詢出勤紀錄失敗')
   } finally {
     attendanceLoading.value = false
   }
+}
+
+function handleResetAttendance() {
+  attendanceQuery.value = ''
+  selectedDriverId.value = undefined
+  fetchAttendance()
 }
 
 function getDayKey(day: number): string {
@@ -614,7 +643,8 @@ async function fetchFuelLogs() {
       vehicleId: fuelVehicleId.value,
       driverId: fuelDriverId.value,
       startDate: fuelDateRange.value?.[0],
-      endDate: fuelDateRange.value?.[1]
+      endDate: fuelDateRange.value?.[1],
+      q: fuelQuery.value || undefined
     })
     fuelLogs.value = res.data
     fuelTotal.value = res.meta.total
@@ -623,6 +653,15 @@ async function fetchFuelLogs() {
   } finally {
     fuelLoading.value = false
   }
+}
+
+function handleResetFuel() {
+  fuelQuery.value = ''
+  fuelVehicleId.value = undefined
+  fuelDriverId.value = undefined
+  fuelDateRange.value = undefined
+  fuelPage.value = 1
+  fetchFuelLogs()
 }
 
 function openFuelDialog(row?: any) {
