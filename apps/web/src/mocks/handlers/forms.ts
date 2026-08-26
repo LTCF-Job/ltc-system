@@ -16,8 +16,63 @@ export const formsHandlers = [
     return HttpResponse.json(list)
   }),
 
-  http.post('/api/v1/forms/:id/sync', () => {
-    return HttpResponse.json({ syncedRows: 24, newColumns: 1 })
+  http.post('/api/v1/forms', async ({ request }) => {
+    const body = (await request.json()) as any
+    const newForm = {
+      id: `form_${Date.now()}`,
+      formId: `form_${Date.now()}`,
+      title: body.title,
+      sheetUrl: body.sheetUrl,
+      vehicleId: body.vehicleId || 'veh_1',
+      vehicleName: body.vehicleName || '竹北三車',
+      region: body.region || 'hsinchu',
+      sheetTabs: body.sheetTabs || ['工作表1'],
+      activeTab: body.activeTab || '工作表1',
+      syncedMonths: [],
+      lastSyncedAt: undefined,
+      totalColumns: 40,
+      pendingColumns: 2,
+      hasSyncAlert: false
+    }
+    mockForms.unshift(newForm)
+    return HttpResponse.json(newForm)
+  }),
+
+  http.delete('/api/v1/forms/:id', ({ params }) => {
+    const idx = mockForms.findIndex((f) => f.id === params.id)
+    if (idx !== -1) {
+      mockForms.splice(idx, 1)
+    }
+    return HttpResponse.json({ success: true })
+  }),
+
+  http.post('/api/v1/forms/:id/sync', async ({ params, request }) => {
+    let body: any = {}
+    try {
+      body = (await request.json()) as any
+    } catch {
+      // no body
+    }
+    const form = mockForms.find((f) => f.id === params.id)
+    if (form) {
+      form.lastSyncedAt = new Date().toISOString().replace('T', ' ').substring(0, 16)
+      form.hasSyncAlert = false
+      if (body.month) {
+        if (!form.syncedMonths) form.syncedMonths = []
+        if (!form.syncedMonths.includes(body.month)) {
+          form.syncedMonths.push(body.month)
+        }
+      }
+      if (body.sheetTab) {
+        form.activeTab = body.sheetTab
+      }
+    }
+    return HttpResponse.json({
+      syncedRows: 24,
+      newColumns: 1,
+      month: body.month || '2026-08',
+      sheetTab: body.sheetTab || '8月回報'
+    })
   }),
 
   http.get('/api/v1/forms/columns', ({ request }) => {
