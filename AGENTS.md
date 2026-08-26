@@ -32,6 +32,7 @@
 
 - 先檢查 `git status`，不覆寫、刪除或重設未被要求處理的修改。
 - application source code logic 變更前，讀取相關架構 skill，並依目前專案的 workflow／註解規則執行。
+- 前端修改完成後，一律執行對應的 E2E 測試或智慧改動偵測指令（`npm run test:e2e:changed`），確保修改未破壞既有功能。
 - 文件與 agent 規則修改應保持最小範圍；不因新增入口而複製完整 skill 內容。
 - 不自行 commit、push、rebase、merge 或執行破壞性 Git 操作。
 - 任何「已驗證」的說法都要對應實際執行的檢查、測試或明確的靜態證據；未執行的 runtime 行為要標示為未驗證。
@@ -39,8 +40,22 @@
 ## Repository commands
 
 - Backend：在 `apps/api` 執行 `go test ./...`，需要編譯檢查時執行 `go build ./...`。
-- Frontend：在 `apps/web` 執行 `npm run type-check` 與 `npm run build`。
-- Browser E2E：先檢查 `tests/e2e` 與目前可用的 Playwright 設定，再執行，不把 E2E 成功推論成正式環境驗證。
+- Frontend Type Check & Build：在 `apps/web` 執行 `npm run type-check` 與 `npm run build`。
+- Frontend E2E Tests（Playwright + MSW）：
+  - 跑全量 E2E 測試：`npm run test:e2e`（或根目錄 `make test-web-e2e`）。
+  - 跑改動對應 E2E 測試：`npm run test:e2e:changed`（或根目錄 `make test-web-e2e-changed`）。
+  - 單獨跑特定功能模組 E2E 測試：
+    - 認證與權限：`npm run test:e2e:auth`
+    - 總覽儀表板：`npm run test:e2e:dashboard`
+    - 個案與排班：`npm run test:e2e:cases`
+    - 基礎主檔：`npm run test:e2e:masters`
+    - 表單與對應：`npm run test:e2e:forms`
+    - 搭乘月曆矩陣：`npm run test:e2e:rides`
+    - 異常集中處理：`npm run test:e2e:issues`
+    - 營運報表：`npm run test:e2e:reports`
+    - 車輛與出勤：`npm run test:e2e:operations`
+    - 系統設定與稽核：`npm run test:e2e:settings`
+    - 政府申報匯出：`npm run test:e2e:exports`
 
 ## Language
 
