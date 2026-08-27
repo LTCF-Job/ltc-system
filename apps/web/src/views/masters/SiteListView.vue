@@ -57,13 +57,11 @@
           <el-table-column prop="name" label="據點名稱" width="160" />
           <el-table-column prop="region" label="區域" width="120" align="center">
             <template #default="{ row }">
-              <el-tag size="small" :type="row.region === 'miaoli' ? 'warning' : 'primary'">
-                {{ REGION_LABELS[row.region as Region] || row.region }}
-              </el-tag>
+              <span>{{ REGION_LABELS[row.region as Region] || row.region }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="address" label="據點地址" min-width="240" />
-          <el-table-column label="開放時間" width="180">
+          <el-table-column prop="address" label="據點地址" min-width="180" />
+          <el-table-column label="開放時間" width="220" class-name="open-days-column">
             <template #default="{ row }">
               {{ row.openDays?.map((d: number) => `週${'一二三四五六日'[d-1]}`).join('、') || '未設定' }}
             </template>
@@ -253,3 +251,29 @@ async function handleDelete(row: any) {
 
 executeFetch()
 </script>
+
+<style scoped>
+.region-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  white-space: nowrap;
+}
+
+.region-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--el-border-color);
+  border-radius: 50%;
+}
+
+.region-label.region-miaoli::before { border-color: var(--el-color-warning); }
+.region-label.region-hsinchu::before { border-color: var(--el-color-primary); }
+
+:deep(.open-days-column .cell) {
+  white-space: nowrap;
+}
+</style>

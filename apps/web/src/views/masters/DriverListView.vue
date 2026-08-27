@@ -49,18 +49,22 @@
       <!-- 表格 -->
       <template #table>
         <el-table :data="drivers" border stripe style="width: 100%">
-          <el-table-column prop="name" label="司機姓名" width="120" />
+          <el-table-column prop="name" label="司機姓名" width="130">
+            <template #default="{ row }"><span class="driver-name">{{ row.name }}</span></template>
+          </el-table-column>
           <el-table-column prop="nationalId" label="身分證字號" width="140" align="center">
             <template #default="{ row }">
-              <span class="font-mono">{{ row.nationalId || '-' }}</span>
+              <span class="driver-data font-mono">{{ row.nationalId || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="phone" label="聯絡電話" width="130" align="center">
             <template #default="{ row }">
-              <span>{{ row.phone || '-' }}</span>
+              <span class="driver-data">{{ row.phone || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="email" label="電子信箱" min-width="180" />
+          <el-table-column prop="email" label="電子信箱" min-width="200">
+            <template #default="{ row }"><span class="driver-data">{{ row.email || '-' }}</span></template>
+          </el-table-column>
           <el-table-column label="目前指派主要車輛" min-width="180">
             <template #default="{ row }">
               <div v-if="getPrimaryVehicleDisplay(row)" class="assigned-vehicle-info">
@@ -69,7 +73,7 @@
                   ({{ getPrimaryVehicleDisplay(row)?.plateNo }})
                 </span>
               </div>
-              <el-tag v-else size="small" type="info">未指派</el-tag>
+              <span v-else class="assignment-empty">尚未指派</span>
             </template>
           </el-table-column>
           <el-table-column prop="active" label="狀態" width="130" align="center">
@@ -439,31 +443,23 @@ executeFetch()
 }
 
 .status-toggle-pill.is-active {
-  background-color: #ecfdf5;
   color: #047857;
-  border-color: #a7f3d0;
+  border-color: transparent;
 }
 
 .status-toggle-pill.is-active:hover {
-  background-color: #d1fae5;
-  border-color: #6ee7b7;
+  border-color: #10b981;
   color: #065f46;
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(5, 150, 105, 0.18);
 }
 
 .status-toggle-pill.is-inactive {
-  background-color: #f3f4f6;
   color: #4b5563;
-  border-color: #e5e7eb;
+  border-color: transparent;
 }
 
 .status-toggle-pill.is-inactive:hover {
-  background-color: #e5e7eb;
-  border-color: #d1d5db;
+  border-color: #9ca3af;
   color: #1f2937;
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
 }
 
 .status-toggle-pill.is-readonly {
@@ -538,6 +534,22 @@ executeFetch()
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.driver-name,
+.vehicle-name {
+  font-weight: 650;
+  color: var(--el-text-color-primary);
+}
+
+.driver-data {
+  color: var(--el-text-color-regular);
+  letter-spacing: 0.01em;
+}
+
+.assignment-empty {
+  color: var(--el-text-color-placeholder);
+  font-size: 13px;
 }
 
 .vehicle-plate {

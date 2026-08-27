@@ -68,7 +68,7 @@
       <el-table :data="records" border stripe size="small">
         <el-table-column prop="serviceDate" label="保養日期" width="110" align="center">
           <template #default="{ row }">
-            <el-tag size="small" type="info">{{ row.serviceDate?.slice(0, 10) }}</el-tag>
+            <span>{{ row.serviceDate?.slice(0, 10) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="vehicleName" label="車輛名稱" width="120" />
@@ -86,7 +86,7 @@
         </el-table-column>
         <el-table-column prop="cost" label="花費金額" width="110" align="right">
           <template #default="{ row }">
-            <span class="font-bold text-primary">${{ Number(row.cost).toLocaleString() }}</span>
+            <span class="font-bold">${{ Number(row.cost).toLocaleString() }}</span>
           </template>
         </el-table-column>
         <el-table-column label="收據憑證" width="100" align="center">
@@ -241,6 +241,7 @@ import {
 } from '@/api/maintenance'
 import { listVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
+import { downloadBlob } from '@/utils/download'
 import type { MaintenanceLogDTO, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
@@ -389,14 +390,7 @@ async function handleDownloadBlank() {
   downloadingBlank.value = true
   try {
     const blob = await downloadBlankMaintenanceExcel()
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = '車輛定期保養檢查表_空白範本.xlsx'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
+    downloadBlob(blob, '車輛定期保養檢查表_空白範本.xlsx')
     ElMessage.success('空白保養表下載成功')
   } catch (err: any) {
     ElMessage.error(err.message || '下載空白保養表失敗')
@@ -429,7 +423,7 @@ onMounted(async () => {
     .page-title {
       font-size: 18px;
       font-weight: bold;
-      color: var(--el-color-primary);
+      color: var(--el-text-color-primary);
       margin: 0 0 4px 0;
     }
 
@@ -449,10 +443,6 @@ onMounted(async () => {
 
 .font-bold {
   font-weight: 600;
-}
-
-.text-primary {
-  color: var(--el-color-primary);
 }
 
 .text-muted {

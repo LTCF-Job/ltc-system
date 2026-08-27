@@ -105,9 +105,9 @@
                   :value="key"
                 />
               </el-select>
-              <el-tag v-else size="small" :type="row.region === 'miaoli' ? 'warning' : 'primary'">
+              <span v-else>
                 {{ REGION_LABELS[row.region as Region] || row.region }}
-              </el-tag>
+              </span>
             </template>
           </el-table-column>
 
@@ -550,5 +550,25 @@ executeFetch()
 .inactive-pill .radio-dot {
   background-color: #6b7280;
 }
+
+.region-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  white-space: nowrap;
+}
+
+.region-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--el-border-color);
+  border-radius: 50%;
+}
+
+.region-label.region-miaoli::before { border-color: var(--el-color-warning); }
+.region-label.region-hsinchu::before { border-color: var(--el-color-primary); }
 </style>
 
