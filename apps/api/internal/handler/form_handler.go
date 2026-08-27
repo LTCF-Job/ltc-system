@@ -14,7 +14,7 @@ import (
 type FormServiceInterface interface {
 	ListForms(ctx context.Context) ([]service.FormListItemDTO, error)
 	ListGoogleDriveFiles(ctx context.Context) ([]service.GoogleDriveFileDTO, error)
-	InspectGoogleSheet(ctx context.Context, inputURLOrID string) (*service.InspectSheetDTO, error)
+	InspectGoogleSheet(ctx context.Context, inputURLOrID string, accessToken string) (*service.InspectSheetDTO, error)
 	CreateFormAssociation(ctx context.Context, req service.CreateFormAssociationRequest) (*service.FormListItemDTO, error)
 	DeleteFormAssociation(ctx context.Context, formID string) error
 	SyncForm(ctx context.Context, formID string, opts *service.SyncFormOptions) (map[string]interface{}, error)
@@ -48,6 +48,7 @@ func (h *FormHandler) InspectGoogleSheet(c *gin.Context) {
 	var req struct {
 		SheetURL      string `json:"sheetUrl"`
 		SpreadsheetID string `json:"spreadsheetId"`
+		AccessToken   string `json:"accessToken"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		middleware.RespondError(c, http.StatusBadRequest, "INVALID_PAYLOAD", "請提供有效之試算表連結或 ID", nil)
@@ -59,7 +60,7 @@ func (h *FormHandler) InspectGoogleSheet(c *gin.Context) {
 		target = req.SpreadsheetID
 	}
 
-	result, err := h.svc.InspectGoogleSheet(c.Request.Context(), target)
+	result, err := h.svc.InspectGoogleSheet(c.Request.Context(), target, req.AccessToken)
 	if err != nil {
 		middleware.RespondError(c, http.StatusBadRequest, "INSPECT_SHEET_FAILED", err.Error(), nil)
 		return

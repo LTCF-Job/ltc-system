@@ -769,7 +769,9 @@ async function executeSyncForm() {
     const res = await syncForm(targetForm.value.id, {
       month: syncMonth.value,
       sheetTab: syncTab.value,
-      force: forceSyncConfirm.value
+      force: forceSyncConfirm.value,
+      spreadsheetId: targetForm.value.sheetUrl,
+      accessToken: currentAccessToken.value || pickerAccessToken.value || undefined
     })
     ElMessage.success(`【${targetForm.value.title}】(${syncMonth.value} / ${syncTab.value}) 同步完成：新增 ${res.syncedRows} 筆紀錄、${res.newColumns} 個新欄位`)
     syncDialogVisible.value = false
@@ -783,7 +785,11 @@ async function syncAllForms() {
   syncingAll.value = true
   try {
     for (const f of forms.value) {
-      await syncForm(f.id, { month: '2026-08' })
+      await syncForm(f.id, {
+        month: '2026-08',
+        spreadsheetId: f.sheetUrl,
+        accessToken: currentAccessToken.value || pickerAccessToken.value || undefined
+      })
     }
     ElMessage.success('全部表單已批次同步完成')
     fetchForms()

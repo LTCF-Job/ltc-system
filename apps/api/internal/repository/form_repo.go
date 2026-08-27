@@ -263,6 +263,7 @@ func (r *FormRepository) CorrectRideRecord(
 type GoogleFormEntity struct {
 	ID                 uuid.UUID
 	VehicleID          uuid.UUID
+	SheetID            string
 	VehicleDisplayName string
 	FormTitle          string
 	Region             string
@@ -296,7 +297,7 @@ func (r *FormRepository) ListGoogleForms(ctx context.Context) ([]GoogleFormEntit
 	}
 
 	query := `
-		SELECT f.id, f.vehicle_id, COALESCE(v.display_name, '未知車輛'), f.form_title, COALESCE(v.region, 'hsinchu'),
+		SELECT f.id, f.vehicle_id, f.sheet_id, COALESCE(v.display_name, '未知車輛'), f.form_title, COALESCE(v.region, 'hsinchu'),
 		       f.last_synced_at, f.status
 		FROM google_forms f
 		LEFT JOIN vehicles v ON f.vehicle_id = v.id
@@ -311,7 +312,7 @@ func (r *FormRepository) ListGoogleForms(ctx context.Context) ([]GoogleFormEntit
 	var forms []GoogleFormEntity
 	for rows.Next() {
 		var f GoogleFormEntity
-		if err := rows.Scan(&f.ID, &f.VehicleID, &f.VehicleDisplayName, &f.FormTitle, &f.Region, &f.LastSyncedAt, &f.Status); err == nil {
+		if err := rows.Scan(&f.ID, &f.VehicleID, &f.SheetID, &f.VehicleDisplayName, &f.FormTitle, &f.Region, &f.LastSyncedAt, &f.Status); err == nil {
 			forms = append(forms, f)
 		}
 	}

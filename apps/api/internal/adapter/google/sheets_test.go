@@ -65,14 +65,14 @@ func TestOfflineGoogleClient(t *testing.T) {
 	})
 
 	t.Run("離線模式解析試算表結構", func(t *testing.T) {
-		info, err := client.GetSpreadsheetInfo(ctx, "https://docs.google.com/spreadsheets/d/demo-id/edit")
+		info, err := client.GetSpreadsheetInfo(ctx, "https://docs.google.com/spreadsheets/d/demo-id/edit", "")
 		require.NoError(t, err)
 		assert.Equal(t, "demo-id", info.SpreadsheetID)
 		assert.NotEmpty(t, info.SheetTabs)
 	})
 
 	t.Run("離線模式讀取資料列", func(t *testing.T) {
-		rows, err := client.ReadSheetRows(ctx, "demo-id", "8月回報")
+		rows, err := client.ReadSheetRows(ctx, "demo-id", "8月回報", "")
 		require.NoError(t, err)
 		assert.NotEmpty(t, rows)
 		assert.Equal(t, "時間戳記", rows[0][0])

@@ -382,6 +382,8 @@ export interface SyncFormOptions {
   month?: string
   sheetTab?: string
   force?: boolean
+  spreadsheetId?: string
+  accessToken?: string
 }
 
 export interface FormColumnDTO {

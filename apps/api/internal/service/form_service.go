@@ -26,8 +26,8 @@ type FormRepositoryPort interface {
 // GoogleAdapterPort 定義 Google 試算表與雲端硬碟適配器介面。
 type GoogleAdapterPort interface {
 	ListDriveSheets(ctx context.Context) ([]google.DriveFileItem, error)
-	GetSpreadsheetInfo(ctx context.Context, spreadsheetID string) (*google.SpreadsheetInfo, error)
-	ReadSheetRows(ctx context.Context, spreadsheetID string, tabName string) ([][]interface{}, error)
+	GetSpreadsheetInfo(ctx context.Context, spreadsheetID string, accessToken string) (*google.SpreadsheetInfo, error)
+	ReadSheetRows(ctx context.Context, spreadsheetID string, tabName string, accessToken string) ([][]interface{}, error)
 }
 
 // FormListItemDTO 表單清單項目 DTO。
@@ -105,13 +105,16 @@ type CreateFormAssociationRequest struct {
 	Region      string   `json:"region,omitempty"`
 	SheetTabs   []string `json:"sheetTabs,omitempty"`
 	ActiveTab   string   `json:"activeTab,omitempty"`
+	AccessToken string   `json:"accessToken,omitempty"`
 }
 
 // SyncFormOptions 同步選項。
 type SyncFormOptions struct {
-	Month    string `json:"month"`
-	SheetTab string `json:"sheetTab"`
-	Force    bool   `json:"force"`
+	Month         string `json:"month"`
+	SheetTab      string `json:"sheetTab"`
+	Force         bool   `json:"force"`
+	SpreadsheetID string `json:"spreadsheetId,omitempty"`
+	AccessToken   string `json:"accessToken,omitempty"`
 }
 
 // FormService 負責處理表單清單查詢、同步與欄位對應業務邏輯。
@@ -156,7 +159,7 @@ func (s *FormService) ListGoogleDriveFiles(ctx context.Context) ([]GoogleDriveFi
 }
 
 // InspectGoogleSheet 解析特定試算表結構、標題與所有工作表分頁。
-func (s *FormService) InspectGoogleSheet(ctx context.Context, inputURLOrID string) (*InspectSheetDTO, error) {
+func (s *FormService) InspectGoogleSheet(ctx context.Context, inputURLOrID string, accessToken string) (*InspectSheetDTO, error) {
 	sheetID := google.ExtractSpreadsheetID(inputURLOrID)
 	if sheetID == "" {
 		return nil, errors.New("請輸入有效的 Google 試算表連結或 ID")
@@ -171,14 +174,14 @@ func (s *FormService) InspectGoogleSheet(ctx context.Context, inputURLOrID strin
 		}, nil
 	}
 
-	info, err := s.googleCli.GetSpreadsheetInfo(ctx, sheetID)
+	info, err := s.googleCli.GetSpreadsheetInfo(ctx, sheetID, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("無法讀取 Google 試算表結構: %w", err)
 	}
 
 	var headers []string
 	if len(info.SheetTabs) > 0 {
-		rows, err := s.googleCli.ReadSheetRows(ctx, sheetID, info.SheetTabs[0])
+		rows, err := s.googleCli.ReadSheetRows(ctx, sheetID, info.SheetTabs[0], accessToken)
 		if err == nil && len(rows) > 0 {
 			for _, cell := range rows[0] {
 				if str, ok := cell.(string); ok && strings.TrimSpace(str) != "" {
@@ -217,7 +220,7 @@ func (s *FormService) ListForms(ctx context.Context) ([]FormListItemDTO, error) 
 					VehicleName:        e.VehicleDisplayName,
 					Title:              e.FormTitle,
 					FormName:           e.FormTitle,
-					SheetURL:           fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit", e.ID.String()),
+					SheetURL:           fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit", e.SheetID),
 					Region:             e.Region,
 					SheetTabs:          []string{"8月回報", "7月回報"},
 					ActiveTab:          "8月回報",
@@ -322,10 +325,10 @@ func (s *FormService) CreateFormAssociation(ctx context.Context, req CreateFormA
 
 	// 若未指定分頁或只有預設分頁，嘗試透過 Google API 自動讀取所有分頁
 	if s.googleCli != nil {
-		if info, err := s.googleCli.GetSpreadsheetInfo(ctx, sheetID); err == nil && len(info.SheetTabs) > 0 {
+		if info, err := s.googleCli.GetSpreadsheetInfo(ctx, sheetID, req.AccessToken); err == nil && len(info.SheetTabs) > 0 {
 			tabs = info.SheetTabs
 			if len(tabs) > 0 {
-				if rows, err := s.googleCli.ReadSheetRows(ctx, sheetID, tabs[0]); err == nil && len(rows) > 0 {
+				if rows, err := s.googleCli.ReadSheetRows(ctx, sheetID, tabs[0], req.AccessToken); err == nil && len(rows) > 0 {
 					for _, cell := range rows[0] {
 						if str, ok := cell.(string); ok && strings.TrimSpace(str) != "" {
 							headers = append(headers, str)
@@ -430,7 +433,15 @@ func (s *FormService) SyncForm(ctx context.Context, formID string, opts *SyncFor
 
 	// 若有 Google 客戶端，嘗試真實讀取
 	if s.googleCli != nil {
-		rows, err := s.googleCli.ReadSheetRows(ctx, formID, tab)
+		spreadsheetID := formID
+		accessToken := ""
+		if opts != nil {
+			if opts.SpreadsheetID != "" {
+				spreadsheetID = google.ExtractSpreadsheetID(opts.SpreadsheetID)
+			}
+			accessToken = opts.AccessToken
+		}
+		rows, err := s.googleCli.ReadSheetRows(ctx, spreadsheetID, tab, accessToken)
 		if err == nil && len(rows) > 1 {
 			syncedRows = len(rows) - 1 // 扣除表頭列
 		}

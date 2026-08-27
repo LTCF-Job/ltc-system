@@ -11,7 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockGoogleAdapter struct{}
+type mockGoogleAdapter struct {
+	lastInfoToken string
+	lastRowsToken string
+}
 
 func (m *mockGoogleAdapter) ListDriveSheets(ctx context.Context) ([]google.DriveFileItem, error) {
 	return []google.DriveFileItem{
@@ -20,7 +23,8 @@ func (m *mockGoogleAdapter) ListDriveSheets(ctx context.Context) ([]google.Drive
 	}, nil
 }
 
-func (m *mockGoogleAdapter) GetSpreadsheetInfo(ctx context.Context, spreadsheetID string) (*google.SpreadsheetInfo, error) {
+func (m *mockGoogleAdapter) GetSpreadsheetInfo(ctx context.Context, spreadsheetID string, accessToken string) (*google.SpreadsheetInfo, error) {
+	m.lastInfoToken = accessToken
 	return &google.SpreadsheetInfo{
 		SpreadsheetID: spreadsheetID,
 		Title:         "竹北一車每日接送回報 (回覆)",
@@ -28,7 +32,8 @@ func (m *mockGoogleAdapter) GetSpreadsheetInfo(ctx context.Context, spreadsheetI
 	}, nil
 }
 
-func (m *mockGoogleAdapter) ReadSheetRows(ctx context.Context, spreadsheetID string, tabName string) ([][]interface{}, error) {
+func (m *mockGoogleAdapter) ReadSheetRows(ctx context.Context, spreadsheetID string, tabName string, accessToken string) ([][]interface{}, error) {
+	m.lastRowsToken = accessToken
 	return [][]interface{}{
 		{"時間戳記", "今天日期", "今日駕駛人", "蔡曾切（去）"},
 		{"2026/08/25 15:30:00", "2026-08-25", "陳司機", "有坐"},
@@ -37,7 +42,8 @@ func (m *mockGoogleAdapter) ReadSheetRows(ctx context.Context, spreadsheetID str
 
 func TestFormService_GoogleOperations(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NewFormService(nil, &mockGoogleAdapter{})
+	adapter := &mockGoogleAdapter{}
+	svc := service.NewFormService(nil, adapter)
 
 	t.Run("列出 Google Drive 試算表", func(t *testing.T) {
 		files, err := svc.ListGoogleDriveFiles(ctx)
@@ -47,12 +53,14 @@ func TestFormService_GoogleOperations(t *testing.T) {
 	})
 
 	t.Run("解析 Google 試算表結構與分頁", func(t *testing.T) {
-		info, err := svc.InspectGoogleSheet(ctx, "https://docs.google.com/spreadsheets/d/sheet_001/edit")
+		info, err := svc.InspectGoogleSheet(ctx, "https://docs.google.com/spreadsheets/d/sheet_001/edit", "user-token")
 		require.NoError(t, err)
 		assert.Equal(t, "sheet_001", info.SpreadsheetID)
 		assert.Equal(t, "竹北一車每日接送回報 (回覆)", info.Title)
 		assert.Equal(t, []string{"8月回報", "7月回報", "表單回覆 1"}, info.SheetTabs)
 		assert.Contains(t, info.PreviewHeaders, "蔡曾切（去）")
+		assert.Equal(t, "user-token", adapter.lastInfoToken)
+		assert.Equal(t, "user-token", adapter.lastRowsToken)
 	})
 
 	t.Run("建立表單關聯", func(t *testing.T) {
@@ -73,11 +81,14 @@ func TestFormService_GoogleOperations(t *testing.T) {
 
 	t.Run("表單同步操作", func(t *testing.T) {
 		res, err := svc.SyncForm(ctx, "sheet_001", &service.SyncFormOptions{
-			Month:    "2026-08",
-			SheetTab: "8月回報",
+			Month:         "2026-08",
+			SheetTab:      "8月回報",
+			AccessToken:   "user-token",
+			SpreadsheetID: "sheet_001",
 		})
 		require.NoError(t, err)
 		assert.Equal(t, 1, res["syncedRows"])
 		assert.Equal(t, "2026-08", res["month"])
+		assert.Equal(t, "user-token", adapter.lastRowsToken)
 	})
 }

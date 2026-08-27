@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"golang.org/x/oauth2"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
@@ -30,8 +31,8 @@ type SpreadsheetInfo struct {
 // Adapter 定義 Google 試算表與雲端硬碟的操作介面。
 type Adapter interface {
 	ListDriveSheets(ctx context.Context) ([]DriveFileItem, error)
-	GetSpreadsheetInfo(ctx context.Context, spreadsheetID string) (*SpreadsheetInfo, error)
-	ReadSheetRows(ctx context.Context, spreadsheetID string, tabName string) ([][]interface{}, error)
+	GetSpreadsheetInfo(ctx context.Context, spreadsheetID string, accessToken string) (*SpreadsheetInfo, error)
+	ReadSheetRows(ctx context.Context, spreadsheetID string, tabName string, accessToken string) ([][]interface{}, error)
 }
 
 // Client 封裝 Google Drive 與 Sheets 服務。
@@ -144,13 +145,13 @@ func (c *Client) ListDriveSheets(ctx context.Context) ([]DriveFileItem, error) {
 }
 
 // GetSpreadsheetInfo 讀取試算表標題與分頁（工作表 Tab）清單。
-func (c *Client) GetSpreadsheetInfo(ctx context.Context, inputIDOrURL string) (*SpreadsheetInfo, error) {
+func (c *Client) GetSpreadsheetInfo(ctx context.Context, inputIDOrURL string, accessToken string) (*SpreadsheetInfo, error) {
 	spreadsheetID := ExtractSpreadsheetID(inputIDOrURL)
 	if spreadsheetID == "" {
 		return nil, errors.New("invalid google spreadsheet URL or ID")
 	}
 
-	if c.isOffline || c.sheetsSvc == nil {
+	if (c.isOffline || c.sheetsSvc == nil) && strings.TrimSpace(accessToken) == "" {
 		// 離線降級示範結構
 		return &SpreadsheetInfo{
 			SpreadsheetID: spreadsheetID,
@@ -159,7 +160,11 @@ func (c *Client) GetSpreadsheetInfo(ctx context.Context, inputIDOrURL string) (*
 		}, nil
 	}
 
-	resp, err := c.sheetsSvc.Spreadsheets.Get(spreadsheetID).Context(ctx).Do()
+	sheetsSvc, err := c.sheetsService(ctx, accessToken)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := sheetsSvc.Spreadsheets.Get(spreadsheetID).Context(ctx).Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to inspect spreadsheet %s: %w", spreadsheetID, err)
 	}
@@ -183,7 +188,7 @@ func (c *Client) GetSpreadsheetInfo(ctx context.Context, inputIDOrURL string) (*
 }
 
 // ReadSheetRows 讀取指定試算表分頁中所有資料列。
-func (c *Client) ReadSheetRows(ctx context.Context, inputIDOrURL string, tabName string) ([][]interface{}, error) {
+func (c *Client) ReadSheetRows(ctx context.Context, inputIDOrURL string, tabName string, accessToken string) ([][]interface{}, error) {
 	spreadsheetID := ExtractSpreadsheetID(inputIDOrURL)
 	if spreadsheetID == "" {
 		return nil, errors.New("invalid google spreadsheet URL or ID")
@@ -193,7 +198,7 @@ func (c *Client) ReadSheetRows(ctx context.Context, inputIDOrURL string, tabName
 		tabName = "表單回覆 1"
 	}
 
-	if c.isOffline || c.sheetsSvc == nil {
+	if (c.isOffline || c.sheetsSvc == nil) && strings.TrimSpace(accessToken) == "" {
 		// 離線示範標題與資料列
 		return [][]interface{}{
 			{"時間戳記", "今天日期", "今日駕駛人", "蔡曾切（去）", "蔡曾切（回）", "問題回報"},
@@ -203,10 +208,21 @@ func (c *Client) ReadSheetRows(ctx context.Context, inputIDOrURL string, tabName
 	}
 
 	readRange := fmt.Sprintf("'%s'!A1:ZZ", tabName)
-	valueResp, err := c.sheetsSvc.Spreadsheets.Values.Get(spreadsheetID, readRange).Context(ctx).Do()
+	sheetsSvc, err := c.sheetsService(ctx, accessToken)
+	if err != nil {
+		return nil, err
+	}
+	valueResp, err := sheetsSvc.Spreadsheets.Values.Get(spreadsheetID, readRange).Context(ctx).Do()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read range %s: %w", readRange, err)
 	}
 
 	return valueResp.Values, nil
+}
+
+func (c *Client) sheetsService(ctx context.Context, accessToken string) (*sheets.Service, error) {
+	if strings.TrimSpace(accessToken) == "" {
+		return c.sheetsSvc, nil
+	}
+	return sheets.NewService(ctx, option.WithTokenSource(oauth2.StaticTokenSource(&oauth2.Token{AccessToken: accessToken})))
 }
