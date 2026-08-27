@@ -59,6 +59,14 @@ button, input, textarea, select { font: inherit; }
     background: var(--app-orange); border-color: var(--app-orange);
     &:hover, &:focus-visible { background: var(--app-orange-dark); border-color: var(--app-orange-dark); box-shadow: 0 4px 12px rgba(47, 111, 237, 0.22); }
   }
+  &--success {
+    &.is-link {
+      color: #087d58;
+      &:hover, &:focus-visible {
+        color: #056144;
+      }
+    }
+  }
   &:focus-visible, &.is-focus { outline: 3px solid rgba(47, 111, 237, 0.24); outline-offset: 1px; }
 }
 

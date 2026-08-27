@@ -181,8 +181,9 @@
             <template #default="{ row }">
               <el-button
                 link
-                type="primary"
+                type="success"
                 size="small"
+                :icon="Edit"
                 @click="$router.push(`/cases/${row.id}?tab=basic`)"
               >
                 編輯
@@ -286,7 +287,7 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { Plus, Upload, Download, ArrowDown } from '@element-plus/icons-vue'
+import { Plus, Upload, Download, ArrowDown, Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'

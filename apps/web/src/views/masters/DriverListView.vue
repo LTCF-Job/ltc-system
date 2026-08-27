@@ -109,13 +109,13 @@
             align="center"
           >
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openEditDialog(row)">
+              <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row)">
                 編輯
               </el-button>
-              <el-button link type="success" size="small" @click="openAssignDialog(row)">
+              <el-button link type="primary" size="small" :icon="Van" @click="openAssignDialog(row)">
                 指派車輛
               </el-button>
-              <el-button link type="danger" size="small" @click="handleDeleteDriver(row as any)">
+              <el-button link type="danger" size="small" :icon="Delete" @click="handleDeleteDriver(row as any)">
                 刪除
               </el-button>
             </template>
@@ -212,7 +212,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit, Van, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import {

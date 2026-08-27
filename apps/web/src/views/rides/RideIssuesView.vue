@@ -1,13 +1,5 @@
 <template>
   <div class="ride-issues-view">
-    <div class="page-header">
-      <el-button link @click="$router.push('/rides')">
-        <el-icon><ArrowLeft /></el-icon>
-        返回搭乘月曆
-      </el-button>
-      <h2>異常搭乘集中處理</h2>
-    </div>
-
     <!-- 篩選列 -->
     <el-card shadow="never" class="filter-card mb-3" style="margin-bottom: 12px;">
       <el-row :gutter="16" align="middle">
@@ -19,7 +11,7 @@
             style="width: 260px;"
             @keyup.enter="fetchIssues"
           />
-          <el-button type="primary" icon="Search" @click="fetchIssues">
+          <el-button type="primary" :icon="Search" @click="fetchIssues">
             查詢
           </el-button>
           <el-button @click="handleReset">
@@ -56,13 +48,10 @@
             align="center"
           >
             <template #default="{ row }">
-              <el-button type="primary" size="small" @click="openResolveDialog(row as any)">
+              <el-button type="success" size="small" :icon="Edit" @click="openResolveDialog(row as any)">
                 人工裁決
               </el-button>
             </template>
-
-
-
           </el-table-column>
         </el-table>
       </el-tab-pane>
@@ -143,7 +132,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { Search, Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listIssueRides, resolveConflict } from '@/api/rides'
 import { listVehicles, listDrivers } from '@/api/masters'
@@ -236,21 +225,6 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background-color: #ffffff;
-  padding: 16px 20px;
-  border-radius: 8px;
-
-  h2 {
-    margin: 0;
-    font-size: 20px;
-    color: var(--el-color-primary);
-  }
 }
 
 .issues-tabs {

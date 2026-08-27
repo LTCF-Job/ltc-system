@@ -120,7 +120,7 @@
           align="center"
         >
           <template #default="{ row }">
-            <el-button type="primary" link icon="Edit" @click="openEditDialog(row as any)">
+            <el-button type="success" link icon="Edit" @click="openEditDialog(row as any)">
               編輯
             </el-button>
             <el-button type="danger" link icon="Delete" @click="handleDelete(row as any)">

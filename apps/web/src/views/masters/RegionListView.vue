@@ -147,7 +147,7 @@
             align="center"
           >
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
+              <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row as any)">
                 編輯
               </el-button>
               <el-button
@@ -155,6 +155,7 @@
                 link
                 type="danger"
                 size="small"
+                :icon="Delete"
                 @click="handleDelete(row as any)"
               >
                 刪除
@@ -221,7 +222,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Plus, Rank, InfoFilled } from '@element-plus/icons-vue'
+import { Plus, Rank, InfoFilled, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import { listRegions, createRegion, updateRegion, deleteRegion } from '@/api/masters'

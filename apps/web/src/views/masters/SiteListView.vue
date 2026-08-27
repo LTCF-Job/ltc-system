@@ -77,7 +77,7 @@
             align="center"
           >
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openEditDialog(row)">
+              <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row)">
                 編輯
               </el-button>
               <el-button link type="danger" size="small" @click="handleDelete(row)">
@@ -143,7 +143,7 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import { listSites, createSite, updateSite, deleteSite } from '@/api/masters'

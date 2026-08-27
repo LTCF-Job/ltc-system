@@ -82,7 +82,7 @@
 
           <div class="role-actions" @click.stop>
             <el-button
-              type="primary"
+              type="success"
               link
               size="small"
               icon="Edit"
@@ -91,7 +91,7 @@
               編輯設定
             </el-button>
             <el-button
-              type="success"
+              type="primary"
               link
               size="small"
               icon="CopyDocument"
@@ -148,7 +148,7 @@
               支援 {{ countRolePerms(selectedRole.permissions).views }} 項檢視、{{ countRolePerms(selectedRole.permissions).edits }} 項操作
             </el-tag>
             <el-button
-              type="primary"
+              type="success"
               size="small"
               icon="Edit"
               plain

@@ -128,12 +128,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="210" fixed="right" align="center">
+        <el-table-column label="操作" width="240" fixed="right" align="center">
           <template #default="{ row }">
             <el-button
               link
-              type="primary"
+              type="success"
               size="small"
+              :icon="Edit"
               @click="$router.push(`/forms/mappings?formId=${row.id}`)"
             >
               欄位對應
@@ -141,8 +142,9 @@
             <el-button
               v-if="authStore.hasPermission('forms_sync', 'edit')"
               link
-              type="success"
+              type="primary"
               size="small"
+              :icon="Refresh"
               :loading="syncingId === (row as any).id"
               @click="openSyncDialog(row as any)"
             >
@@ -153,6 +155,7 @@
               link
               type="danger"
               size="small"
+              :icon="Delete"
               @click="handleDeleteAssociation(row as any)"
             >
               解除
@@ -302,7 +305,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Refresh, Link, Plus } from '@element-plus/icons-vue'
+import { Refresh, Link, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { listForms, syncForm, createFormAssociation, deleteFormAssociation } from '@/api/forms'
 import { formatDateTime } from '@/utils/formatters'

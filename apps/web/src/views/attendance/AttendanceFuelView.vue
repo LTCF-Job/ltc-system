@@ -265,12 +265,12 @@
                 <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
-            <el-table-column v-if="authStore.can('staff')" label="操作" width="120" align="center" fixed="right">
+            <el-table-column v-if="authStore.can('staff')" label="操作" width="140" align="center" fixed="right">
               <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="openFuelDialog(row)">
+                <el-button link type="success" size="small" :icon="Edit" @click="openFuelDialog(row)">
                   編輯
                 </el-button>
-                <el-button link type="danger" size="small" @click="handleDeleteFuel(row)">
+                <el-button link type="danger" size="small" :icon="Delete" @click="handleDeleteFuel(row)">
                   刪除
                 </el-button>
               </template>
@@ -427,7 +427,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Refresh, Plus } from '@element-plus/icons-vue'
+import { Refresh, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import {
   getMonthAttendance,

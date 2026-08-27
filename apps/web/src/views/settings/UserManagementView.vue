@@ -101,12 +101,12 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="操作" width="190" fixed="right" align="center">
+          <el-table-column label="操作" width="220" fixed="right" align="center">
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
+              <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row as any)">
                 編輯
               </el-button>
-              <el-button link type="warning" size="small" @click="openPermissionDrawer(row as any)">
+              <el-button link type="warning" size="small" :icon="Setting" @click="openPermissionDrawer(row as any)">
                 設定權限
               </el-button>
               <el-button
@@ -114,6 +114,7 @@
                 link
                 type="danger"
                 size="small"
+                :icon="Delete"
                 @click="handleDelete(row as any)"
               >
                 刪除
@@ -273,6 +274,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { Plus, Search, Edit, Setting, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import {

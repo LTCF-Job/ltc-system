@@ -168,7 +168,7 @@
           >
             <template #default="{ row }">
               <template v-if="editingRowId === row.id">
-                <el-button type="primary" size="small" :loading="savingRow" @click="saveInlineEdit(row as any)">
+                <el-button type="success" size="small" :loading="savingRow" :icon="Check" @click="saveInlineEdit(row as any)">
                   儲存
                 </el-button>
                 <el-button size="small" :disabled="savingRow" @click="cancelInlineEdit">
@@ -176,10 +176,10 @@
                 </el-button>
               </template>
               <template v-else>
-                <el-button link type="primary" size="small" @click="startInlineEdit(row as any)">
+                <el-button link type="success" size="small" :icon="Edit" @click="startInlineEdit(row as any)">
                   編輯
                 </el-button>
-                <el-button link type="danger" size="small" @click="handleDeleteVehicle(row as any)">
+                <el-button link type="danger" size="small" :icon="Delete" @click="handleDeleteVehicle(row as any)">
                   刪除
                 </el-button>
               </template>
@@ -246,7 +246,7 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit, Check, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import { listVehicles, createVehicle, updateVehicle, deleteVehicle } from '@/api/masters'

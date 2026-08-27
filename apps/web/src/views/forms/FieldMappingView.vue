@@ -122,9 +122,10 @@
         >
           <template #default="{ row }">
             <el-button
-              type="primary"
+              type="success"
               link
               size="small"
+              :icon="Check"
               :disabled="!row.editCaseId"
               @click="handleSaveMapping(row)"
             >
@@ -135,6 +136,7 @@
               type="info"
               link
               size="small"
+              :icon="Close"
               @click="handleIgnoreMapping(row)"
             >
               略過此欄
@@ -149,6 +151,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { Check, Close } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   listForms,

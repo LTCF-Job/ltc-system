@@ -98,7 +98,7 @@
               >
                 <template #default="{ row }">
                   <el-button
-                    type="primary"
+                    type="success"
                     size="small"
                     icon="Edit"
                     @click="openReportDialog(row)"
