@@ -79,9 +79,11 @@
               <span>{{ (AUDIT_ENTITY_LABELS as any)[(row as any).entityType] || (row as any).entityType }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="entityName" label="操作對象" min-width="180" show-overflow-tooltip>
+          <el-table-column prop="entityName" label="操作對象" min-width="200" show-overflow-tooltip>
             <template #default="{ row }">
-              <span>{{ (row as any).entityName || (row as any).entityId || '-' }}</span>
+              <span :title="(row as any).entityId ? `實體編號：${(row as any).entityId}` : undefined">
+                {{ getEntityDisplayName(row as any) }}
+              </span>
             </template>
           </el-table-column>
           <el-table-column prop="ipAddress" label="IP 位址" width="130" align="center" />
@@ -120,7 +122,7 @@
             <span :class="getActionClass(selectedLog.action)">
               {{ AUDIT_ACTION_LABELS[selectedLog.action] || selectedLog.action }}
             </span>
-            <span v-if="selectedLog.entityName" class="entity-badge">({{ selectedLog.entityName }})</span>
+            <span class="entity-badge">({{ getEntityDisplayName(selectedLog) }})</span>
           </el-descriptions-item>
           <el-descriptions-item label="來源 IP" :span="2">{{ selectedLog.ipAddress || '未知' }}</el-descriptions-item>
         </el-descriptions>
@@ -222,15 +224,18 @@ function getActionClass(action: AuditAction): string {
   switch (action) {
     case 'create':
     case 'import':
+    case 'manual_report':
       return 'crud-create'
     case 'update':
     case 'correct':
     case 'resolve_conflict':
+    case 'setting_change':
       return 'crud-update'
     case 'delete':
     case 'reveal_pii':
       return 'crud-delete'
     case 'login':
+    case 'logout':
     case 'export':
     default:
       return 'crud-read'
@@ -243,6 +248,165 @@ function getActorDisplayName(row?: { actorRole?: string; actorName?: string } | 
     return (ROLE_LABELS as any)[row.actorRole]
   }
   return row.actorName || '系統'
+}
+
+// 智慧解析操作對象為使用者面向看得懂的親切中文標籤
+function getEntityDisplayName(row?: AuditLogDTO | null): string {
+  if (!row) return '-'
+
+  // 若 entityName 存在且非純 UUID / 非 entityId 原始字串，優先採用
+  const isUuid = (str?: string) =>
+    !!str && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str)
+
+  if (row.entityName && !isUuid(row.entityName) && row.entityName !== row.entityId) {
+    return row.entityName
+  }
+
+  // 從 afterData / beforeData 中萃取可讀名稱與業務識別
+  const data: Record<string, any> = { ...(row.beforeData || {}), ...(row.afterData || {}) }
+
+  switch (row.entityType) {
+    case 'ride_records': {
+      const caseName = data.caseName || data.case_name || (data.caseId ? '搭乘個案' : '')
+      const date = data.serviceDate || data.service_date || ''
+      const leg = data.legSeq || data.leg_seq
+      let legText = ''
+      if (leg === 1) legText = '去程'
+      else if (leg === 2) legText = '回程'
+      else if (leg) legText = `第 ${leg} 趟`
+
+      const tripInfo = [date, legText].filter(Boolean).join(' ')
+
+      if (caseName && tripInfo) {
+        return `${caseName} (${tripInfo})`
+      }
+      if (caseName) {
+        return `${caseName} (搭乘紀錄)`
+      }
+      if (tripInfo) {
+        return `搭乘紀錄 (${tripInfo})`
+      }
+      if (data.reason || data.correctionReason || data.correction_reason) {
+        return `搭乘紀錄 (${data.reason || data.correctionReason || data.correction_reason})`
+      }
+      return '搭乘紀錄'
+    }
+
+    case 'cases': {
+      const name = data.name || data.caseName || data.case_name
+      const code = data.code || data.caseCode || data.case_code
+      if (name) return `${name}${code ? ` (${code})` : ''}`
+      return '個案主檔'
+    }
+
+    case 'vehicles': {
+      const plate = data.plateNo || data.plate_no
+      const name = data.displayName || data.display_name || data.brandModel || data.brand_model
+      if (name || plate) return `${name || '車輛'}${plate ? ` (${plate})` : ''}`
+      return '車輛主檔'
+    }
+
+    case 'drivers': {
+      const name = data.name || data.driverName || data.driver_name
+      if (name) return `${name} (司機)`
+      return '司機主檔'
+    }
+
+    case 'sites': {
+      const name = data.name || data.siteName || data.site_name
+      if (name) return `${name} (據點)`
+      return '據點主檔'
+    }
+
+    case 'regions': {
+      const name = data.name || (data.region && REGION_LABELS[data.region as keyof typeof REGION_LABELS])
+      if (name) return `${name} (地區)`
+      return '地區主檔'
+    }
+
+    case 'attendance_records': {
+      const driver = data.driverName || data.driver_name
+      const date = data.date || data.attendanceDate || data.serviceDate || ''
+      return `${driver || '司機'}${date ? ` (${date} 出勤紀錄)` : ' 出勤紀錄'}`
+    }
+
+    case 'fuel_logs': {
+      const veh = data.vehicleName || data.plateNo || data.plate_no
+      const date = (data.fuelDate || data.fuel_date || '').slice(0, 10)
+      return `${veh || '車輛'}${date ? ` (${date} 加油紀錄)` : ' 加油紀錄'}`
+    }
+
+    case 'maintenance_logs': {
+      const veh = data.vehicleName || data.plateNo || data.plate_no
+      const date = (data.serviceDate || data.maintenanceDate || '').slice(0, 10)
+      return `${veh || '車輛'}${date ? ` (${date} 保養紀錄)` : ' 保養紀錄'}`
+    }
+
+    case 'holiday':
+    case 'holiday_calendar': {
+      const name = data.name || (data.year ? `${data.year} 年行事曆` : '')
+      const date = data.holidayDate || data.holiday_date
+      if (name && date) return `${name} (${date})`
+      if (name || date) return `${name || date} (行事曆)`
+      return '行政行事曆'
+    }
+
+    case 'users': {
+      const name = data.displayName || data.display_name || data.name
+      const email = data.email
+      if (name) return `${name}${email ? ` (${email})` : ''}`
+      if (email) return `使用者 (${email})`
+      return '使用者帳號'
+    }
+
+    case 'roles': {
+      const name = data.name || (data.role && (ROLE_LABELS as any)[data.role])
+      return `${name || '角色身分'}`
+    }
+
+    case 'notification_recipients':
+    case 'notification_recipient': {
+      const name = data.displayName || data.display_name
+      const email = data.email
+      const topic = data.topic && (NOTIFICATION_TOPIC_LABELS as any)[data.topic]
+      if (name && topic) return `${name} (${topic})`
+      if (email && topic) return `${email} (${topic})`
+      if (name || email) return `${name || email} (通知收件人)`
+      return '通知收件人'
+    }
+
+    case 'export_jobs': {
+      const ym = data.periodYm || data.period_ym
+      const reg = data.region ? (REGION_LABELS[data.region as keyof typeof REGION_LABELS] || data.region) : '全區'
+      return `${ym || ''} ${reg} 申報匯出`
+    }
+
+    case 'google_forms': {
+      const title = data.title || data.formId || data.sheetTab
+      return `${title || 'Google 表單'}`
+    }
+
+    case 'app_settings':
+      return '系統全域設定'
+
+    case 'auth': {
+      const user = data.email || data.name || data.actorName
+      return `${user ? `${user} (登入)` : '登入驗證'}`
+    }
+
+    default:
+      break
+  }
+
+  // 若均無符合且 entityId 存在時，以實體種類中文加上簡短 ID 呈現
+  const typeLabel = (AUDIT_ENTITY_LABELS as any)[row.entityType] || '系統資料'
+  if (row.entityId) {
+    if (isUuid(row.entityId)) {
+      return `${typeLabel} (#${row.entityId.slice(0, 8)})`
+    }
+    return `${typeLabel} (${row.entityId})`
+  }
+  return typeLabel
 }
 
 // 格式化欄位數值為繁體中文親切文字

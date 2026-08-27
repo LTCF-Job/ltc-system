@@ -897,8 +897,32 @@ export const mockDashboardStats: DashboardStatsDTO = {
   recentExports: mockExportJobs
 }
 
-// 系統操作紀錄展示資料：涵蓋登入 (login)、主檔 CUD、更正 (correct)、衝突裁決 (resolve_conflict)、匯出 (export) 與設定變更
+// 系統操作紀錄展示資料：涵蓋登入 (login)、主檔 CUD、事後補報 (manual_report)、更正 (correct)、衝突裁決 (resolve_conflict)、匯出 (export) 與設定變更
 export const mockAuditLogs: AuditLogDTO[] = [
+  {
+    id: 'audit_manual_report_demo',
+    actorId: 'usr_staff',
+    actorName: '行政承辦',
+    actorRole: 'staff',
+    action: 'manual_report',
+    entityType: 'ride_records',
+    entityId: 'c87eefa5-8b94-4362-b6e2-aa564f52080a',
+    beforeData: undefined,
+    afterData: {
+      caseId: 'case_1',
+      caseName: '蔡曾切',
+      serviceDate: '2026-08-28',
+      legSeq: 1,
+      effectiveStatus: 'boarded',
+      departTimeOverride: '09:15',
+      durationMinOverride: 15,
+      notClaimedAa09: false,
+      reason: '司機電話回報補登'
+    },
+    ipAddress: '192.168.1.105',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    createdAt: '2026-08-28 09:20:00'
+  },
   {
     id: 'audit_0',
     actorId: 'usr_admin',

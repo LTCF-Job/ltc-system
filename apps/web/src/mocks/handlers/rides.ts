@@ -602,6 +602,29 @@ export const ridesHandlers = [
       }
     }
 
+    const targetCase = mockCases.find((c) => c.id === body.caseId)
+    const legText = body.legSeq === 1 ? '去程' : body.legSeq === 2 ? '回程' : `第 ${body.legSeq} 趟`
+    const caseDisplayName = targetCase ? targetCase.name : '搭乘個案'
+
+    mockAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actorId: 'usr_staff',
+      actorName: '當前使用者',
+      actorRole: 'staff',
+      action: 'manual_report',
+      entityType: 'ride_records',
+      entityId: rideId,
+      entityName: `${caseDisplayName} (${body.serviceDate} ${legText})`,
+      beforeData: undefined,
+      afterData: {
+        ...override,
+        caseName: caseDisplayName
+      },
+      ipAddress: '127.0.0.1',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      createdAt: formattedNow
+    })
+
     return HttpResponse.json({
       data: {
         id: rideId,

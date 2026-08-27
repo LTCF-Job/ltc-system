@@ -12,6 +12,14 @@ test.describe('10. 系統稽核紀錄與權限設定 (Audit Logs & System Settin
     await waitForTableLoaded(page)
     await expect(page.locator('.el-table').first()).toBeVisible()
 
+    // 驗證「搭乘事後補報」動作已正確中文化（非 manual_report）
+    const manualReportAction = page.locator('.el-table__row').getByText('搭乘事後補報').first()
+    await expect(manualReportAction).toBeVisible()
+
+    // 驗證操作對象欄位非 raw UUID，而是親切可讀的個案與趟次或實體描述
+    const entityCell = page.locator('.el-table__row').getByText('蔡曾切 (2026-08-28 去程)').first()
+    await expect(entityCell).toBeVisible()
+
     // 點選第一筆異動前後按鈕
     const diffBtn = page.locator('.el-table__row').locator('button, a').filter({ hasText: '異動前後' }).first()
     if (await diffBtn.isVisible()) {
