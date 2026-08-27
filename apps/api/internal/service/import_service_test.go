@@ -119,6 +119,76 @@ func TestParseCases_TemplateExcel(t *testing.T) {
 	assert.Equal(t, 3, len(preview.PreviewRows))
 }
 
+func TestParseCases_ProfileWorkbook(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	sheetName := "進系統個案個資"
+	f.SetSheetName("Sheet1", sheetName)
+	headers := []string{"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "聯絡人", "戶籍", "居住地", "REMARK"}
+	for i, header := range headers {
+		cell, err := excelize.CoordinatesToCellName(i+1, 1)
+		require.NoError(t, err)
+		require.NoError(t, f.SetCellValue(sheetName, cell, header))
+	}
+	row := []interface{}{1, "王小明", "一般", "A202559750", "男", "045/06/15", 70, "竹南日照", "竹南1車", "竹南2車", "個管", "陳小華", "苗栗縣竹南鎮戶籍地址", "苗栗縣竹南鎮居住地址", "需輪椅"}
+	for i, value := range row {
+		cell, err := excelize.CoordinatesToCellName(i+1, 2)
+		require.NoError(t, err)
+		require.NoError(t, f.SetCellValue(sheetName, cell, value))
+	}
+
+	buf, err := f.WriteToBuffer()
+	require.NoError(t, err)
+
+	svc := NewImportService(nil, nil, nil, nil, nil)
+	preview, err := svc.ParseCases(bytes.NewReader(buf.Bytes()), "彙整-個案資料(竹南.頭份).xlsx")
+	require.NoError(t, err)
+	require.Len(t, preview.Rows, 1)
+
+	got := preview.Rows[0]
+	assert.True(t, got.IsProfileWorkbook)
+	assert.Equal(t, "一般", got.HouseholdType)
+	assert.Equal(t, "男", got.Gender)
+	assert.Equal(t, "1956-06-15", got.BirthDate)
+	assert.Equal(t, "個管", got.CareContactRole)
+	assert.Equal(t, "陳小華", got.CareContactName)
+	assert.Equal(t, "苗栗縣竹南鎮戶籍地址", got.RegisteredAddress)
+	assert.Equal(t, "苗栗縣竹南鎮居住地址", got.HomeAddress)
+	assert.Equal(t, "竹南1車", got.OutboundVehicle)
+	assert.Equal(t, "竹南2車", got.InboundVehicle)
+	assert.Equal(t, "miaoli", got.Region)
+	assert.True(t, got.IsDraft)
+	assert.Empty(t, got.Weekdays)
+}
+
+func TestParseCases_ProfileWorkbookReportsSkippedFields(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	sheetName := "進系統個案個資"
+	f.SetSheetName("Sheet1", sheetName)
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "聯絡人", "戶籍", "居住地"}
+	for i, header := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		require.NoError(t, f.SetCellValue(sheetName, cell, header))
+	}
+	values := []interface{}{"馮玉英", "", "A202559750", "女", "錯誤生日", "竹南日照", "竹南1車", "竹南2車", "個管", "陳小華", "戶籍地址", "居住地址"}
+	for i, value := range values {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
+		require.NoError(t, f.SetCellValue(sheetName, cell, value))
+	}
+	buf, err := f.WriteToBuffer()
+	require.NoError(t, err)
+
+	preview, err := NewImportService(nil, nil, nil, nil, nil).ParseCases(bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	require.NoError(t, err)
+	require.Len(t, preview.Rows, 1)
+	assert.Equal(t, 1, preview.ErrorRows)
+	assert.Contains(t, preview.Rows[0].ErrorMessage, "戶別：空白")
+	assert.Contains(t, preview.Rows[0].ErrorMessage, "生日：格式錯誤")
+	assert.Equal(t, "", preview.Rows[0].RawValues["戶別"])
+	assert.Equal(t, "錯誤生日", preview.Rows[0].RawValues["生日"])
+}
+
 func TestParseCases_EmptyAndCorruptedFiles(t *testing.T) {
 	svc := NewImportService(nil, nil, nil, nil, nil)
 

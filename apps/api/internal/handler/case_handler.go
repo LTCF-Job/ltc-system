@@ -157,14 +157,14 @@ func (h *CaseHandler) ImportExcel(c *gin.Context) {
 	if dryRun == "false" {
 		actorID := middleware.GetActorID(c)
 		actorRole := middleware.GetActorRole(c)
-		count, err := h.importService.CommitCases(
+		result, err := h.importService.CommitCases(
 			c.Request.Context(), preview, actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
 		)
 		if err != nil {
 			middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "匯入個案寫入失敗", nil)
 			return
 		}
-		middleware.RespondSuccess(c, http.StatusOK, gin.H{"count": count}, nil)
+		middleware.RespondSuccess(c, http.StatusOK, result, nil)
 		return
 	}
 
@@ -191,6 +191,18 @@ func (h *CaseHandler) DownloadTemplate(c *gin.Context) {
 
 	fileName := "個案批次匯入範本.xlsx"
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"case_template.xlsx\"; filename*=UTF-8''%s", url.PathEscape(fileName)))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
+}
+
+// ExportProfileWorkbook 下載與個案彙整表相同格式的主檔資料。
+func (h *CaseHandler) ExportProfileWorkbook(c *gin.Context) {
+	excelBytes, err := h.masterService.GenerateCaseProfileWorkbook(c.Request.Context())
+	if err != nil {
+		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "產生個案主檔 Excel 失敗", nil)
+		return
+	}
+	fileName := "個案資料彙整.xlsx"
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"case_profile.xlsx\"; filename*=UTF-8''%s", url.PathEscape(fileName)))
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
 }
 
@@ -228,15 +240,15 @@ func (h *CaseHandler) Update(c *gin.Context) {
 	}
 
 	var req struct {
-		Name             *string    `json:"name"`
-		HomeAddress      *string    `json:"homeAddress"`
-		Region           *string    `json:"region"`
-		LTCLevel         *string    `json:"ltcLevel"`
-		ServiceCategory  *int       `json:"serviceCategory"`
-		ServiceUsageType *int       `json:"serviceUsageType"`
-		ClaimStartDate   *string    `json:"claimStartDate"`
-		ClaimEndDate     *string    `json:"claimEndDate"`
-		Status           *string    `json:"status"`
+		Name             *string `json:"name"`
+		HomeAddress      *string `json:"homeAddress"`
+		Region           *string `json:"region"`
+		LTCLevel         *string `json:"ltcLevel"`
+		ServiceCategory  *int    `json:"serviceCategory"`
+		ServiceUsageType *int    `json:"serviceUsageType"`
+		ClaimStartDate   *string `json:"claimStartDate"`
+		ClaimEndDate     *string `json:"claimEndDate"`
+		Status           *string `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
@@ -339,4 +351,3 @@ func (h *CaseHandler) SaveSchedule(c *gin.Context) {
 
 	middleware.RespondSuccess(c, http.StatusOK, sched, nil)
 }
-

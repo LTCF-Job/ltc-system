@@ -24,14 +24,20 @@ func NewCaseRepository(db *pgxpool.Pool) *CaseRepository {
 func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int) ([]CaseEntity, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
-		SELECT id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-		       home_address, region, ltc_level, service_category, service_usage_type, claim_start_date, claim_end_date,
-		       status, created_at, updated_at
-		FROM cases
-		WHERE ($1 = '' OR region = $1)
-		  AND ($2 = '' OR status = $2)
-		  AND ($3 = '' OR name ILIKE '%' || $3 || '%' OR code ILIKE '%' || $3 || '%' OR home_address ILIKE '%' || $3 || '%')
-		ORDER BY code ASC
+		SELECT c.id, c.code, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
+		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
+		       COALESCE(st.name, ''), COALESCE(vo.display_name, ''), COALESCE(vi.display_name, ''),
+		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_start_date, c.claim_end_date,
+		       c.status, c.created_at, c.updated_at
+		FROM cases c
+		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
+		LEFT JOIN sites st ON st.id = p.site_id
+		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
+		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
+		WHERE ($1 = '' OR c.region = $1)
+		  AND ($2 = '' OR c.status = $2)
+		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.code ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
+		ORDER BY c.code ASC
 		LIMIT $4 OFFSET $5
 	`
 	rows, err := r.db.Query(ctx, query, region, status, q, pageSize, offset)
@@ -45,6 +51,7 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		var c CaseEntity
 		if err := rows.Scan(
 			&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
+			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress, &c.SiteName, &c.OutboundVehicle, &c.InboundVehicle,
 			&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimStartDate, &c.ClaimEndDate,
 			&c.Status, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
@@ -63,6 +70,13 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 	_ = r.db.QueryRow(ctx, countQuery, region, status, q).Scan(&total)
 
 	return list, total, nil
+}
+
+func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID, siteID, outboundVehicleID, inboundVehicleID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `INSERT INTO case_transport_preferences (case_id, site_id, outbound_vehicle_id, inbound_vehicle_id)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (case_id) DO UPDATE SET site_id = EXCLUDED.site_id, outbound_vehicle_id = EXCLUDED.outbound_vehicle_id, inbound_vehicle_id = EXCLUDED.inbound_vehicle_id, updated_at = now()`, caseID, siteID, outboundVehicleID, inboundVehicleID)
+	return err
 }
 
 // GetByID 依 UUID 取得個案。
@@ -139,8 +153,9 @@ func (r *CaseRepository) Create(ctx context.Context, c *CaseEntity) error {
 	query := `
 		INSERT INTO cases (
 			id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
+			household_type, gender, birth_date, care_contact_role, care_contact_name, registered_address,
 			home_address, region, ltc_level, service_category, service_usage_type, claim_start_date, claim_end_date, status
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		RETURNING created_at, updated_at
 	`
 	if c.ID == uuid.Nil {
@@ -148,6 +163,7 @@ func (r *CaseRepository) Create(ctx context.Context, c *CaseEntity) error {
 	}
 	return r.db.QueryRow(ctx, query,
 		c.ID, c.Code, c.Name, c.NameNormalized, c.NationalIDCipher, c.NationalIDHMAC, c.NationalIDMasked,
+		c.HouseholdType, c.Gender, c.BirthDate, c.CareContactRole, c.CareContactName, c.RegisteredAddress,
 		c.HomeAddress, c.Region, c.LTCLevel, c.ServiceCategory, c.ServiceUsageType, c.ClaimStartDate, c.ClaimEndDate, c.Status,
 	).Scan(&c.CreatedAt, &c.UpdatedAt)
 }
@@ -387,4 +403,3 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 
 	return results, nil
 }
-

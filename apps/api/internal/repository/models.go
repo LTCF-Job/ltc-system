@@ -8,23 +8,32 @@ import (
 
 // CaseEntity 代表 cases 資料表實體。
 type CaseEntity struct {
-	ID                 uuid.UUID  `json:"id"`
-	Code               string     `json:"code"`
-	Name               string     `json:"name"`
-	NameNormalized     string     `json:"nameNormalized"`
-	NationalIDCipher   []byte     `json:"-"`
-	NationalIDHMAC     []byte     `json:"-"`
-	NationalIDMasked   string     `json:"nationalIdMasked"`
-	HomeAddress        string     `json:"homeAddress"`
-	Region             string     `json:"region"`
-	LTCLevel           *string    `json:"ltcLevel,omitempty"`
-	ServiceCategory    int        `json:"serviceCategory"`
-	ServiceUsageType   int        `json:"serviceUsageType"`
-	ClaimStartDate     time.Time  `json:"claimStartDate"`
-	ClaimEndDate       *time.Time `json:"claimEndDate,omitempty"`
-	Status             string     `json:"status"`
-	CreatedAt          time.Time  `json:"createdAt"`
-	UpdatedAt          time.Time  `json:"updatedAt"`
+	ID                uuid.UUID  `json:"id"`
+	Code              string     `json:"code"`
+	Name              string     `json:"name"`
+	NameNormalized    string     `json:"nameNormalized"`
+	NationalIDCipher  []byte     `json:"-"`
+	NationalIDHMAC    []byte     `json:"-"`
+	NationalIDMasked  string     `json:"nationalIdMasked"`
+	HouseholdType     *string    `json:"householdType,omitempty"`
+	Gender            *string    `json:"gender,omitempty"`
+	BirthDate         *time.Time `json:"birthDate,omitempty"`
+	CareContactRole   *string    `json:"careContactRole,omitempty"`
+	CareContactName   *string    `json:"careContactName,omitempty"`
+	RegisteredAddress *string    `json:"registeredAddress,omitempty"`
+	SiteName          string     `json:"siteName,omitempty"`
+	OutboundVehicle   string     `json:"outboundVehicle,omitempty"`
+	InboundVehicle    string     `json:"inboundVehicle,omitempty"`
+	HomeAddress       string     `json:"homeAddress"`
+	Region            string     `json:"region"`
+	LTCLevel          *string    `json:"ltcLevel,omitempty"`
+	ServiceCategory   int        `json:"serviceCategory"`
+	ServiceUsageType  int        `json:"serviceUsageType"`
+	ClaimStartDate    time.Time  `json:"claimStartDate"`
+	ClaimEndDate      *time.Time `json:"claimEndDate,omitempty"`
+	Status            string     `json:"status"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
 }
 
 // SiteEntity 代表 sites 資料表實體。
@@ -83,22 +92,22 @@ type DriverAssignmentEntity struct {
 
 // CaseScheduleEntity 代表 case_schedules 與 schedule_legs 之組合排班實體。
 type CaseScheduleEntity struct {
-	ID                 uuid.UUID            `json:"id"`
-	CaseID             uuid.UUID            `json:"caseId"`
-	SiteID             uuid.UUID            `json:"siteId"`
-	SiteName           string               `json:"siteName,omitempty"`
-	EffectiveFrom      time.Time            `json:"effectiveFrom"`
-	EffectiveTo        *time.Time           `json:"effectiveTo,omitempty"`
-	Weekdays           []int16              `json:"weekdays"`
-	TripPattern        int16                `json:"tripPattern"`
-	UnitPrice          float64              `json:"unitPrice"`
-	DistanceKM         float64              `json:"distanceKm"`
-	ServiceDurationMin int16                `json:"serviceDurationMin"`
-	ServiceCode        string               `json:"serviceCode"`
-	Note               *string              `json:"note,omitempty"`
-	Legs               []ScheduleLegEntity  `json:"legs,omitempty"`
-	CreatedAt          time.Time            `json:"createdAt"`
-	UpdatedAt          time.Time            `json:"updatedAt"`
+	ID                 uuid.UUID           `json:"id"`
+	CaseID             uuid.UUID           `json:"caseId"`
+	SiteID             uuid.UUID           `json:"siteId"`
+	SiteName           string              `json:"siteName,omitempty"`
+	EffectiveFrom      time.Time           `json:"effectiveFrom"`
+	EffectiveTo        *time.Time          `json:"effectiveTo,omitempty"`
+	Weekdays           []int16             `json:"weekdays"`
+	TripPattern        int16               `json:"tripPattern"`
+	UnitPrice          float64             `json:"unitPrice"`
+	DistanceKM         float64             `json:"distanceKm"`
+	ServiceDurationMin int16               `json:"serviceDurationMin"`
+	ServiceCode        string              `json:"serviceCode"`
+	Note               *string             `json:"note,omitempty"`
+	Legs               []ScheduleLegEntity `json:"legs,omitempty"`
+	CreatedAt          time.Time           `json:"createdAt"`
+	UpdatedAt          time.Time           `json:"updatedAt"`
 }
 
 // ScheduleLegEntity 代表 schedule_legs 實體。
@@ -198,4 +207,3 @@ type RegionEntity struct {
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
-

@@ -164,6 +164,7 @@ func main() {
 		apiV1.GET("/cases", middleware.RequireRoles("viewer", "staff", "admin"), caseH.List)
 		apiV1.POST("/cases", middleware.RequireRoles("staff", "admin"), caseH.Create)
 		apiV1.GET("/cases/template", middleware.RequireRoles("viewer", "staff", "admin"), caseH.DownloadTemplate)
+		apiV1.GET("/cases/export", middleware.RequireRoles("viewer", "staff", "admin"), caseH.ExportProfileWorkbook)
 		apiV1.GET("/cases/:id", middleware.RequireRoles("viewer", "staff", "admin"), caseH.Get)
 		apiV1.PATCH("/cases/:id", middleware.RequireRoles("staff", "admin"), caseH.Update)
 		apiV1.POST("/cases/:id/reveal", middleware.RequireRoles("staff", "admin"), caseH.Reveal)

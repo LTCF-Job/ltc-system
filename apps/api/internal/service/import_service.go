@@ -23,6 +23,13 @@ var (
 	reDriverHeader = regexp.MustCompile(`^(.+?)\((\S+)\s+([A-Z][0-9]{9})\)$`)
 )
 
+func stringPointer(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
 // ImportService 負責批次 Excel/CSV 主檔與個案資料之解析與匯入。
 type ImportService struct {
 	masterService *MasterService
@@ -80,6 +87,12 @@ type CaseImportRowResult struct {
 	Name               string                  `json:"name"`
 	NationalID         string                  `json:"nationalId,omitempty"`
 	Phone              string                  `json:"phone,omitempty"`
+	HouseholdType      string                  `json:"householdType,omitempty"`
+	Gender             string                  `json:"gender,omitempty"`
+	BirthDate          string                  `json:"birthDate,omitempty"`
+	CareContactRole    string                  `json:"careContactRole,omitempty"`
+	CareContactName    string                  `json:"careContactName,omitempty"`
+	RegisteredAddress  string                  `json:"registeredAddress,omitempty"`
 	HomeAddress        string                  `json:"homeAddress,omitempty"`
 	Region             string                  `json:"region"`
 	ClaimStartDate     string                  `json:"claimStartDate"`
@@ -99,9 +112,53 @@ type CaseImportRowResult struct {
 	UnitPrice          float64                 `json:"unitPrice"`
 	ServiceDurationMin int16                   `json:"serviceDurationMin"`
 	Note               string                  `json:"note,omitempty"`
+	IsProfileWorkbook  bool                    `json:"isProfileWorkbook"`
 	IsDraft            bool                    `json:"isDraft"`
 	WarningMessage     string                  `json:"warningMessage,omitempty"`
 	ErrorMessage       string                  `json:"errorMessage,omitempty"`
+	RawValues          map[string]string       `json:"rawValues,omitempty"`
+}
+
+// CaseImportSkippedRow 保留未寫入資料庫的來源列與欄位錯誤。
+type CaseImportSkippedRow struct {
+	RowIndex  int               `json:"rowIndex"`
+	CaseName  string            `json:"caseName"`
+	Reasons   []string          `json:"reasons"`
+	RawValues map[string]string `json:"rawValues"`
+}
+
+// CaseImportCommitResult 回傳正式匯入成功與略過的列，供操作人員補正來源資料。
+type CaseImportCommitResult struct {
+	ImportedCount int                    `json:"importedCount"`
+	SkippedRows   []CaseImportSkippedRow `json:"skippedRows"`
+}
+
+func parseProfileBirthDate(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if parsed, err := time.Parse("2006-01-02", value); err == nil {
+		return parsed.Format("2006-01-02")
+	}
+	parts := strings.FieldsFunc(value, func(r rune) bool { return r == '/' || r == '-' || r == '.' })
+	if len(parts) != 3 {
+		return ""
+	}
+	year, yearErr := strconv.Atoi(parts[0])
+	month, monthErr := strconv.Atoi(parts[1])
+	day, dayErr := strconv.Atoi(parts[2])
+	if yearErr != nil || monthErr != nil || dayErr != nil {
+		return ""
+	}
+	if year < 1911 {
+		year += 1911
+	}
+	parsed := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	if parsed.Year() != year || int(parsed.Month()) != month || parsed.Day() != day {
+		return ""
+	}
+	return parsed.Format("2006-01-02")
 }
 
 // CaseImportPreviewResult 批次匯入預覽與統計結構體。
@@ -320,6 +377,16 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 	validRows := 0
 	errorRows := 0
 	warningRows := 0
+	profileWorkbookFound := false
+	for _, rows := range tables {
+		for r := 0; r < min(3, len(rows)); r++ {
+			rowText := strings.Join(rows[r], ",")
+			if strings.Contains(rowText, "戶別") && strings.Contains(rowText, "居住地") {
+				profileWorkbookFound = true
+				break
+			}
+		}
+	}
 
 	for tableIdx, rows := range tables {
 		sheetName := sheetNames[tableIdx]
@@ -337,6 +404,12 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 				headerRowIdx = r
 				for c, colName := range rows[r] {
 					cleanName := strings.TrimSpace(strings.ReplaceAll(colName, "*", ""))
+					if strings.Contains(cleanName, "接送車輛(去)") || strings.Contains(cleanName, "接送車輛（去）") {
+						colMap["接送車輛(去)"] = c
+					}
+					if strings.Contains(cleanName, "接送車輛(回)") || strings.Contains(cleanName, "接送車輛（回）") {
+						colMap["接送車輛(回)"] = c
+					}
 					cleanName = strings.Split(cleanName, "(")[0]
 					cleanName = strings.Split(cleanName, "（")[0]
 					cleanName = strings.TrimSpace(cleanName)
@@ -346,6 +419,13 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 				}
 				break
 			}
+		}
+		isProfileWorkbook := false
+		if _, ok := colMap["戶別"]; ok {
+			_, isProfileWorkbook = colMap["居住地"]
+		}
+		if profileWorkbookFound && !isProfileWorkbook {
+			continue
 		}
 
 		for rIdx := headerRowIdx + 1; rIdx < len(rows); rIdx++ {
@@ -396,11 +476,25 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 
 			totalRows++
 			actualRowIndex := rIdx + 1
+			rawValues := make(map[string]string)
+			for label, index := range colMap {
+				if index < len(row) {
+					rawValues[label] = strings.TrimSpace(row[index])
+				}
+			}
 
 			nationalID := getVal("身分證字號", "身分證")
 			regionStr := getVal("申報地區", "地區", "區域")
 			phone := getVal("聯絡電話", "電話")
-			homeAddress := getVal("住家地址", "地址")
+			homeAddress := getVal("居住地", "住家地址", "地址")
+			householdType := getVal("戶別")
+			gender := getVal("性別")
+			birthDate := parseProfileBirthDate(getVal("生日"))
+			careContactRole := getVal("個管or照專", "個管／照專", "個管/照專")
+			careContactName := getVal("聯絡人")
+			registeredAddress := getVal("戶籍")
+			outboundVehicle := getVal("接送車輛(去)")
+			inboundVehicle := getVal("接送車輛(回)")
 			claimStartDate := getVal("開始申報日", "幾號開始申報", "申報開始日")
 			siteName := getVal("所屬據點", "據點", "據點名稱")
 			distanceStr := getVal("單趟里程(公里)", "單趟里程", "里程", "里程數")
@@ -408,7 +502,7 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 			durationStr := getVal("服務時長(分鐘)", "服務時長", "時長")
 			serviceCatStr := getVal("服務類別")
 			serviceUsageStr := getVal("服務使用類型")
-			note := getVal("備註")
+			note := getVal("備註", "REMARK")
 
 			// 相容舊版欄位順序 (序號|姓名|地區|幾號開始申報|據點|每週開放時間|去程時間|回程時間...)
 			if regionStr == "" && len(colMap) == 0 {
@@ -558,6 +652,13 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 			if inboundTime == "" {
 				inboundTime = "16:00"
 			}
+			if isProfileWorkbook {
+				activeWeekdays = nil
+				weekdayScheds = nil
+				maxTripPattern = 0
+				outboundTime = ""
+				inboundTime = ""
+			}
 
 			rowRes := CaseImportRowResult{
 				RowIndex:           actualRowIndex,
@@ -565,6 +666,12 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 				Name:               name,
 				NationalID:         nationalID,
 				Phone:              phone,
+				HouseholdType:      householdType,
+				Gender:             gender,
+				BirthDate:          birthDate,
+				CareContactRole:    careContactRole,
+				CareContactName:    careContactName,
+				RegisteredAddress:  registeredAddress,
 				HomeAddress:        homeAddress,
 				Region:             region,
 				ClaimStartDate:     claimStartDate,
@@ -575,16 +682,41 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 				WeekdaySchedules:   weekdayScheds,
 				OutboundTime:       outboundTime,
 				InboundTime:        inboundTime,
+				OutboundVehicle:    outboundVehicle,
+				InboundVehicle:     inboundVehicle,
 				TripPattern:        maxTripPattern,
 				DistanceKM:         distanceKM,
 				UnitPrice:          unitPrice,
 				ServiceDurationMin: durationMin,
 				Note:               note,
-				IsDraft:            nationalID == "" || homeAddress == "",
+				IsProfileWorkbook:  isProfileWorkbook,
+				IsDraft:            isProfileWorkbook || nationalID == "" || homeAddress == "",
+				RawValues:          rawValues,
 			}
 
 			hasError := false
 			hasWarning := false
+			if isProfileWorkbook {
+				requiredFields := []struct{ label, value string }{
+					{"戶別", householdType}, {"身分證字號", nationalID}, {"性別", gender},
+					{"據點", siteName}, {"接送車輛(去)", outboundVehicle}, {"接送車輛(回)", inboundVehicle},
+					{"個管or照專", careContactRole}, {"聯絡人", careContactName}, {"戶籍", registeredAddress}, {"居住地", homeAddress},
+				}
+				for _, field := range requiredFields {
+					if field.value == "" {
+						message := field.label + "：空白"
+						rowRes.ErrorMessage = strings.Trim(strings.TrimSpace(rowRes.ErrorMessage+"；"+message), "；")
+						errorsList = append(errorsList, CaseImportErrorItem{RowIndex: actualRowIndex, CaseName: name, Field: field.label, Message: message})
+						hasError = true
+					}
+				}
+				if strings.TrimSpace(getVal("生日")) != "" && birthDate == "" {
+					message := "生日：格式錯誤"
+					rowRes.ErrorMessage = strings.Trim(strings.TrimSpace(rowRes.ErrorMessage+"；"+message), "；")
+					errorsList = append(errorsList, CaseImportErrorItem{RowIndex: actualRowIndex, CaseName: name, Field: "生日", Message: message})
+					hasError = true
+				}
+			}
 
 			// 里程數檢核
 			if distanceKM <= 0 {
@@ -666,14 +798,19 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 }
 
 // CommitCases 將通過檢核的個案資料正式寫入資料庫。
-func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPreviewResult, actorID uuid.UUID, actorRole, ip, ua string) (int, error) {
+func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPreviewResult, actorID uuid.UUID, actorRole, ip, ua string) (*CaseImportCommitResult, error) {
 	if preview == nil || len(preview.Rows) == 0 {
-		return 0, nil
+		return &CaseImportCommitResult{}, nil
 	}
 
-	createdCount := 0
+	result := &CaseImportCommitResult{}
 	for _, row := range preview.Rows {
 		if row.ErrorMessage != "" {
+			item := skippedRow(row)
+			result.SkippedRows = append(result.SkippedRows, item)
+			if s.masterService != nil {
+				s.masterService.RecordSkippedCaseImport(ctx, item, actorID, actorRole, ip, ua)
+			}
 			continue
 		}
 
@@ -697,20 +834,47 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 		}
 
 		caseReq := CreateCaseRequest{
-			Name:             row.Name,
-			NationalID:       natID,
-			HomeAddress:      addr,
-			Region:           row.Region,
-			ClaimStartDate:   claimStart,
-			ServiceCategory:  row.ServiceCategory,
-			ServiceUsageType: row.ServiceUsageType,
-			Status:           status,
+			Name:              row.Name,
+			NationalID:        natID,
+			HouseholdType:     stringPointer(row.HouseholdType),
+			Gender:            stringPointer(row.Gender),
+			CareContactRole:   stringPointer(row.CareContactRole),
+			CareContactName:   stringPointer(row.CareContactName),
+			RegisteredAddress: stringPointer(row.RegisteredAddress),
+			HomeAddress:       addr,
+			Region:            row.Region,
+			ClaimStartDate:    claimStart,
+			ServiceCategory:   row.ServiceCategory,
+			ServiceUsageType:  row.ServiceUsageType,
+			Status:            status,
+		}
+		if row.BirthDate != "" {
+			if birthDate, err := time.Parse("2006-01-02", row.BirthDate); err == nil {
+				caseReq.BirthDate = &birthDate
+			}
 		}
 
 		caseEntity, err := s.masterService.CreateCase(ctx, caseReq, actorID, actorRole, ip, ua)
 		if err != nil {
-			// 若身分證重複則略過
+			item := CaseImportSkippedRow{RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{"個案建立失敗：" + err.Error()}, RawValues: row.RawValues}
+			result.SkippedRows = append(result.SkippedRows, item)
+			if s.masterService != nil {
+				s.masterService.RecordSkippedCaseImport(ctx, item, actorID, actorRole, ip, ua)
+			}
 			continue
+		}
+		if row.IsProfileWorkbook && s.siteRepo != nil && s.vehicleRepo != nil {
+			site, siteErr := s.siteRepo.GetByName(ctx, row.SiteName)
+			outbound, outboundErr := s.vehicleRepo.GetByDisplayName(ctx, row.OutboundVehicle)
+			inbound, inboundErr := s.vehicleRepo.GetByDisplayName(ctx, row.InboundVehicle)
+			if siteErr != nil || outboundErr != nil || inboundErr != nil {
+				item := CaseImportSkippedRow{RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{"據點或去／回程車輛未建檔"}, RawValues: row.RawValues}
+				result.SkippedRows = append(result.SkippedRows, item)
+				continue
+			}
+			if err := s.caseRepo.UpsertTransportPreference(ctx, caseEntity.ID, site.ID, outbound.ID, inbound.ID); err != nil {
+				return result, fmt.Errorf("save case transport preference: %w", err)
+			}
 		}
 
 		// 關聯據點與建立排班
@@ -728,7 +892,7 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			}
 		}
 
-		if siteID != uuid.Nil && len(row.Weekdays) > 0 {
+		if siteID != uuid.Nil && len(row.Weekdays) > 0 && !row.IsProfileWorkbook {
 			var legs []CreateScheduleLegItemRequest
 			if row.TripPattern == 1 {
 				legs = append(legs, CreateScheduleLegItemRequest{
@@ -766,8 +930,13 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			})
 		}
 
-		createdCount++
+		result.ImportedCount++
 	}
 
-	return createdCount, nil
+	return result, nil
+}
+
+func skippedRow(row CaseImportRowResult) CaseImportSkippedRow {
+	reasons := strings.Split(row.ErrorMessage, "；")
+	return CaseImportSkippedRow{RowIndex: row.RowIndex, CaseName: row.Name, Reasons: reasons, RawValues: row.RawValues}
 }
