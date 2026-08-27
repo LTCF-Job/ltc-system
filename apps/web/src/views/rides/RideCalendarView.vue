@@ -6,6 +6,14 @@
         <el-col :span="18" class="filter-inputs">
           <div class="month-picker-wrapper">
             <span class="label">查詢月份：</span>
+            <el-button
+              :icon="ArrowLeft"
+              circle
+              size="small"
+              title="上一月"
+              aria-label="上一月"
+              @click="changeMonth(-1)"
+            />
             <el-date-picker
               v-model="selectedDate"
               type="month"
@@ -15,6 +23,14 @@
               style="width: 140px"
               :clearable="false"
               @change="fetchMatrix"
+            />
+            <el-button
+              :icon="ArrowRight"
+              circle
+              size="small"
+              title="下一月"
+              aria-label="下一月"
+              @click="changeMonth(1)"
             />
           </div>
 
@@ -104,9 +120,9 @@
           align="center"
         >
           <template #default="{ row }">
-            <el-tag size="small" :type="row.region === 'miaoli' ? 'warning' : 'primary'">
+            <span class="inline-value">
               {{ REGION_LABELS[row.region] || row.region }}
-            </el-tag>
+            </span>
           </template>
         </el-table-column>
 
@@ -126,7 +142,7 @@
         <el-table-column
           v-for="day in daysInMonth"
           :key="day"
-          :label="`${day}`"
+          :label="isHoliday(day) ? `${day} ★` : `${day}`"
           min-width="46"
           align="center"
         >
@@ -156,7 +172,7 @@
                         <div>司機：{{ slot.record.driverName || '未指定' }}</div>
                       </template>
                       <div v-if="slot.record.hasConflict" style="color: #ff4d4f;">⚠️ 發現跨車回報衝突！</div>
-                      <div v-if="slot.record.correctedAt" style="color: #409eff;">✏️ 已由 {{ slot.record.correctedByName }} 於 {{ slot.record.correctedAt }} 更正</div>
+                      <div v-if="slot.record.correctedAt" style="color: #409eff;">✏️ 已由 {{ slot.record.correctedByName }} 於 {{ formatDateTime(slot.record.correctedAt) }} 更正</div>
                     </div>
                   </template>
 
@@ -212,10 +228,22 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Warning, WarningFilled, Check, Close, QuestionFilled, Search, Plus } from '@element-plus/icons-vue'
+import {
+  Warning,
+  WarningFilled,
+  Check,
+  Close,
+  QuestionFilled,
+  Search,
+  Plus,
+  ArrowLeft,
+  ArrowRight
+} from '@element-plus/icons-vue'
 import RideCorrectionDrawer from './RideCorrectionDrawer.vue'
 import RideManualEntryDialog from './RideManualEntryDialog.vue'
 import { getRideCalendarMatrix } from '@/api/rides'
+import { listHolidays } from '@/api/holidays'
+import { formatDateTime } from '@/utils/formatters'
 import { useRocMonth } from '@/composables/useRocMonth'
 import { REGION_LABELS } from '@/types/domain'
 import type { RideCalendarMatrixDTO, CaseRideCalendarRowDTO, RideRecordDTO } from '@/types/api'
@@ -227,6 +255,7 @@ const regionFilter = ref<string>('')
 const searchQuery = ref<string>('')
 const loading = ref(false)
 const matrixData = ref<RideCalendarMatrixDTO | null>(null)
+const holidayMap = ref<Record<string, { name: string; isDayOff?: boolean }>>({})
 const drawerRef = ref<InstanceType<typeof RideCorrectionDrawer>>()
 const manualEntryDialogRef = ref<InstanceType<typeof RideManualEntryDialog>>()
 
@@ -240,18 +269,44 @@ const daysInMonth = computed(() => {
   return new Date(year, month, 0).getDate()
 })
 
+function changeMonth(delta: number) {
+  if (!selectedDate.value) {
+    selectedDate.value = '2026-07'
+  }
+  const [yearStr, monthStr] = selectedDate.value.split('-')
+  let year = parseInt(yearStr, 10)
+  let month = parseInt(monthStr, 10)
+
+  month += delta
+  if (month < 1) {
+    month = 12
+    year -= 1
+  } else if (month > 12) {
+    month = 1
+    year += 1
+  }
+
+  selectedDate.value = `${year}-${String(month).padStart(2, '0')}`
+  fetchMatrix()
+}
+
 async function fetchMatrix() {
   loading.value = true
   try {
-    const res = await getRideCalendarMatrix({
+    const [res, holidayResponse] = await Promise.all([getRideCalendarMatrix({
       month: currentRocMonth.value,
       region: regionFilter.value || undefined,
       q: searchQuery.value || undefined
-    })
+    }), listHolidays({ startDate: `${selectedDate.value}-01`, endDate: `${selectedDate.value}-${String(daysInMonth.value).padStart(2, '0')}`, region: regionFilter.value || undefined })])
     matrixData.value = (res as any)?.cases ? res : ((res as any)?.data || res)
+    holidayMap.value = Object.fromEntries((holidayResponse.data || []).map((item) => [item.holidayDate, item]))
   } finally {
     loading.value = false
   }
+}
+
+function isHoliday(day: number) {
+  return Boolean(holidayMap.value[`${selectedDate.value}-${String(day).padStart(2, '0')}`])
 }
 
 function getCell(row: any, day: number) {
@@ -317,6 +372,10 @@ onMounted(() => {
   gap: 12px;
 }
 
+.inline-value {
+  color: var(--el-text-color-regular);
+}
+
 .filter-card, .legend-card, .matrix-card {
   border-radius: 8px;
 }
@@ -329,11 +388,12 @@ onMounted(() => {
   .month-picker-wrapper {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 
     .label {
       font-size: 14px;
       font-weight: 500;
+      white-space: nowrap;
     }
   }
 }

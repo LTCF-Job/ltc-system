@@ -1,8 +1,14 @@
 package handler
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
+	"ltc-system/apps/api/internal/domain/govform"
+	"ltc-system/apps/api/internal/export"
 	"ltc-system/apps/api/internal/middleware"
 	"ltc-system/apps/api/internal/service"
 
@@ -377,11 +383,16 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 // ExportHandler 處理匯出與前置檢核請求。
 type ExportHandler struct {
 	precheckService *service.PrecheckService
+	reportService   *service.ReportService
 }
 
 // NewExportHandler 建立 ExportHandler 實例。
-func NewExportHandler(precheckService *service.PrecheckService) *ExportHandler {
-	return &ExportHandler{precheckService: precheckService}
+func NewExportHandler(precheckService *service.PrecheckService, reportServices ...*service.ReportService) *ExportHandler {
+	var reportService *service.ReportService
+	if len(reportServices) > 0 {
+		reportService = reportServices[0]
+	}
+	return &ExportHandler{precheckService: precheckService, reportService: reportService}
 }
 
 // Precheck 執行匯出前置檢核（支援 GET Query 與 POST JSON Body）。
@@ -436,8 +447,23 @@ func (h *ExportHandler) Create(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&req)
 
+	if req.PeriodYM == "" {
+		req.PeriodYM = "115-07"
+	}
+	if req.Region == "" {
+		req.Region = "hsinchu"
+	}
+
+	jobID := uuid.New().String()
+	query := url.Values{}
+	query.Set("jobType", req.JobType)
+	query.Set("periodYm", req.PeriodYM)
+	query.Set("region", req.Region)
+	downloadURL := fmt.Sprintf("/api/v1/exports/%s/download?%s", jobID, query.Encode())
+	fileName := exportFileName(req.JobType, req.PeriodYM, req.Region)
+
 	job := gin.H{
-		"id":          uuid.New().String(),
+		"id":          jobID,
 		"jobType":     req.JobType,
 		"periodYm":    req.PeriodYM,
 		"region":      req.Region,
@@ -445,8 +471,8 @@ func (h *ExportHandler) Create(c *gin.Context) {
 		"status":      "succeeded",
 		"totalCases":  12,
 		"totalRows":   180,
-		"fileName":    "gov-claim-" + req.PeriodYM + ".xlsx",
-		"downloadUrl": "/healthz",
+		"fileName":    fileName,
+		"downloadUrl": downloadURL,
 		"createdAt":   "2026-08-25 16:00:00",
 	}
 	middleware.RespondSuccess(c, http.StatusAccepted, job, nil)
@@ -455,18 +481,78 @@ func (h *ExportHandler) Create(c *gin.Context) {
 // Get 取得單筆匯出工作狀態與下載連結。
 func (h *ExportHandler) Get(c *gin.Context) {
 	jobID := c.Param("id")
+	jobType := c.DefaultQuery("jobType", "gov_claim")
+	periodYM := c.DefaultQuery("periodYm", "115-07")
+	region := c.DefaultQuery("region", "hsinchu")
+	query := url.Values{}
+	query.Set("jobType", jobType)
+	query.Set("periodYm", periodYM)
+	query.Set("region", region)
+	downloadURL := fmt.Sprintf("/api/v1/exports/%s/download?%s", jobID, query.Encode())
 	job := gin.H{
 		"id":          jobID,
-		"jobType":     "gov_claim",
-		"periodYm":    "115-07",
-		"region":      "hsinchu",
+		"jobType":     jobType,
+		"periodYm":    periodYM,
+		"region":      region,
 		"mode":        "single_multi_case",
 		"status":      "succeeded",
 		"totalCases":  12,
 		"totalRows":   180,
-		"fileName":    "gov-claim-115-07.xlsx",
-		"downloadUrl": "/healthz",
+		"fileName":    exportFileName(jobType, periodYM, region),
+		"downloadUrl": downloadURL,
 		"createdAt":   "2026-08-25 16:00:00",
 	}
 	middleware.RespondSuccess(c, http.StatusOK, job, nil)
+}
+
+// Download 串流下載政府申報 Excel 檔案。
+func (h *ExportHandler) Download(c *gin.Context) {
+	jobType := c.DefaultQuery("jobType", "gov_claim")
+	periodYM := c.DefaultQuery("periodYm", "115-07")
+	region := c.DefaultQuery("region", "hsinchu")
+
+	excelBytes, err := h.generateExportBytes(c.Request.Context(), jobType, periodYM, region)
+	if err != nil {
+		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "產生申報 Excel 檔案失敗", nil)
+		return
+	}
+
+	fileName := exportFileName(jobType, periodYM, region)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", fileName, url.PathEscape(fileName)))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
+}
+
+func (h *ExportHandler) generateExportBytes(ctx context.Context, jobType, periodYM, region string) ([]byte, error) {
+	switch jobType {
+	case "trip_summary":
+		if h.reportService != nil {
+			var regionPtr *string
+			if region != "" {
+				regionPtr = &region
+			}
+			return h.reportService.GenerateTripSummaryExcel(ctx, periodYM, regionPtr, nil)
+		}
+		return export.GenerateTripSummaryExcel(periodYM, nil)
+	case "hsinchu_schedule":
+		if h.reportService != nil {
+			return h.reportService.GenerateHsinchuScheduleExcel(ctx, nil, nil)
+		}
+		return export.GenerateHsinchuScheduleExcel(nil, nil)
+	case "gov_claim", "":
+		return export.GenerateGovClaimExcel([]govform.ClaimRow{})
+	default:
+		return nil, fmt.Errorf("unsupported export job type %q", jobType)
+	}
+}
+
+func exportFileName(jobType, periodYM, region string) string {
+	period := strings.ReplaceAll(periodYM, "-", "")
+	switch jobType {
+	case "trip_summary":
+		return fmt.Sprintf("trip-summary-%s.xlsx", periodYM)
+	case "hsinchu_schedule":
+		return "hsinchu-schedule.xlsx"
+	default:
+		return fmt.Sprintf("gov-claim-%s-%s.xlsx", region, period)
+	}
 }

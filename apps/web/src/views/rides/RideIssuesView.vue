@@ -43,15 +43,9 @@
           <el-table-column prop="description" label="衝突說明" min-width="260" />
           <el-table-column label="涉及車輛" width="200">
             <template #default="{ row }">
-              <el-tag
-                v-for="(v, idx) in row.vehicles"
-                :key="idx"
-                type="danger"
-                size="small"
-                style="margin-right: 4px;"
-              >
-                {{ v }}
-              </el-tag>
+              <span v-for="(v, idx) in row.vehicles" :key="idx" class="vehicle-name">
+                {{ v }}<span v-if="Number(idx) < row.vehicles.length - 1" class="vehicle-separator">、</span>
+              </span>
             </template>
           </el-table-column>
 
@@ -263,4 +257,7 @@ onMounted(async () => {
   border-radius: 8px;
   background-color: #ffffff;
 }
+
+.vehicle-name { color: var(--el-text-color-regular); }
+.vehicle-separator { color: var(--el-text-color-placeholder); }
 </style>

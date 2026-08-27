@@ -169,7 +169,7 @@
 
       <!-- 歷次更正稽核資訊 -->
       <div v-if="record.correctedAt" class="audit-hint">
-        最後更正者：{{ record.correctedByName || '承辦人員' }} 於 {{ record.correctedAt }}
+        最後更正者：{{ record.correctedByName || '承辦人員' }} 於 {{ formatDateTime(record.correctedAt) }}
         <span v-if="record.correctionReason">（原因：{{ record.correctionReason }}）</span>
       </div>
     </div>

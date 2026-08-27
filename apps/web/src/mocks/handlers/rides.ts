@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import { mockCases, mockMissingRides, mockVehicles, mockDrivers, mockAuditLogs } from '../data/mockData'
+import { mockCases, mockMissingRides, mockIssueRides, mockVehicles, mockDrivers, mockAuditLogs } from '../data/mockData'
 
 // 記憶體內儲存更正或補登後的搭乘紀錄狀態
 export interface RideOverride {
@@ -132,7 +132,7 @@ export function findRideOverride(
 }
 
 export const ridesHandlers = [
-  // 搭乘月曆矩陣
+  // 搭乘月曆表
   http.get('/api/v1/rides/calendar', ({ request }) => {
     const url = new URL(request.url)
     const monthParam = url.searchParams.get('month') || '2026-07'
@@ -585,59 +585,27 @@ export const ridesHandlers = [
     const type = url.searchParams.get('issueType') || 'conflict'
     const q = url.searchParams.get('q')?.trim().toLowerCase()
 
-    let conflictList = [
-      {
-        id: 'ride_conflict_1',
-        caseId: 'case_2',
-        caseName: '葉秀珍',
-        serviceDate: '2026-07-20',
-        legSeq: 1,
-        issueType: 'conflict',
-        hasConflict: true,
-        description: '竹北一車與竹北二車皆回報「有坐」，需指定正確承載車輛',
-        vehicles: ['竹北一車', '竹北二車']
-      }
-    ].filter((item) => {
-      const override = findRideOverride(item.caseId, item.serviceDate, item.legSeq, item.id)
-      return !override || override.hasConflict !== false
-    })
+    let conflictList = mockIssueRides
+      .filter((item) => item.issueType === 'conflict')
+      .filter((item) => {
+        const override = findRideOverride(item.caseId, item.serviceDate, item.legSeq, item.id)
+        return !override || override.hasConflict !== false
+      })
 
-    let unreportedList = [
-      {
-        id: 'ride_unrep_1',
-        caseId: 'case_1',
-        caseName: '蔡曾切',
-        serviceDate: '2026-07-15',
-        legSeq: 2,
-        issueType: 'unreported',
-        hasConflict: false,
-        description: '07/15 第 2 趟（回程）司機尚未提交表單回覆',
-        vehicles: ['苗栗一車']
-      }
-    ].filter((item) => {
-      const override = findRideOverride(item.caseId, item.serviceDate, item.legSeq, item.id)
-      return !override || override.effectiveStatus === 'unreported'
-    })
+    let unreportedList = mockIssueRides
+      .filter((item) => item.issueType === 'unreported')
+      .filter((item) => {
+        const override = findRideOverride(item.caseId, item.serviceDate, item.legSeq, item.id)
+        return !override || override.effectiveStatus === 'unreported'
+      })
 
-    let errorList = [
-      {
-        id: 'err_1',
-        caseId: 'case_unknown',
-        caseName: '去程到07/21',
-        serviceDate: '2026-07-21',
-        legSeq: 1,
-        issueType: 'import_error',
-        hasConflict: false,
-        description: '搭乘欄填寫非標準字串「去程到07/21」，無法自動解析為有坐/沒坐',
-        vehicles: []
-      }
-    ]
+    let errorList = mockIssueRides.filter((item) => item.issueType === 'import_error')
 
     if (q) {
       const matchItem = (item: any) =>
         item.caseName.toLowerCase().includes(q) ||
         item.description.toLowerCase().includes(q) ||
-        item.vehicles.some((v: string) => v.toLowerCase().includes(q))
+        (item.vehicles && item.vehicles.some((v: string) => v.toLowerCase().includes(q)))
 
       conflictList = conflictList.filter(matchItem)
       unreportedList = unreportedList.filter(matchItem)

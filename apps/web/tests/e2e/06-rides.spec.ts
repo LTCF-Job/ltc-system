@@ -2,12 +2,12 @@ import { test, expect } from '@playwright/test'
 import { loginAs } from './helpers/auth'
 import { waitForTableLoaded, expectElMessage, confirmMessageBox } from './helpers/ui'
 
-test.describe('06. 搭乘月曆矩陣與紀錄更正 (Ride Calendar Matrix & Correction)', () => {
+test.describe('06. 搭乘月曆表與紀錄更正 (Ride Calendar & Correction)', () => {
   test.beforeEach(async ({ page }) => {
     await loginAs(page, 'admin', '/rides')
   })
 
-  test('搭乘月曆矩陣渲染、圖例與日期欄位顯示', async ({ page }) => {
+  test('搭乘月曆表渲染、圖例與日期欄位顯示', async ({ page }) => {
     await waitForTableLoaded(page)
     await expect(page.getByText('搭乘圖例：')).toBeVisible()
     await expect(page.getByText('有坐 (Boarded)')).toBeVisible()
@@ -15,9 +15,27 @@ test.describe('06. 搭乘月曆矩陣與紀錄更正 (Ride Calendar Matrix & Cor
     await expect(page.getByText('未回報 (Unreported)')).toBeVisible()
     await expect(page.getByText('混車衝突 (Conflict)')).toBeVisible()
 
-    // 檢查矩陣表格與個案姓名欄
+    // 檢查表格與個案姓名欄
     await expect(page.locator('.calendar-table').first()).toBeVisible()
     await expect(page.locator('.calendar-table').first().getByText('個案姓名')).toBeVisible()
+  })
+
+  test('點選查詢月份左右方向按鈕可快速切換上下月份', async ({ page }) => {
+    await waitForTableLoaded(page)
+    const monthInput = page.locator('.month-picker-wrapper input')
+    await expect(monthInput).toHaveValue('2026-07')
+
+    // 點選上一月
+    const prevBtn = page.getByRole('button', { name: '上一月' })
+    await expect(prevBtn).toBeVisible()
+    await prevBtn.click()
+    await expect(monthInput).toHaveValue('2026-06')
+
+    // 點選下一月
+    const nextBtn = page.getByRole('button', { name: '下一月' })
+    await expect(nextBtn).toBeVisible()
+    await nextBtn.click()
+    await expect(monthInput).toHaveValue('2026-07')
   })
 
   test('點選月曆搭乘格子開啟更正抽屜面板並執行更正', async ({ page }) => {
