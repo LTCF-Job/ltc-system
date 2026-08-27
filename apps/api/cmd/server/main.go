@@ -9,15 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/adapter"
+	"ltc-system/apps/api/internal/adapter/google"
 	"ltc-system/apps/api/internal/config"
 	"ltc-system/apps/api/internal/handler"
 	"ltc-system/apps/api/internal/middleware"
 	"ltc-system/apps/api/internal/repository"
 	"ltc-system/apps/api/internal/service"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -71,11 +73,15 @@ func main() {
 	taskRepo := repository.NewTaskRepository(pool)
 
 	// 初始化 Services
+	googleCli, err := google.NewClient(ctx, cfg.GoogleSAJSON)
+	if err != nil {
+		slog.Warn("Failed to initialize Google API client (falling back to offline mode)", slog.String("error", err.Error()))
+	}
 	regionSvc := service.NewRegionService(regionRepo, auditRepo)
 	masterSvc := service.NewMasterService(cfg, caseRepo, siteRepo, vehicleRepo, driverRepo, auditRepo)
 	importSvc := service.NewImportService(masterSvc, siteRepo, vehicleRepo, driverRepo, caseRepo)
 	rideSvc := service.NewRideService(formRepo, driverRepo, caseRepo, vehicleRepo, auditRepo)
-	formSvc := service.NewFormService(formRepo)
+	formSvc := service.NewFormService(formRepo, googleCli)
 	precheckSvc := service.NewPrecheckService(precheckRepo)
 	notificationSvc := service.NewNotificationService(notificationRepo, auditRepo, nil)
 	holidayProvider := service.GovernmentHolidayProvider(&adapter.GovernmentHolidayHTTPClient{
@@ -187,6 +193,10 @@ func main() {
 
 		// 5. 表單管理與欄位對應
 		apiV1.GET("/forms", middleware.RequireRoles("viewer", "staff", "admin"), formH.ListForms)
+		apiV1.POST("/forms", middleware.RequireRoles("staff", "admin"), formH.CreateFormAssociation)
+		apiV1.DELETE("/forms/:id", middleware.RequireRoles("staff", "admin"), formH.DeleteFormAssociation)
+		apiV1.GET("/forms/google-drive-files", middleware.RequireRoles("staff", "admin"), formH.ListGoogleDriveFiles)
+		apiV1.POST("/forms/inspect-sheet", middleware.RequireRoles("staff", "admin"), formH.InspectGoogleSheet)
 		apiV1.POST("/forms/:id/sync", middleware.RequireRoles("staff", "admin"), formH.SyncForm)
 		apiV1.GET("/forms/columns", middleware.RequireRoles("viewer", "staff", "admin"), formH.ListColumns)
 		apiV1.PATCH("/forms/columns/:id/mapping", middleware.RequireRoles("staff", "admin"), formH.UpdateColumnMapping)

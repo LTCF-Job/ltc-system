@@ -4,15 +4,20 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"ltc-system/apps/api/internal/middleware"
 	"ltc-system/apps/api/internal/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 // FormServiceInterface 定義 FormHandler 所需的業務服務介面。
 type FormServiceInterface interface {
 	ListForms(ctx context.Context) ([]service.FormListItemDTO, error)
-	SyncForm(ctx context.Context, formID string) (map[string]interface{}, error)
+	ListGoogleDriveFiles(ctx context.Context) ([]service.GoogleDriveFileDTO, error)
+	InspectGoogleSheet(ctx context.Context, inputURLOrID string) (*service.InspectSheetDTO, error)
+	CreateFormAssociation(ctx context.Context, req service.CreateFormAssociationRequest) (*service.FormListItemDTO, error)
+	DeleteFormAssociation(ctx context.Context, formID string) error
+	SyncForm(ctx context.Context, formID string, opts *service.SyncFormOptions) (map[string]interface{}, error)
 	ListColumns(ctx context.Context, mappingStatus string) ([]service.FormColumnDTO, error)
 	UpdateColumnMapping(ctx context.Context, colID string, status string, caseID *string, legSeq *int16) error
 	BatchMapping(ctx context.Context, mappings []service.ColumnMappingUpdate) (int, error)
@@ -28,6 +33,66 @@ func NewFormHandler(svc FormServiceInterface) *FormHandler {
 	return &FormHandler{svc: svc}
 }
 
+// ListGoogleDriveFiles 取得 Google 雲端硬碟中的試算表清單。
+func (h *FormHandler) ListGoogleDriveFiles(c *gin.Context) {
+	files, err := h.svc.ListGoogleDriveFiles(c.Request.Context())
+	if err != nil {
+		middleware.RespondError(c, http.StatusInternalServerError, "FAILED_TO_LIST_DRIVE_FILES", err.Error(), nil)
+		return
+	}
+	middleware.RespondSuccess(c, http.StatusOK, files, nil)
+}
+
+// InspectGoogleSheet 解析特定試算表的分頁與欄位結構。
+func (h *FormHandler) InspectGoogleSheet(c *gin.Context) {
+	var req struct {
+		SheetURL      string `json:"sheetUrl"`
+		SpreadsheetID string `json:"spreadsheetId"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, "INVALID_PAYLOAD", "請提供有效之試算表連結或 ID", nil)
+		return
+	}
+
+	target := req.SheetURL
+	if target == "" {
+		target = req.SpreadsheetID
+	}
+
+	result, err := h.svc.InspectGoogleSheet(c.Request.Context(), target)
+	if err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, "INSPECT_SHEET_FAILED", err.Error(), nil)
+		return
+	}
+	middleware.RespondSuccess(c, http.StatusOK, result, nil)
+}
+
+// CreateFormAssociation 建立表單與 Google 試算表關聯。
+func (h *FormHandler) CreateFormAssociation(c *gin.Context) {
+	var req service.CreateFormAssociationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, "INVALID_PAYLOAD", err.Error(), nil)
+		return
+	}
+
+	form, err := h.svc.CreateFormAssociation(c.Request.Context(), req)
+	if err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, "FAILED_TO_CREATE_ASSOCIATION", err.Error(), nil)
+		return
+	}
+	middleware.RespondSuccess(c, http.StatusCreated, form, nil)
+}
+
+// DeleteFormAssociation 解除表單關聯。
+func (h *FormHandler) DeleteFormAssociation(c *gin.Context) {
+	formID := c.Param("id")
+	if err := h.svc.DeleteFormAssociation(c.Request.Context(), formID); err != nil {
+		middleware.RespondError(c, http.StatusInternalServerError, "FAILED_TO_DELETE_ASSOCIATION", err.Error(), nil)
+		return
+	}
+	middleware.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
+}
+
 // ListForms 取得 Google 表單清單。
 func (h *FormHandler) ListForms(c *gin.Context) {
 	forms, err := h.svc.ListForms(c.Request.Context())
@@ -41,7 +106,10 @@ func (h *FormHandler) ListForms(c *gin.Context) {
 // SyncForm 手動觸發表單同步。
 func (h *FormHandler) SyncForm(c *gin.Context) {
 	formID := c.Param("id")
-	res, err := h.svc.SyncForm(c.Request.Context(), formID)
+	var opts service.SyncFormOptions
+	_ = c.ShouldBindJSON(&opts) // 選填
+
+	res, err := h.svc.SyncForm(c.Request.Context(), formID, &opts)
 	if err != nil {
 		middleware.RespondError(c, http.StatusInternalServerError, "SYNC_FAILED", err.Error(), nil)
 		return

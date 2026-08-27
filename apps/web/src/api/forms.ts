@@ -5,8 +5,19 @@ import type {
   CreateFormAssociationRequest,
   SyncFormOptions,
   UpdateColumnMappingRequest,
-  BatchMappingRequest
+  BatchMappingRequest,
+  GoogleDriveSheetDTO,
+  InspectSheetResultDTO,
+  InspectSheetRequest
 } from '@/types/api'
+
+export async function listGoogleDriveSheets(): Promise<GoogleDriveSheetDTO[]> {
+  return apiClient.get('/forms/google-drive-files')
+}
+
+export async function inspectGoogleSheet(params: InspectSheetRequest): Promise<InspectSheetResultDTO> {
+  return apiClient.post('/forms/inspect-sheet', params)
+}
 
 export async function listForms(params?: { q?: string }): Promise<FormDTO[]> {
   return apiClient.get('/forms', { params })

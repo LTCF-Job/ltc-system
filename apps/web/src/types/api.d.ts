@@ -206,7 +206,7 @@ export interface CreateCaseRequest {
   status?: CaseStatus
 }
 
-export interface UpdateCaseRequest extends Partial<CreateCaseRequest> {}
+export interface UpdateCaseRequest extends Partial<CreateCaseRequest> { }
 
 export interface CreateScheduleRequest {
   siteId: string
@@ -274,7 +274,7 @@ export interface CreateSiteRequest {
   openDays: number[]
 }
 
-export interface UpdateSiteRequest extends Partial<CreateSiteRequest> {}
+export interface UpdateSiteRequest extends Partial<CreateSiteRequest> { }
 
 export interface VehicleDTO {
   id: string
@@ -292,7 +292,7 @@ export interface CreateVehicleRequest {
   active?: boolean
 }
 
-export interface UpdateVehicleRequest extends Partial<CreateVehicleRequest> {}
+export interface UpdateVehicleRequest extends Partial<CreateVehicleRequest> { }
 
 export interface DriverAssignmentDTO {
   id: string
@@ -327,7 +327,7 @@ export interface CreateDriverRequest {
   active?: boolean
 }
 
-export interface UpdateDriverRequest extends Partial<CreateDriverRequest> {}
+export interface UpdateDriverRequest extends Partial<CreateDriverRequest> { }
 
 // Google 表單與欄位對應
 export interface FormDTO {
@@ -351,9 +351,31 @@ export interface CreateFormAssociationRequest {
   title: string
   sheetUrl: string
   vehicleId?: string
+  vehicleName?: string
   region?: Region
   sheetTabs?: string[]
   activeTab?: string
+  accessToken?: string
+}
+
+export interface InspectSheetRequest {
+  sheetUrl?: string
+  spreadsheetId?: string
+  accessToken?: string
+}
+
+export interface GoogleDriveSheetDTO {
+  id: string
+  name: string
+  mimeType?: string
+  modifiedTime?: string
+}
+
+export interface InspectSheetResultDTO {
+  spreadsheetId: string
+  title: string
+  sheetTabs: string[]
+  previewHeaders?: string[]
 }
 
 export interface SyncFormOptions {
@@ -783,7 +805,7 @@ export interface CreateMaintenanceRequest {
   note?: string
 }
 
-export interface UpdateMaintenanceRequest extends Partial<CreateMaintenanceRequest> {}
+export interface UpdateMaintenanceRequest extends Partial<CreateMaintenanceRequest> { }
 
 // 14. 司機出勤與請假 (Attendance)
 export interface DriverDayAttendanceDTO {
@@ -842,7 +864,7 @@ export interface CreateFuelLogRequest {
   receiptUrl?: string
 }
 
-export interface UpdateFuelLogRequest extends Partial<CreateFuelLogRequest> {}
+export interface UpdateFuelLogRequest extends Partial<CreateFuelLogRequest> { }
 
 // 16. 完整版營運儀表板指標 (Dashboard Advanced Metrics)
 export interface AttendanceDistributionDTO {
