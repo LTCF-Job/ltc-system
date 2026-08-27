@@ -122,6 +122,7 @@ type HolidayEntity struct {
 	Name        string    `json:"name"`
 	Region      *string   `json:"region,omitempty"`
 	Source      string    `json:"source"`
+	IsDayOff    bool      `json:"isDayOff"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
@@ -190,7 +191,6 @@ type VehicleTripSummary struct {
 // RegionEntity 代表 regions 資料表實體。
 type RegionEntity struct {
 	ID          uuid.UUID `json:"id"`
-	Code        string    `json:"code"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	Status      string    `json:"status"`
@@ -198,5 +198,4 @@ type RegionEntity struct {
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
-
 

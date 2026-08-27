@@ -116,24 +116,25 @@ func (s *MaintenanceService) GenerateBlankMaintenanceExcel(ctx context.Context) 
 	defer f.Close()
 
 	headerStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Color: "#FFFFFF"},
-		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#1D5B79"}, Pattern: 1},
+		Font:      &excelize.Font{Bold: true, Color: "FFFFFF", Size: 11, Family: "Microsoft JhengHei"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"1D5B79"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border: []excelize.Border{
-			{Type: "left", Color: "#B0C4DE", Style: 1},
-			{Type: "top", Color: "#B0C4DE", Style: 1},
-			{Type: "bottom", Color: "#B0C4DE", Style: 1},
-			{Type: "right", Color: "#B0C4DE", Style: 1},
+			{Type: "left", Color: "B0C4DE", Style: 1},
+			{Type: "top", Color: "B0C4DE", Style: 1},
+			{Type: "bottom", Color: "B0C4DE", Style: 1},
+			{Type: "right", Color: "B0C4DE", Style: 1},
 		},
 	})
 
 	gridStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Color: "000000", Size: 11, Family: "Microsoft JhengHei"},
 		Alignment: &excelize.Alignment{Vertical: "center"},
 		Border: []excelize.Border{
-			{Type: "left", Color: "#CCCCCC", Style: 1},
-			{Type: "top", Color: "#CCCCCC", Style: 1},
-			{Type: "bottom", Color: "#CCCCCC", Style: 1},
-			{Type: "right", Color: "#CCCCCC", Style: 1},
+			{Type: "left", Color: "CCCCCC", Style: 1},
+			{Type: "top", Color: "CCCCCC", Style: 1},
+			{Type: "bottom", Color: "CCCCCC", Style: 1},
+			{Type: "right", Color: "CCCCCC", Style: 1},
 		},
 	})
 
@@ -184,6 +185,7 @@ func (s *MaintenanceService) GenerateBlankMaintenanceExcel(ctx context.Context) 
 		f.SetColWidth(sheetName, "F", "F", 12)
 		f.SetColWidth(sheetName, "G", "G", 22)
 		f.SetColWidth(sheetName, "H", "H", 14)
+		f.SetSheetDimension(sheetName, "A1:H16")
 	}
 
 	var buf bytes.Buffer

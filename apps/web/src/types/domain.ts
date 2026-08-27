@@ -300,7 +300,7 @@ export const SYSTEM_MODULES: SystemModuleInfo[] = [
   { id: 'masters_drivers', name: '司機管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'forms_sync', name: '表單同步管理', category: 'operations', categoryName: '表單與搭乘' },
   { id: 'forms_mappings', name: '欄位對應設定', category: 'operations', categoryName: '表單與搭乘' },
-  { id: 'rides_calendar', name: '搭乘月曆矩陣', category: 'operations', categoryName: '表單與搭乘' },
+  { id: 'rides_calendar', name: '搭乘月曆表', category: 'operations', categoryName: '表單與搭乘' },
   { id: 'rides_issues', name: '異常集中處理', category: 'operations', categoryName: '表單與搭乘' },
   { id: 'rides_missing', name: '未回報清單', category: 'operations', categoryName: '表單與搭乘' },
   { id: 'reports_trip_summary', name: '車輛趟數表', category: 'reports', categoryName: '營運報表' },

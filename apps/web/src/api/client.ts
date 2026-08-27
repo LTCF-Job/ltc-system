@@ -31,10 +31,21 @@ apiClient.interceptors.request.use(
 // 回應攔截器：處理 401、403 與通用錯誤提示
 apiClient.interceptors.response.use(
   (response) => response.data,
-  (error: AxiosError<{ error?: ApiError }>) => {
+  async (error: AxiosError<{ error?: ApiError }>) => {
     const authStore = useAuthStore()
     const status = error.response?.status
-    const apiError = error.response?.data?.error
+    let apiError = error.response?.data?.error
+
+    // 當 responseType 為 'blob' 時，後端返回的 JSON 錯誤會被包在 Blob 內，需讀取轉回物件
+    if (!apiError && error.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text()
+        const parsed = JSON.parse(text)
+        apiError = parsed?.error
+      } catch {
+        // 忽略解析失敗
+      }
+    }
 
     if (status === 401) {
       const wasAuthenticated = authStore.isAuthenticated

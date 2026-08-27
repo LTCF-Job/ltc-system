@@ -120,6 +120,26 @@ export interface UpdateRoleRequest {
 }
 
 // 個案與排班
+export type ScheduleMode = 'monthly' | 'by_weekday' | 'unified'
+
+export interface WeekdayScheduleConfig {
+  weekday: number
+  label?: string
+  tripCount: number
+  departTime?: string
+  returnTime?: string
+  vehicleId?: string
+}
+
+export interface DayScheduleConfig {
+  date: string
+  tripCount: number
+  departTime?: string
+  returnTime?: string
+  vehicleId?: string
+  note?: string
+}
+
 export interface ScheduleLegDTO {
   id: string
   legSeq: number
@@ -146,6 +166,9 @@ export interface CaseScheduleDTO {
   serviceCode: string
   note?: string
   legs: ScheduleLegDTO[]
+  scheduleMode?: ScheduleMode
+  weeklyConfigs?: WeekdayScheduleConfig[]
+  monthlyConfigs?: Record<string, DayScheduleConfig>
 }
 
 export interface CaseDTO {
@@ -195,6 +218,9 @@ export interface CreateScheduleRequest {
   serviceDurationMin: number
   serviceCode?: string
   note?: string
+  scheduleMode?: ScheduleMode
+  weeklyConfigs?: WeekdayScheduleConfig[]
+  monthlyConfigs?: Record<string, DayScheduleConfig>
   legs: Array<{
     legSeq: number
     direction: Direction
@@ -208,7 +234,6 @@ export interface CreateScheduleRequest {
 // 主檔：區域、據點、車輛、司機
 export interface RegionDTO {
   id: string
-  code: string
   name: string
   description?: string
   status: 'active' | 'inactive'
@@ -218,7 +243,6 @@ export interface RegionDTO {
 }
 
 export interface CreateRegionRequest {
-  code: string
   name: string
   description?: string
   status?: 'active' | 'inactive'

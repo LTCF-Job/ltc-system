@@ -12,6 +12,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/adapter"
 	"ltc-system/apps/api/internal/config"
 	"ltc-system/apps/api/internal/handler"
 	"ltc-system/apps/api/internal/middleware"
@@ -77,7 +78,11 @@ func main() {
 	formSvc := service.NewFormService(formRepo)
 	precheckSvc := service.NewPrecheckService(precheckRepo)
 	notificationSvc := service.NewNotificationService(notificationRepo, auditRepo, nil)
-	holidaySvc := service.NewHolidayService(holidayRepo, auditRepo)
+	holidayProvider := service.GovernmentHolidayProvider(&adapter.GovernmentHolidayHTTPClient{
+		Endpoint: adapter.GovernmentHolidayCSVEndpoint,
+		Client:   &http.Client{Timeout: cfg.GovernmentHolidayAPITimeout},
+	})
+	holidaySvc := service.NewHolidaySyncService(holidayRepo, auditRepo, holidayProvider)
 	reportSvc := service.NewReportService(reportRepo)
 	auditSvc := service.NewAuditService(auditRepo)
 	maintenanceSvc := service.NewMaintenanceService(maintenanceRepo, vehicleRepo, auditRepo)
@@ -93,7 +98,7 @@ func main() {
 	vehicleH := handler.NewVehicleHandler(vehicleRepo)
 	driverH := handler.NewDriverHandler(cfg, driverRepo)
 	rideH := handler.NewRideHandler(rideSvc)
-	exportH := handler.NewExportHandler(precheckSvc)
+	exportH := handler.NewExportHandler(precheckSvc, reportSvc)
 	notificationH := handler.NewNotificationHandler(notificationSvc)
 	holidayH := handler.NewHolidayHandler(holidaySvc)
 	reportH := handler.NewReportHandler(reportSvc)
@@ -202,6 +207,7 @@ func main() {
 		apiV1.GET("/exports", middleware.RequireRoles("viewer", "staff", "admin"), exportH.List)
 		apiV1.POST("/exports", middleware.RequireRoles("staff", "admin"), exportH.Create)
 		apiV1.GET("/exports/:id", middleware.RequireRoles("viewer", "staff", "admin"), exportH.Get)
+		apiV1.GET("/exports/:id/download", middleware.RequireRoles("viewer", "staff", "admin"), exportH.Download)
 
 		// 8. 國定假日與行事曆管理 (B5.1)
 		apiV1.GET("/holidays", middleware.RequireRoles("viewer", "staff", "admin"), holidayH.List)
@@ -250,7 +256,6 @@ func main() {
 		apiV1.POST("/tasks/check-missing-reports", middleware.RequireRoles("staff", "admin"), taskH.CheckMissingReports)
 		apiV1.POST("/tasks/month-end-reminder", middleware.RequireRoles("staff", "admin"), taskH.MonthEndReminder)
 	}
-
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	slog.Info("Starting LTC API Server", slog.String("addr", addr), slog.String("env", cfg.AppEnv))
