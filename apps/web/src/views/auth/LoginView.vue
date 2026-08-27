@@ -130,8 +130,9 @@ async function handleLogin() {
     }
     loading.value = true
     try {
+      const authEmail = form.email === 'ltcf-admin' ? 'ltcf-admin@ltc.example.com' : form.email
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: form.email,
+        email: authEmail,
         password: form.password
       })
       if (error || !data.session || !data.user) {
