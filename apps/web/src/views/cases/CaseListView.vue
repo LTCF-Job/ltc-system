@@ -82,6 +82,11 @@
           批次匯入個案
         </el-button>
 
+        <el-button v-if="authStore.can('staff')" plain @click="handleExportProfile">
+          <el-icon><Download /></el-icon>
+          匯出個案資料
+        </el-button>
+
         <el-button
           v-if="authStore.can('staff')"
           type="primary"
@@ -297,6 +302,7 @@ import {
   updateCase,
   deleteCase,
   downloadCaseImportTemplate,
+  exportCaseProfileWorkbook,
   dryRunImportCases,
   commitImportCases
 } from '@/api/cases'
@@ -406,12 +412,22 @@ async function handleDownloadTemplate(format: any = 'xlsx') {
   }
 }
 
+async function handleExportProfile() {
+  try {
+    const blob = await exportCaseProfileWorkbook()
+    downloadBlob(blob, '個案資料彙整.xlsx')
+    ElMessage.success('個案資料匯出完成')
+  } catch (err: any) {
+    ElMessage.error(err.message || '匯出個案資料失敗')
+  }
+}
+
 function openImportDialog() {
   importDialogRef.value?.open()
 }
 
 async function handleCommitImport(file: File) {
-  await commitImportCases(file)
+  return commitImportCases(file)
 }
 
 // 新增個案表單

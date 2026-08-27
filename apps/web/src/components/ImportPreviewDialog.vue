@@ -87,6 +87,7 @@
         show-icon
         :closable="false"
         title="檔案中含有格式錯誤或缺漏必填欄位，錯誤列無法寫入，請修正後重新上傳。"
+        description="你仍可繼續匯入其餘合法資料；錯誤列與原因會在完成後保留於本畫面。"
         style="margin-bottom: 12px;"
       />
 
@@ -125,12 +126,21 @@
         <el-button @click="resetToUpload">重新選擇檔案</el-button>
         <el-button
           type="primary"
-          :disabled="dryRunResult.errorRows > 0 || dryRunResult.validRows === 0"
+          :disabled="dryRunResult.validRows === 0"
           :loading="submitting"
           @click="confirmImport"
         >
-          確認寫入 ({{ dryRunResult.validRows }} 筆)
+          匯入有效資料 ({{ dryRunResult.validRows }} 筆)
         </el-button>
+      </div>
+
+      <div v-if="commitResult" class="result-list" role="status">
+        <h4>匯入結果：成功 {{ commitResult.importedCount }} 筆，略過 {{ commitResult.skippedRows.length }} 筆</h4>
+        <ul v-if="commitResult.skippedRows.length">
+          <li v-for="row in commitResult.skippedRows" :key="`${row.rowIndex}-${row.caseName}`">
+            第 {{ row.rowIndex }} 列（{{ row.caseName }}）：{{ row.reasons.join('；') }}
+          </li>
+        </ul>
       </div>
     </div>
   </el-dialog>
@@ -142,10 +152,15 @@ import { UploadFilled, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { DryRunImportResultDTO } from '@/types/api'
 
+interface ImportCommitResult {
+  importedCount: number
+  skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
+}
+
 const props = defineProps<{
   title: string
   onDryRun: (file: File) => Promise<DryRunImportResultDTO>
-  onCommit: (file: File) => Promise<void>
+  onCommit: (file: File) => Promise<ImportCommitResult>
   onDownloadTemplate?: () => Promise<void> | void
 }>()
 
@@ -159,6 +174,7 @@ const analyzing = ref(false)
 const submitting = ref(false)
 const downloadingTemplate = ref(false)
 const dryRunResult = ref<DryRunImportResultDTO | null>(null)
+const commitResult = ref<ImportCommitResult | null>(null)
 
 async function handleDownloadTemplate() {
   if (!props.onDownloadTemplate) return
@@ -173,6 +189,7 @@ async function handleDownloadTemplate() {
 function open() {
   selectedFile.value = null
   dryRunResult.value = null
+  commitResult.value = null
   visible.value = true
 }
 
@@ -202,6 +219,7 @@ async function startDryRun() {
 
 function resetToUpload() {
   dryRunResult.value = null
+  commitResult.value = null
   selectedFile.value = null
 }
 
@@ -215,9 +233,9 @@ async function confirmImport() {
   if (!selectedFile.value) return
   submitting.value = true
   try {
-    await props.onCommit(selectedFile.value)
-    ElMessage.success('批次匯入成功！')
-    visible.value = false
+    const result = await props.onCommit(selectedFile.value)
+    commitResult.value = result
+    ElMessage.success(`已匯入 ${result.importedCount} 筆有效資料`)
     emit('success')
   } finally {
     submitting.value = false
@@ -263,6 +281,14 @@ defineExpose({
   ul {
     padding-left: 20px;
   }
+}
+
+.result-list {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background-color: var(--el-color-info-light-9);
+  border-radius: 4px;
+  font-size: 13px;
 }
 
 .dialog-footer {
