@@ -86,11 +86,11 @@ func (h *RegionHandler) Create(c *gin.Context) {
 	actorRole := middleware.GetActorRole(c)
 	reg, err := h.svc.CreateRegion(c.Request.Context(), req, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
-		if errors.Is(err, service.ErrDuplicateRegionCode) {
-			middleware.RespondError(c, http.StatusConflict, middleware.CodeValidationFailed, "區域代碼已存在", nil)
+		if errors.Is(err, service.ErrDuplicateRegionName) {
+			middleware.RespondError(c, http.StatusConflict, middleware.CodeValidationFailed, "區域名稱已存在", nil)
 			return
 		}
-		if errors.Is(err, service.ErrInvalidRegionCode) || errors.Is(err, service.ErrRegionCodeRequired) || errors.Is(err, service.ErrRegionNameRequired) {
+		if errors.Is(err, service.ErrRegionNameRequired) {
 			middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
 			return
 		}

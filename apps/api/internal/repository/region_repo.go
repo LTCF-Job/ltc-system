@@ -25,11 +25,11 @@ func (r *RegionRepository) List(ctx context.Context, q, status string, page, pag
 	}
 	offset := (page - 1) * pageSize
 	query := `
-		SELECT id, code, name, description, status, sort_order, created_at, updated_at
+		SELECT id, name, description, status, sort_order, created_at, updated_at
 		FROM regions
-		WHERE ($1 = '' OR code ILIKE '%' || $1 || '%' OR name ILIKE '%' || $1 || '%')
+		WHERE ($1 = '' OR name ILIKE '%' || $1 || '%' OR description ILIKE '%' || $1 || '%')
 		  AND ($2 = '' OR status = $2)
-		ORDER BY sort_order ASC, code ASC
+		ORDER BY sort_order ASC, name ASC
 		LIMIT $3 OFFSET $4
 	`
 	rows, err := r.db.Query(ctx, query, q, status, pageSize, offset)
@@ -41,7 +41,7 @@ func (r *RegionRepository) List(ctx context.Context, q, status string, page, pag
 	var regions []RegionEntity
 	for rows.Next() {
 		var reg RegionEntity
-		if err := rows.Scan(&reg.ID, &reg.Code, &reg.Name, &reg.Description, &reg.Status, &reg.SortOrder, &reg.CreatedAt, &reg.UpdatedAt); err != nil {
+		if err := rows.Scan(&reg.ID, &reg.Name, &reg.Description, &reg.Status, &reg.SortOrder, &reg.CreatedAt, &reg.UpdatedAt); err != nil {
 			return nil, 0, err
 		}
 		regions = append(regions, reg)
@@ -50,7 +50,7 @@ func (r *RegionRepository) List(ctx context.Context, q, status string, page, pag
 	var total int64
 	countQuery := `
 		SELECT COUNT(*) FROM regions
-		WHERE ($1 = '' OR code ILIKE '%' || $1 || '%' OR name ILIKE '%' || $1 || '%')
+		WHERE ($1 = '' OR name ILIKE '%' || $1 || '%' OR description ILIKE '%' || $1 || '%')
 		  AND ($2 = '' OR status = $2)
 	`
 	_ = r.db.QueryRow(ctx, countQuery, q, status).Scan(&total)
@@ -64,9 +64,9 @@ func (r *RegionRepository) ListAll(ctx context.Context) ([]RegionEntity, error) 
 		return []RegionEntity{}, nil
 	}
 	query := `
-		SELECT id, code, name, description, status, sort_order, created_at, updated_at
+		SELECT id, name, description, status, sort_order, created_at, updated_at
 		FROM regions
-		ORDER BY sort_order ASC, code ASC
+		ORDER BY sort_order ASC, name ASC
 	`
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {
@@ -77,7 +77,7 @@ func (r *RegionRepository) ListAll(ctx context.Context) ([]RegionEntity, error) 
 	var regions []RegionEntity
 	for rows.Next() {
 		var reg RegionEntity
-		if err := rows.Scan(&reg.ID, &reg.Code, &reg.Name, &reg.Description, &reg.Status, &reg.SortOrder, &reg.CreatedAt, &reg.UpdatedAt); err != nil {
+		if err := rows.Scan(&reg.ID, &reg.Name, &reg.Description, &reg.Status, &reg.SortOrder, &reg.CreatedAt, &reg.UpdatedAt); err != nil {
 			return nil, err
 		}
 		regions = append(regions, reg)
@@ -91,28 +91,28 @@ func (r *RegionRepository) GetByID(ctx context.Context, id uuid.UUID) (*RegionEn
 		return nil, fmt.Errorf("database not connected")
 	}
 	query := `
-		SELECT id, code, name, description, status, sort_order, created_at, updated_at
+		SELECT id, name, description, status, sort_order, created_at, updated_at
 		FROM regions WHERE id = $1
 	`
 	var reg RegionEntity
-	err := r.db.QueryRow(ctx, query, id).Scan(&reg.ID, &reg.Code, &reg.Name, &reg.Description, &reg.Status, &reg.SortOrder, &reg.CreatedAt, &reg.UpdatedAt)
+	err := r.db.QueryRow(ctx, query, id).Scan(&reg.ID, &reg.Name, &reg.Description, &reg.Status, &reg.SortOrder, &reg.CreatedAt, &reg.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &reg, nil
 }
 
-// GetByCode 依區域代碼取得區域。
-func (r *RegionRepository) GetByCode(ctx context.Context, code string) (*RegionEntity, error) {
+// GetByName 依區域名稱取得區域。
+func (r *RegionRepository) GetByName(ctx context.Context, name string) (*RegionEntity, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("database not connected")
 	}
 	query := `
-		SELECT id, code, name, description, status, sort_order, created_at, updated_at
-		FROM regions WHERE code = $1 LIMIT 1
+		SELECT id, name, description, status, sort_order, created_at, updated_at
+		FROM regions WHERE name = $1 LIMIT 1
 	`
 	var reg RegionEntity
-	err := r.db.QueryRow(ctx, query, code).Scan(&reg.ID, &reg.Code, &reg.Name, &reg.Description, &reg.Status, &reg.SortOrder, &reg.CreatedAt, &reg.UpdatedAt)
+	err := r.db.QueryRow(ctx, query, name).Scan(&reg.ID, &reg.Name, &reg.Description, &reg.Status, &reg.SortOrder, &reg.CreatedAt, &reg.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -125,14 +125,14 @@ func (r *RegionRepository) Create(ctx context.Context, reg *RegionEntity) error 
 		return fmt.Errorf("database not connected")
 	}
 	query := `
-		INSERT INTO regions (id, code, name, description, status, sort_order)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO regions (id, name, description, status, sort_order)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING created_at, updated_at
 	`
 	if reg.ID == uuid.Nil {
 		reg.ID = uuid.New()
 	}
-	return r.db.QueryRow(ctx, query, reg.ID, reg.Code, reg.Name, reg.Description, reg.Status, reg.SortOrder).
+	return r.db.QueryRow(ctx, query, reg.ID, reg.Name, reg.Description, reg.Status, reg.SortOrder).
 		Scan(&reg.CreatedAt, &reg.UpdatedAt)
 }
 

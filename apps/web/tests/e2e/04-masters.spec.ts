@@ -56,11 +56,22 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
     await expectElMessage(page, /成功/, 'success')
   })
 
-  test('地區管理：清單瀏覽', async ({ page }) => {
+  test('地區管理：清單瀏覽與新增地區（不需填寫代碼）', async ({ page }) => {
     await page.goto('/masters/regions')
     await waitForTableLoaded(page)
     await expect(page.locator('.el-table').first()).toBeVisible()
     await expect(page.locator('.el-table').first()).toContainText('新竹')
+
+    // 點選新增地區按鈕
+    await page.getByRole('button', { name: '新增地區' }).click()
+    const dialog = page.locator('.el-dialog').filter({ hasText: '新增營運地區' })
+    await expect(dialog).toBeVisible()
+
+    // 驗證彈窗中無「地區代碼」欄位，只有區域名稱、排序、狀態與備註說明
+    await expect(dialog.getByLabel('地區代碼')).toHaveCount(0)
+    await dialog.getByPlaceholder(/如：臺北市/).fill('測試營運區')
+    await dialog.getByRole('button', { name: '儲存' }).click()
+    await expectElMessage(page, /成功/, 'success')
   })
 })
 

@@ -12,7 +12,7 @@
       <template #filter>
         <el-input
           v-model="filters.q"
-          placeholder="搜尋地區代碼／名稱／說明"
+          placeholder="搜尋區域名稱／說明"
           clearable
           style="width: 260px"
           @keyup.enter="handleSearch"
@@ -92,14 +92,6 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="code" label="地區代碼" width="160">
-            <template #default="{ row }">
-              <el-tag size="small" type="info" class="font-mono">
-                {{ row.code }}
-              </el-tag>
-            </template>
-          </el-table-column>
-
           <el-table-column prop="name" label="地區名稱" min-width="150">
             <template #default="{ row }">
               <span class="font-bold text-gray-800">{{ row.name }}</span>
@@ -141,7 +133,11 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="createdAt" label="建立時間" width="130" align="center" />
+          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center">
+            <template #default="{ row }">
+              <span>{{ formatDateTime(row.createdAt) }}</span>
+            </template>
+          </el-table-column>
 
           <el-table-column
             v-if="authStore.can('staff')"
@@ -177,17 +173,6 @@
       destroy-on-close
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-form-item label="地區代碼" prop="code">
-          <el-input
-            v-model="form.code"
-            :disabled="!!editingId"
-            placeholder="如：taipei、taichung（英文小寫與底線）"
-          />
-          <div v-if="!editingId" class="form-tip">
-            建立後作為系統篩選識別碼，建議使用全小寫英文、數字或底線。
-          </div>
-        </el-form-item>
-
         <el-form-item label="地區名稱" prop="name">
           <el-input v-model="form.name" placeholder="如：臺北市、臺中市" />
         </el-form-item>
@@ -240,6 +225,7 @@ import { Plus, Rank, InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import { listRegions, createRegion, updateRegion, deleteRegion } from '@/api/masters'
+import { formatDateTime } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/auth'
 import type { RegionDTO, CreateRegionRequest, UpdateRegionRequest } from '@/types/api'
 
@@ -270,13 +256,11 @@ const editingId = ref<string | null>(null)
 const formRef = ref<FormInstance>()
 
 const form = reactive<{
-  code: string
   name: string
   description: string
   status: 'active' | 'inactive'
   sortOrder: number
 }>({
-  code: '',
   name: '',
   description: '',
   status: 'active',
@@ -374,18 +358,7 @@ async function onDrop(event: DragEvent, targetIndex: number) {
   }
 }
 
-const validateCode = (_rule: any, value: string, callback: any) => {
-  if (!value) {
-    return callback(new Error('請輸入區域代碼'))
-  }
-  if (!/^[a-z0-9_-]{2,30}$/.test(value.trim())) {
-    return callback(new Error('區域代碼需為 2~30 字之小寫英數字、底線或連字號'))
-  }
-  callback()
-}
-
 const rules: FormRules = {
-  code: [{ required: true, validator: validateCode, trigger: 'blur' }],
   name: [{ required: true, message: '請輸入區域名稱', trigger: 'blur' }],
   sortOrder: [{ required: true, message: '請設定排序權重', trigger: 'change' }]
 }
@@ -433,7 +406,6 @@ function handleSizeChange(s: number) {
 
 function openCreateDialog() {
   editingId.value = null
-  form.code = ''
   form.name = ''
   form.description = ''
   form.status = 'active'
@@ -443,7 +415,6 @@ function openCreateDialog() {
 
 function openEditDialog(row: RegionDTO) {
   editingId.value = row.id
-  form.code = row.code
   form.name = row.name
   form.description = row.description || ''
   form.status = row.status
@@ -479,7 +450,6 @@ async function handleSubmit() {
         ElMessage.success('區域資料更新成功')
       } else {
         const createData: CreateRegionRequest = {
-          code: form.code.trim().toLowerCase(),
           name: form.name.trim(),
           description: form.description.trim(),
           status: form.status,
@@ -501,7 +471,7 @@ async function handleSubmit() {
 async function handleDelete(row: RegionDTO) {
   try {
     await ElMessageBox.confirm(
-      `確定要刪除區域「${row.name} (${row.code})」嗎？若該區域已有綁定個案、車輛或據點，建議優先改為「停用」。`,
+      `確定要刪除區域「${row.name}」嗎？若該區域已有綁定個案、車輛或據點，建議優先改為「停用」。`,
       '刪除確認',
       {
         confirmButtonText: '確定刪除',

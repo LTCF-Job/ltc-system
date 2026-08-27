@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,12 +11,9 @@ import (
 )
 
 var (
-	ErrRegionCodeRequired = errors.New("region code is required")
-	ErrRegionNameRequired = errors.New("region name is required")
-	ErrInvalidRegionCode  = errors.New("region code must consist of lowercase letters, numbers, hyphens or underscores (2-30 characters)")
-	ErrDuplicateRegionCode = errors.New("region code already exists")
-	ErrRegionNotFound     = errors.New("region not found")
-	regionCodePattern     = regexp.MustCompile(`^[a-z0-9_-]{2,30}$`)
+	ErrRegionNameRequired  = errors.New("region name is required")
+	ErrDuplicateRegionName = errors.New("region name already exists")
+	ErrRegionNotFound      = errors.New("region not found")
 )
 
 // RegionService 提供區域主檔之維護業務邏輯。
@@ -36,7 +32,6 @@ func NewRegionService(repo *repository.RegionRepository, auditRepo *repository.A
 
 // CreateRegionRequest 代表新增區域之請求結構。
 type CreateRegionRequest struct {
-	Code        string `json:"code" binding:"required"`
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
@@ -49,11 +44,6 @@ type UpdateRegionRequest struct {
 	Description *string `json:"description"`
 	Status      *string `json:"status"`
 	SortOrder   *int    `json:"sortOrder"`
-}
-
-// ValidateCode 驗證區域代碼是否合規。
-func ValidateRegionCode(code string) bool {
-	return regionCodePattern.MatchString(code)
 }
 
 // ListRegions 取得區域分頁清單。
@@ -79,31 +69,23 @@ func (s *RegionService) GetRegion(ctx context.Context, id uuid.UUID) (*repositor
 
 // CreateRegion 建立新區域主檔並留存稽核紀錄。
 func (s *RegionService) CreateRegion(ctx context.Context, req CreateRegionRequest, actorID uuid.UUID, actorRole, ip, ua string) (*repository.RegionEntity, error) {
-	req.Code = strings.TrimSpace(strings.ToLower(req.Code))
 	req.Name = strings.TrimSpace(req.Name)
-
-	if req.Code == "" {
-		return nil, ErrRegionCodeRequired
-	}
-	if !ValidateRegionCode(req.Code) {
-		return nil, ErrInvalidRegionCode
-	}
 	if req.Name == "" {
 		return nil, ErrRegionNameRequired
 	}
+
 	if req.Status == "" {
 		req.Status = "active"
 	} else if req.Status != "active" && req.Status != "inactive" {
 		req.Status = "active"
 	}
 
-	existing, _ := s.repo.GetByCode(ctx, req.Code)
+	existing, _ := s.repo.GetByName(ctx, req.Name)
 	if existing != nil {
-		return nil, ErrDuplicateRegionCode
+		return nil, ErrDuplicateRegionName
 	}
 
 	entity := repository.RegionEntity{
-		Code:        req.Code,
 		Name:        req.Name,
 		Description: strings.TrimSpace(req.Description),
 		Status:      req.Status,
