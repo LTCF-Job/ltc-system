@@ -177,7 +177,7 @@ const demoModules = [
     tags: ['在案/暫停/停案', '補助/自費', '4類機構', '1/2/4趟排班', '身分證遮罩/解密']
   },
   {
-    title: '搭乘月曆矩陣',
+    title: '搭乘月曆表',
     path: '/rides',
     icon: Calendar,
     iconClass: 'color-warning',

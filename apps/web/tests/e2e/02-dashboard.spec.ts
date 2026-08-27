@@ -26,8 +26,8 @@ test.describe('02. 總覽儀表板 (Dashboard)', () => {
 
   test('快捷功能按鈕可順暢跳轉至各功能頁面', async ({ page }) => {
     await waitForTableLoaded(page)
-    // 點選搭乘月曆矩陣
-    await page.getByRole('button', { name: '搭乘月曆矩陣' }).click()
+    // 點選搭乘月曆表
+    await page.getByRole('button', { name: '搭乘月曆表' }).click()
     await page.waitForURL('**/rides', { timeout: 10000 })
     await expect(page).toHaveURL(/.*\/rides$/)
 
