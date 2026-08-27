@@ -11,10 +11,10 @@
         </span>
       </div>
       <div class="summary-counts">
-        <el-tag v-if="result.summary.totalErrors > 0" type="danger" effect="dark">
+        <el-tag v-if="result.summary.totalErrors > 0" type="danger">
           錯誤 {{ result.summary.totalErrors }} 項
         </el-tag>
-        <el-tag v-if="result.summary.totalWarnings > 0" type="warning" effect="dark">
+        <el-tag v-if="result.summary.totalWarnings > 0" type="warning">
           警告 {{ result.summary.totalWarnings }} 項
         </el-tag>
         <el-tag v-if="result.summary.totalInfos > 0" type="info" effect="plain">

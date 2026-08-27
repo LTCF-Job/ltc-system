@@ -24,8 +24,8 @@ export default defineConfig({
     reuseExistingServer: true,
     timeout: 60000,
     env: {
-      VITE_ENABLE_MSW: 'true'
+      VITE_ENABLE_MSW: 'true',
+      VITE_E2E: 'true'
     }
   }
 })
-

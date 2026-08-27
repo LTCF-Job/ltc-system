@@ -18,8 +18,8 @@ test.describe('02. 總覽儀表板 (Dashboard)', () => {
 
   test('視覺化圖表容器載入完成', async ({ page }) => {
     await waitForTableLoaded(page)
-    await expect(page.getByText('各車當月接送趟數分佈')).toBeVisible()
-    await expect(page.getByText('車隊出勤與請假狀態')).toBeVisible()
+    await expect(page.getByText('各車當月接送趟數分佈', { exact: true })).toBeVisible()
+    await expect(page.getByText('車隊出勤與請假狀態', { exact: true })).toBeVisible()
     const canvases = page.locator('canvas')
     await expect(canvases.first()).toBeVisible({ timeout: 10000 })
   })
@@ -43,6 +43,22 @@ test.describe('02. 總覽儀表板 (Dashboard)', () => {
     await waitForTableLoaded(page)
     await expect(page.getByText('最近申報匯出紀錄')).toBeVisible()
     await expect(page.locator('.recent-exports-card .el-table').first()).toBeVisible()
+  })
+
+  test('最近申報匯出紀錄可下載檔案', async ({ page }) => {
+    await waitForTableLoaded(page)
+    const downloadPromise = page.waitForEvent('download')
+    await page.locator('.recent-exports-card').getByRole('button', { name: '下載' }).first().click()
+    const download = await downloadPromise
+
+    expect(download.suggestedFilename()).toMatch(/\.xlsx$/)
+
+    const zipHeader = await page.evaluate(async () => {
+      const response = await fetch('/api/v1/exports/job_202607_01/download?jobType=gov_claim&periodYm=115-07&region=hsinchu')
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      return Array.from(bytes.slice(0, 4))
+    })
+    expect(zipHeader).toEqual([80, 75, 3, 4])
   })
 })
 

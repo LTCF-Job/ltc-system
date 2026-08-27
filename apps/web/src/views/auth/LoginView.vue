@@ -79,7 +79,7 @@ import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
-import { isDemoCredentials, enterDemoMode, exitDemoModeIfActive } from '@/lib/demoMode'
+import { isDemoCredentials, enterDemoMode, exitDemoModeIfActive, isMockRuntimeEnabled } from '@/lib/demoMode'
 import { ROLE_LABELS, type UserRole } from '@/types/domain'
 
 const router = useRouter()
@@ -88,7 +88,7 @@ const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
-const isMockLoginEnabled = import.meta.env.VITE_ENABLE_MSW === 'true'
+const isMockLoginEnabled = isMockRuntimeEnabled()
 
 const form = reactive({
   email: isMockLoginEnabled ? 'admin@ltc.example.com' : '',
@@ -106,7 +106,7 @@ async function handleLogin() {
     if (!valid) return
 
     // 帳號密碼皆為 demo：略過真實 Supabase 登入，直接進展示模式
-    if (isDemoCredentials(form.email, form.password)) {
+    if (isMockLoginEnabled && isDemoCredentials(form.email, form.password)) {
       loading.value = true
       try {
         await enterDemoMode()

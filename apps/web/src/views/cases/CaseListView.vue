@@ -302,6 +302,7 @@ import {
 } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
+import { downloadBlob } from '@/utils/download'
 import {
   REGION_LABELS,
   CASE_STATUS_LABELS,
@@ -398,14 +399,7 @@ async function handleDownloadTemplate(format: any = 'xlsx') {
   try {
     const safeFormat: 'xlsx' | 'csv' = typeof format === 'string' && format.toLowerCase() === 'csv' ? 'csv' : 'xlsx'
     const blob = await downloadCaseImportTemplate(safeFormat)
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `個案批次匯入範本.${safeFormat}`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
+    downloadBlob(blob, `個案批次匯入範本.${safeFormat}`)
     ElMessage.success(`個案匯入範本 (.${safeFormat}) 下載成功`)
   } catch (err: any) {
     ElMessage.error(err.message || '下載範本失敗')

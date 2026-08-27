@@ -267,7 +267,7 @@
             </el-table-column>
             <el-table-column prop="region" label="區域" width="100" align="center">
               <template #default="{ row }">
-                <span class="region-pill">{{ row.region ? (REGION_LABELS[row.region] || row.region) : '全區' }}</span>
+                <span>{{ row.region ? (REGION_LABELS[row.region] || row.region) : '全區' }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="totalRows" label="總趟數" width="90" align="center">
@@ -298,7 +298,7 @@
                   type="primary"
                   size="small"
                   class="action-download-btn"
-                  @click="downloadFile(row.downloadUrl)"
+                  @click="downloadFile(row.downloadUrl, row.fileName)"
                 >
                   <el-icon><Download /></el-icon> 下載
                 </el-button>
@@ -317,6 +317,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   User,
   Van,
@@ -341,8 +342,9 @@ import {
 } from 'echarts/components'
 
 import { getDashboardMetrics } from '@/api/dashboard'
-import { getDashboardStats } from '@/api/exports'
+import { downloadExportFile, getDashboardStats } from '@/api/exports'
 import { formatDateTime } from '@/utils/formatters'
+import { downloadBlob } from '@/utils/download'
 import { REGION_LABELS } from '@/types/domain'
 import type { DashboardMetricsDTO, ExportJobDTO } from '@/types/api'
 
@@ -528,8 +530,14 @@ const attendancePieChartOption = computed(() => {
   }
 })
 
-function downloadFile(url: string) {
-  window.open(url, '_blank')
+async function downloadFile(url: string, filename?: string) {
+  try {
+    const blob = await downloadExportFile(url)
+    downloadBlob(blob, filename || '申報匯出.xlsx')
+    ElMessage.success('申報檔案下載成功')
+  } catch (error: any) {
+    ElMessage.error(error?.message || '下載檔案失敗')
+  }
 }
 
 onMounted(() => {

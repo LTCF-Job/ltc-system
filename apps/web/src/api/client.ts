@@ -3,6 +3,7 @@ import { ElMessage, ElNotification } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
 import type { ApiError } from '@/types/api'
+import { isMockRuntimeEnabled } from '@/lib/demoMode'
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -19,7 +20,7 @@ apiClient.interceptors.request.use(
     if (authStore.token) {
       config.headers.Authorization = `Bearer ${authStore.token}`
     }
-    if (import.meta.env.VITE_ENABLE_MSW === 'true' && authStore.user) {
+    if (isMockRuntimeEnabled() && authStore.user) {
       config.headers['X-Mock-Role'] = authStore.user.role
       config.headers['X-Mock-User-ID'] = authStore.user.id || '00000000-0000-0000-0000-000000000001'
     }

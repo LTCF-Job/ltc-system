@@ -69,7 +69,7 @@
               <el-table-column prop="departTime" label="排定出發時間" width="130" />
               <el-table-column prop="vehicleName" label="負責車輛" width="130">
                 <template #default="{ row }">
-                  <el-tag effect="plain" type="info">{{ row.vehicleName || '未指定' }}</el-tag>
+                  <span>{{ row.vehicleName || '未指定' }}</span>
                 </template>
               </el-table-column>
               <el-table-column prop="driverName" label="司機" width="120" />
@@ -77,7 +77,6 @@
                 <template #default="{ row }">
                   <el-tag
                     :type="(row.daysOverdue || 0) >= 3 ? 'danger' : 'warning'"
-                    effect="dark"
                     size="small"
                   >
                     逾期 {{ row.daysOverdue || 0 }} 天
@@ -185,7 +184,7 @@
               <el-table-column prop="triggeredByName" label="觸發來源" width="180" />
               <el-table-column label="狀態" width="100" align="center">
                 <template #default="{ row }">
-                  <el-tag :type="row.status === 'sent' || row.success ? 'success' : 'danger'" effect="dark" size="small">
+                  <el-tag :type="row.status === 'sent' || row.success ? 'success' : 'danger'" size="small">
                     {{ row.status === 'sent' || row.success ? '發送成功' : '失敗' }}
                   </el-tag>
                 </template>

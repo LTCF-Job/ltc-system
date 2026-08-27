@@ -7,10 +7,10 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
 import '@/styles/element-overrides.scss'
-import { restoreDemoModeOnBoot } from '@/lib/demoMode'
+import { isMockRuntimeEnabled, restoreDemoModeOnBoot } from '@/lib/demoMode'
 
 async function prepareApp() {
-  if (import.meta.env.VITE_ENABLE_MSW === 'true') {
+  if (isMockRuntimeEnabled()) {
     const { worker } = await import('./mocks/browser')
     await worker.start({
       onUnhandledRequest: 'bypass'
