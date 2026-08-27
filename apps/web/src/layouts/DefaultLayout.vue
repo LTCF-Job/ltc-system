@@ -1,13 +1,23 @@
 <template>
   <a class="skip-link" href="#main-content">跳至主要內容</a>
   <el-container class="layout-container">
+    <div
+      v-if="isMobile && isMobileMenuOpen"
+      class="navigation-backdrop"
+      aria-hidden="true"
+      @click="isMobileMenuOpen = false"
+    />
     <!-- 側邊選單欄 -->
-    <el-aside :width="isCollapse ? '68px' : expandedAsideWidth" class="aside-menu">
+    <el-aside
+      :width="isMobile ? expandedAsideWidth : (isCollapse ? '68px' : expandedAsideWidth)"
+      class="aside-menu"
+      :class="{ 'is-mobile': isMobile, 'is-mobile-open': isMobileMenuOpen }"
+    >
       <el-scrollbar class="menu-scrollbar">
         <el-menu
           id="primary-navigation"
           :default-active="activeRoute"
-          :collapse="isCollapse"
+            :collapse="!isMobile && isCollapse"
           router
           class="el-menu-vertical"
           background-color="#19324d"
@@ -150,13 +160,13 @@
           <el-button
             link
             class="toggle-btn"
-            :aria-label="isCollapse ? '展開側邊導覽' : '收合側邊導覽'"
-            :aria-expanded="!isCollapse"
+            :aria-label="isNavigationOpen ? '收合側邊導覽' : '展開側邊導覽'"
+            :aria-expanded="isNavigationOpen"
             aria-controls="primary-navigation"
-            @click="isCollapse = !isCollapse"
+            @click="toggleNavigation"
           >
             <el-icon :size="18">
-              <Fold v-if="!isCollapse" />
+              <Fold v-if="isNavigationOpen" />
               <Expand v-else />
             </el-icon>
           </el-button>
@@ -226,7 +236,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Van,
@@ -263,6 +273,8 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const isCollapse = ref(false)
+const isMobile = ref(false)
+const isMobileMenuOpen = ref(false)
 const demoGuideRef = ref<InstanceType<typeof DemoGuideDrawer>>()
 const changePasswordDialogRef = ref<InstanceType<typeof ChangePasswordDialog>>()
 
@@ -307,6 +319,34 @@ const activeRoute = computed(() => {
   const path = route.path
   if (path.startsWith('/cases/')) return '/cases'
   return path
+})
+
+const isNavigationOpen = computed(() => isMobile.value ? isMobileMenuOpen.value : !isCollapse.value)
+
+function updateViewportMode() {
+  isMobile.value = window.matchMedia('(max-width: 640px)').matches
+  if (!isMobile.value) isMobileMenuOpen.value = false
+}
+
+function toggleNavigation() {
+  if (isMobile.value) {
+    isMobileMenuOpen.value = !isMobileMenuOpen.value
+    return
+  }
+  isCollapse.value = !isCollapse.value
+}
+
+watch(() => route.fullPath, () => {
+  if (isMobile.value) isMobileMenuOpen.value = false
+})
+
+onMounted(() => {
+  updateViewportMode()
+  window.addEventListener('resize', updateViewportMode)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateViewportMode)
 })
 
 const currentRouteTitle = computed(() => {
@@ -442,6 +482,10 @@ function handleCommand(cmd: string) {
 
 }
 
+.navigation-backdrop {
+  display: none;
+}
+
 .layout-header {
   height: 56px;
   background-color: var(--app-surface);
@@ -568,7 +612,24 @@ function handleCommand(cmd: string) {
 }
 
 @media (max-width: 640px) {
-  .aside-menu { position: fixed; inset: 0 auto 0 0; z-index: 20; box-shadow: 8px 0 24px rgba(16, 21, 34, 0.08); }
+  .navigation-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    background: rgba(16, 21, 34, 0.34);
+  }
+
+  .aside-menu.is-mobile {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 20;
+    box-shadow: 8px 0 24px rgba(16, 21, 34, 0.16);
+    transform: translateX(-105%);
+    transition: transform 0.22s ease-out;
+  }
+
+  .aside-menu.is-mobile.is-mobile-open { transform: translateX(0); }
   .layout-header { padding-left: 12px; }
   .layout-header .header-right { gap: 8px; }
   .layout-header .demo-center-btn { padding: 8px; }

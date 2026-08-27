@@ -38,7 +38,7 @@
         </template>
 
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :xs="24" :lg="12">
             <el-form-item label="所屬據點" prop="siteId">
               <el-select
                 v-model="formData.siteId"
@@ -56,7 +56,7 @@
             </el-form-item>
           </el-col>
 
-          <el-col :span="12">
+          <el-col :xs="24" :lg="12">
             <el-form-item label="有效起始日" prop="effectiveFrom">
               <el-date-picker
                 v-model="formData.effectiveFrom"
@@ -367,7 +367,7 @@
         <!-- 模式 3：固定統一排班 (常態基準) -->
         <template v-else>
           <el-row :gutter="20">
-            <el-col :span="12">
+            <el-col :xs="24" :lg="12">
               <el-form-item label="趟數型態" prop="tripPattern">
                 <el-radio-group v-model="formData.tripPattern" @change="(val: any) => handlePatternChange(val)">
                   <el-radio-button :value="1">單向 1 趟</el-radio-button>
@@ -377,7 +377,7 @@
               </el-form-item>
             </el-col>
 
-            <el-col :span="12">
+            <el-col :xs="24" :lg="12">
               <el-form-item label="每週搭乘日" prop="weekdays">
                 <el-checkbox-group v-model="formData.weekdays">
                   <el-checkbox :value="1">週一</el-checkbox>
@@ -395,7 +395,7 @@
 
         <!-- 費用與時長欄位 (共用) -->
         <el-row :gutter="20" style="margin-top: 16px;">
-          <el-col :span="8">
+          <el-col :xs="24" :sm="8">
             <el-form-item label="申報單價 (元)" prop="unitPrice">
               <el-input-number
                 v-model="formData.unitPrice"
@@ -407,7 +407,7 @@
             </el-form-item>
           </el-col>
 
-          <el-col :span="8">
+          <el-col :xs="24" :sm="8">
             <el-form-item label="單趟里程 (公里)" prop="distanceKm">
               <el-input-number
                 v-model="formData.distanceKm"
@@ -420,7 +420,7 @@
             </el-form-item>
           </el-col>
 
-          <el-col :span="8">
+          <el-col :xs="24" :sm="8">
             <el-form-item label="服務時長 (分鐘)" prop="serviceDurationMin">
               <el-input-number
                 v-model="formData.serviceDurationMin"
@@ -448,7 +448,7 @@
           </div>
 
           <el-row :gutter="16" class="leg-inputs">
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item
                 label="出發時間"
                 :prop="`legs.${idx}.departTime`"
@@ -464,7 +464,7 @@
               </el-form-item>
             </el-col>
 
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="抵達時間 (選填)">
                 <el-time-picker
                   v-model="leg.arriveTime"
@@ -476,7 +476,7 @@
               </el-form-item>
             </el-col>
 
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item
                 label="預設指派車輛"
                 :prop="`legs.${idx}.vehicleId`"
@@ -498,7 +498,7 @@
               </el-form-item>
             </el-col>
 
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="車次序號 (RunNo)">
                 <el-input-number v-model="leg.runNo" :min="1" :max="20" style="width: 100%" />
               </el-form-item>

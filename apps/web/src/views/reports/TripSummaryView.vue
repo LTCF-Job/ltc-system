@@ -3,7 +3,7 @@
     <!-- 篩選與操作列 -->
     <el-card class="filter-card" shadow="never">
       <el-row :gutter="16" justify="space-between" align="middle">
-        <el-col :span="18">
+        <el-col :xs="24" :lg="18">
           <div class="filter-wrapper" style="display: flex; gap: 8px; align-items: center;">
             <el-date-picker
               v-model="queryMonth"
@@ -61,7 +61,7 @@
             </el-button>
           </div>
         </el-col>
-        <el-col :span="6" class="actions-col">
+        <el-col :xs="24" :lg="6" class="actions-col">
           <el-button
             type="success"
             icon="Download"
@@ -76,19 +76,19 @@
 
     <!-- 總覽資料統計卡片 -->
     <el-row :gutter="16">
-      <el-col :span="8">
+      <el-col :xs="24" :sm="8">
         <el-card shadow="never" class="stat-card">
           <div class="stat-title">全期去程趟數合計</div>
           <div class="stat-number">{{ reportData?.grandTotalOutbound || 0 }} <span>趟</span></div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="24" :sm="8">
         <el-card shadow="never" class="stat-card">
           <div class="stat-title">全期回程趟數合計</div>
           <div class="stat-number">{{ reportData?.grandTotalInbound || 0 }} <span>趟</span></div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="24" :sm="8">
         <el-card shadow="never" class="stat-card">
           <div class="stat-title">全期車輛總趟數</div>
           <div class="stat-number font-bold">{{ reportData?.grandTotal || 0 }} <span>趟</span></div>

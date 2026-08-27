@@ -221,13 +221,13 @@
         label-position="right"
       >
         <el-row :gutter="16">
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="角色名稱" prop="name">
               <el-input v-model="form.name" placeholder="如：外部稽核員、車隊專員" />
             </el-form-item>
           </el-col>
 
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="標籤色彩" prop="tagType">
               <el-select v-model="form.tagType" placeholder="請選擇標籤樣式" style="width: 100%">
                 <el-option

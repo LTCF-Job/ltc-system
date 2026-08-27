@@ -3,7 +3,7 @@
     <!-- 篩選列 -->
     <el-card shadow="never" class="filter-card mb-3" style="margin-bottom: 12px;">
       <el-row :gutter="16" align="middle">
-        <el-col :span="18" style="display: flex; gap: 8px;">
+        <el-col :xs="24" :lg="18" class="issue-filter-controls">
           <el-input
             v-model="issueQuery"
             placeholder="搜尋個案姓名／涉及車輛／說明"
@@ -234,4 +234,19 @@ onMounted(async () => {
 
 .vehicle-name { color: var(--el-text-color-regular); }
 .vehicle-separator { color: var(--el-text-color-placeholder); }
+
+.issue-filter-controls {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .issue-filter-controls {
+    flex-wrap: wrap;
+  }
+
+  .issue-filter-controls :deep(.el-input) {
+    width: 100%;
+  }
+}
 </style>

@@ -3,7 +3,7 @@
     <!-- 匯出條件設定卡片 -->
     <el-card shadow="never" class="export-settings-card">
       <template #header>
-        <span class="card-title">政府申報表匯出設定 <small>申報格式／33 欄</small></span>
+        <span class="card-title">政府申報表匯出設定</span>
       </template>
 
       <el-form
@@ -13,7 +13,7 @@
         :disabled="!authStore.can('staff')"
       >
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="申報年月 (民國)">
               <div class="roc-month-picker">
                 <el-date-picker
@@ -30,7 +30,7 @@
             </el-form-item>
           </el-col>
 
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="申報地區">
               <el-select
                 v-model="form.region"
@@ -51,37 +51,39 @@
           </el-col>
         </el-row>
 
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="匯出檔案模式">
+        <el-row :gutter="20" align="middle" class="export-mode-row">
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="匯出檔案模式" class="mode-form-item">
               <el-radio-group v-model="form.mode">
                 <el-radio value="single_multi_case">單檔多案 (.xlsx)</el-radio>
                 <el-radio value="case_per_file">一案一檔壓縮包 (.zip)</el-radio>
               </el-radio-group>
             </el-form-item>
           </el-col>
+
+          <el-col :xs="24" :sm="12">
+            <div v-if="authStore.can('staff')" class="action-buttons">
+              <el-button
+                type="info"
+                plain
+                :loading="checking"
+                @click="handleRunPrecheck"
+              >
+                <el-icon><Warning /></el-icon>
+                執行前置檢核
+              </el-button>
+
+              <el-button
+                type="primary"
+                :loading="exporting"
+                @click="handleStartExport"
+              >
+                <el-icon><Download /></el-icon>
+                開始產生申報檔
+              </el-button>
+            </div>
+          </el-col>
         </el-row>
-
-        <div v-if="authStore.can('staff')" class="action-buttons">
-          <el-button
-            type="info"
-            plain
-            :loading="checking"
-            @click="handleRunPrecheck"
-          >
-            <el-icon><Warning /></el-icon>
-            執行前置檢核
-          </el-button>
-
-          <el-button
-            type="primary"
-            :loading="exporting"
-            @click="handleStartExport"
-          >
-            <el-icon><Download /></el-icon>
-            開始產生申報檔
-          </el-button>
-        </div>
       </el-form>
     </el-card>
 
@@ -354,13 +356,6 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: bold;
   color: var(--el-color-primary);
-
-  small {
-    margin-left: 8px;
-    color: var(--el-text-color-secondary);
-    font-size: 12px;
-    font-weight: 500;
-  }
 }
 
 .roc-month-picker {
@@ -374,11 +369,15 @@ onUnmounted(() => {
   }
 }
 
+.mode-form-item {
+  margin-bottom: 0;
+}
+
 .action-buttons {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 12px;
-  margin-top: 16px;
 }
 
 .job-status-container {
@@ -400,6 +399,20 @@ onUnmounted(() => {
 
   .error-box {
     margin-top: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .roc-month-picker,
+  .action-buttons,
+  .job-status-container .job-info {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .action-buttons,
+  .job-status-container .download-box {
+    justify-content: flex-start;
   }
 }
 </style>

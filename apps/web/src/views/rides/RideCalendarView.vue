@@ -3,7 +3,7 @@
     <!-- 篩選與月份切換列 -->
     <el-card shadow="never" class="filter-card">
       <el-row :gutter="16" justify="space-between" align="middle">
-        <el-col :span="18" class="filter-inputs">
+        <el-col :xs="24" :lg="18" class="filter-inputs">
           <div class="month-picker-wrapper">
             <span class="label">查詢月份：</span>
             <el-button
@@ -62,7 +62,7 @@
           <el-button type="primary" :icon="Search" @click="fetchMatrix">查詢</el-button>
         </el-col>
 
-        <el-col :span="6" class="actions-col">
+        <el-col :xs="24" :lg="6" class="actions-col">
           <el-button type="warning" plain @click="$router.push('/rides/issues')">
             <el-icon><Warning /></el-icon>
             異常集中處理 (衝突/未回報)
@@ -590,5 +590,22 @@ onMounted(() => {
   flex-direction: column;
   gap: 4px;
   font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .filter-inputs {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .filter-inputs .month-picker-wrapper,
+  .actions-col {
+    width: 100%;
+  }
+
+  .actions-col {
+    justify-content: flex-start;
+    margin-top: 12px;
+  }
 }
 </style>

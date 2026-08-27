@@ -240,7 +240,7 @@
 
             <!-- 油資統計指標 -->
             <el-row :gutter="16" class="mt-3">
-              <el-col :span="8">
+              <el-col :xs="24" :sm="8">
                 <el-card shadow="never" class="stat-card">
                   <div class="stat-inner">
                     <span class="stat-label">加油總筆數</span>
@@ -248,7 +248,7 @@
                   </div>
                 </el-card>
               </el-col>
-              <el-col :span="8">
+              <el-col :xs="24" :sm="8">
                 <el-card shadow="never" class="stat-card">
                   <div class="stat-inner">
                     <span class="stat-label">總加油公升數</span>
@@ -256,7 +256,7 @@
                   </div>
                 </el-card>
               </el-col>
-              <el-col :span="8">
+              <el-col :xs="24" :sm="8">
                 <el-card shadow="never" class="stat-card">
                   <div class="stat-inner">
                     <span class="stat-label">總花費金額</span>

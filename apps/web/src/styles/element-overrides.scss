@@ -354,3 +354,57 @@ select {
     display: block !important;
   }
 }
+
+@media (max-width: 720px) {
+  .el-card .el-card__body {
+    padding: 14px;
+  }
+
+  .el-dialog {
+    width: calc(100% - 24px) !important;
+    margin: 12vh auto 0;
+  }
+
+  .el-descriptions__table {
+    table-layout: fixed;
+  }
+
+  .el-descriptions__cell {
+    overflow-wrap: anywhere;
+  }
+
+  .layout-main .el-card__body:has(> .el-table),
+  .layout-main .el-tabs__content {
+    overflow-x: auto;
+  }
+
+  .layout-main .el-table {
+    min-width: max-content;
+  }
+
+  .el-pagination {
+    row-gap: 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  .el-form--label-left .el-form-item__label,
+  .el-form--label-right .el-form-item__label {
+    float: none;
+    display: block;
+    width: auto !important;
+    text-align: left;
+    line-height: 1.5;
+    padding: 0 0 6px;
+  }
+
+  .el-form--label-left .el-form-item__content,
+  .el-form--label-right .el-form-item__content {
+    margin-left: 0 !important;
+  }
+
+  .el-radio-group {
+    white-space: normal;
+    line-height: 2.25;
+  }
+}
