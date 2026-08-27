@@ -31,6 +31,13 @@ Keep a visible one-way path from route or user action to feature behavior, API c
 
 Keep mock, fixture, seed, and demo behavior behind an explicit development or test boundary. It must not silently replace production requests or alter production authorization behavior.
 
+## Date and time display rules
+
+- 時間顯示一律精確至秒數（標準格式為 `YYYY-MM-DD HH:mm:ss`，若僅顯示時間為 `HH:mm:ss`，純日期為 `YYYY-MM-DD`）。
+- 嚴禁直接在 template 中渲染未經格式化的原始 ISO 8601 或後端 timestamp 字串（避免顯示毫秒 `.SSS` 或時區字尾如 `Z`、`+08:00`）。
+- 前端日期與時間格式化統一使用 `@/utils/formatters`（如 `formatDateTime`、`formatDate`、`formatTime`）。
+- 表格或清單中的時間欄位應設定足夠欄寬（建議 `min-width="170"` 或 `width="170"`），確保完整秒級時間字串不會折行或被裁切。
+
 ## Review workflow
 
 1. Trace representative screens from route entry to network request and rendered state.

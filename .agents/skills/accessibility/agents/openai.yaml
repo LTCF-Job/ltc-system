@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Accessibility"
+  short_description: "Design and verify accessible Vue interfaces"
+  default_prompt: "Apply the repository accessibility rules to this Vue interface while preserving existing behavior and project conventions."

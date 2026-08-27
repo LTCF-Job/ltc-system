@@ -16,6 +16,9 @@
 - Go backend code style：`.agents/skills/go-backend-code-style/SKILL.md`
 - Go unit testing：`.agents/skills/golang-unit-testing/SKILL.md`
 - Vue 3 frontend：`.agents/skills/frontend-architecture/SKILL.md`
+- Admin UI design：`.agents/skills/admin-ui-design/SKILL.md`
+- LTC dashboard visual language：`.agents/skills/ltc-dashboard-visual-language/SKILL.md`
+- Frontend accessibility：`.agents/skills/accessibility/SKILL.md`
 - mock／demo／seed／MSW：`.agents/skills/mock-and-demo-boundaries/SKILL.md`
 - architecture audit／refactoring review：`.agents/skills/architecture-review/SKILL.md`
 
