@@ -106,7 +106,7 @@ async function handleLogin() {
     if (!valid) return
 
     // 帳號密碼皆為 demo：略過真實 Supabase 登入，直接進展示模式
-    if (isMockLoginEnabled && isDemoCredentials(form.email, form.password)) {
+    if (isDemoCredentials(form.email, form.password)) {
       loading.value = true
       try {
         await enterDemoMode()

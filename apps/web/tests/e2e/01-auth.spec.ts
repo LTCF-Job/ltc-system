@@ -32,6 +32,22 @@ test.describe('01. 認證與權限控制 (Authentication & Authorization)', () =
     expect(currentUrl).not.toContain('/settings/users')
   })
 
+  test('輸入 demo/demo 帳密可直接進入展示模式並載入資料', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByPlaceholder('請輸入電子郵件').fill('demo')
+    await page.getByPlaceholder('請輸入密碼').fill('demo')
+    await page.getByRole('button', { name: '登入系統' }).click()
+
+    await expect(page).toHaveURL('/')
+    await expect(page.getByRole('menuitem', { name: '總覽儀表板' })).toBeVisible()
+    await expect(page.getByText('在案個案總數')).toBeVisible()
+
+    // 重新整理頁面後，展示模式狀態應持續維持
+    await page.reload()
+    await expect(page.getByRole('menuitem', { name: '總覽儀表板' })).toBeVisible()
+    await expect(page.getByText('在案個案總數')).toBeVisible()
+  })
+
   test('登出系統後狀態被清除並安全導回登入頁面', async ({ page }) => {
     await loginAs(page, 'admin')
     await logout(page)

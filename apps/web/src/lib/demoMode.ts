@@ -33,7 +33,6 @@ async function ensureWorkerStopped() {
 
 // 帳號密碼皆為 demo 時呼叫：略過真實登入，啟用 mock 攔截並記住狀態
 export async function enterDemoMode() {
-  if (!isMockRuntimeEnabled()) return
   await ensureWorkerStarted()
   localStorage.setItem(DEMO_MODE_KEY, 'true')
 }
@@ -46,10 +45,6 @@ export async function exitDemoModeIfActive() {
 
 // App 啟動時呼叫：重新整理頁面後，若上次是展示模式且尚未登出，還原 mock 攔截狀態
 export async function restoreDemoModeOnBoot() {
-  if (!isMockRuntimeEnabled()) {
-    localStorage.removeItem(DEMO_MODE_KEY)
-    return
-  }
   if (isDemoModeFlagged()) {
     await ensureWorkerStarted()
   }
