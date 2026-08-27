@@ -69,6 +69,12 @@ export const exportsHandlers = [
   }),
 
   http.get('/api/v1/exports', () => {
-    return HttpResponse.json({ data: mockExportJobs, meta: { total: mockExportJobs.length } })
+    const data = mockExportJobs.map((job) => ({
+      ...job,
+      downloadUrl: job.downloadUrl?.startsWith('/api/v1/')
+        ? job.downloadUrl
+        : `/api/v1/exports/${job.id}/download?jobType=${job.jobType}&periodYm=${job.periodYm}&region=${job.region || 'hsinchu'}`
+    }))
+    return HttpResponse.json({ data, meta: { total: data.length } })
   })
 ]

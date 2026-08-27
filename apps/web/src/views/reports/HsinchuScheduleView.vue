@@ -94,9 +94,7 @@
       >
         <el-table-column label="趟次" width="90" align="center">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain" type="primary">
-              第 {{ row.runNo }} 趟
-            </el-tag>
+            <span>第 {{ row.runNo }} 趟</span>
           </template>
         </el-table-column>
         <el-table-column prop="caseCode" label="個案編號" width="100" />
@@ -112,7 +110,7 @@
         </el-table-column>
         <el-table-column prop="departTime" label="出發時間" width="95" align="center">
           <template #default="{ row }">
-            <el-tag size="small" type="success">{{ row.departTime }}</el-tag>
+            <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="origin" label="出發地 (住家)" min-width="180" />
@@ -148,9 +146,7 @@
       >
         <el-table-column label="趟次" width="90" align="center">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain" type="warning">
-              第 {{ row.runNo }} 趟
-            </el-tag>
+            <span>第 {{ row.runNo }} 趟</span>
           </template>
         </el-table-column>
         <el-table-column prop="caseCode" label="個案編號" width="100" />
@@ -166,7 +162,7 @@
         </el-table-column>
         <el-table-column prop="departTime" label="出發時間" width="95" align="center">
           <template #default="{ row }">
-            <el-tag size="small" type="warning">{{ row.departTime }}</el-tag>
+            <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="origin" label="出發地 (據點)" min-width="180" />
@@ -200,6 +196,7 @@ import { getHsinchuSchedule, exportHsinchuScheduleExcel } from '@/api/reports'
 import { listSites, listVehicles } from '@/api/masters'
 import { formatDateTime } from '@/utils/formatters'
 import type { HsinchuScheduleReportDTO, SiteDTO, VehicleDTO } from '@/types/api'
+import { downloadBlob } from '@/utils/download'
 
 const loading = ref(false)
 const exporting = ref(false)
@@ -253,14 +250,7 @@ async function handleExportExcel() {
       siteId: selectedSiteId.value,
       vehicleId: selectedVehicleId.value
     })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'hsinchu-schedule.xlsx'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
+    downloadBlob(blob, 'hsinchu-schedule.xlsx')
     ElMessage.success('時刻表 Excel 匯出成功')
   } catch (err: any) {
     ElMessage.error(err.message || '匯出時刻表失敗')
@@ -301,7 +291,7 @@ onMounted(async () => {
     .page-title {
       font-size: 18px;
       font-weight: bold;
-      color: var(--el-color-primary);
+      color: var(--el-text-color-primary);
       margin: 0 0 4px 0;
     }
 
@@ -322,18 +312,20 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-weight: bold;
-  font-size: 14px;
-  color: #ffffff;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13.5px;
+  background-color: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
+  border: 1px solid var(--el-border-color-light);
 
   &.bg-outbound {
-    background-color: var(--el-color-primary);
+    border-left: 3px solid var(--el-color-primary);
   }
 
   &.bg-inbound {
-    background-color: #e67e22;
+    border-left: 3px solid var(--el-color-warning);
   }
 }
 

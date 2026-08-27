@@ -3,7 +3,7 @@
     <!-- 匯出條件設定卡片 -->
     <el-card shadow="never" class="export-settings-card">
       <template #header>
-        <span class="card-title">政府申報表匯出設定 (申報格式 33 欄規格)</span>
+        <span class="card-title">政府申報表匯出設定 <small>申報格式／33 欄</small></span>
       </template>
 
       <el-form
@@ -128,7 +128,8 @@
             type="error"
             show-icon
             :closable="false"
-            :title="currentJob.errorMessage || '匯出失敗，請重試或聯絡管理員'"
+            title="匯出失敗"
+            :description="currentJob.errorMessage || '請檢查前置檢核結果後重試；若仍無法匯出，請聯絡管理員。'"
           />
         </div>
       </div>
@@ -199,6 +200,7 @@ import {
 } from '@/api/exports'
 import { useAuthStore } from '@/stores/auth'
 import { useRocMonth } from '@/composables/useRocMonth'
+import { downloadBlob } from '@/utils/download'
 import {
   REGION_LABELS,
   EXPORT_STATUS_LABELS
@@ -311,14 +313,7 @@ function startPolling(jobId: string) {
 async function downloadFile(url: string) {
   try {
     const blob = await downloadExportFile(url)
-    const downloadUrl = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = downloadUrl
-    a.download = currentJob.value?.fileName || `gov-claim-${selectedDate.value}.xlsx`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0)
+    downloadBlob(blob, currentJob.value?.fileName || `gov-claim-${selectedDate.value}.xlsx`)
     ElMessage.success('申報檔案下載成功')
   } catch (err: any) {
     ElMessage.error(err.message || '下載檔案失敗')
@@ -359,6 +354,13 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: bold;
   color: var(--el-color-primary);
+
+  small {
+    margin-left: 8px;
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    font-weight: 500;
+  }
 }
 
 .roc-month-picker {

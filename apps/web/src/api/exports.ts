@@ -34,7 +34,9 @@ export async function getDashboardStats(): Promise<DashboardStatsDTO> {
 }
 
 export async function downloadExportFile(url: string): Promise<Blob> {
-  return apiClient.get(url, {
+  const baseURL = String(apiClient.defaults.baseURL || '')
+  const requestPath = url.startsWith(baseURL) ? url.slice(baseURL.length) : url
+  return apiClient.get(requestPath, {
     responseType: 'blob'
   })
 }
