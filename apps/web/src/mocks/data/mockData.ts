@@ -483,12 +483,22 @@ export const mockCases: CaseDTO[] = [
       siteId: 'site_2',
       siteName: '竹南日照據點',
       effectiveFrom: '2026-07-01',
-      weekdays: [1, 3, 5],
+      weekdays: [1, 2, 3, 4, 5],
       tripPattern: 2,
       unitPrice: 115,
       distanceKm: 6.0,
       serviceDurationMin: 12,
       serviceCode: 'BD03',
+      scheduleMode: 'by_weekday',
+      weeklyConfigs: [
+        { weekday: 1, label: '週一', tripCount: 2, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 2, label: '週二', tripCount: 1, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 3, label: '週三', tripCount: 2, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 4, label: '週四', tripCount: 1, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 5, label: '週五', tripCount: 2, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 6, label: '週六', tripCount: 0, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 7, label: '週日', tripCount: 0, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' }
+      ],
       legs: [
         { id: 'leg_10_1', legSeq: 1, direction: 'outbound', departTime: '08:50', arriveTime: '09:05', runNo: 1, vehicleId: 'veh_4', vehicleName: '竹南2車' },
         { id: 'leg_10_2', legSeq: 2, direction: 'inbound', departTime: '15:50', arriveTime: '16:05', runNo: 1, vehicleId: 'veh_4', vehicleName: '竹南2車' }

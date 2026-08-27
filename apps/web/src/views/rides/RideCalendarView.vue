@@ -129,12 +129,23 @@
         <el-table-column
           prop="tripPattern"
           label="趟數"
-          width="70"
+          width="76"
           fixed="left"
           align="center"
         >
           <template #default="{ row }">
-            <span>{{ row.tripPattern }} 趟</span>
+            <el-tag
+              v-if="getTripPatternDisplay(row) === '自訂'"
+              size="small"
+              type="info"
+              effect="plain"
+              class="custom-trip-tag"
+            >
+              自訂
+            </el-tag>
+            <span v-else class="trip-count-text">
+              {{ getTripPatternDisplay(row) }}
+            </span>
           </template>
         </el-table-column>
 
@@ -314,28 +325,68 @@ function getCell(row: any, day: number) {
   return row.days?.[dayKey]
 }
 
+// 取得個案月曆趟數顯示文字：當月應搭日趟數一致時顯示 N 趟，不一致時顯示自訂
+function getTripPatternDisplay(row: any): string {
+  if (row.tripPattern === 'custom' || row.tripPatternText === '自訂') {
+    return '自訂'
+  }
+
+  if (row.days) {
+    const scheduledTripCounts = new Set<number>()
+    for (const dateKey in row.days) {
+      const cell = row.days[dateKey]
+      if (cell && cell.isExpected) {
+        const count = cell.expectedTripCount ?? cell.records?.length ?? 0
+        if (count > 0) {
+          scheduledTripCounts.add(count)
+        }
+      }
+    }
+    if (scheduledTripCounts.size > 1) {
+      return '自訂'
+    } else if (scheduledTripCounts.size === 1) {
+      const count = Array.from(scheduledTripCounts)[0]
+      return `${count} 趟`
+    }
+  }
+
+  if (typeof row.tripPattern === 'number') {
+    return `${row.tripPattern} 趟`
+  }
+  return '2 趟'
+}
+
+// 計算該個案在指定日期的搭乘槽位列表（依該日預期趟數與實際紀錄動態展開）
 function getDaySlots(row: any, day: number) {
   const cell = getCell(row, day)
-  const tripPattern = row.tripPattern || 2
   const records = cell?.records || []
+  const isExpected = cell ? cell.isExpected : false
+  const expectedTripCount = cell?.expectedTripCount ?? (isExpected ? (typeof row.tripPattern === 'number' ? row.tripPattern : 2) : 0)
 
-  // 計算總槽位數：至少滿足該個案的 tripPattern，且包容可能存在的更大 legSeq
-  let maxLegSeq = tripPattern
+  let maxLegSeq = 0
   for (const r of records) {
     if (r.legSeq > maxLegSeq) {
       maxLegSeq = r.legSeq
     }
   }
 
+  // 應搭日至少滿足預期趟數；非應搭日依實際紀錄數（無紀錄時為單一非應搭槽位）
+  let totalSlots = 0
+  if (isExpected) {
+    totalSlots = Math.max(expectedTripCount, maxLegSeq, 1)
+  } else {
+    totalSlots = Math.max(maxLegSeq, records.length, 1)
+  }
+
   const slots = []
-  for (let legSeq = 1; legSeq <= maxLegSeq; legSeq++) {
+  for (let legSeq = 1; legSeq <= totalSlots; legSeq++) {
     const record = records.find((r: any) => r.legSeq === legSeq)
     const direction = legSeq % 2 === 1 ? '去程' : '回程'
     slots.push({
       legSeq,
       direction,
       record: record || null,
-      isExpected: cell ? cell.isExpected : false
+      isExpected: isExpected && legSeq <= expectedTripCount
     })
   }
   return slots
@@ -349,12 +400,13 @@ function openManualEntry(row: any, day: number, targetLegSeq?: number) {
   const dayKey = `${selectedDate.value}-${String(day).padStart(2, '0')}`
   const cell = getCell(row, day)
   const existingLegs = (cell?.records || []).map((r: any) => r.legSeq)
+  const dayTripCount = cell?.expectedTripCount || (typeof row.tripPattern === 'number' ? row.tripPattern : 2)
   manualEntryDialogRef.value?.open({
     caseId: row.caseId,
     caseName: row.caseName,
     caseCode: row.caseCode,
     serviceDate: dayKey,
-    tripPattern: row.tripPattern || 2,
+    tripPattern: dayTripCount || 2,
     targetLegSeq,
     existingLegs
   })
@@ -374,6 +426,16 @@ onMounted(() => {
 
 .inline-value {
   color: var(--el-text-color-regular);
+}
+
+.custom-trip-tag {
+  font-weight: 500;
+  border-radius: 4px;
+}
+
+.trip-count-text {
+  color: var(--el-text-color-regular);
+  font-size: 13px;
 }
 
 .filter-card, .legend-card, .matrix-card {

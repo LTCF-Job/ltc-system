@@ -4,6 +4,7 @@ import type {
   CaseStatus,
   Direction,
   TripPattern,
+  CalendarTripPattern,
   EffectiveRideStatus,
   RideReportedStatus,
   MappingStatus,
@@ -436,6 +437,7 @@ export interface RideCalendarCellDTO {
   date: string
   dayOfWeek: number
   isExpected: boolean
+  expectedTripCount?: number
   isHoliday?: boolean
   holidayName?: string
   records: RideRecordDTO[]
@@ -446,7 +448,8 @@ export interface CaseRideCalendarRowDTO {
   caseCode: string
   caseName: string
   region: Region
-  tripPattern: TripPattern
+  tripPattern: CalendarTripPattern
+  tripPatternText?: string
   days: Record<string, RideCalendarCellDTO>
 }
 

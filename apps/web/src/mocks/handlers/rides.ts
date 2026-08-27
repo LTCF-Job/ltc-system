@@ -174,13 +174,82 @@ export const ridesHandlers = [
 
     const rows = sourceCases.map((c) => {
       const days: Record<string, any> = {}
+      const scheduledTripCounts = new Set<number>()
+
       for (let day = 1; day <= totalDays; day++) {
         const dayStr = String(day).padStart(2, '0')
         const monthStr = String(targetMonth).padStart(2, '0')
         const dateKey = `${targetYear}-${monthStr}-${dayStr}`
         const dateObj = new Date(targetYear, targetMonth - 1, day)
         const dayOfWeek = dateObj.getDay() === 0 ? 7 : dateObj.getDay()
-        const isExpected = (c.activeSchedule?.weekdays || []).includes(dayOfWeek)
+
+        let isExpected = false
+        let dayTripCount = 0
+        let dayLegs: Array<{ legSeq: number; direction: 'outbound' | 'inbound'; departTime: string; vehicleId?: string; vehicleName?: string }> = []
+
+        const monthlyCfg = c.activeSchedule?.monthlyConfigs?.[dateKey]
+        if (monthlyCfg) {
+          dayTripCount = monthlyCfg.tripCount || 0
+          isExpected = dayTripCount > 0
+          if (isExpected) {
+            if (dayTripCount === 1) {
+              dayLegs = [
+                { legSeq: 1, direction: 'outbound', departTime: monthlyCfg.departTime || '09:00', vehicleId: monthlyCfg.vehicleId || c.activeSchedule?.legs?.[0]?.vehicleId, vehicleName: c.activeSchedule?.legs?.[0]?.vehicleName || '竹南2車' }
+              ]
+            } else if (dayTripCount === 2) {
+              dayLegs = [
+                { legSeq: 1, direction: 'outbound', departTime: monthlyCfg.departTime || '09:00', vehicleId: monthlyCfg.vehicleId || c.activeSchedule?.legs?.[0]?.vehicleId, vehicleName: c.activeSchedule?.legs?.[0]?.vehicleName || '竹南2車' },
+                { legSeq: 2, direction: 'inbound', departTime: monthlyCfg.returnTime || '16:00', vehicleId: monthlyCfg.vehicleId || c.activeSchedule?.legs?.[1]?.vehicleId, vehicleName: c.activeSchedule?.legs?.[1]?.vehicleName || '竹南2車' }
+              ]
+            } else if (dayTripCount === 4) {
+              dayLegs = [
+                { legSeq: 1, direction: 'outbound', departTime: monthlyCfg.departTime || '08:30', vehicleId: monthlyCfg.vehicleId || 'veh_4', vehicleName: '竹南2車' },
+                { legSeq: 2, direction: 'inbound', departTime: '11:30', vehicleId: monthlyCfg.vehicleId || 'veh_4', vehicleName: '竹南2車' },
+                { legSeq: 3, direction: 'outbound', departTime: '13:30', vehicleId: monthlyCfg.vehicleId || 'veh_4', vehicleName: '竹南2車' },
+                { legSeq: 4, direction: 'inbound', departTime: monthlyCfg.returnTime || '16:30', vehicleId: monthlyCfg.vehicleId || 'veh_4', vehicleName: '竹南2車' }
+              ]
+            }
+          }
+        } else if (c.activeSchedule?.scheduleMode === 'by_weekday') {
+          const weeklyCfg = c.activeSchedule?.weeklyConfigs?.find((w) => w.weekday === dayOfWeek)
+          dayTripCount = weeklyCfg?.tripCount || 0
+          isExpected = dayTripCount > 0
+          if (isExpected) {
+            if (dayTripCount === 1) {
+              dayLegs = [
+                { legSeq: 1, direction: 'outbound', departTime: weeklyCfg?.departTime || '08:50', vehicleId: weeklyCfg?.vehicleId || 'veh_4', vehicleName: '竹南2車' }
+              ]
+            } else if (dayTripCount === 2) {
+              dayLegs = [
+                { legSeq: 1, direction: 'outbound', departTime: weeklyCfg?.departTime || '08:50', vehicleId: weeklyCfg?.vehicleId || 'veh_4', vehicleName: '竹南2車' },
+                { legSeq: 2, direction: 'inbound', departTime: weeklyCfg?.returnTime || '15:50', vehicleId: weeklyCfg?.vehicleId || 'veh_4', vehicleName: '竹南2車' }
+              ]
+            } else if (dayTripCount === 4) {
+              dayLegs = [
+                { legSeq: 1, direction: 'outbound', departTime: '08:30', vehicleId: 'veh_4', vehicleName: '竹南2車' },
+                { legSeq: 2, direction: 'inbound', departTime: '11:30', vehicleId: 'veh_4', vehicleName: '竹南2車' },
+                { legSeq: 3, direction: 'outbound', departTime: '13:30', vehicleId: 'veh_4', vehicleName: '竹南2車' },
+                { legSeq: 4, direction: 'inbound', departTime: '16:30', vehicleId: 'veh_4', vehicleName: '竹南2車' }
+              ]
+            }
+          }
+        } else {
+          isExpected = (c.activeSchedule?.weekdays || []).includes(dayOfWeek)
+          if (isExpected) {
+            dayTripCount = (c.activeSchedule?.legs || []).length || (c.activeSchedule?.tripPattern || 2)
+            dayLegs = (c.activeSchedule?.legs || []).map((leg) => ({
+              legSeq: leg.legSeq,
+              direction: leg.direction,
+              departTime: leg.departTime,
+              vehicleId: leg.vehicleId,
+              vehicleName: leg.vehicleName
+            }))
+          }
+        }
+
+        if (isExpected && dayTripCount > 0) {
+          scheduledTripCounts.add(dayTripCount)
+        }
 
         if (isExpected) {
           const isConflict = targetYear === 2026 && targetMonth === 7 && day === 20 && c.id === 'case_2'
@@ -193,7 +262,8 @@ export const ridesHandlers = [
             date: dateKey,
             dayOfWeek,
             isExpected: true,
-            records: (c.activeSchedule?.legs || []).map((leg) => {
+            expectedTripCount: dayTripCount,
+            records: dayLegs.map((leg) => {
               const legUnreported = isUnreported || (day === 24 && c.id === 'case_2' && leg.legSeq === 4)
               const baseEffectiveStatus = legUnreported ? 'unreported' : (isAbsent ? 'absent' : 'boarded')
               const legConflict = isConflict && leg.legSeq === 1
@@ -351,9 +421,21 @@ export const ridesHandlers = [
             date: dateKey,
             dayOfWeek,
             isExpected: false,
+            expectedTripCount: 0,
             records: nonScheduledRecords
           }
         }
+      }
+
+      let rowTripPattern: any = c.activeSchedule?.tripPattern || 2
+      let rowTripPatternText: string | undefined = undefined
+
+      if (scheduledTripCounts.size > 1) {
+        rowTripPattern = 'custom'
+        rowTripPatternText = '自訂'
+      } else if (scheduledTripCounts.size === 1) {
+        rowTripPattern = Array.from(scheduledTripCounts)[0]
+        rowTripPatternText = `${rowTripPattern} 趟`
       }
 
       return {
@@ -361,7 +443,8 @@ export const ridesHandlers = [
         caseCode: c.code,
         caseName: c.name,
         region: c.region,
-        tripPattern: c.activeSchedule?.tripPattern || 2,
+        tripPattern: rowTripPattern,
+        tripPatternText: rowTripPatternText,
         days
       }
     })

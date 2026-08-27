@@ -222,16 +222,18 @@ func (h *RideHandler) GetCalendar(c *gin.Context) {
 	// 產生範例月曆矩陣回傳
 	casesData := []gin.H{
 		{
-			"caseId":      "55555555-5555-5555-5555-555555555501",
-			"caseCode":    "C0001",
-			"caseName":    "蔡曾切",
-			"region":      "miaoli",
-			"tripPattern": 2,
+			"caseId":          "55555555-5555-5555-5555-555555555501",
+			"caseCode":        "C0001",
+			"caseName":        "蔡曾切",
+			"region":          "miaoli",
+			"tripPattern":     "custom",
+			"tripPatternText": "自訂",
 			"days": gin.H{
 				"2026-07-10": gin.H{
-					"date":       "2026-07-10",
-					"dayOfWeek":  5,
-					"isExpected": true,
+					"date":              "2026-07-10",
+					"dayOfWeek":         5,
+					"isExpected":        true,
+					"expectedTripCount": 2,
 					"records": []gin.H{
 						{
 							"id":                   "ride_case_1_10_1",
@@ -268,16 +270,18 @@ func (h *RideHandler) GetCalendar(c *gin.Context) {
 			},
 		},
 		{
-			"caseId":      "55555555-5555-5555-5555-555555555502",
-			"caseCode":    "C0002",
-			"caseName":    "葉秀珍",
-			"region":      "hsinchu",
-			"tripPattern": 2,
+			"caseId":          "55555555-5555-5555-5555-555555555502",
+			"caseCode":        "C0002",
+			"caseName":        "葉秀珍",
+			"region":          "hsinchu",
+			"tripPattern":     4,
+			"tripPatternText": "4 趟",
 			"days": gin.H{
 				"2026-07-20": gin.H{
-					"date":       "2026-07-20",
-					"dayOfWeek":  1,
-					"isExpected": true,
+					"date":              "2026-07-20",
+					"dayOfWeek":         1,
+					"isExpected":        true,
+					"expectedTripCount": 4,
 					"records": []gin.H{
 						{
 							"id":                   "ride_case_2_20_1",

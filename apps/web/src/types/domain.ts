@@ -105,11 +105,13 @@ export const PERIOD_LABELS: Record<Period, string> = {
 }
 
 export type TripPattern = 1 | 2 | 4
+export type CalendarTripPattern = TripPattern | 'custom'
 
-export const TRIP_PATTERN_LABELS: Record<TripPattern, string> = {
+export const TRIP_PATTERN_LABELS: Record<CalendarTripPattern, string> = {
   1: '單向 1 趟',
   2: '一般 2 趟',
-  4: '四趟'
+  4: '四趟',
+  custom: '自訂'
 }
 
 export type RideReportedStatus = 'boarded' | 'absent'
