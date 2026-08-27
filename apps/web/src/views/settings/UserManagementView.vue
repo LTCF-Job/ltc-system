@@ -30,9 +30,10 @@
             :label="r.name"
             :value="r.key"
           >
-            <el-tag :type="r.tagType" size="small" effect="plain">
+            <span class="role-text" :class="`role-${r.key}`">
+              <span class="role-dot" :class="`dot-${r.key}`"></span>
               {{ r.name }}
-            </el-tag>
+            </span>
           </el-option>
         </el-select>
 
@@ -51,7 +52,6 @@
           <el-table-column prop="displayName" label="使用者姓名" min-width="140">
             <template #default="{ row }">
               <div class="user-name-cell">
-                <el-avatar :size="26" icon="UserFilled" class="user-avatar" />
                 <span class="font-bold">{{ row.displayName }}</span>
               </div>
             </template>
@@ -61,25 +61,24 @@
 
           <el-table-column label="身分角色" width="140" align="center">
             <template #default="{ row }">
-              <el-tag :type="getRoleTagType((row as any).role)">
+              <span class="role-text" :class="`role-${(row as any).role}`">
+                <span class="role-dot" :class="`dot-${(row as any).role}`"></span>
                 {{ getRoleDisplayName((row as any).role) }}
-              </el-tag>
+              </span>
             </template>
           </el-table-column>
 
           <el-table-column label="權限模式" width="140" align="center">
             <template #default="{ row }">
-              <el-tag
+              <span
                 v-if="(row as any).customPermissions && Object.keys((row as any).customPermissions).length > 0"
-                type="warning"
-                effect="plain"
-                size="small"
+                class="perm-mode-custom"
               >
                 個人自訂權限
-              </el-tag>
-              <el-tag v-else type="info" effect="plain" size="small">
+              </span>
+              <span v-else class="perm-mode-default">
                 套用角色預設
-              </el-tag>
+              </span>
             </template>
           </el-table-column>
 
@@ -163,9 +162,10 @@
               :label="r.name"
               :value="r.key"
             >
-              <el-tag :type="r.tagType" size="small" effect="plain">
+              <span class="role-text" :class="`role-${r.key}`">
+                <span class="role-dot" :class="`dot-${r.key}`"></span>
                 {{ r.name }}
-              </el-tag>
+              </span>
             </el-option>
           </el-select>
         </el-form-item>
@@ -237,7 +237,7 @@
         >
           <el-table-column prop="categoryName" label="分類" width="110" align="center">
             <template #default="{ row }">
-              <el-tag size="small" effect="plain" type="info">{{ row.categoryName }}</el-tag>
+              <span>{{ row.categoryName }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="name" label="功能區塊模組" min-width="160" />
@@ -293,8 +293,7 @@ import {
   SYSTEM_MODULES,
   DEFAULT_ROLE_PERMISSIONS,
   type UserRole,
-  type SystemPermissions,
-  type RoleTagType
+  type SystemPermissions
 } from '@/types/domain'
 
 const authStore = useAuthStore()
@@ -355,24 +354,6 @@ function getRoleDisplayName(roleKey?: string): string {
   const role = roleList.value.find((r) => r.key === roleKey)
   if (role) return role.name
   return (ROLE_LABELS as any)[roleKey] || roleKey
-}
-
-function getRoleTagType(roleKey?: string): RoleTagType {
-  if (!roleKey) return 'info'
-  const role = roleList.value.find((r) => r.key === roleKey)
-  if (role && role.tagType) return role.tagType
-  switch (roleKey) {
-    case 'admin':
-      return 'danger'
-    case 'dispatcher':
-    case 'staff':
-      return 'primary'
-    case 'driver':
-      return 'success'
-    case 'viewer':
-    default:
-      return 'info'
-  }
 }
 
 async function fetchRoles() {
@@ -587,6 +568,44 @@ onMounted(() => {
 
 .font-bold {
   font-weight: bold;
+}
+
+.role-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+
+  &.role-admin { color: #be123c; }
+  &.role-dispatcher { color: #1d4ed8; }
+  &.role-staff { color: #15803d; }
+  &.role-driver { color: #b45309; }
+  &.role-viewer { color: #475569; }
+}
+
+.role-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+
+  &.dot-admin { background-color: #e11d48; }
+  &.dot-dispatcher { background-color: #2563eb; }
+  &.dot-staff { background-color: #16a34a; }
+  &.dot-driver { background-color: #d97706; }
+  &.dot-viewer { background-color: #64748b; }
+}
+
+.perm-mode-custom {
+  color: #d97706;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.perm-mode-default {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
 
 .perm-drawer-content {

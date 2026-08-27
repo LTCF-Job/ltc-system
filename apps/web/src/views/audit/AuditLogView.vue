@@ -64,26 +64,19 @@
           </el-table-column>
           <el-table-column label="操作者" width="140" align="center">
             <template #default="{ row }">
-              <el-tag
-                size="small"
-                :type="getActorTagType((row as any).actorRole)"
-              >
-                {{ getActorDisplayName(row) }}
-              </el-tag>
+              <span>{{ getActorDisplayName(row) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="動作" width="140" align="center">
             <template #default="{ row }">
-              <el-tag :type="getActionTagType((row as any).action)">
+              <span :class="getActionClass((row as any).action)">
                 {{ (AUDIT_ACTION_LABELS as any)[(row as any).action] || (row as any).action }}
-              </el-tag>
+              </span>
             </template>
           </el-table-column>
           <el-table-column label="實體種類" width="130" align="center">
             <template #default="{ row }">
-              <el-tag effect="plain" type="info">
-                {{ (AUDIT_ENTITY_LABELS as any)[(row as any).entityType] || (row as any).entityType }}
-              </el-tag>
+              <span>{{ (AUDIT_ENTITY_LABELS as any)[(row as any).entityType] || (row as any).entityType }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="entityName" label="操作對象" min-width="180" show-overflow-tooltip>
@@ -121,20 +114,12 @@
         <el-descriptions :column="2" border style="margin-bottom: 16px;">
           <el-descriptions-item label="操作時間">{{ formatDateTime(selectedLog.createdAt) }}</el-descriptions-item>
           <el-descriptions-item label="操作者">
-            <el-tag
-              size="small"
-              :type="getActorTagType(selectedLog.actorRole)"
-            >
-              {{ getActorDisplayName(selectedLog) }}
-            </el-tag>
+            {{ getActorDisplayName(selectedLog) }}
           </el-descriptions-item>
           <el-descriptions-item label="動作類型">
-            <el-tag size="small" :type="getActionTagType(selectedLog.action)">
+            <span :class="getActionClass(selectedLog.action)">
               {{ AUDIT_ACTION_LABELS[selectedLog.action] || selectedLog.action }}
-            </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="目標實體">
-            {{ AUDIT_ENTITY_LABELS[selectedLog.entityType] || selectedLog.entityType }}
+            </span>
             <span v-if="selectedLog.entityName" class="entity-badge">({{ selectedLog.entityName }})</span>
           </el-descriptions-item>
           <el-descriptions-item label="來源 IP" :span="2">{{ selectedLog.ipAddress || '未知' }}</el-descriptions-item>
@@ -159,9 +144,7 @@
           >
             <el-table-column label="所屬區塊" width="130" align="center">
               <template #default="{ row }">
-                <el-tag effect="plain" type="info" size="small">
-                  {{ row.section }}
-                </el-tag>
+                <span>{{ row.section }}</span>
               </template>
             </el-table-column>
             <el-table-column label="欄位名稱" min-width="150">
@@ -185,9 +168,7 @@
             </el-table-column>
             <el-table-column label="狀態" width="90" align="center">
               <template #default="{ row }">
-                <el-tag size="small" :type="row.tagType">
-                  {{ row.statusText }}
-                </el-tag>
+                <span>{{ row.statusText }}</span>
               </template>
             </el-table-column>
           </el-table>
@@ -236,31 +217,24 @@ const queryEntityType = ref<AuditEntityType | undefined>(undefined)
 const detailVisible = ref(false)
 const selectedLog = ref<AuditLogDTO | null>(null)
 
-function getActionTagType(action: AuditAction): 'primary' | 'success' | 'warning' | 'info' | 'danger' {
+// 依 CRUD 類型標示文字顏色
+function getActionClass(action: AuditAction): string {
   switch (action) {
     case 'create':
     case 'import':
-      return 'success'
+      return 'crud-create'
     case 'update':
     case 'correct':
     case 'resolve_conflict':
-      return 'warning'
+      return 'crud-update'
     case 'delete':
     case 'reveal_pii':
-      return 'danger'
+      return 'crud-delete'
     case 'login':
-      return 'info'
     case 'export':
-      return 'primary'
     default:
-      return 'info'
+      return 'crud-read'
   }
-}
-
-function getActorTagType(role?: string): 'danger' | 'primary' | 'info' {
-  if (role === 'admin') return 'danger'
-  if (role === 'dispatcher' || role === 'staff') return 'primary'
-  return 'info'
 }
 
 function getActorDisplayName(row?: { actorRole?: string; actorName?: string } | null): string {
@@ -482,6 +456,27 @@ onMounted(() => {
   margin-left: 4px;
 }
 
+/* CRUD 文字顏色標示，純文字無額外外框 */
+.crud-create {
+  color: var(--el-color-success);
+  font-weight: 600;
+}
+
+.crud-update {
+  color: #d97706; /* amber */
+  font-weight: 600;
+}
+
+.crud-delete {
+  color: var(--el-color-danger);
+  font-weight: 600;
+}
+
+.crud-read {
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
 .dialog-content {
   display: flex;
   flex-direction: column;
@@ -520,16 +515,14 @@ onMounted(() => {
 
 .diff-old {
   color: var(--el-color-danger);
-  background-color: #fff1f0;
-  padding: 2px 6px;
-  border-radius: 4px;
+  border-left: 2px solid var(--el-color-danger);
+  padding-left: 6px;
 }
 
 .diff-new {
   color: var(--el-color-success);
-  background-color: #f6ffed;
+  border-left: 2px solid var(--el-color-success);
   font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding-left: 6px;
 }
 </style>

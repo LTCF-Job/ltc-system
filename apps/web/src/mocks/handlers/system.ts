@@ -13,7 +13,13 @@ import {
 export const systemHandlers = [
   // 儀表板指標與統計
   http.get('/api/v1/dashboard/stats', () => {
-    return HttpResponse.json(mockDashboardStats)
+    const recentExports = mockDashboardStats.recentExports.map((job) => ({
+      ...job,
+      downloadUrl: job.downloadUrl?.startsWith('/api/v1/')
+        ? job.downloadUrl
+        : `/api/v1/exports/${job.id}/download?jobType=${job.jobType}&periodYm=${job.periodYm}&region=${job.region || 'hsinchu'}`
+    }))
+    return HttpResponse.json({ ...mockDashboardStats, recentExports })
   }),
 
   http.get('/api/v1/dashboard/metrics', () => {
