@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { mockTripSummaryReport, mockHsinchuScheduleReport } from '../data/mockData'
+import { createMockExcelBlob } from '../utils/mockExcel'
 
 export const reportsHandlers = [
   // 車輛趟數表
@@ -24,10 +25,8 @@ export const reportsHandlers = [
   }),
 
   http.get('/api/v1/reports/trip-summary/export', () => {
-    const dummyBlob = new Blob(['mock-excel-binary-data'], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    })
-    return new HttpResponse(dummyBlob, {
+    const excelBlob = createMockExcelBlob()
+    return new HttpResponse(excelBlob, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': 'attachment; filename="trip-summary.xlsx"'
@@ -61,10 +60,8 @@ export const reportsHandlers = [
   }),
 
   http.get('/api/v1/reports/hsinchu-schedule/export', () => {
-    const dummyBlob = new Blob(['mock-hsinchu-schedule-binary'], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    })
-    return new HttpResponse(dummyBlob, {
+    const excelBlob = createMockExcelBlob()
+    return new HttpResponse(excelBlob, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': 'attachment; filename="hsinchu-schedule.xlsx"'

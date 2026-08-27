@@ -29,24 +29,35 @@ func GenerateHsinchuScheduleExcel(outbound, inbound []HsinchuScheduleExportItem)
 
 	sheetName := "新竹接送時刻表"
 	defaultSheet := f.GetSheetName(0)
-	f.SetSheetName(defaultSheet, sheetName)
+	if err := f.SetSheetName(defaultSheet, sheetName); err != nil {
+		return nil, fmt.Errorf("failed to rename hsinchu schedule sheet: %w", err)
+	}
 
-	titleStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Size: 14, Color: "#1D5B79"},
+	titleStyle, err := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Size: 14, Color: "1D5B79", Family: "Microsoft JhengHei"},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create title style: %w", err)
+	}
 
-	sectionHeaderStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Color: "#FFFFFF"},
-		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#1D5B79"}, Pattern: 1},
+	sectionHeaderStyle, err := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Color: "FFFFFF", Size: 11, Family: "Microsoft JhengHei"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"1D5B79"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create section header style: %w", err)
+	}
 
-	runHeaderStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Color: "#1D5B79"},
-		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#EAF2F8"}, Pattern: 1},
+	runHeaderStyle, err := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Color: "1D5B79", Size: 11, Family: "Microsoft JhengHei"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"EAF2F8"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create run header style: %w", err)
+	}
 
 	// 第 1 列：主標題
 	f.SetCellValue(sheetName, "A1", "長照交通接送 新竹區搭車順序時刻表")
@@ -115,6 +126,9 @@ func GenerateHsinchuScheduleExcel(outbound, inbound []HsinchuScheduleExportItem)
 	f.SetColWidth(sheetName, "F", "F", 30)
 	f.SetColWidth(sheetName, "G", "G", 14)
 	f.SetColWidth(sheetName, "H", "H", 30)
+	if err := f.SetSheetDimension(sheetName, fmt.Sprintf("A1:H%d", currentRow)); err != nil {
+		return nil, fmt.Errorf("failed to set hsinchu schedule sheet dimension: %w", err)
+	}
 
 	var buf bytes.Buffer
 	if err := f.Write(&buf); err != nil {

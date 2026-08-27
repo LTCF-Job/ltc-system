@@ -194,7 +194,8 @@ import {
   precheckExport,
   createExportJob,
   getExportJob,
-  listExportJobs
+  listExportJobs,
+  downloadExportFile
 } from '@/api/exports'
 import { useAuthStore } from '@/stores/auth'
 import { useRocMonth } from '@/composables/useRocMonth'
@@ -307,8 +308,21 @@ function startPolling(jobId: string) {
   }, 2000)
 }
 
-function downloadFile(url: string) {
-  window.open(url, '_blank')
+async function downloadFile(url: string) {
+  try {
+    const blob = await downloadExportFile(url)
+    const downloadUrl = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = downloadUrl
+    a.download = currentJob.value?.fileName || `gov-claim-${selectedDate.value}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0)
+    ElMessage.success('申報檔案下載成功')
+  } catch (err: any) {
+    ElMessage.error(err.message || '下載檔案失敗')
+  }
 }
 
 async function fetchHistory() {

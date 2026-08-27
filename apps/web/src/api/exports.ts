@@ -32,3 +32,9 @@ export async function listExportJobs(params?: {
 export async function getDashboardStats(): Promise<DashboardStatsDTO> {
   return apiClient.get('/dashboard/stats')
 }
+
+export async function downloadExportFile(url: string): Promise<Blob> {
+  return apiClient.get(url, {
+    responseType: 'blob'
+  })
+}

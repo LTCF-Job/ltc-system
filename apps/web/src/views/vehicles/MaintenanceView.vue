@@ -391,7 +391,9 @@ async function handleDownloadBlank() {
     const a = document.createElement('a')
     a.href = url
     a.download = '車輛定期保養檢查表_空白範本.xlsx'
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
     ElMessage.success('空白保養表下載成功')
   } catch (err: any) {

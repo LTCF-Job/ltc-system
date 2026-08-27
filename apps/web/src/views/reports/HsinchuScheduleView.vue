@@ -257,7 +257,9 @@ async function handleExportExcel() {
     const a = document.createElement('a')
     a.href = url
     a.download = 'hsinchu-schedule.xlsx'
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
     ElMessage.success('時刻表 Excel 匯出成功')
   } catch (err: any) {
