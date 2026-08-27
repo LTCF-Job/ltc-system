@@ -54,15 +54,23 @@
 
       <!-- 操作按鈕列 -->
       <template #actions>
-        <el-button
+        <el-dropdown
           v-if="authStore.can('staff')"
-          type="info"
-          plain
-          @click="handleDownloadTemplate"
+          trigger="click"
+          @command="(val: 'xlsx' | 'csv') => handleDownloadTemplate(val)"
         >
-          <el-icon><Download /></el-icon>
-          下載匯入範本
-        </el-button>
+          <el-button type="info" plain>
+            <el-icon><Download /></el-icon>
+            下載匯入範本
+            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="xlsx">標準 Excel 範本 (.xlsx)</el-dropdown-item>
+              <el-dropdown-item command="csv">標準 CSV 範本 (.csv)</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
 
         <el-button
           v-if="authStore.can('staff')"
@@ -107,15 +115,10 @@
                 @command="(val: Region) => handleQuickUpdateRegion(row as any, val)"
               >
                 <span class="cursor-pointer">
-                  <el-tag
-                    size="small"
-                    :type="row.region === 'miaoli' ? 'warning' : 'primary'"
-                    effect="light"
-                    style="cursor: pointer;"
-                  >
+                  <span class="inline-value inline-value-clickable">
                     {{ REGION_LABELS[row.region as Region] || row.region }}
                     <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                  </el-tag>
+                  </span>
                 </span>
                 <template #dropdown>
                   <el-dropdown-menu style="max-height: 240px; overflow-y: auto;">
@@ -129,9 +132,9 @@
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
-              <el-tag v-else size="small" :type="row.region === 'miaoli' ? 'warning' : 'primary'">
+              <span v-else class="inline-value">
                 {{ REGION_LABELS[row.region as Region] || row.region }}
-              </el-tag>
+              </span>
             </template>
           </el-table-column>
           <el-table-column prop="status" label="狀態" width="115" align="center">
@@ -142,37 +145,24 @@
                 @command="(val: CaseStatus) => handleQuickUpdateStatus(row as any, val)"
               >
                 <span class="cursor-pointer">
-                  <el-tag
-                    size="small"
-                    :type="row.status === 'active' ? 'success' : (row.status === 'suspended' ? 'info' : 'danger')"
-                    effect="light"
-                    style="cursor: pointer;"
-                  >
+                  <span class="case-status inline-value-clickable">
+                    <span class="status-dot" :class="`status-dot-${row.status}`"></span>
                     {{ CASE_STATUS_LABELS[row.status as CaseStatus] || row.status }}
                     <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                  </el-tag>
+                  </span>
                 </span>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="active">
-                      <el-tag size="small" type="success">在案</el-tag>
-                    </el-dropdown-item>
-                    <el-dropdown-item command="suspended">
-                      <el-tag size="small" type="info">暫停</el-tag>
-                    </el-dropdown-item>
-                    <el-dropdown-item command="closed">
-                      <el-tag size="small" type="danger">停案</el-tag>
-                    </el-dropdown-item>
+                    <el-dropdown-item command="active">在案</el-dropdown-item>
+                    <el-dropdown-item command="suspended">暫停</el-dropdown-item>
+                    <el-dropdown-item command="closed">停案</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
-              <el-tag
-                v-else
-                size="small"
-                :type="row.status === 'active' ? 'success' : (row.status === 'suspended' ? 'info' : 'danger')"
-              >
+              <span v-else class="case-status">
+                <span class="status-dot" :class="`status-dot-${row.status}`"></span>
                 {{ CASE_STATUS_LABELS[row.status as CaseStatus] || row.status }}
-              </el-tag>
+              </span>
             </template>
           </el-table-column>
           <el-table-column prop="claimStartDate" label="起聘申報日" width="115" align="center" />
@@ -182,7 +172,7 @@
                 {{ TRIP_PATTERN_LABELS[row.activeSchedule.tripPattern as TripPattern] }}
                 ({{ row.activeSchedule.weekdays?.map((w: number) => `週${'一二三四五六日'[w-1]}`).join('、') }})
               </span>
-              <el-tag v-else size="small" type="info">尚未設定排班</el-tag>
+              <span v-else class="empty-value">尚未設定排班</span>
             </template>
           </el-table-column>
           <el-table-column prop="homeAddress" label="住家地址" min-width="190" show-overflow-tooltip />
@@ -403,16 +393,19 @@ async function handleDeleteCase(row: CaseDTO) {
 }
 
 // 下載匯入範本
-async function handleDownloadTemplate() {
+async function handleDownloadTemplate(format: any = 'xlsx') {
   try {
-    const blob = await downloadCaseImportTemplate()
+    const safeFormat: 'xlsx' | 'csv' = typeof format === 'string' && format.toLowerCase() === 'csv' ? 'csv' : 'xlsx'
+    const blob = await downloadCaseImportTemplate(safeFormat)
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = '個案批次匯入範本.csv'
+    a.download = `個案批次匯入範本.${safeFormat}`
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
-    ElMessage.success('個案匯入範本下載成功')
+    ElMessage.success(`個案匯入範本 (.${safeFormat}) 下載成功`)
   } catch (err: any) {
     ElMessage.error(err.message || '下載範本失敗')
   }
@@ -485,4 +478,27 @@ executeFetch()
   display: flex;
   flex-direction: column;
 }
+
+.inline-value,
+.case-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--el-text-color-regular);
+}
+
+.inline-value-clickable { cursor: pointer; }
+.inline-value-clickable:hover { color: var(--el-color-primary); }
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--el-text-color-placeholder);
+}
+
+.status-dot-active { background: var(--el-color-success); }
+.status-dot-suspended { background: var(--el-color-warning); }
+.status-dot-closed { background: var(--el-text-color-placeholder); }
+.empty-value { color: var(--el-text-color-placeholder); }
 </style>

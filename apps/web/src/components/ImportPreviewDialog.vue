@@ -27,7 +27,7 @@
                 style="margin-top: 8px"
               >
                 <el-icon><Download /></el-icon>
-                下載匯入範本 (.csv)
+                下載標準匯入範本
               </el-button>
             </div>
           </template>
@@ -112,7 +112,7 @@
       </el-table>
 
       <!-- 錯誤明細展開清單 -->
-      <div v-if="dryRunResult.errors.length > 0" class="error-list">
+      <div v-if="dryRunResult.errors && dryRunResult.errors.length > 0" class="error-list">
         <h4>錯誤明細：</h4>
         <ul>
           <li v-for="(err, idx) in dryRunResult.errors" :key="idx">
@@ -184,8 +184,17 @@ async function startDryRun() {
   if (!selectedFile.value) return
   analyzing.value = true
   try {
-    const res = await props.onDryRun(selectedFile.value)
-    dryRunResult.value = res
+    const res: any = await props.onDryRun(selectedFile.value)
+    const rawData = res?.data ?? res
+    dryRunResult.value = {
+      totalRows: rawData.totalRows || 0,
+      validRows: rawData.validRows || 0,
+      errorRows: rawData.errorRows || 0,
+      warningRows: rawData.warningRows || 0,
+      previewRows: rawData.previewRows || rawData.rows || [],
+      errors: rawData.errors || [],
+      warnings: rawData.warnings || []
+    }
   } finally {
     analyzing.value = false
   }

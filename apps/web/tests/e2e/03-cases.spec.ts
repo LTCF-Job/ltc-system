@@ -52,6 +52,11 @@ test.describe('03. 個案主檔與排班設定 (Cases & Schedules)', () => {
 
     // 切換至排班設定分頁
     await page.getByRole('tab', { name: '排班設定' }).click()
+    await expect(page.getByText('排班條件與模式設定')).toBeVisible()
+    await expect(page.getByText('排班優先順序')).toBeVisible()
+
+    // 切換至固定排班確認趟數型態
+    await page.getByRole('radio', { name: /固定排班/ }).click()
     await expect(page.getByText('趟數型態')).toBeVisible()
   })
 

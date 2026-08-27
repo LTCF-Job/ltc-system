@@ -57,8 +57,9 @@ export async function deleteCase(id: string): Promise<void> {
   return apiClient.delete(`/cases/${id}`)
 }
 
-export async function downloadCaseImportTemplate(): Promise<Blob> {
+export async function downloadCaseImportTemplate(format: 'xlsx' | 'csv' = 'xlsx'): Promise<Blob> {
   return apiClient.get('/cases/template', {
+    params: { format },
     responseType: 'blob'
   })
 }
