@@ -28,6 +28,7 @@ type Config struct {
 	NotifyFrom          string        `envconfig:"NOTIFY_FROM" default:"noreply@ltc.example.com"`
 	SentryDSN           string        `envconfig:"SENTRY_DSN"`
 	LogLevel            string        `envconfig:"LOG_LEVEL" default:"info"`
+	GovernmentHolidayAPITimeout time.Duration `envconfig:"GOVERNMENT_HOLIDAY_API_TIMEOUT" default:"10s"`
 
 	// 解析後的金鑰 bytes
 	EncryptionKey []byte `ignored:"true"`

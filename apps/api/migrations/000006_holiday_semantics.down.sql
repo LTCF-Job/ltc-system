@@ -1,0 +1,1 @@
+ALTER TABLE holidays DROP COLUMN IF EXISTS is_day_off;
