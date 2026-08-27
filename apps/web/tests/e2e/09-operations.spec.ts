@@ -35,6 +35,26 @@ test.describe('09. 車輛保養與出勤油資 (Operations: Maintenance & Attend
     await page.goto('/attendance')
     await waitForTableLoaded(page)
     await expect(page.locator('.filter-card, .table-card, .attendance-view, .el-table').first()).toBeVisible()
+
+    // 驗證出勤彙總指標標籤包含 O / 假別文字與國定假日
+    await expect(page.locator('.attendance-summary-pills')).toContainText('出勤 (O)')
+    await expect(page.locator('.attendance-summary-pills')).toContainText('事假 (事)')
+    await expect(page.locator('.attendance-summary-pills')).toContainText('國定假日')
+
+    // 驗證出勤矩陣表格包含 O 與 假別文字
+    const matrix = page.locator('.attendance-matrix')
+    await expect(matrix).toBeVisible()
+    await expect(matrix.locator('.symbol-work').first()).toHaveText('O')
+    await expect(matrix.locator('.symbol-leave').first()).toHaveText('事')
+
+    // 點選儲存格開啟登記 Dialog 驗證狀態選項
+    const firstCell = matrix.locator('.day-cell').first()
+    await firstCell.click()
+    const dialog = page.locator('.el-dialog').filter({ hasText: '登記司機出勤狀態' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('radio', { name: /出勤 \(O\)/ })).toBeVisible()
+    await expect(dialog.getByRole('radio', { name: /事假 \(事\)/ })).toBeVisible()
+    await dialog.getByRole('button', { name: '取消' }).click()
   })
 })
 
