@@ -8,25 +8,21 @@
       :disabled="!authStore.can('staff')"
     >
       <!-- 排班優先順序引導說明 -->
-      <el-alert
-        type="info"
-        :closable="false"
-        class="priority-alert"
-      >
-        <template #title>
-          <div class="priority-title">
-            <strong>排班優先順序：</strong>
-            <span>當月排班 (最高優先)</span>
-            <span class="priority-arrow">➔</span>
-            <span>當周排班 (依星期設定)</span>
-            <span class="priority-arrow">➔</span>
-            <span>固定排班 (常態基準)</span>
+      <div class="priority-guide-card">
+        <div class="guide-header">
+          <div class="guide-badge">排班優先順序</div>
+          <div class="guide-steps">
+            <span class="step" :class="{ active: scheduleMode === 'monthly' }">1. 當月排班 (月曆自訂，最高優先)</span>
+            <span class="step-arrow">➔</span>
+            <span class="step" :class="{ active: scheduleMode === 'by_weekday' }">2. 當周排班 (依星期個別設定)</span>
+            <span class="step-arrow">➔</span>
+            <span class="step" :class="{ active: scheduleMode === 'unified' }">3. 固定排班 (常態基準條件)</span>
           </div>
-        </template>
-        <div class="priority-desc">
-          系統在計算預期搭乘趟次與生成月曆時，優先採用【當月排班】之特定日期設定；若當月未特別自訂，則自動套用【當周排班】（依星期個別設定）；若當周亦未特別設定，則回落至【固定排班】常態條件。
         </div>
-      </el-alert>
+        <div class="guide-desc">
+          系統生成月曆與計算搭乘趟次時，優先採用【當月排班】；若當月未特別自訂，則依【當周排班】星期規則生效；若當周未特別設定，則回落至【固定排班】基準條件。
+        </div>
+      </div>
 
       <!-- 排班基本條件 -->
       <el-card shadow="never" class="section-card">
@@ -86,26 +82,49 @@
                   value-format="YYYY-MM"
                   placeholder="選擇月份"
                   :clearable="false"
-                  style="width: 150px"
+                  style="width: 140px"
                   @change="handleMonthChange"
                 />
-                <span class="month-info">
-                  共 {{ daysInSelectedMonth }} 天 ({{ activeDaysCountInMonth }} 天有排班)
-                </span>
+                <div class="month-stat-chips">
+                  <span class="stat-chip">當月共 <strong>{{ daysInSelectedMonth }}</strong> 天</span>
+                  <span class="stat-chip highlight">有排班 <strong>{{ activeDaysCountInMonth }}</strong> 天</span>
+                  <span v-if="overriddenDaysCountInMonth > 0" class="stat-chip custom">已自訂 <strong>{{ overriddenDaysCountInMonth }}</strong> 天</span>
+                  <span v-if="holidayDaysCountInMonth > 0" class="stat-chip holiday">國定假日 <strong>{{ holidayDaysCountInMonth }}</strong> 天</span>
+                </div>
               </div>
 
               <div class="monthly-quick-actions">
-                <el-button size="small" type="primary" plain @click="applyWeeklyToMonth">
-                  套用當周排班至本月
+                <el-button
+                  size="small"
+                  class="action-btn action-apply-weekly"
+                  :icon="Calendar"
+                  @click="applyWeeklyToMonth"
+                >
+                  套用當周排班
                 </el-button>
-                <el-button size="small" type="default" @click="applyFixedToMonth">
-                  套用固定排班至本月
+                <el-button
+                  size="small"
+                  class="action-btn action-apply-fixed"
+                  :icon="SetUp"
+                  @click="applyFixedToMonth"
+                >
+                  套用固定排班
                 </el-button>
-                <el-button size="small" type="warning" plain @click="clearMonthOverrides">
-                  清空當月自訂 (恢復繼承)
+                <el-button
+                  size="small"
+                  class="action-btn action-clear"
+                  :icon="RefreshRight"
+                  @click="clearMonthOverrides"
+                >
+                  清空當月自訂
                 </el-button>
-                <el-button size="small" type="info" plain @click="setAllMonthAbsent">
-                  整月設為不搭乘 (請假)
+                <el-button
+                  size="small"
+                  class="action-btn action-absent"
+                  :icon="CircleClose"
+                  @click="setAllMonthAbsent"
+                >
+                  整月設為不搭乘
                 </el-button>
               </div>
             </div>
@@ -116,39 +135,58 @@
                 border
                 size="small"
                 style="width: 100%"
-                max-height="450"
+                max-height="460"
                 class="monthly-table"
               >
                 <el-table-column label="日期" width="130" align="center">
                   <template #default="{ row }">
                     <div :class="['date-cell-label', { 'is-weekend': row.isWeekend }]">
-                      <strong>{{ row.date.slice(5) }}<span v-if="row.isHoliday"> ★</span></strong>
-                      <span class="weekday-text">({{ row.weekdayLabel }})</span>
-                      <span v-if="row.isHoliday" class="holiday-text">{{ row.holidayName || '休假日' }}</span>
+                      <div class="date-main">
+                        <span class="date-num">{{ row.date.slice(5) }}</span>
+                        <span class="weekday-text">({{ row.weekdayLabel }})</span>
+                      </div>
+                      <el-tag
+                        v-if="row.isHoliday"
+                        size="small"
+                        type="danger"
+                        effect="light"
+                        class="holiday-badge"
+                      >
+                        {{ row.holidayName || '國定假日' }}
+                      </el-tag>
                     </div>
                   </template>
                 </el-table-column>
 
                 <el-table-column label="生效來源" width="120" align="center">
                   <template #default="{ row }">
-                    <span
+                    <el-tag
                       v-if="row.isOverridden"
-                      class="schedule-source"
+                      size="small"
+                      type="primary"
+                      effect="plain"
+                      class="source-tag custom"
                     >
                       當月自訂
-                    </span>
-                    <span
+                    </el-tag>
+                    <el-tag
                       v-else-if="row.source === 'weekly'"
-                      class="schedule-source"
+                      size="small"
+                      type="success"
+                      effect="plain"
+                      class="source-tag weekly"
                     >
-                      套用當周
-                    </span>
-                    <span
+                      依每週設定
+                    </el-tag>
+                    <el-tag
                       v-else
-                      class="schedule-source"
+                      size="small"
+                      type="info"
+                      effect="plain"
+                      class="source-tag fixed"
                     >
-                      套用固定
-                    </span>
+                      依固定基準
+                    </el-tag>
                   </template>
                 </el-table-column>
 
@@ -230,18 +268,18 @@
                   </template>
                 </el-table-column>
 
-                <el-table-column label="操作" width="90" align="center">
+                <el-table-column label="操作" width="95" align="center">
                   <template #default="{ row }">
                     <el-button
                       v-if="row.isOverridden"
                       size="small"
                       link
-                      type="danger"
+                      type="primary"
                       @click="resetDayToInherited(row)"
                     >
-                      重設繼承
+                      恢復預設
                     </el-button>
-                    <span v-else class="text-muted text-xs">依預設</span>
+                    <span v-else class="text-muted text-xs">已繼承</span>
                   </template>
                 </el-table-column>
               </el-table>
@@ -482,6 +520,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
+import { Calendar, SetUp, RefreshRight, CircleClose } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { listSites, listVehicles } from '@/api/masters'
 import { saveCaseSchedule } from '@/api/cases'
@@ -600,7 +639,9 @@ function buildMonthDaysList() {
     if (goWeekday === 0) goWeekday = 7 // 1..7 (週一..週日)
     const isWeekend = goWeekday >= 6
     const holiday = holidayMap.value[dateStr]
-    const isHoliday = Boolean(holiday?.isDayOff !== false)
+    // 只有在 holiday 存在且 holiday.isDayOff !== false (非補班日) 才是國定休假日
+    const isHoliday = Boolean(holiday && holiday.isDayOff !== false)
+    const holidayName = holiday?.name || ''
 
     const mOverride = monthlyConfigs[dateStr]
     const wConfig = weekdayConfigs.find((c) => c.weekday === goWeekday)
@@ -614,7 +655,7 @@ function buildMonthDaysList() {
     let vehicleId = defaultVehicle
     let note = ''
 
-    // 層級 2：當周設定
+    // 層級 2：當周設定 (非國定休假日生效)
     if (wConfig && !isHoliday) {
       source = 'weekly'
       tripCount = wConfig.tripCount
@@ -640,7 +681,7 @@ function buildMonthDaysList() {
       weekday: goWeekday,
       weekdayLabel: weekdayLabels[goWeekday - 1],
       isWeekend,
-      holidayName: holiday?.name,
+      holidayName,
       isHoliday,
       isOverridden,
       source,
@@ -657,6 +698,14 @@ function buildMonthDaysList() {
 
 const activeDaysCountInMonth = computed(() => {
   return monthDaysList.value.filter((d) => d.tripCount > 0).length
+})
+
+const holidayDaysCountInMonth = computed(() => {
+  return monthDaysList.value.filter((d) => d.isHoliday).length
+})
+
+const overriddenDaysCountInMonth = computed(() => {
+  return monthDaysList.value.filter((d) => d.isOverridden).length
 })
 
 function handleMonthChange() {
@@ -929,31 +978,60 @@ async function handleSave() {
   gap: 16px;
 }
 
-.priority-alert {
+.priority-guide-card {
+  background: #ffffff;
+  border: 1px solid var(--el-border-color-lighter);
+  border-left: 4px solid #3b82f6;
   border-radius: 8px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 
-  .priority-title {
+  .guide-header {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+
+  .guide-badge {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    background: #f1f5f9;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .guide-steps {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-size: 13px;
     flex-wrap: wrap;
-    color: var(--el-text-color-primary);
 
-    .priority-arrow {
-      color: var(--el-text-color-secondary);
+    .step {
+      font-weight: 500;
+      color: #64748b;
+
+      &.active {
+        color: #0f172a;
+        font-weight: 700;
+      }
+    }
+
+    .step-arrow {
+      color: #94a3b8;
       font-size: 12px;
-      margin: 0 2px;
     }
   }
 
-  .priority-desc {
-    margin-top: 6px;
+  .guide-desc {
     font-size: 12px;
-    line-height: 1.5;
-    color: var(--el-text-color-regular);
+    line-height: 1.6;
+    color: #475569;
   }
 }
 
@@ -972,7 +1050,7 @@ async function handleSave() {
   .card-title {
     font-size: 15px;
     font-weight: bold;
-    color: var(--el-color-primary);
+    color: #1e293b;
   }
 }
 
@@ -989,20 +1067,68 @@ async function handleSave() {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 10px 14px;
-  background-color: var(--el-fill-color-light);
-  border-radius: 6px;
+  padding: 12px 16px;
+  background-color: #f8fafc;
+  border-radius: 8px;
   border: 1px solid var(--el-border-color-lighter);
 
   .month-select-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+    flex-wrap: wrap;
 
     .toolbar-label {
       font-size: 13px;
-      font-weight: bold;
+      font-weight: 600;
       color: var(--el-text-color-primary);
+    }
+  }
+
+  .month-stat-chips {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    .stat-chip {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+      padding: 2px 8px;
+      background: #ffffff;
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: 12px;
+
+      strong {
+        color: var(--el-text-color-primary);
+      }
+
+      &.highlight {
+        color: #166534;
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+        strong {
+          color: #15803d;
+        }
+      }
+
+      &.custom {
+        color: #1e40af;
+        border-color: #bfdbfe;
+        background: #eff6ff;
+        strong {
+          color: #1d4ed8;
+        }
+      }
+
+      &.holiday {
+        color: #b91c1c;
+        border-color: #fecaca;
+        background: #fef2f2;
+        strong {
+          color: #991b1b;
+        }
+      }
     }
   }
 
@@ -1011,6 +1137,75 @@ async function handleSave() {
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+
+    .action-btn {
+      font-size: 12px;
+      font-weight: 600;
+      height: 32px;
+      padding: 0 12px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #1e293b;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+
+      &:hover {
+        border-color: #94a3b8;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+
+      &.action-apply-weekly {
+        border-color: #cbd5e1;
+        background: #ffffff;
+        color: #1e293b;
+
+        &:hover {
+          border-color: #86efac;
+          background: #f0fdf4;
+          color: #15803d;
+        }
+      }
+
+      &.action-apply-fixed {
+        border-color: #cbd5e1;
+        background: #ffffff;
+        color: #1e293b;
+
+        &:hover {
+          border-color: #93c5fd;
+          background: #eff6ff;
+          color: #1d4ed8;
+        }
+      }
+
+      &.action-clear {
+        border-color: #fed7aa;
+        background: #fffaf5;
+        color: #9a3412;
+
+        &:hover {
+          border-color: #fdba74;
+          background: #ffedd5;
+          color: #7c2d12;
+        }
+      }
+
+      &.action-absent {
+        border-color: #cbd5e1;
+        background: #ffffff;
+        color: #475569;
+
+        &:hover {
+          border-color: #fca5a5;
+          background: #fef2f2;
+          color: #b91c1c;
+        }
+      }
+    }
   }
 }
 
@@ -1023,24 +1218,40 @@ async function handleSave() {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
 
-  &.is-weekend {
-    color: var(--el-color-danger);
+  .date-main {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
   }
 
   .weekday-text {
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: normal;
     color: var(--el-text-color-secondary);
   }
 
-  .holiday-text {
-    color: var(--el-color-danger);
-    font-size: 11px;
-    max-width: 100px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  &.is-weekend {
+    .date-main {
+      color: #94a3b8;
+    }
+    .weekday-text {
+      color: #94a3b8;
+    }
+  }
+
+  .holiday-badge {
+    font-size: 10px;
+    padding: 0 4px;
+    height: 18px;
+    line-height: 16px;
+    border-radius: 4px;
+    margin-top: 2px;
   }
 }
 
@@ -1053,19 +1264,32 @@ async function handleSave() {
 }
 
 .month-info,
-.schedule-source,
 .leg-label,
 .leg-direction {
   color: var(--el-text-color-secondary);
   font-size: 12px;
 }
 
-.schedule-source {
-  display: inline-block;
-  padding: 2px 6px;
-  background-color: var(--el-fill-color-light);
-  border: 1px solid var(--el-border-color-lighter);
+.source-tag {
+  font-size: 12px;
+  font-weight: 500;
   border-radius: 4px;
+  background: transparent !important; /* 確保無背景底色 */
+
+  &.custom {
+    color: var(--el-color-primary) !important;
+    border-color: var(--el-color-primary) !important;
+  }
+
+  &.weekly {
+    color: #16a34a !important;
+    border-color: #86efac !important;
+  }
+
+  &.fixed {
+    color: var(--el-text-color-regular) !important;
+    border-color: var(--el-border-color) !important;
+  }
 }
 
 .leg-label {

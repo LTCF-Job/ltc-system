@@ -55,8 +55,15 @@ test.describe('03. 個案主檔與排班設定 (Cases & Schedules)', () => {
     await expect(page.getByText('排班條件與模式設定')).toBeVisible()
     await expect(page.getByText('排班優先順序')).toBeVisible()
 
+    // 驗證當月排班月曆之來源標籤與日期呈現
+    await expect(page.locator('.monthly-table')).toBeVisible()
+    await expect(page.locator('.source-tag').first()).toBeVisible()
+    const firstRowDate = page.locator('.date-cell-label').first()
+    await expect(firstRowDate).toBeVisible()
+    await expect(firstRowDate).not.toContainText('★')
+
     // 切換至固定排班確認趟數型態
-    await page.getByRole('radio', { name: /固定排班/ }).click()
+    await page.locator('.el-radio-button', { hasText: '固定排班' }).click()
     await expect(page.getByText('趟數型態')).toBeVisible()
   })
 
