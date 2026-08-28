@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // AuditFilter 定義稽核日誌查詢過濾條件。
@@ -43,7 +44,8 @@ func (r *AuditRepository) Insert(ctx context.Context, item *AuditLogEntity) erro
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at
 	`
-	return r.db.QueryRow(ctx, query, item.ActorID, item.ActorRole, item.Action, item.EntityType, item.EntityID, item.BeforeData, item.AfterData, item.IPAddress, item.UserAgent).
+	db := pgxdb.FromContext(ctx, r.db)
+	return db.QueryRow(ctx, query, item.ActorID, item.ActorRole, item.Action, item.EntityType, item.EntityID, item.BeforeData, item.AfterData, item.IPAddress, item.UserAgent).
 		Scan(&item.ID, &item.CreatedAt)
 }
 

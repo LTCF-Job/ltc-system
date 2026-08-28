@@ -16,6 +16,7 @@ import (
 	"github.com/xuri/excelize/v2"
 	"golang.org/x/text/unicode/norm"
 	"ltc-system/apps/api/internal/domain/crypto"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 	"ltc-system/apps/api/internal/repository"
 )
 
@@ -37,6 +38,7 @@ type ImportService struct {
 	vehicleRepo   *repository.VehicleRepository
 	driverRepo    *repository.DriverRepository
 	caseRepo      *repository.CaseRepository
+	txRunner      *pgxdb.TxRunner
 }
 
 // NewImportService 建立 ImportService 實例。
@@ -46,6 +48,7 @@ func NewImportService(
 	vehicleRepo *repository.VehicleRepository,
 	driverRepo *repository.DriverRepository,
 	caseRepo *repository.CaseRepository,
+	txRunner *pgxdb.TxRunner,
 ) *ImportService {
 	return &ImportService{
 		masterService: masterService,
@@ -53,6 +56,7 @@ func NewImportService(
 		vehicleRepo:   vehicleRepo,
 		driverRepo:    driverRepo,
 		caseRepo:      caseRepo,
+		txRunner:      txRunner,
 	}
 }
 
@@ -797,10 +801,44 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 	}, nil
 }
 
+func buildImportLegs(row CaseImportRowResult) []CreateScheduleLegItemRequest {
+	switch row.TripPattern {
+	case 1:
+		return []CreateScheduleLegItemRequest{
+			{LegSeq: 1, Direction: "outbound", DepartTime: row.OutboundTime},
+		}
+	case 4:
+		return []CreateScheduleLegItemRequest{
+			{LegSeq: 1, Direction: "outbound", DepartTime: "08:30"},
+			{LegSeq: 2, Direction: "inbound", DepartTime: "11:30"},
+			{LegSeq: 3, Direction: "outbound", DepartTime: "13:30"},
+			{LegSeq: 4, Direction: "inbound", DepartTime: "16:30"},
+		}
+	default:
+		return []CreateScheduleLegItemRequest{
+			{LegSeq: 1, Direction: "outbound", DepartTime: row.OutboundTime},
+			{LegSeq: 2, Direction: "inbound", DepartTime: row.InboundTime},
+		}
+	}
+}
+
 // CommitCases 將通過檢核的個案資料正式寫入資料庫。
+//
+// 交易語意：每一列（個案主檔＋接送車輛偏好＋排班設定＋稽核紀錄）在單一事務中
+// 全有或全無提交；列與列之間彼此獨立——某列寫入失敗只回滾該列自身的變更並
+// 記為略過列（附原因與原始欄位供人工補正），不影響已提交的前列，也不會中止
+// 整批匯入其餘待處理的列。
+//
+// 選擇「逐列獨立事務」而非「整批單一事務＋逐列 savepoint」：匯入列彼此沒有
+// 跨列一致性需求，逐列事務讓已成功的列立即落地可見、避免整批因單一長交易
+// 持有鎖與可見性延遲，且與 CaseRepository 既有逐方法自管事務的慣例
+// （CreateSchedule、HolidayRepository.BatchUpsert）一致。
 func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPreviewResult, actorID uuid.UUID, actorRole, ip, ua string) (*CaseImportCommitResult, error) {
 	if preview == nil || len(preview.Rows) == 0 {
 		return &CaseImportCommitResult{}, nil
+	}
+	if s.txRunner == nil {
+		return nil, errors.New("import service: transaction runner not configured")
 	}
 
 	result := &CaseImportCommitResult{}
@@ -834,6 +872,7 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 		}
 
 		caseReq := CreateCaseRequest{
+			Code:              "IMP-" + strings.ToUpper(uuid.New().String()[:8]),
 			Name:              row.Name,
 			NationalID:        natID,
 			HouseholdType:     stringPointer(row.HouseholdType),
@@ -854,15 +893,8 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			}
 		}
 
-		caseEntity, err := s.masterService.CreateCase(ctx, caseReq, actorID, actorRole, ip, ua)
-		if err != nil {
-			item := CaseImportSkippedRow{RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{"個案建立失敗：" + err.Error()}, RawValues: row.RawValues}
-			result.SkippedRows = append(result.SkippedRows, item)
-			if s.masterService != nil {
-				s.masterService.RecordSkippedCaseImport(ctx, item, actorID, actorRole, ip, ua)
-			}
-			continue
-		}
+		// 據點／車輛主檔為既有唯讀參照資料，於事務外先查詢即可；查無對應資料時整列直接略過，不需開啟事務。
+		var transportSiteID, outboundVehicleID, inboundVehicleID uuid.UUID
 		if row.IsProfileWorkbook && s.siteRepo != nil && s.vehicleRepo != nil {
 			site, siteErr := s.siteRepo.GetByName(ctx, row.SiteName)
 			outbound, outboundErr := s.vehicleRepo.GetByDisplayName(ctx, row.OutboundVehicle)
@@ -872,62 +904,66 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 				result.SkippedRows = append(result.SkippedRows, item)
 				continue
 			}
-			if err := s.caseRepo.UpsertTransportPreference(ctx, caseEntity.ID, site.ID, outbound.ID, inbound.ID); err != nil {
-				return result, fmt.Errorf("save case transport preference: %w", err)
-			}
+			transportSiteID, outboundVehicleID, inboundVehicleID = site.ID, outbound.ID, inbound.ID
 		}
 
-		// 關聯據點與建立排班
-		var siteID uuid.UUID
+		var scheduleSiteID uuid.UUID
 		if s.siteRepo != nil {
 			siteList, _, _ := s.siteRepo.List(ctx, row.Region, "", 1, 100)
 			for _, st := range siteList {
 				if st.Name == row.SiteName || strings.Contains(st.Name, row.SiteName) {
-					siteID = st.ID
+					scheduleSiteID = st.ID
 					break
 				}
 			}
-			if siteID == uuid.Nil && len(siteList) > 0 {
-				siteID = siteList[0].ID
+			if scheduleSiteID == uuid.Nil && len(siteList) > 0 {
+				scheduleSiteID = siteList[0].ID
 			}
 		}
 
-		if siteID != uuid.Nil && len(row.Weekdays) > 0 && !row.IsProfileWorkbook {
-			var legs []CreateScheduleLegItemRequest
-			if row.TripPattern == 1 {
-				legs = append(legs, CreateScheduleLegItemRequest{
-					LegSeq:     1,
-					Direction:  "outbound",
-					DepartTime: row.OutboundTime,
-				})
-			} else if row.TripPattern == 4 {
-				legs = append(legs,
-					CreateScheduleLegItemRequest{LegSeq: 1, Direction: "outbound", DepartTime: "08:30"},
-					CreateScheduleLegItemRequest{LegSeq: 2, Direction: "inbound", DepartTime: "11:30"},
-					CreateScheduleLegItemRequest{LegSeq: 3, Direction: "outbound", DepartTime: "13:30"},
-					CreateScheduleLegItemRequest{LegSeq: 4, Direction: "inbound", DepartTime: "16:30"},
-				)
-			} else {
-				legs = append(legs,
-					CreateScheduleLegItemRequest{LegSeq: 1, Direction: "outbound", DepartTime: row.OutboundTime},
-					CreateScheduleLegItemRequest{LegSeq: 2, Direction: "inbound", DepartTime: row.InboundTime},
-				)
+		var caseEntity *repository.CaseEntity
+		txErr := s.txRunner.WithTx(ctx, func(txCtx context.Context) error {
+			var err error
+			caseEntity, err = s.masterService.CreateCase(txCtx, caseReq, actorID, actorRole, ip, ua)
+			if err != nil {
+				return fmt.Errorf("個案建立失敗：%w", err)
 			}
 
-			schedNote := row.Note
-			_, _ = s.masterService.CreateCaseSchedule(ctx, CreateScheduleRequest{
-				CaseID:             caseEntity.ID,
-				SiteID:             siteID,
-				EffectiveFrom:      claimStart,
-				Weekdays:           row.Weekdays,
-				TripPattern:        row.TripPattern,
-				UnitPrice:          row.UnitPrice,
-				DistanceKM:         row.DistanceKM,
-				ServiceDurationMin: row.ServiceDurationMin,
-				ServiceCode:        "BD03",
-				Note:               &schedNote,
-				Legs:               legs,
-			})
+			if transportSiteID != uuid.Nil {
+				if err := s.caseRepo.UpsertTransportPreference(txCtx, caseEntity.ID, transportSiteID, outboundVehicleID, inboundVehicleID); err != nil {
+					return fmt.Errorf("儲存接送車輛偏好失敗：%w", err)
+				}
+			}
+
+			if scheduleSiteID != uuid.Nil && len(row.Weekdays) > 0 && !row.IsProfileWorkbook {
+				schedNote := row.Note
+				if _, err := s.masterService.CreateCaseSchedule(txCtx, CreateScheduleRequest{
+					CaseID:             caseEntity.ID,
+					SiteID:             scheduleSiteID,
+					EffectiveFrom:      claimStart,
+					Weekdays:           row.Weekdays,
+					TripPattern:        row.TripPattern,
+					UnitPrice:          row.UnitPrice,
+					DistanceKM:         row.DistanceKM,
+					ServiceDurationMin: row.ServiceDurationMin,
+					ServiceCode:        "BD03",
+					Note:               &schedNote,
+					Legs:               buildImportLegs(row),
+				}); err != nil {
+					return fmt.Errorf("建立排班設定失敗：%w", err)
+				}
+			}
+
+			return nil
+		})
+
+		if txErr != nil {
+			item := CaseImportSkippedRow{RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{txErr.Error()}, RawValues: row.RawValues}
+			result.SkippedRows = append(result.SkippedRows, item)
+			if s.masterService != nil {
+				s.masterService.RecordSkippedCaseImport(ctx, item, actorID, actorRole, ip, ua)
+			}
+			continue
 		}
 
 		result.ImportedCount++
