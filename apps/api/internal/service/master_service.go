@@ -238,10 +238,17 @@ func (s *MasterService) CreateCaseSchedule(ctx context.Context, req CreateSchedu
 		}
 		lastTime = l.DepartTime
 
+		period := "am"
+		if l.DepartTime >= "12:00" {
+			period = "pm"
+		}
+
 		legs = append(legs, repository.ScheduleLegEntity{
 			LegSeq:     l.LegSeq,
 			Direction:  l.Direction,
+			Period:     period,
 			DepartTime: l.DepartTime,
+			RunNo:      1,
 			VehicleID:  l.VehicleID,
 		})
 	}
