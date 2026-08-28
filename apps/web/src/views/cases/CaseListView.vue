@@ -226,6 +226,10 @@
         <el-table-column prop="departTime" label="去程時間" width="100" />
         <el-table-column prop="returnTime" label="回程時間" width="100" />
         <el-table-column prop="tripPattern" label="趟數" width="80" />
+        <el-table-column prop="householdType" label="戶別" width="100" />
+        <el-table-column prop="gender" label="性別" width="70" />
+        <el-table-column prop="careContactRole" label="個管/照專" width="100" />
+        <el-table-column prop="registeredAddress" label="戶籍" min-width="160" show-overflow-tooltip />
       </template>
     </ImportPreviewDialog>
 
@@ -294,6 +298,7 @@
 import { ref, reactive } from 'vue'
 import { Plus, Upload, Download, ArrowDown, Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
 import {
@@ -361,7 +366,7 @@ async function handleQuickUpdateRegion(row: CaseDTO, newRegion: Region) {
     row.region = newRegion
     ElMessage.success(`已將個案「${row.name}」申報區域修改為 ${REGION_LABELS[newRegion]}`)
   } catch (err: any) {
-    ElMessage.error(err.message || '更新區域失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新區域失敗'))
   }
 }
 
@@ -373,7 +378,7 @@ async function handleQuickUpdateStatus(row: CaseDTO, newStatus: CaseStatus) {
     row.status = newStatus
     ElMessage.success(`已將個案「${row.name}」狀態變更為 ${CASE_STATUS_LABELS[newStatus]}`)
   } catch (err: any) {
-    ElMessage.error(err.message || '更新狀態失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
   }
 }
 
@@ -395,7 +400,7 @@ async function handleDeleteCase(row: CaseDTO) {
     executeFetch()
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '刪除個案失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除個案失敗'))
     }
   }
 }
@@ -408,7 +413,7 @@ async function handleDownloadTemplate(format: any = 'xlsx') {
     downloadBlob(blob, `個案批次匯入範本.${safeFormat}`)
     ElMessage.success(`個案匯入範本 (.${safeFormat}) 下載成功`)
   } catch (err: any) {
-    ElMessage.error(err.message || '下載範本失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載範本失敗'))
   }
 }
 
@@ -418,7 +423,7 @@ async function handleExportProfile() {
     downloadBlob(blob, '個案資料彙整.xlsx')
     ElMessage.success('個案資料匯出完成')
   } catch (err: any) {
-    ElMessage.error(err.message || '匯出個案資料失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '匯出個案資料失敗'))
   }
 }
 

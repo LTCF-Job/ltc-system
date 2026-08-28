@@ -187,6 +187,18 @@ export interface CaseDTO {
   claimStartDate: string
   claimEndDate?: string
   status: CaseStatus
+  householdType?: string
+  gender?: string
+  birthDate?: string
+  careContactRole?: string
+  careContactName?: string
+  registeredAddress?: string
+  siteId?: string
+  siteName?: string
+  outboundVehicleId?: string
+  outboundVehicle?: string
+  inboundVehicleId?: string
+  inboundVehicle?: string
   createdAt: string
   updatedAt: string
   activeSchedule?: CaseScheduleDTO
@@ -204,6 +216,18 @@ export interface CreateCaseRequest {
   claimStartDate: string
   claimEndDate?: string
   status?: CaseStatus
+  householdType?: string
+  gender?: string
+  birthDate?: string
+  careContactRole?: string
+  careContactName?: string
+  registeredAddress?: string
+}
+
+export interface UpdateCaseTransportPreferenceRequest {
+  siteId: string
+  outboundVehicleId: string
+  inboundVehicleId: string
 }
 
 export interface UpdateCaseRequest extends Partial<CreateCaseRequest> { }

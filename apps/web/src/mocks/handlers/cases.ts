@@ -103,6 +103,17 @@ export const casesHandlers = [
     return HttpResponse.json(c)
   }),
 
+  http.put('/api/v1/cases/:id/transport-preference', async ({ params, request }) => {
+    const c = mockCases.find((item) => item.id === params.id)
+    if (!c) return new HttpResponse(null, { status: 404 })
+    const body = (await request.json()) as any
+    c.siteId = body.siteId
+    c.outboundVehicleId = body.outboundVehicleId
+    c.inboundVehicleId = body.inboundVehicleId
+    c.updatedAt = new Date().toISOString().split('T')[0]
+    return HttpResponse.json(c)
+  }),
+
   http.delete('/api/v1/cases/:id', ({ params }) => {
     const idx = mockCases.findIndex((item) => item.id === params.id)
     if (idx === -1) return new HttpResponse(null, { status: 404 })
@@ -148,9 +159,9 @@ export const casesHandlers = [
         errorRows: 1,
         warningRows: 2,
         previewRows: [
-          { rowIndex: 2, name: '張曾阿妹', region: '苗栗', claimStartDate: '2026-07-01', siteName: '竹南日照據點', weekdays: '週一至週五', departTime: '09:00', returnTime: '16:00', tripPattern: 2 },
-          { rowIndex: 3, name: '李國盛', region: '新竹', claimStartDate: '2026-07-01', siteName: '竹北日照中心', weekdays: '週二、週四', departTime: '09:30', returnTime: '15:30', tripPattern: 2, __hasWarning: true },
-          { rowIndex: 4, name: '何阿財', region: '苗栗', claimStartDate: '2026-07-01', siteName: '未知據點', weekdays: '週一至週五', departTime: '09:00', returnTime: '16:00', tripPattern: 2, __hasError: true }
+          { rowIndex: 2, name: '張曾阿妹', region: '苗栗', claimStartDate: '2026-07-01', siteName: '竹南日照據點', weekdays: '週一至週五', departTime: '09:00', returnTime: '16:00', tripPattern: 2, householdType: '與子女同住', gender: '女', careContactRole: '個管', registeredAddress: '苗栗縣竹南鎮大營路123號' },
+          { rowIndex: 3, name: '李國盛', region: '新竹', claimStartDate: '2026-07-01', siteName: '竹北日照中心', weekdays: '週二、週四', departTime: '09:30', returnTime: '15:30', tripPattern: 2, householdType: '獨居', gender: '男', careContactRole: '照專', registeredAddress: '新竹縣竹北市文興路一段200號', __hasWarning: true },
+          { rowIndex: 4, name: '何阿財', region: '苗栗', claimStartDate: '2026-07-01', siteName: '未知據點', weekdays: '週一至週五', departTime: '09:00', returnTime: '16:00', tripPattern: 2, householdType: '與家人同住', gender: '男', careContactRole: '個管', registeredAddress: '苗栗縣苗栗市中正路1號', __hasError: true }
         ],
         errors: [
           { rowIndex: 4, caseName: '何阿財', field: '據點', message: '據點「未知據點」不存在於系統主檔中' }

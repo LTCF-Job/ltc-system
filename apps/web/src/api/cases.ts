@@ -4,6 +4,7 @@ import type {
   CaseDTO,
   CreateCaseRequest,
   UpdateCaseRequest,
+  UpdateCaseTransportPreferenceRequest,
   CaseScheduleDTO,
   CreateScheduleRequest,
   DryRunImportResultDTO
@@ -55,6 +56,14 @@ export async function updateCase(id: string, data: UpdateCaseRequest): Promise<C
 
 export async function deleteCase(id: string): Promise<void> {
   return apiClient.delete(`/cases/${id}`)
+}
+
+export async function updateCaseTransportPreference(
+  id: string,
+  data: UpdateCaseTransportPreferenceRequest
+): Promise<CaseDTO> {
+  const res: any = await apiClient.put(`/cases/${id}/transport-preference`, data)
+  return res?.data ?? res
 }
 
 export async function downloadCaseImportTemplate(format: 'xlsx' | 'csv' = 'xlsx'): Promise<Blob> {

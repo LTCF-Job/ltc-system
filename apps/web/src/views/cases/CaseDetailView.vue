@@ -134,9 +134,104 @@
             </el-col>
           </el-row>
 
+          <el-divider content-position="left">個案背景與聯絡人</el-divider>
+
+          <el-row :gutter="20">
+            <el-col :xs="24" :sm="12" :lg="6">
+              <el-form-item label="家戶類型" prop="householdType">
+                <el-input v-model="editForm.householdType" placeholder="如：獨居、與子女同住" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :lg="6">
+              <el-form-item label="性別" prop="gender">
+                <el-select v-model="editForm.gender" clearable style="width: 100%">
+                  <el-option value="男" label="男" />
+                  <el-option value="女" label="女" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :lg="6">
+              <el-form-item label="出生日期" prop="birthDate">
+                <el-date-picker
+                  v-model="editForm.birthDate"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row :gutter="20">
+            <el-col :xs="24" :sm="12" :lg="8">
+              <el-form-item label="照顧者聯絡人角色" prop="careContactRole">
+                <el-input v-model="editForm.careContactRole" placeholder="如：個管、照專" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :lg="8">
+              <el-form-item label="照顧者聯絡人姓名" prop="careContactName">
+                <el-input v-model="editForm.careContactName" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="24" :lg="8">
+              <el-form-item label="戶籍地址" prop="registeredAddress">
+                <el-input v-model="editForm.registeredAddress" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
           <div v-if="authStore.can('staff')" class="form-actions">
             <el-button type="primary" :loading="saving" @click="handleUpdateCase">
               儲存基本資料
+            </el-button>
+          </div>
+        </el-form>
+
+        <el-divider content-position="left">交通偏好</el-divider>
+
+        <el-form label-width="140px" :disabled="!authStore.can('staff')">
+          <el-row :gutter="20">
+            <el-col :xs="24" :sm="12" :lg="8">
+              <el-form-item label="所屬據點">
+                <el-select v-model="transportForm.siteId" filterable style="width: 100%">
+                  <el-option
+                    v-for="site in availableSites"
+                    :key="site.id"
+                    :value="site.id"
+                    :label="site.name"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :lg="8">
+              <el-form-item label="去程車輛">
+                <el-select v-model="transportForm.outboundVehicleId" filterable style="width: 100%">
+                  <el-option
+                    v-for="vehicle in availableVehicles"
+                    :key="vehicle.id"
+                    :value="vehicle.id"
+                    :label="vehicle.displayName"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :lg="8">
+              <el-form-item label="回程車輛">
+                <el-select v-model="transportForm.inboundVehicleId" filterable style="width: 100%">
+                  <el-option
+                    v-for="vehicle in availableVehicles"
+                    :key="vehicle.id"
+                    :value="vehicle.id"
+                    :label="vehicle.displayName"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <div v-if="authStore.can('staff')" class="form-actions">
+            <el-button type="primary" :loading="savingTransportPreference" @click="handleUpdateTransportPreference">
+              儲存交通偏好
             </el-button>
           </div>
         </el-form>
@@ -161,12 +256,14 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import ScheduleEditor from './ScheduleEditor.vue'
-import { getCase, updateCase, deleteCase, getCaseSchedule } from '@/api/cases'
+import { getCase, updateCase, deleteCase, getCaseSchedule, updateCaseTransportPreference } from '@/api/cases'
+import { listSites, listVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
 import { CASE_STATUS_LABELS, REGION_LABELS } from '@/types/domain'
-import type { CaseDTO, UpdateCaseRequest } from '@/types/api'
+import type { CaseDTO, UpdateCaseRequest, UpdateCaseTransportPreferenceRequest, SiteDTO, VehicleDTO } from '@/types/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -175,8 +272,11 @@ const caseId = computed(() => route.params.id as string)
 
 const loading = ref(false)
 const saving = ref(false)
+const savingTransportPreference = ref(false)
 const activeTab = ref(route.query.tab === 'schedule' ? 'schedule' : 'basic')
 const caseData = ref<CaseDTO | null>(null)
+const availableSites = ref<SiteDTO[]>([])
+const availableVehicles = ref<VehicleDTO[]>([])
 
 const editForm = reactive<UpdateCaseRequest>({
   name: '',
@@ -187,7 +287,19 @@ const editForm = reactive<UpdateCaseRequest>({
   serviceUsageType: 2,
   claimStartDate: '',
   claimEndDate: '',
-  status: 'active'
+  status: 'active',
+  householdType: '',
+  gender: '',
+  birthDate: '',
+  careContactRole: '',
+  careContactName: '',
+  registeredAddress: ''
+})
+
+const transportForm = reactive<UpdateCaseTransportPreferenceRequest>({
+  siteId: '',
+  outboundVehicleId: '',
+  inboundVehicleId: ''
 })
 
 async function fetchDetail() {
@@ -218,11 +330,29 @@ async function fetchDetail() {
     editForm.claimStartDate = res.claimStartDate ? String(res.claimStartDate).slice(0, 10) : ''
     editForm.claimEndDate = res.claimEndDate ? String(res.claimEndDate).slice(0, 10) : ''
     editForm.status = res.status || 'active'
+    editForm.householdType = res.householdType || ''
+    editForm.gender = res.gender || ''
+    editForm.birthDate = res.birthDate ? String(res.birthDate).slice(0, 10) : ''
+    editForm.careContactRole = res.careContactRole || ''
+    editForm.careContactName = res.careContactName || ''
+    editForm.registeredAddress = res.registeredAddress || ''
+    transportForm.siteId = res.siteId || ''
+    transportForm.outboundVehicleId = res.outboundVehicleId || ''
+    transportForm.inboundVehicleId = res.inboundVehicleId || ''
   } catch (err: any) {
-    ElMessage.error(err.message || '載入個案明細失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入個案明細失敗'))
   } finally {
     loading.value = false
   }
+}
+
+async function loadSitesAndVehicles() {
+  const [sitesRes, vehiclesRes] = await Promise.all([
+    listSites({ pageSize: 100 }),
+    listVehicles({ active: true, pageSize: 100 })
+  ])
+  availableSites.value = sitesRes.data
+  availableVehicles.value = vehiclesRes.data
 }
 
 async function handleUpdateCase() {
@@ -233,6 +363,16 @@ async function handleUpdateCase() {
     router.push('/cases')
   } finally {
     saving.value = false
+  }
+}
+
+async function handleUpdateTransportPreference() {
+  savingTransportPreference.value = true
+  try {
+    await updateCaseTransportPreference(caseId.value, transportForm)
+    ElMessage.success('交通偏好已更新')
+  } finally {
+    savingTransportPreference.value = false
   }
 }
 
@@ -257,7 +397,7 @@ async function handleDeleteCase() {
     router.push('/cases')
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '刪除個案失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除個案失敗'))
     }
   }
 }
@@ -280,6 +420,7 @@ watch(
 
 onMounted(() => {
   fetchDetail()
+  loadSitesAndVehicles()
 })
 </script>
 
