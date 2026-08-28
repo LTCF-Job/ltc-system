@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
 import type { ApiError } from '@/types/api'
 import { isMockRuntimeEnabled } from '@/lib/demoMode'
+import { resolveErrorMessage } from './errorCodes'
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -65,7 +66,8 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    const message = apiError?.message || error.message || '系統發生錯誤，請稍後再試'
+    // 一律依錯誤碼查表顯示非技術性訊息，不直接信任後端或 axios 回傳的原始 message 字串
+    const message = resolveErrorMessage(apiError?.code)
 
     // 若有詳細欄位錯誤清單，以通知元件條列呈現
     if (apiError?.details && apiError.details.length > 0) {

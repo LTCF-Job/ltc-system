@@ -341,6 +341,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Check, Close, Plus, Search, Edit, Delete, CopyDocument, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import {
   listRoles,
   createRole,
@@ -442,7 +443,7 @@ async function fetchRoles() {
       selectedRole.value = defaultItem
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '載入角色清單失敗')
+    ElMessage.error(resolveErrorMessage(error.response?.data?.error?.code, '載入角色清單失敗'))
   } finally {
     loading.value = false
   }
@@ -568,7 +569,7 @@ async function handleSubmit() {
       dialogVisible.value = false
       await fetchRoles()
     } catch (err: any) {
-      const msg = err.response?.data?.error?.message || err.message || '儲存角色失敗'
+      const msg = resolveErrorMessage(err.response?.data?.error?.code, '儲存角色失敗')
       ElMessage.error(msg)
     } finally {
       submitting.value = false
@@ -613,7 +614,7 @@ async function handleDeleteRole(role: RoleDTO) {
     await fetchRoles()
   } catch (err: any) {
     if (err !== 'cancel') {
-      const msg = err.response?.data?.error?.message || err.message || '刪除失敗'
+      const msg = resolveErrorMessage(err.response?.data?.error?.code, '刪除失敗')
       ElMessage.error(msg)
     }
   }

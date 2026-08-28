@@ -59,6 +59,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import { supabase } from '@/lib/supabase'
 import { changeSelfPassword } from '@/api/users'
 
@@ -111,7 +112,7 @@ async function handleSubmit() {
           password: form.newPassword
         })
         if (error) {
-          throw new Error(error.message)
+          throw error
         }
       }
       // 呼叫 API 記錄密碼變更留痕與 Mock 支援
@@ -123,7 +124,7 @@ async function handleSubmit() {
       ElMessage.success('密碼修改成功，請妥善保管新密碼')
       visible.value = false
     } catch (err: any) {
-      ElMessage.error(err.message || '密碼修改失敗，請檢查目前密碼是否正確')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '密碼修改失敗，請檢查目前密碼是否正確'))
     } finally {
       loading.value = false
     }

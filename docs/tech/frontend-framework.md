@@ -65,7 +65,7 @@ meta: { title: '個案管理', module: 'masters_cases', roles: ['admin', 'staff'
 
 除了上面 build-time 的 `VITE_ENABLE_MSW`，正式環境還有另一條**登入時動態啟用 MSW** 的路徑，讓同一個正式部署輸入固定的展示帳密就能看假資料，其他帳密登入照常打真的後端：
 
-正式預設管理員帳號由 `apps/api/migrations/000007_seed_default_admin_user.up.sql` 建立，登入頁接受 `ltcf-admin` 並轉換為 Supabase Auth 使用的 `ltcf-admin@ltc.example.com`；密碼為 `ltcf-admin_1234`，角色寫入 `app_metadata.role=admin`。此帳號不是展示帳號，展示帳號仍為 `demo/demo`。
+正式預設管理員帳號由 `apps/api/migrations/000002_seed_reference_data.up.sql` 建立，登入頁接受 `ltcf-admin` 並轉換為 Supabase Auth 使用的 `ltcf-admin@ltc.example.com`；密碼為 `ltcf-admin_1234`，角色寫入 `app_metadata.role=admin`。此帳號不是展示帳號，展示帳號仍為 `demo/demo`。
 
 - 帳號密碼**都輸入 `demo`**（`isDemoCredentials`，常數寫在 `demoMode.ts`）時，`LoginView.handleLogin` 完全略過 Supabase，直接動態 `import('@/mocks/browser')` 並 `worker.start()`，用一組寫死的假使用者（`role: 'admin'`）建立 session，之後這個分頁的 API 請求全部被 MSW 攔截。
 - 非 `demo/demo` 的帳密才會照原本流程打 `supabase.auth.signInWithPassword`；登入成功後呼叫 `exitDemoModeIfActive()` 確保沒有殘留前一次展示模式的攔截（避免同一分頁先用 demo 登入過，殘留攔截到之後的真實帳號請求）。

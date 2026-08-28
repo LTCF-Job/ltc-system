@@ -224,6 +224,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Plus, Rank, InfoFilled, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import { listRegions, createRegion, updateRegion, deleteRegion } from '@/api/masters'
 import { formatDateTime } from '@/utils/formatters'
@@ -376,7 +377,7 @@ async function fetchRegions() {
     regions.value = res.data || []
     total.value = res.meta?.total ?? regions.value.length
   } catch (err: any) {
-    ElMessage.error(err.message || '查詢區域清單失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢區域清單失敗'))
   } finally {
     loading.value = false
   }
@@ -430,7 +431,7 @@ async function handleToggleStatus(row: RegionDTO, newActive: boolean) {
     row.status = newStatus
     ElMessage.success(`已將「${row.name}」切換為 ${newActive ? '啟用中' : '已停用'}`)
   } catch (err: any) {
-    ElMessage.error(err.message || '更新狀態失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
   }
 }
 
@@ -462,7 +463,7 @@ async function handleSubmit() {
       dialogVisible.value = false
       fetchRegions()
     } catch (err: any) {
-      ElMessage.error(err.message || '儲存失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存失敗'))
     } finally {
       submitting.value = false
     }

@@ -192,6 +192,7 @@ import {
   Back
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import { getHsinchuSchedule, exportHsinchuScheduleExcel } from '@/api/reports'
 import { listSites, listVehicles } from '@/api/masters'
 import { formatDateTime } from '@/utils/formatters'
@@ -217,7 +218,7 @@ async function fetchFilterOptions() {
     sites.value = siteRes.data.filter(s => s.region === 'hsinchu')
     vehicles.value = vehRes.data.filter(v => v.region === 'hsinchu')
   } catch (err: any) {
-    ElMessage.error(err.message || '載入篩選條件失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入篩選條件失敗'))
   }
 }
 
@@ -230,7 +231,7 @@ async function fetchSchedule() {
       q: searchQuery.value || undefined
     })
   } catch (err: any) {
-    ElMessage.error(err.message || '查詢新竹接送時刻表失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢新竹接送時刻表失敗'))
   } finally {
     loading.value = false
   }
@@ -253,7 +254,7 @@ async function handleExportExcel() {
     downloadBlob(blob, 'hsinchu-schedule.xlsx')
     ElMessage.success('時刻表 Excel 匯出成功')
   } catch (err: any) {
-    ElMessage.error(err.message || '匯出時刻表失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '匯出時刻表失敗'))
   } finally {
     exporting.value = false
   }

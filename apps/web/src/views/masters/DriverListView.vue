@@ -218,6 +218,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Plus, Edit, Van, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import {
   listDrivers,
@@ -302,7 +303,7 @@ async function handleQuickToggleActive(row: DriverDTO, newActive: boolean) {
     row.active = newActive
     ElMessage.success(`已將司機「${row.name}」狀態更新為 ${newActive ? '在職' : '離職'}`)
   } catch (err: any) {
-    ElMessage.error(err.message || '更新司機狀態失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新司機狀態失敗'))
   }
 }
 
@@ -409,7 +410,7 @@ async function handleDeleteDriver(row: DriverDTO) {
     executeFetch()
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '刪除司機失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除司機失敗'))
     }
   }
 }

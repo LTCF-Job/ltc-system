@@ -191,6 +191,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import PrecheckResult from '@/components/PrecheckResult.vue'
 import { formatDateTime } from '@/utils/formatters'
 import {
@@ -318,7 +319,7 @@ async function downloadFile(url: string) {
     downloadBlob(blob, currentJob.value?.fileName || `gov-claim-${selectedDate.value}.xlsx`)
     ElMessage.success('申報檔案下載成功')
   } catch (err: any) {
-    ElMessage.error(err.message || '下載檔案失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載檔案失敗'))
   }
 }
 

@@ -248,6 +248,7 @@
 import { ref, reactive } from 'vue'
 import { Plus, Edit, Check, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import { listVehicles, createVehicle, updateVehicle, deleteVehicle } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
@@ -367,7 +368,7 @@ async function saveInlineEdit(row: VehicleDTO) {
     editingRowId.value = null
     ElMessage.success(`車輛「${row.displayName}」資料已更新`)
   } catch (err: any) {
-    ElMessage.error(err.message || '更新車輛資料失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新車輛資料失敗'))
   } finally {
     savingRow.value = false
   }
@@ -379,7 +380,7 @@ async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
     row.active = newActive
     ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '服役中' : '已停用'}`)
   } catch (err: any) {
-    ElMessage.error(err.message || '切換狀態失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '切換狀態失敗'))
   }
 }
 
@@ -424,7 +425,7 @@ async function handleDeleteVehicle(row: VehicleDTO) {
     executeFetch()
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '刪除車輛失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除車輛失敗'))
     }
   }
 }

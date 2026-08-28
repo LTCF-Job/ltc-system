@@ -478,6 +478,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Refresh, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import {
   getMonthAttendance,
   upsertAttendance,
@@ -579,7 +580,7 @@ async function fetchOptions() {
     drivers.value = dRes.data
     vehicles.value = vRes.data
   } catch (err: any) {
-    ElMessage.error(err.message || '載入主檔選項失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入主檔選項失敗'))
   }
 }
 
@@ -604,7 +605,7 @@ async function fetchAttendance() {
     attendanceReport.value = attRes
     holidayMap.value = Object.fromEntries((holidayRes.data || []).map((item) => [item.holidayDate, item]))
   } catch (err: any) {
-    ElMessage.error(err.message || '查詢出勤紀錄失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢出勤紀錄失敗'))
   } finally {
     attendanceLoading.value = false
   }
@@ -720,7 +721,7 @@ async function handleSaveAttendance() {
     attendanceDialogVisible.value = false
     fetchAttendance()
   } catch (err: any) {
-    ElMessage.error(err.message || '更新出勤狀態失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新出勤狀態失敗'))
   } finally {
     attendanceSaving.value = false
   }
@@ -742,7 +743,7 @@ async function fetchFuelLogs() {
     fuelLogs.value = res.data
     fuelTotal.value = res.meta.total
   } catch (err: any) {
-    ElMessage.error(err.message || '查詢油資紀錄失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢油資紀錄失敗'))
   } finally {
     fuelLoading.value = false
   }
@@ -794,7 +795,7 @@ async function handleSaveFuel() {
       fuelDialogVisible.value = false
       fetchFuelLogs()
     } catch (err: any) {
-      ElMessage.error(err.message || '儲存油資紀錄失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存油資紀錄失敗'))
     } finally {
       fuelSaving.value = false
     }
@@ -813,7 +814,7 @@ async function handleDeleteFuel(row: any) {
     fetchFuelLogs()
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '刪除失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除失敗'))
     }
   }
 }

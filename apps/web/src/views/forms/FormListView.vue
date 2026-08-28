@@ -457,6 +457,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Refresh, Link, Plus, Edit, Delete, Document } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import {
   listForms,
   syncForm,
@@ -593,7 +594,7 @@ async function selectDriveFile(file: GoogleDriveSheetDTO) {
     step.value = 2
     ElMessage.success(`已載入【${file.name}】之 ${availableTabs.value.length} 個工作表分頁`)
   } catch (err: any) {
-    ElMessage.error(err.message || '讀取試算表分頁失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '讀取試算表分頁失敗'))
   } finally {
     inspectingFileId.value = ''
   }
@@ -663,7 +664,7 @@ async function handleManualInspect() {
     step.value = 2
     ElMessage.success(`已成功解析 ${availableTabs.value.length} 個分頁`)
   } catch (err: any) {
-    ElMessage.error(err.message || '解析試算表失敗，請確認連結與權限')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '解析試算表失敗，請確認連結與權限'))
   } finally {
     inspectingManual.value = false
   }

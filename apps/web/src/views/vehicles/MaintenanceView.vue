@@ -232,6 +232,7 @@ import {
   Delete
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import {
   listMaintenance,
   createMaintenance,
@@ -288,7 +289,7 @@ async function fetchFilterOptions() {
     const res = await listVehicles({ pageSize: 100 })
     vehicles.value = res.data
   } catch (err: any) {
-    ElMessage.error(err.message || '載入車輛清單失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入車輛清單失敗'))
   }
 }
 
@@ -306,7 +307,7 @@ async function fetchList() {
     records.value = res.data
     total.value = res.meta.total
   } catch (err: any) {
-    ElMessage.error(err.message || '查詢維修保養紀錄失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢維修保養紀錄失敗'))
   } finally {
     loading.value = false
   }
@@ -362,7 +363,7 @@ async function handleSave() {
       dialogVisible.value = false
       fetchList()
     } catch (err: any) {
-      ElMessage.error(err.message || '儲存保養紀錄失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存保養紀錄失敗'))
     } finally {
       saving.value = false
     }
@@ -381,7 +382,7 @@ async function handleDelete(row: any) {
     fetchList()
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '刪除失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除失敗'))
     }
   }
 }
@@ -393,7 +394,7 @@ async function handleDownloadBlank() {
     downloadBlob(blob, '車輛定期保養檢查表_空白範本.xlsx')
     ElMessage.success('空白保養表下載成功')
   } catch (err: any) {
-    ElMessage.error(err.message || '下載空白保養表失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載空白保養表失敗'))
   } finally {
     downloadingBlank.value = false
   }

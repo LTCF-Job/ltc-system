@@ -125,7 +125,7 @@ async function handleLogin() {
     }
 
     if (!supabase) {
-      ElMessage.error('尚未設定 Supabase 登入環境變數，請聯絡系統管理員')
+      ElMessage.error('帳號密碼錯誤或無此使用者')
       return
     }
     loading.value = true
@@ -136,7 +136,7 @@ async function handleLogin() {
         password: form.password
       })
       if (error || !data.session || !data.user) {
-        ElMessage.error(error?.message || '帳號或密碼錯誤')
+        ElMessage.error('帳號密碼錯誤或無此使用者')
         return
       }
 
