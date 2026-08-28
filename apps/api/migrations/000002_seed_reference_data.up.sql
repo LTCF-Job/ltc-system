@@ -1,25 +1,6 @@
--- Migration: 000004_create_regions.up.sql
--- Description: 建立 regions 區域資料表、放寬舊表 region 約束，並預載全台灣 22 縣市種子資料
+-- Migration: 000002_seed_reference_data.up.sql
+-- Description: 載入正式參考資料（全台灣 22 縣市）與預設 Supabase Auth 管理員帳號
 
-CREATE TABLE IF NOT EXISTS regions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name TEXT NOT NULL UNIQUE,
-    description TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
-    sort_order INT NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- 放寬舊有資料表上的靜態 region CHECK 約束
-ALTER TABLE sites DROP CONSTRAINT IF EXISTS sites_region_check;
-ALTER TABLE vehicles DROP CONSTRAINT IF EXISTS vehicles_region_check;
-ALTER TABLE drivers DROP CONSTRAINT IF EXISTS drivers_region_check;
-ALTER TABLE cases DROP CONSTRAINT IF EXISTS cases_region_check;
-ALTER TABLE export_jobs DROP CONSTRAINT IF EXISTS export_jobs_region_check;
-ALTER TABLE holidays DROP CONSTRAINT IF EXISTS holidays_region_check;
-
--- 預先載入台灣 22 縣市種子資料
 INSERT INTO regions (name, description, status, sort_order) VALUES
 ('新竹縣', '新竹縣營運區域', 'active', 1),
 ('新竹市', '新竹市營運區域', 'active', 2),
@@ -47,3 +28,42 @@ ON CONFLICT (name) DO UPDATE SET
   description = EXCLUDED.description,
   status = EXCLUDED.status,
   sort_order = EXCLUDED.sort_order;
+
+INSERT INTO auth.users (
+    id,
+    instance_id,
+    aud,
+    role,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    raw_app_meta_data,
+    raw_user_meta_data,
+    created_at,
+    updated_at,
+    confirmation_token,
+    recovery_token,
+    email_change_token_new,
+    email_change
+)
+VALUES (
+    '00000000-0000-0000-0000-000000000002',
+    '00000000-0000-0000-0000-000000000000',
+    'authenticated',
+    'authenticated',
+    'ltcf-admin@ltc.example.com',
+    '$2a$10$IKiM.bIaxDYbD/.cl.b8MODthsuQ0WhLDcvox90gC3H3TDHaHFVYe',
+    now(),
+    '{"provider":"email","providers":["email"],"role":"admin"}'::jsonb,
+    '{"display_name":"系統管理員"}'::jsonb,
+    now(),
+    now(),
+    '', '', '', ''
+)
+ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    encrypted_password = EXCLUDED.encrypted_password,
+    email_confirmed_at = EXCLUDED.email_confirmed_at,
+    raw_app_meta_data = EXCLUDED.raw_app_meta_data,
+    raw_user_meta_data = EXCLUDED.raw_user_meta_data,
+    updated_at = now();
