@@ -81,26 +81,9 @@ func (s *DashboardService) GetMetrics(ctx context.Context, periodYm string) (*Da
 		ClaimFulfillmentRate: 95.0,
 	}
 
+	// 無資料庫連線時回傳誠實的零值指標，與 ReportService 的離線行為一致，
+	// 不再回傳假造的固定示範數字。
 	if s.repo == nil {
-		dto.TotalCasesCount = 186
-		dto.ReportedTripsCount = 1420
-		dto.PendingConflictsCount = 2
-		dto.PendingFormColumnsCount = 0
-		dto.AttendanceDistribution = AttendanceDistributionDTO{
-			WorkCount:       280,
-			LeaveCount:      6,
-			SickCount:       2,
-			OffCount:        112,
-			LeavePercentage: 2.78,
-		}
-		dto.VehicleTripTrends = []VehicleTripTrendItemDTO{
-			{VehicleName: "竹北一車", PlateNo: "BZG-7915", TripCount: 185},
-			{VehicleName: "竹北二車", PlateNo: "BZG-7916", TripCount: 160},
-			{VehicleName: "竹北三車", PlateNo: "BZG-7917", TripCount: 145},
-			{VehicleName: "竹南一車", PlateNo: "BZG-8801", TripCount: 172},
-			{VehicleName: "竹南二車", PlateNo: "BZG-8802", TripCount: 190},
-			{VehicleName: "頭份一車", PlateNo: "BZG-9901", TripCount: 130},
-		}
 		return dto, nil
 	}
 

@@ -52,23 +52,23 @@ func NewMasterService(
 
 // CreateCaseRequest 代表新增個案之請求參數。
 type CreateCaseRequest struct {
-	Code              string     `json:"code"`
-	Name              string     `json:"name" binding:"required"`
-	NationalID        string     `json:"nationalId" binding:"required"`
-	HouseholdType     *string    `json:"householdType"`
-	Gender            *string    `json:"gender"`
-	BirthDate         *time.Time `json:"birthDate"`
-	CareContactRole   *string    `json:"careContactRole"`
-	CareContactName   *string    `json:"careContactName"`
-	RegisteredAddress *string    `json:"registeredAddress"`
-	HomeAddress       string     `json:"homeAddress" binding:"required"`
-	Region            string     `json:"region" binding:"required"`
-	LTCLevel          *string    `json:"ltcLevel"`
-	ServiceCategory   int        `json:"serviceCategory"`
-	ServiceUsageType  int        `json:"serviceUsageType"`
-	ClaimStartDate    time.Time  `json:"claimStartDate" binding:"required"`
-	ClaimEndDate      *time.Time `json:"claimEndDate"`
-	Status            string     `json:"status"`
+	Code              string
+	Name              string
+	NationalID        string
+	HouseholdType     *string
+	Gender            *string
+	BirthDate         *time.Time
+	CareContactRole   *string
+	CareContactName   *string
+	RegisteredAddress *string
+	HomeAddress       string
+	Region            string
+	LTCLevel          *string
+	ServiceCategory   int
+	ServiceUsageType  int
+	ClaimStartDate    time.Time
+	ClaimEndDate      *time.Time
+	Status            string
 }
 
 // CreateCase 建立個案主檔，執行身分證查重、加密與雜湊產生。
@@ -146,6 +146,100 @@ func (s *MasterService) CreateCase(ctx context.Context, req CreateCaseRequest, a
 	return &entity, nil
 }
 
+// ListCases 查詢個案清單（回傳遮罩身分證）。
+func (s *MasterService) ListCases(ctx context.Context, region, status, q string, page, pageSize int) ([]repository.CaseEntity, int64, error) {
+	return s.caseRepo.List(ctx, region, status, q, page, pageSize)
+}
+
+// GetCaseByID 取得單筆個案主檔明細。
+func (s *MasterService) GetCaseByID(ctx context.Context, id uuid.UUID) (*repository.CaseEntity, error) {
+	return s.caseRepo.GetByID(ctx, id)
+}
+
+// UpdateCaseInput 代表更新個案主檔所需之輸入，欄位為 nil 表示不變更。
+type UpdateCaseInput struct {
+	Name              *string
+	HomeAddress       *string
+	Region            *string
+	LTCLevel          *string
+	ServiceCategory   *int
+	ServiceUsageType  *int
+	Status            *string
+	HouseholdType     *string
+	Gender            *string
+	BirthDate         *time.Time
+	CareContactRole   *string
+	CareContactName   *string
+	RegisteredAddress *string
+}
+
+// UpdateCase 更新個案主檔資料，僅套用有提供的欄位。
+func (s *MasterService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCaseInput) (*repository.CaseEntity, error) {
+	entity, err := s.caseRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if in.Name != nil {
+		entity.Name = *in.Name
+	}
+	if in.HomeAddress != nil {
+		entity.HomeAddress = *in.HomeAddress
+	}
+	if in.Region != nil {
+		entity.Region = *in.Region
+	}
+	if in.LTCLevel != nil {
+		entity.LTCLevel = in.LTCLevel
+	}
+	if in.ServiceCategory != nil {
+		entity.ServiceCategory = *in.ServiceCategory
+	}
+	if in.ServiceUsageType != nil {
+		entity.ServiceUsageType = *in.ServiceUsageType
+	}
+	if in.Status != nil {
+		entity.Status = *in.Status
+	}
+	if in.HouseholdType != nil {
+		entity.HouseholdType = in.HouseholdType
+	}
+	if in.Gender != nil {
+		entity.Gender = in.Gender
+	}
+	if in.BirthDate != nil {
+		entity.BirthDate = in.BirthDate
+	}
+	if in.CareContactRole != nil {
+		entity.CareContactRole = in.CareContactRole
+	}
+	if in.CareContactName != nil {
+		entity.CareContactName = in.CareContactName
+	}
+	if in.RegisteredAddress != nil {
+		entity.RegisteredAddress = in.RegisteredAddress
+	}
+
+	if err := s.caseRepo.Update(ctx, entity); err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+// UpdateCaseTransportPreference 更新個案的交通偏好（所屬據點與去回程車輛），回傳更新後的個案主檔。
+func (s *MasterService) UpdateCaseTransportPreference(ctx context.Context, caseID, siteID, outboundVehicleID, inboundVehicleID uuid.UUID) (*repository.CaseEntity, error) {
+	if err := s.caseRepo.UpsertTransportPreference(ctx, caseID, siteID, outboundVehicleID, inboundVehicleID); err != nil {
+		return nil, err
+	}
+	return s.caseRepo.GetByID(ctx, caseID)
+}
+
+// GetActiveScheduleForCaseOnDate 取得個案於指定日期生效之排班；查無資料時回傳 nil、nil，
+// 底層查詢失敗時回傳 error（呼叫端不應將兩者混為一談）。
+func (s *MasterService) GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*repository.CaseScheduleEntity, error) {
+	return s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, serviceDate)
+}
+
 // RevealCaseNationalID 解密個案身分證並留存稽核日誌。
 func (s *MasterService) RevealCaseNationalID(ctx context.Context, caseID uuid.UUID, actorID uuid.UUID, actorRole, ip, ua string) (string, error) {
 	caseEntity, err := s.caseRepo.GetByID(ctx, caseID)
@@ -188,26 +282,26 @@ func (s *MasterService) RecordSkippedCaseImport(ctx context.Context, item CaseIm
 
 // CreateScheduleRequest 代表建立個案排班設定之請求參數。
 type CreateScheduleRequest struct {
-	CaseID             uuid.UUID                      `json:"caseId" binding:"required"`
-	SiteID             uuid.UUID                      `json:"siteId" binding:"required"`
-	EffectiveFrom      time.Time                      `json:"effectiveFrom" binding:"required"`
-	EffectiveTo        *time.Time                     `json:"effectiveTo"`
-	Weekdays           []int16                        `json:"weekdays" binding:"required"`
-	TripPattern        int16                          `json:"tripPattern" binding:"required"`
-	UnitPrice          float64                        `json:"unitPrice" binding:"required"`
-	DistanceKM         float64                        `json:"distanceKm" binding:"required"`
-	ServiceDurationMin int16                          `json:"serviceDurationMin" binding:"required"`
-	ServiceCode        string                         `json:"serviceCode" binding:"required"`
-	Note               *string                        `json:"note"`
-	Legs               []CreateScheduleLegItemRequest `json:"legs" binding:"required"`
+	CaseID             uuid.UUID
+	SiteID             uuid.UUID
+	EffectiveFrom      time.Time
+	EffectiveTo        *time.Time
+	Weekdays           []int16
+	TripPattern        int16
+	UnitPrice          float64
+	DistanceKM         float64
+	ServiceDurationMin int16
+	ServiceCode        string
+	Note               *string
+	Legs               []CreateScheduleLegItemRequest
 }
 
 // CreateScheduleLegItemRequest 代表排班單趟設定之請求參數。
 type CreateScheduleLegItemRequest struct {
-	LegSeq     int16      `json:"legSeq" binding:"required"`
-	Direction  string     `json:"direction" binding:"required"`
-	DepartTime string     `json:"departTime" binding:"required"`
-	VehicleID  *uuid.UUID `json:"vehicleId"`
+	LegSeq     int16
+	Direction  string
+	DepartTime string
+	VehicleID  *uuid.UUID
 }
 
 // CreateCaseSchedule 建立個案之有效排班設定並校驗趟次時段與遞增順序。

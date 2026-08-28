@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"log/slog"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,8 +18,30 @@ const (
 	CodePrecheckFailed      = "PRECHECK_FAILED"
 	CodeMappingRequired     = "MAPPING_REQUIRED"
 	CodeIngestTokenInvalid  = "INGEST_TOKEN_INVALID"
+	CodeFormSourceFailed    = "FORM_SOURCE_FAILED"
+	CodeFormSyncFailed      = "FORM_SYNC_FAILED"
+	CodeFormMappingFailed   = "FORM_MAPPING_FAILED"
 	CodeInternalError       = "INTERNAL_ERROR"
 )
+
+// codeMessages 為每個錯誤碼提供固定、非技術性的預設訊息，是前端顯示文字的單一事實來源。
+// 任何底層（Go、SQL、第三方 SDK）錯誤訊息一律不得回傳給前端，只透過 slog 記錄於伺服器端。
+var codeMessages = map[string]string{
+	CodeValidationFailed:    "輸入資料不符合規則，請確認後再試",
+	CodeUnauthenticated:     "請重新登入",
+	CodeForbidden:           "權限不足，無法執行此操作",
+	CodeNotFound:            "查無資料",
+	CodeDuplicateNationalID: "身分證字號已存在，請確認個案資料",
+	CodeAssignmentOverlap:   "該時段已有其他排班，請調整後再試",
+	CodeExportInProgress:    "匯出作業進行中，請稍後再試",
+	CodePrecheckFailed:      "資料檢核未通過，請確認後再試",
+	CodeMappingRequired:     "尚未完成欄位對應設定",
+	CodeIngestTokenInvalid:  "匯入權杖無效或已過期",
+	CodeFormSourceFailed:    "無法存取雲端試算表，請確認連結或權限設定",
+	CodeFormSyncFailed:      "同步表單資料失敗，請稍後再試",
+	CodeFormMappingFailed:   "更新欄位對應設定失敗，請稍後再試",
+	CodeInternalError:       "系統發生錯誤，請稍後再試",
+}
 
 // APIResponse 代表成功回應之統一封裝結構。
 type APIResponse struct {
@@ -68,4 +92,22 @@ func RespondError(c *gin.Context, httpStatus int, code string, message string, d
 			Details: details,
 		},
 	})
+}
+
+// RespondErrorCode 依錯誤碼查表回傳統一、非技術性錯誤訊息。
+// err 為實際發生的底層錯誤，僅記錄於伺服器端 log，絕不回傳給前端；呼叫端不應再自行組出 err.Error() 作為 message。
+func RespondErrorCode(c *gin.Context, httpStatus int, code string, err error, details []ErrorDetail) {
+	if err != nil {
+		slog.Error("api_error",
+			slog.String("code", code),
+			slog.String("path", c.Request.URL.Path),
+			slog.String("method", c.Request.Method),
+			slog.String("error", err.Error()),
+		)
+	}
+	message, ok := codeMessages[code]
+	if !ok {
+		message = codeMessages[CodeInternalError]
+	}
+	RespondError(c, httpStatus, code, message, details)
 }

@@ -200,110 +200,53 @@ func (s *FormService) InspectGoogleSheet(ctx context.Context, inputURLOrID strin
 }
 
 // ListForms 查詢 Google 表單清單；若無資料則回傳預設展示項目。
+// ListForms 查詢已建立的表單關聯清單。
+//
+// TODO: SheetTabs／SyncedMonths／SyncedRowCount／TotalColumns 目前是固定值，
+// 沒有真正查詢 form_columns／form_submissions 統計，需要在有真實 schema／
+// 資料驗證管道後再補上；本次僅移除「查無資料時回傳整批假造展示資料」的部分，
+// 讓離線或空清單時誠實回傳空結果，不再假裝有 3 張已同步的表單。
 func (s *FormService) ListForms(ctx context.Context) ([]FormListItemDTO, error) {
-	var forms []FormListItemDTO
+	forms := []FormListItemDTO{}
 
-	if s.repo != nil {
-		entities, err := s.repo.ListGoogleForms(ctx)
-		if err == nil && len(entities) > 0 {
-			for _, e := range entities {
-				var lastSyncStr *string
-				if e.LastSyncedAt != nil {
-					str := e.LastSyncedAt.Format("2006-01-02 15:04:05")
-					lastSyncStr = &str
-				}
-				forms = append(forms, FormListItemDTO{
-					ID:                 e.ID.String(),
-					FormID:             e.ID.String(),
-					VehicleID:          e.VehicleID.String(),
-					VehicleDisplayName: e.VehicleDisplayName,
-					VehicleName:        e.VehicleDisplayName,
-					Title:              e.FormTitle,
-					FormName:           e.FormTitle,
-					SheetURL:           fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit", e.SheetID),
-					Region:             e.Region,
-					SheetTabs:          []string{"8月回報", "7月回報"},
-					ActiveTab:          "8月回報",
-					SyncedMonths:       []string{"2026-08"},
-					LastSyncedAt:       lastSyncStr,
-					SyncedRowCount:     20,
-					TotalColumns:       40,
-					PendingColumns:     0,
-					PendingColumnMap:   0,
-					HasSyncAlert:       false,
-					Status:             e.Status,
-				})
-			}
-			return forms, nil
-		}
+	if s.repo == nil {
+		return forms, nil
 	}
 
-	// 離線或尚未設定資料庫時的預設展示資料
-	return []FormListItemDTO{
-		{
-			ID:                 "44444444-4444-4444-4444-444444444401",
-			FormID:             "44444444-4444-4444-4444-444444444401",
-			VehicleID:          "22222222-2222-2222-2222-222222222201",
-			VehicleDisplayName: "竹北一車",
-			VehicleName:        "竹北一車",
-			Title:              "竹北一車每日接送回報表",
-			FormName:           "竹北一車每日接送回報表",
-			SheetURL:           "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit",
-			Region:             "hsinchu",
-			SheetTabs:          []string{"8月回報", "7月回報"},
-			ActiveTab:          "8月回報",
-			SyncedMonths:       []string{"2026-07", "2026-08"},
-			LastSyncedAt:       strPtr("2026-08-25 15:30:00"),
-			SyncedRowCount:     24,
-			TotalColumns:       56,
-			PendingColumns:     0,
-			PendingColumnMap:   0,
-			HasSyncAlert:       false,
-			Status:             "active",
-		},
-		{
-			ID:                 "44444444-4444-4444-4444-444444444402",
-			FormID:             "44444444-4444-4444-4444-444444444402",
-			VehicleID:          "22222222-2222-2222-2222-222222222202",
-			VehicleDisplayName: "竹北二車",
-			VehicleName:        "竹北二車",
-			Title:              "竹北二車每日接送回報表",
-			FormName:           "竹北二車每日接送回報表",
-			SheetURL:           "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit",
-			Region:             "hsinchu",
+	entities, err := s.repo.ListGoogleForms(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range entities {
+		var lastSyncStr *string
+		if e.LastSyncedAt != nil {
+			str := e.LastSyncedAt.Format("2006-01-02 15:04:05")
+			lastSyncStr = &str
+		}
+		forms = append(forms, FormListItemDTO{
+			ID:                 e.ID.String(),
+			FormID:             e.ID.String(),
+			VehicleID:          e.VehicleID.String(),
+			VehicleDisplayName: e.VehicleDisplayName,
+			VehicleName:        e.VehicleDisplayName,
+			Title:              e.FormTitle,
+			FormName:           e.FormTitle,
+			SheetURL:           fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit", e.SheetID),
+			Region:             e.Region,
 			SheetTabs:          []string{"8月回報", "7月回報"},
 			ActiveTab:          "8月回報",
 			SyncedMonths:       []string{"2026-08"},
-			LastSyncedAt:       strPtr("2026-08-25 15:20:00"),
-			SyncedRowCount:     18,
-			TotalColumns:       48,
+			LastSyncedAt:       lastSyncStr,
+			SyncedRowCount:     20,
+			TotalColumns:       40,
 			PendingColumns:     0,
 			PendingColumnMap:   0,
 			HasSyncAlert:       false,
-			Status:             "active",
-		},
-		{
-			ID:                 "44444444-4444-4444-4444-444444444403",
-			FormID:             "44444444-4444-4444-4444-444444444403",
-			VehicleID:          "22222222-2222-2222-2222-222222222203",
-			VehicleDisplayName: "竹南1車",
-			VehicleName:        "竹南1車",
-			Title:              "竹南1車每日接送回報表",
-			FormName:           "竹南1車每日接送回報表",
-			SheetURL:           "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit",
-			Region:             "miaoli",
-			SheetTabs:          []string{"8月回報", "7月回報"},
-			ActiveTab:          "8月回報",
-			SyncedMonths:       []string{"2026-07"},
-			LastSyncedAt:       strPtr("2026-08-20 14:00:00"),
-			SyncedRowCount:     20,
-			TotalColumns:       62,
-			PendingColumns:     1,
-			PendingColumnMap:   1,
-			HasSyncAlert:       true,
-			Status:             "active",
-		},
-	}, nil
+			Status:             e.Status,
+		})
+	}
+	return forms, nil
 }
 
 // CreateFormAssociation 建立新表單與 Google 試算表關聯，自動抓取所有分頁與欄位並儲存至資料庫。

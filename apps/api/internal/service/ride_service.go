@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -10,9 +11,11 @@ import (
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/merge"
 	"ltc-system/apps/api/internal/domain/namenorm"
-	"ltc-system/apps/api/internal/middleware"
 	"ltc-system/apps/api/internal/repository"
 )
+
+// ErrInvalidIngestToken 代表 Webhook 呼叫端提供的 ingest token 無效或不存在。
+var ErrInvalidIngestToken = errors.New("invalid ingest token")
 
 // RideService 封裝 Google 表單回報解析、正規化、混車合併、衝突裁決與更正。
 type RideService struct {
@@ -53,7 +56,7 @@ type ProcessFormWebhookRequest struct {
 func (s *RideService) IngestWebhook(ctx context.Context, secret string, req ProcessFormWebhookRequest) error {
 	formID, defaultVehicleID, err := s.formRepo.GetFormBySecret(ctx, secret)
 	if err != nil {
-		return middleware.ErrInvalidToken
+		return ErrInvalidIngestToken
 	}
 
 	// 依規格書 5.2，若服務日期為空（如總計列或標頭）直接跳過處理
@@ -382,4 +385,3 @@ func (s *RideService) ManualReportRide(
 
 	return &rec, nil
 }
-

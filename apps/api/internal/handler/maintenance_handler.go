@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/repository"
 	"ltc-system/apps/api/internal/service"
 )
 
@@ -51,7 +50,7 @@ func (h *MaintenanceHandler) List(c *gin.Context) {
 
 	list, total, err := h.maintenanceSvc.List(c.Request.Context(), page, pageSize, vehicleID, startDate, endDate, q)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -78,7 +77,7 @@ func (h *MaintenanceHandler) Create(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -91,7 +90,7 @@ func (h *MaintenanceHandler) Create(c *gin.Context) {
 	actorID := middleware.GetActorID(c)
 	actorRole := middleware.GetActorRole(c)
 
-	item := &repository.MaintenanceLogEntity{
+	item, err := h.maintenanceSvc.Create(c.Request.Context(), service.MaintenanceLogInput{
 		VehicleID:   req.VehicleID,
 		ServiceDate: svcDate,
 		Mileage:     req.Mileage,
@@ -101,10 +100,9 @@ func (h *MaintenanceHandler) Create(c *gin.Context) {
 		ReceiptURL:  req.ReceiptURL,
 		Note:        req.Note,
 		CreatedBy:   actorID,
-	}
-
-	if err := h.maintenanceSvc.Create(c.Request.Context(), item, &actorID, &actorRole); err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+	}, &actorID, &actorRole)
+	if err != nil {
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -132,7 +130,7 @@ func (h *MaintenanceHandler) Update(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -144,8 +142,8 @@ func (h *MaintenanceHandler) Update(c *gin.Context) {
 
 	actorID := middleware.GetActorID(c)
 	actorRole := middleware.GetActorRole(c)
-	item := &repository.MaintenanceLogEntity{
-		ID:          id,
+
+	item, err := h.maintenanceSvc.Update(c.Request.Context(), id, service.MaintenanceLogInput{
 		VehicleID:   req.VehicleID,
 		ServiceDate: svcDate,
 		Mileage:     req.Mileage,
@@ -154,10 +152,9 @@ func (h *MaintenanceHandler) Update(c *gin.Context) {
 		Cost:        req.Cost,
 		ReceiptURL:  req.ReceiptURL,
 		Note:        req.Note,
-	}
-
-	if err := h.maintenanceSvc.Update(c.Request.Context(), item, &actorID, &actorRole); err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+	}, &actorID, &actorRole)
+	if err != nil {
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -176,7 +173,7 @@ func (h *MaintenanceHandler) Delete(c *gin.Context) {
 	actorID := middleware.GetActorID(c)
 	actorRole := middleware.GetActorRole(c)
 	if err := h.maintenanceSvc.Delete(c.Request.Context(), id, &actorID, &actorRole); err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -187,7 +184,7 @@ func (h *MaintenanceHandler) Delete(c *gin.Context) {
 func (h *MaintenanceHandler) DownloadBlankTemplate(c *gin.Context) {
 	excelBytes, err := h.maintenanceSvc.GenerateBlankMaintenanceExcel(c.Request.Context())
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 

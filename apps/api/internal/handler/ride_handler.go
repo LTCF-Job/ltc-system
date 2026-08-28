@@ -2,12 +2,15 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"ltc-system/apps/api/internal/domain/govform"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/export"
 	"ltc-system/apps/api/internal/middleware"
 	"ltc-system/apps/api/internal/service"
@@ -36,16 +39,16 @@ func (h *RideHandler) IngestWebhook(c *gin.Context) {
 
 	var req service.ProcessFormWebhookRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
 	if err := h.rideService.IngestWebhook(c.Request.Context(), secret, req); err != nil {
-		if err == middleware.ErrInvalidToken {
+		if errors.Is(err, service.ErrInvalidIngestToken) {
 			middleware.RespondError(c, http.StatusUnauthorized, middleware.CodeIngestTokenInvalid, "無效的 Ingest Token", nil)
 			return
 		}
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -85,7 +88,7 @@ func (h *RideHandler) Correct(c *gin.Context) {
 
 	var dto CorrectDTO
 	if err := c.ShouldBindJSON(&dto); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -123,7 +126,7 @@ func (h *RideHandler) Correct(c *gin.Context) {
 	actorRole := middleware.GetActorRole(c)
 
 	if err := h.rideService.CorrectRideRecord(c.Request.Context(), rideID, req, actorID, actorRole, c.ClientIP(), c.Request.UserAgent()); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -134,7 +137,7 @@ func (h *RideHandler) Correct(c *gin.Context) {
 func (h *RideHandler) ManualReport(c *gin.Context) {
 	var dto ManualReportDTO
 	if err := c.ShouldBindJSON(&dto); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -185,7 +188,7 @@ func (h *RideHandler) ManualReport(c *gin.Context) {
 
 	rec, err := h.rideService.ManualReportRide(c.Request.Context(), req, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -193,195 +196,59 @@ func (h *RideHandler) ManualReport(c *gin.Context) {
 }
 
 // GetRecord 取得單筆搭乘紀錄。
+//
+// TODO: 尚無 RideService 查單筆紀錄的方法，待補上真實查詢後串接；
+// 目前誠實回傳查無資料，避免回傳假造內容。
 func (h *RideHandler) GetRecord(c *gin.Context) {
-	rideID := c.Param("id")
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{
-		"id":              rideID,
-		"caseId":          "55555555-5555-5555-5555-555555555501",
-		"caseName":        "蔡曾切",
-		"serviceDate":     "2026-07-10",
-		"legSeq":          1,
-		"effectiveStatus": "boarded",
-		"vehicleId":       "22222222-2222-2222-2222-222222222201",
-		"vehicleName":     "竹北一車",
-		"driverName":      "郭澤威",
-		"hasConflict":     false,
-	}, nil)
+	middleware.RespondError(c, http.StatusNotImplemented, middleware.CodeNotFound, "搭乘紀錄查詢尚未串接資料來源", nil)
 }
 
 // GetCalendar 取得搭乘月曆矩陣資料。
+//
+// TODO: 尚無 RideService 依月份／區域／關鍵字彙整月曆矩陣的方法（需結合
+// domain/calendar 與 case_schedules、ride_records），待補上真實查詢後串接；
+// 目前誠實回傳空清單，避免回傳假造個案姓名與紀錄。
 func (h *RideHandler) GetCalendar(c *gin.Context) {
-	month := c.DefaultQuery("month", "115-07")
+	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(int(time.Now().Year()-1911), int(time.Now().Month())))
 	region := c.Query("region")
 	q := c.Query("q")
-
-	_ = month
 	_ = region
 	_ = q
 
-	// 產生範例月曆矩陣回傳
-	casesData := []gin.H{
-		{
-			"caseId":          "55555555-5555-5555-5555-555555555501",
-			"caseCode":        "C0001",
-			"caseName":        "蔡曾切",
-			"region":          "miaoli",
-			"tripPattern":     "custom",
-			"tripPatternText": "自訂",
-			"days": gin.H{
-				"2026-07-10": gin.H{
-					"date":              "2026-07-10",
-					"dayOfWeek":         5,
-					"isExpected":        true,
-					"expectedTripCount": 2,
-					"records": []gin.H{
-						{
-							"id":                   "ride_case_1_10_1",
-							"caseId":               "55555555-5555-5555-5555-555555555501",
-							"caseName":             "蔡曾切",
-							"serviceDate":          "2026-07-10",
-							"legSeq":               1,
-							"direction":            "outbound",
-							"mergedStatus":         "boarded",
-							"effectiveStatus":      "boarded",
-							"hasConflict":          false,
-							"vehicleName":          "竹南1車",
-							"driverName":           "曾建宏",
-							"scheduledDepartTime":  "09:00",
-							"scheduledDurationMin": 10,
-						},
-						{
-							"id":                   "ride_case_1_10_2",
-							"caseId":               "55555555-5555-5555-5555-555555555501",
-							"caseName":             "蔡曾切",
-							"serviceDate":          "2026-07-10",
-							"legSeq":               2,
-							"direction":            "inbound",
-							"mergedStatus":         "boarded",
-							"effectiveStatus":      "boarded",
-							"hasConflict":          false,
-							"vehicleName":          "竹南1車",
-							"driverName":           "曾建宏",
-							"scheduledDepartTime":  "16:00",
-							"scheduledDurationMin": 10,
-						},
-					},
-				},
-			},
-		},
-		{
-			"caseId":          "55555555-5555-5555-5555-555555555502",
-			"caseCode":        "C0002",
-			"caseName":        "葉秀珍",
-			"region":          "hsinchu",
-			"tripPattern":     4,
-			"tripPatternText": "4 趟",
-			"days": gin.H{
-				"2026-07-20": gin.H{
-					"date":              "2026-07-20",
-					"dayOfWeek":         1,
-					"isExpected":        true,
-					"expectedTripCount": 4,
-					"records": []gin.H{
-						{
-							"id":                   "ride_case_2_20_1",
-							"caseId":               "55555555-5555-5555-5555-555555555502",
-							"caseName":             "葉秀珍",
-							"serviceDate":          "2026-07-20",
-							"legSeq":               1,
-							"direction":            "outbound",
-							"mergedStatus":         "boarded",
-							"effectiveStatus":      "boarded",
-							"hasConflict":          true,
-							"vehicleName":          "竹北一車",
-							"driverName":           "郭澤威",
-							"scheduledDepartTime":  "09:30",
-							"scheduledDurationMin": 10,
-						},
-					},
-				},
-			},
-		},
+	daysInMonth := 30
+	if rocYear, month, err := rocdate.ParseROCYearMonth(monthStr); err == nil {
+		gregorianYear := rocYear + 1911
+		daysInMonth = time.Date(gregorianYear, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day()
 	}
 
 	middleware.RespondSuccess(c, http.StatusOK, gin.H{
-		"month":       "115-07",
-		"totalCases":  len(casesData),
-		"daysInMonth": 31,
-		"cases":       casesData,
+		"month":       monthStr,
+		"totalCases":  0,
+		"daysInMonth": daysInMonth,
+		"cases":       []gin.H{},
 	}, nil)
 }
 
 // ListIssues 取得異常集中處理清單。
+//
+// TODO: 尚無 RideService 依類型彙整異常清單（衝突／未回報／解析失敗）的方法，
+// 待補上真實查詢後串接；目前誠實回傳空清單，避免回傳假造個案姓名與紀錄。
 func (h *RideHandler) ListIssues(c *gin.Context) {
-	issueType := c.DefaultQuery("issueType", "conflict")
-
-	var list []gin.H
-	if issueType == "conflict" {
-		list = []gin.H{
-			{
-				"id":          "ride_conflict_1",
-				"caseId":      "55555555-5555-5555-5555-555555555502",
-				"caseName":    "葉秀珍",
-				"serviceDate": "2026-07-20",
-				"legSeq":      1,
-				"issueType":   "conflict",
-				"hasConflict": true,
-				"description": "竹北一車與竹北二車皆回報「有坐」，需指定正確承載車輛",
-				"vehicles":    []string{"竹北一車", "竹北二車"},
-			},
-		}
-	} else if issueType == "unreported" {
-		list = []gin.H{
-			{
-				"id":          "ride_unrep_1",
-				"caseId":      "55555555-5555-5555-5555-555555555501",
-				"caseName":    "蔡曾切",
-				"serviceDate": "2026-07-15",
-				"legSeq":      2,
-				"issueType":   "unreported",
-				"hasConflict": false,
-				"description": "07/15 第 2 趟（回程）司機尚未提交表單回覆",
-			},
-		}
-	} else {
-		list = []gin.H{
-			{
-				"id":          "err_1",
-				"caseId":      "case_unknown",
-				"caseName":    "去程到07/21",
-				"serviceDate": "2026-07-21",
-				"legSeq":      1,
-				"issueType":   "import_error",
-				"hasConflict": false,
-				"description": "搭乘欄填寫非標準字串「去程到07/21」，無法自動解析為有坐/沒坐",
-			},
-		}
-	}
+	list := []gin.H{}
 
 	middleware.RespondSuccess(c, http.StatusOK, list, middleware.PaginationMeta{
 		Page:     1,
 		PageSize: 20,
-		Total:    int64(len(list)),
+		Total:    0,
 	})
 }
 
 // ResolveConflict 解決混車衝突。
+//
+// TODO: 尚無 RideService 寫入衝突裁決結果的方法，待補上真實寫入後串接；
+// 目前誠實回傳未實作，避免回傳假造的解決成功狀態。
 func (h *RideHandler) ResolveConflict(c *gin.Context) {
-	rideID := c.Param("id")
-	var req struct {
-		VehicleID string `json:"vehicleId"`
-		DriverID  string `json:"driverId"`
-	}
-	_ = c.ShouldBindJSON(&req)
-
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{
-		"id":              rideID,
-		"hasConflict":     false,
-		"vehicleId":       req.VehicleID,
-		"driverId":        req.DriverID,
-		"effectiveStatus": "boarded",
-	}, nil)
+	middleware.RespondError(c, http.StatusNotImplemented, middleware.CodeInternalError, "混車衝突裁決尚未串接資料來源", nil)
 }
 
 // ExportHandler 處理匯出與前置檢核請求。

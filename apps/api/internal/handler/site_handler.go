@@ -7,17 +7,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/repository"
+	"ltc-system/apps/api/internal/service"
 )
 
 // SiteHandler 處理據點相關請求。
 type SiteHandler struct {
-	siteRepo *repository.SiteRepository
+	siteService *service.SiteService
 }
 
 // NewSiteHandler 建立 SiteHandler 實例。
-func NewSiteHandler(siteRepo *repository.SiteRepository) *SiteHandler {
-	return &SiteHandler{siteRepo: siteRepo}
+func NewSiteHandler(siteService *service.SiteService) *SiteHandler {
+	return &SiteHandler{siteService: siteService}
 }
 
 // List 查詢據點清單。
@@ -27,7 +27,7 @@ func (h *SiteHandler) List(c *gin.Context) {
 	region := c.Query("region")
 	q := c.Query("q")
 
-	sites, total, err := h.siteRepo.List(c.Request.Context(), region, q, page, pageSize)
+	sites, total, err := h.siteService.List(c.Request.Context(), region, q, page, pageSize)
 	if err != nil {
 		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "查詢據點失敗", nil)
 		return
@@ -42,29 +42,72 @@ func (h *SiteHandler) List(c *gin.Context) {
 
 // Create 新增據點。
 func (h *SiteHandler) Create(c *gin.Context) {
-	var req repository.SiteEntity
+	var req CreateSiteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusCreated, req, nil)
+	site, err := h.siteService.Create(c.Request.Context(), service.CreateSiteInput{
+		Code:     req.Code,
+		Name:     req.Name,
+		Address:  req.Address,
+		Region:   req.Region,
+		OpenDays: req.OpenDays,
+		Status:   req.Status,
+	})
+	if err != nil {
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		return
+	}
+
+	middleware.RespondSuccess(c, http.StatusCreated, site, nil)
 }
 
 // Update 更新據點。
 func (h *SiteHandler) Update(c *gin.Context) {
 	idStr := c.Param("id")
-	var req repository.SiteEntity
-	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的據點 ID", nil)
 		return
 	}
-	req.ID = uuid.MustParse(idStr)
-	middleware.RespondSuccess(c, http.StatusOK, req, nil)
+
+	var req UpdateSiteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		return
+	}
+
+	site, err := h.siteService.Update(c.Request.Context(), id, service.UpdateSiteInput{
+		Code:     req.Code,
+		Name:     req.Name,
+		Address:  req.Address,
+		Region:   req.Region,
+		OpenDays: req.OpenDays,
+		Status:   req.Status,
+	})
+	if err != nil {
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		return
+	}
+
+	middleware.RespondSuccess(c, http.StatusOK, site, nil)
 }
 
 // Delete 刪除據點。
 func (h *SiteHandler) Delete(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的據點 ID", nil)
+		return
+	}
+
+	if err := h.siteService.Delete(c.Request.Context(), id); err != nil {
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		return
+	}
+
 	middleware.RespondSuccess(c, http.StatusNoContent, nil, nil)
 }
-

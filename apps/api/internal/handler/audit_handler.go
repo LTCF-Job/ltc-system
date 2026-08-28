@@ -8,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/repository"
 	"ltc-system/apps/api/internal/service"
 )
 
@@ -30,7 +29,7 @@ func (h *AuditHandler) List(c *gin.Context) {
 		pageSize = 100
 	}
 
-	filter := repository.AuditFilter{
+	filter := service.AuditFilter{
 		Action:     c.Query("action"),
 		EntityType: c.Query("entityType"),
 		EntityID:   c.Query("entityId"),

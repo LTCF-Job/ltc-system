@@ -108,3 +108,13 @@ func (r *SiteRepository) Update(ctx context.Context, s *SiteEntity) error {
 	return r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.OpenDays, s.Status).
 		Scan(&s.UpdatedAt)
 }
+
+// Delete 刪除據點。若該據點仍被個案排班參照，資料庫外鍵限制會回傳錯誤。
+func (r *SiteRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	if r.db == nil {
+		return fmt.Errorf("database not connected")
+	}
+	query := `DELETE FROM sites WHERE id = $1`
+	_, err := r.db.Exec(ctx, query, id)
+	return err
+}

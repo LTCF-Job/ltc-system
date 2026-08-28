@@ -19,7 +19,7 @@
 ## 目錄與分層
 
 ```
-cmd/server    HTTP 服務入口，路由表跟 dependency wiring 都在這
+cmd/server    HTTP 服務入口。main.go 只做 dependency wiring，routes.go 放路由表
 cmd/migrate   跑 migration 的 CLI
 cmd/exporter  Cloud Run Job，跑政府申報 Excel 匯出
 
@@ -30,18 +30,21 @@ internal/domain        跟框架無關的純邏輯（見下方）
 internal/middleware    JWT 驗證、角色檢查、CORS、audit log、統一 response 格式
 internal/export        Excel 產生
 internal/config        環境變數載入跟啟動檢查
+internal/arch          架構測試：匯入矩陣檢查，跟著 go test ./... 一起跑
 ```
 
-依賴方向固定是 `handler → service → repository`，`domain` 誰都能呼叫但不反過來依賴任何人。加新功能照這個順序寫：
+這是目前的實際結構，不是目標結構。專案的目標是 modular monolith：業務能力逐一搬進 `internal/modules/<capability>/{transport,app,infra}`，上面的扁平套件隨之縮小。
 
-1. 在對應 `repository` 加查詢方法，回傳 repository 自己的 entity struct（不是 domain 型別、也不是 API DTO）。
-2. 在對應 `service` 加業務方法：吃 repository，做驗證、狀態轉換、跨 repository 協調。
-3. 在對應 `handler` 加一個方法：解 request（binding）、呼叫 service、用 `middleware.RespondSuccess` / `RespondError` 組 response。
-4. 在 `cmd/server/main.go` 建構這三層物件，掛路由並指定 `middleware.RequireRoles(...)`。
+現況與目標之間有已知落差，`internal/arch/arch_test.go` 把它們凍結成 baseline，只准變少不准變多：
 
-`main.go` 裡每個 `xxxRepo := repository.NewXxxRepository(pool)` → `xxxSvc := service.NewXxxService(xxxRepo, ...)` → `xxxH := handler.NewXxxHandler(xxxSvc)` 就是一組完整的 vertical slice，看不懂某個功能全貌時，從這三行找起最快。
+- 7 個 handler 直接呼叫 `repository`，跳過 service（`audit`／`case`／`driver`／`fuel`／`holiday`／`maintenance`／`site`）
+- `site_handler.go`、`driver_handler.go` 直接把 request body 綁進 `repository` 的 entity struct
+- `service` 層仍持有具體的 `*repository.X` 而非 port interface
+- `service/ride_service.go` 反向依賴 `middleware`、`adapter/government_holiday.go` 反向依賴 `repository`
 
-想確認邊界細節時讀 [`.agents/skills/backend-architecture/SKILL.md`](../../.agents/skills/backend-architecture/SKILL.md) 跟 [`.agents/skills/go-backend-code-style/SKILL.md`](../../.agents/skills/go-backend-code-style/SKILL.md)，那是團隊目前實際在遵守的規則。
+新增或修改功能時，依賴方向、模型所有權、驗證位置、錯誤與交易歸屬、port 定義位置、檔案拆分時機，以 [`layering-rules.md`](../../.agents/skills/backend-architecture/references/layering-rules.md) 為準；那份文件裡的規則多數已被 `internal/arch/arch_test.go` 編碼，違反會讓 `go test ./...` 失敗。邊界背後的原則見 [`backend-architecture/SKILL.md`](../../.agents/skills/backend-architecture/SKILL.md) 與 [`go-backend-code-style/SKILL.md`](../../.agents/skills/go-backend-code-style/SKILL.md)。
+
+`main.go` 裡每個 `xxxRepo := repository.NewXxxRepository(pool)` → `xxxSvc := service.NewXxxService(xxxRepo, ...)` → `handlers{...}` 欄位就是一組完整的 vertical slice，看不懂某個功能全貌時，從這幾行找起最快。
 
 ## domain 套件（純邏輯，不碰 DB／HTTP）
 

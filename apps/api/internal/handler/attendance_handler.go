@@ -32,7 +32,7 @@ func (h *AttendanceHandler) GetMonthAttendance(c *gin.Context) {
 
 	report, err := h.attendanceSvc.GetMonthAttendance(c.Request.Context(), periodYm, driverID)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -49,7 +49,7 @@ func (h *AttendanceHandler) Upsert(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -63,7 +63,7 @@ func (h *AttendanceHandler) Upsert(c *gin.Context) {
 	actorRole := middleware.GetActorRole(c)
 	item, err := h.attendanceSvc.Upsert(c.Request.Context(), req.DriverID, recDate, req.Status, req.Note, &actorID, &actorRole)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 

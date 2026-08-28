@@ -40,7 +40,7 @@ func TestMaintenanceService_CRUD(t *testing.T) {
 	svc := NewMaintenanceService(maintenanceRepo, vehicleRepo, auditRepo)
 	ctx := context.Background()
 
-	item := &repository.MaintenanceLogEntity{
+	in := MaintenanceLogInput{
 		VehicleID:   uuid.New(),
 		ServiceDate: time.Now(),
 		Mileage:     52000.5,
@@ -50,11 +50,11 @@ func TestMaintenanceService_CRUD(t *testing.T) {
 		CreatedBy:   uuid.New(),
 	}
 
-	err := svc.Create(ctx, item, nil, nil)
+	item, err := svc.Create(ctx, in, nil, nil)
 	assert.NoError(t, err)
 	assert.NotEqual(t, uuid.Nil, item.ID)
 
-	err = svc.Update(ctx, item, nil, nil)
+	item, err = svc.Update(ctx, item.ID, in, nil, nil)
 	assert.NoError(t, err)
 
 	err = svc.Delete(ctx, item.ID, nil, nil)

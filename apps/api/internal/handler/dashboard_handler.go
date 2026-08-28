@@ -23,7 +23,7 @@ func (h *DashboardHandler) GetMetrics(c *gin.Context) {
 	periodYm := c.Query("month")
 	metrics, err := h.dashboardSvc.GetMetrics(c.Request.Context(), periodYm)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 

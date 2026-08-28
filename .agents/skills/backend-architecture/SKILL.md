@@ -26,6 +26,8 @@ Keep business decisions independent from HTTP, UI, database clients, cache clien
 
 Dependencies may point inward from adapters, but inner business code must not import outer delivery or infrastructure details. Follow existing interface ownership when the repository already has a consistent convention.
 
+For this repository's concrete import matrix, model ownership, transaction rules, and file-splitting triggers, read [layering-rules.md](references/layering-rules.md) when changing `apps/api`.
+
 ## Layer decisions
 
 - Put request binding, authentication context extraction, response assembly, and transport error mapping in delivery adapters.

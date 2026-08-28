@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -18,10 +17,6 @@ const (
 	ContextKeyActorID   = "actor_id"
 	ContextKeyActorRole = "actor_role"
 	ContextKeyUserEmail = "user_email"
-)
-
-var (
-	ErrInvalidToken = errors.New("invalid ingest token")
 )
 
 // newSupabaseJWKS 建立向 Supabase JWKS 端點取金鑰並自動輪替的 Keyfunc；未設定 URL 時回傳 nil。

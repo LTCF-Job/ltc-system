@@ -21,8 +21,11 @@ type CaseEntity struct {
 	CareContactRole   *string    `json:"careContactRole,omitempty"`
 	CareContactName   *string    `json:"careContactName,omitempty"`
 	RegisteredAddress *string    `json:"registeredAddress,omitempty"`
+	SiteID            *uuid.UUID `json:"siteId,omitempty"`
 	SiteName          string     `json:"siteName,omitempty"`
+	OutboundVehicleID *uuid.UUID `json:"outboundVehicleId,omitempty"`
 	OutboundVehicle   string     `json:"outboundVehicle,omitempty"`
+	InboundVehicleID  *uuid.UUID `json:"inboundVehicleId,omitempty"`
 	InboundVehicle    string     `json:"inboundVehicle,omitempty"`
 	HomeAddress       string     `json:"homeAddress"`
 	Region            string     `json:"region"`

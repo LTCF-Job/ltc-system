@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"ltc-system/apps/api/internal/middleware"
 	"ltc-system/apps/api/internal/service"
 )
 
@@ -37,7 +38,7 @@ func (h *ReportHandler) GetTripSummary(c *gin.Context) {
 
 	report, err := h.reportSvc.GetTripSummary(c.Request.Context(), periodYm, regionPtr, vehID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -62,7 +63,7 @@ func (h *ReportHandler) ExportTripSummaryExcel(c *gin.Context) {
 
 	excelBytes, err := h.reportSvc.GenerateTripSummaryExcel(c.Request.Context(), periodYm, regionPtr, vehID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -87,7 +88,7 @@ func (h *ReportHandler) GetHsinchuSchedule(c *gin.Context) {
 
 	report, err := h.reportSvc.GetHsinchuSchedule(c.Request.Context(), siteID, vehID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -110,7 +111,7 @@ func (h *ReportHandler) ExportHsinchuScheduleExcel(c *gin.Context) {
 
 	excelBytes, err := h.reportSvc.GenerateHsinchuScheduleExcel(c.Request.Context(), siteID, vehID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "INTERNAL_ERROR", "message": err.Error()}})
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 

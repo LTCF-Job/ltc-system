@@ -32,7 +32,7 @@ func NewRegionService(repo *repository.RegionRepository, auditRepo *repository.A
 
 // CreateRegionRequest 代表新增區域之請求結構。
 type CreateRegionRequest struct {
-	Name        string `json:"name" binding:"required"`
+	Name        string `json:"name"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
 	SortOrder   int    `json:"sortOrder"`

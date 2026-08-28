@@ -8,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/repository"
 	"ltc-system/apps/api/internal/service"
 )
 
@@ -55,7 +54,7 @@ func (h *FuelHandler) List(c *gin.Context) {
 
 	list, total, err := h.fuelSvc.List(c.Request.Context(), page, pageSize, vehicleID, driverID, startDate, endDate, q)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -80,7 +79,7 @@ func (h *FuelHandler) Create(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -93,7 +92,7 @@ func (h *FuelHandler) Create(c *gin.Context) {
 	actorID := middleware.GetActorID(c)
 	actorRole := middleware.GetActorRole(c)
 
-	item := &repository.FuelLogEntity{
+	item, err := h.fuelSvc.Create(c.Request.Context(), service.FuelLogInput{
 		VehicleID:  req.VehicleID,
 		DriverID:   req.DriverID,
 		FuelDate:   fuelDate,
@@ -101,10 +100,9 @@ func (h *FuelHandler) Create(c *gin.Context) {
 		Cost:       req.Cost,
 		ReceiptURL: req.ReceiptURL,
 		CreatedBy:  actorID,
-	}
-
-	if err := h.fuelSvc.Create(c.Request.Context(), item, &actorID, &actorRole); err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+	}, &actorID, &actorRole)
+	if err != nil {
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -130,7 +128,7 @@ func (h *FuelHandler) Update(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -142,18 +140,17 @@ func (h *FuelHandler) Update(c *gin.Context) {
 
 	actorID := middleware.GetActorID(c)
 	actorRole := middleware.GetActorRole(c)
-	item := &repository.FuelLogEntity{
-		ID:         id,
+
+	item, err := h.fuelSvc.Update(c.Request.Context(), id, service.FuelLogInput{
 		VehicleID:  req.VehicleID,
 		DriverID:   req.DriverID,
 		FuelDate:   fuelDate,
 		Liters:     req.Liters,
 		Cost:       req.Cost,
 		ReceiptURL: req.ReceiptURL,
-	}
-
-	if err := h.fuelSvc.Update(c.Request.Context(), item, &actorID, &actorRole); err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+	}, &actorID, &actorRole)
+	if err != nil {
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 
@@ -172,7 +169,7 @@ func (h *FuelHandler) Delete(c *gin.Context) {
 	actorID := middleware.GetActorID(c)
 	actorRole := middleware.GetActorRole(c)
 	if err := h.fuelSvc.Delete(c.Request.Context(), id, &actorID, &actorRole); err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
 		return
 	}
 

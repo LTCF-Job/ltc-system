@@ -78,7 +78,7 @@ func (h *RegionHandler) Get(c *gin.Context) {
 func (h *RegionHandler) Create(c *gin.Context) {
 	var req service.CreateRegionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -91,7 +91,7 @@ func (h *RegionHandler) Create(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, service.ErrRegionNameRequired) {
-			middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+			middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 			return
 		}
 		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "建立區域失敗", nil)
@@ -111,7 +111,7 @@ func (h *RegionHandler) Update(c *gin.Context) {
 
 	var req service.UpdateRegionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 

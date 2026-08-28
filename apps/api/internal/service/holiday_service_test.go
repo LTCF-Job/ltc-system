@@ -12,8 +12,8 @@ import (
 
 type holidayProviderStub struct{}
 
-func (holidayProviderStub) Fetch(context.Context, int) ([]repository.HolidayEntity, error) {
-	return []repository.HolidayEntity{
+func (holidayProviderStub) Fetch(context.Context, int) ([]HolidayRecord, error) {
+	return []HolidayRecord{
 		{HolidayDate: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Name: "元旦", IsDayOff: true},
 		{HolidayDate: time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC), Name: "和平紀念日", IsDayOff: true},
 		{HolidayDate: time.Date(2026, 4, 4, 0, 0, 0, 0, time.UTC), Name: "兒童節", IsDayOff: true},

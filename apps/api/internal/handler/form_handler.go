@@ -37,7 +37,7 @@ func NewFormHandler(svc FormServiceInterface) *FormHandler {
 func (h *FormHandler) ListGoogleDriveFiles(c *gin.Context) {
 	files, err := h.svc.ListGoogleDriveFiles(c.Request.Context())
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, "FAILED_TO_LIST_DRIVE_FILES", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormSourceFailed, err, nil)
 		return
 	}
 	middleware.RespondSuccess(c, http.StatusOK, files, nil)
@@ -51,7 +51,7 @@ func (h *FormHandler) InspectGoogleSheet(c *gin.Context) {
 		AccessToken   string `json:"accessToken"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, "INVALID_PAYLOAD", "請提供有效之試算表連結或 ID", nil)
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "請提供有效之試算表連結或 ID", nil)
 		return
 	}
 
@@ -62,7 +62,7 @@ func (h *FormHandler) InspectGoogleSheet(c *gin.Context) {
 
 	result, err := h.svc.InspectGoogleSheet(c.Request.Context(), target, req.AccessToken)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, "INSPECT_SHEET_FAILED", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeFormSourceFailed, err, nil)
 		return
 	}
 	middleware.RespondSuccess(c, http.StatusOK, result, nil)
@@ -72,13 +72,13 @@ func (h *FormHandler) InspectGoogleSheet(c *gin.Context) {
 func (h *FormHandler) CreateFormAssociation(c *gin.Context) {
 	var req service.CreateFormAssociationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, "INVALID_PAYLOAD", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
 	form, err := h.svc.CreateFormAssociation(c.Request.Context(), req)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, "FAILED_TO_CREATE_ASSOCIATION", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeFormMappingFailed, err, nil)
 		return
 	}
 	middleware.RespondSuccess(c, http.StatusCreated, form, nil)
@@ -88,7 +88,7 @@ func (h *FormHandler) CreateFormAssociation(c *gin.Context) {
 func (h *FormHandler) DeleteFormAssociation(c *gin.Context) {
 	formID := c.Param("id")
 	if err := h.svc.DeleteFormAssociation(c.Request.Context(), formID); err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, "FAILED_TO_DELETE_ASSOCIATION", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormMappingFailed, err, nil)
 		return
 	}
 	middleware.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
@@ -98,7 +98,7 @@ func (h *FormHandler) DeleteFormAssociation(c *gin.Context) {
 func (h *FormHandler) ListForms(c *gin.Context) {
 	forms, err := h.svc.ListForms(c.Request.Context())
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, "FAILED_TO_LIST_FORMS", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormSyncFailed, err, nil)
 		return
 	}
 	middleware.RespondSuccess(c, http.StatusOK, forms, nil)
@@ -112,7 +112,7 @@ func (h *FormHandler) SyncForm(c *gin.Context) {
 
 	res, err := h.svc.SyncForm(c.Request.Context(), formID, &opts)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, "SYNC_FAILED", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormSyncFailed, err, nil)
 		return
 	}
 	middleware.RespondSuccess(c, http.StatusOK, res, nil)
@@ -123,7 +123,7 @@ func (h *FormHandler) ListColumns(c *gin.Context) {
 	status := c.Query("mappingStatus")
 	cols, err := h.svc.ListColumns(c.Request.Context(), status)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, "FAILED_TO_LIST_COLUMNS", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormSyncFailed, err, nil)
 		return
 	}
 	middleware.RespondSuccess(c, http.StatusOK, cols, nil)
@@ -138,12 +138,12 @@ func (h *FormHandler) UpdateColumnMapping(c *gin.Context) {
 		LegSeq        *int16  `json:"legSeq"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, "INVALID_PAYLOAD", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
 	if err := h.svc.UpdateColumnMapping(c.Request.Context(), colID, req.MappingStatus, req.CaseID, req.LegSeq); err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, "FAILED_TO_UPDATE_MAPPING", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormMappingFailed, err, nil)
 		return
 	}
 
@@ -161,13 +161,13 @@ func (h *FormHandler) BatchMapping(c *gin.Context) {
 		Mappings []service.ColumnMappingUpdate `json:"mappings"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, "INVALID_PAYLOAD", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
 	updatedCount, err := h.svc.BatchMapping(c.Request.Context(), req.Mappings)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, "FAILED_TO_BATCH_MAPPING", err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormMappingFailed, err, nil)
 		return
 	}
 

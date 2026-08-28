@@ -26,7 +26,7 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 	query := `
 		SELECT c.id, c.code, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
 		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       COALESCE(st.name, ''), COALESCE(vo.display_name, ''), COALESCE(vi.display_name, ''),
+		       p.site_id, COALESCE(st.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.inbound_vehicle_id, COALESCE(vi.display_name, ''),
 		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_start_date, c.claim_end_date,
 		       c.status, c.created_at, c.updated_at
 		FROM cases c
@@ -51,7 +51,8 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		var c CaseEntity
 		if err := rows.Scan(
 			&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
-			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress, &c.SiteName, &c.OutboundVehicle, &c.InboundVehicle,
+			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
+			&c.SiteID, &c.SiteName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.InboundVehicleID, &c.InboundVehicle,
 			&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimStartDate, &c.ClaimEndDate,
 			&c.Status, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
@@ -82,14 +83,23 @@ func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID, 
 // GetByID 依 UUID 取得個案。
 func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*CaseEntity, error) {
 	query := `
-		SELECT id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-		       home_address, region, ltc_level, service_category, service_usage_type, claim_start_date, claim_end_date,
-		       status, created_at, updated_at
-		FROM cases WHERE id = $1
+		SELECT c.id, c.code, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
+		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
+		       p.site_id, COALESCE(st.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.inbound_vehicle_id, COALESCE(vi.display_name, ''),
+		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_start_date, c.claim_end_date,
+		       c.status, c.created_at, c.updated_at
+		FROM cases c
+		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
+		LEFT JOIN sites st ON st.id = p.site_id
+		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
+		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
+		WHERE c.id = $1
 	`
 	var c CaseEntity
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
+		&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
+		&c.SiteID, &c.SiteName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.InboundVehicleID, &c.InboundVehicle,
 		&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimStartDate, &c.ClaimEndDate,
 		&c.Status, &c.CreatedAt, &c.UpdatedAt,
 	)
@@ -174,13 +184,15 @@ func (r *CaseRepository) Update(ctx context.Context, c *CaseEntity) error {
 		UPDATE cases
 		SET name = $2, name_normalized = $3, home_address = $4, region = $5, ltc_level = $6,
 		    service_category = $7, service_usage_type = $8, claim_start_date = $9, claim_end_date = $10,
-		    status = $11, updated_at = now()
+		    status = $11, household_type = $12, gender = $13, birth_date = $14,
+		    care_contact_role = $15, care_contact_name = $16, registered_address = $17, updated_at = now()
 		WHERE id = $1
 		RETURNING updated_at
 	`
 	return r.db.QueryRow(ctx, query,
 		c.ID, c.Name, c.NameNormalized, c.HomeAddress, c.Region, c.LTCLevel,
 		c.ServiceCategory, c.ServiceUsageType, c.ClaimStartDate, c.ClaimEndDate, c.Status,
+		c.HouseholdType, c.Gender, c.BirthDate, c.CareContactRole, c.CareContactName, c.RegisteredAddress,
 	).Scan(&c.UpdatedAt)
 }
 

@@ -766,21 +766,25 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 			}
 
 			previewRows = append(previewRows, map[string]interface{}{
-				"rowIndex":       actualRowIndex,
-				"name":           name,
-				"nationalId":     crypto.Mask(nationalID),
-				"region":         region,
-				"claimStartDate": claimStartDate,
-				"siteName":       siteName,
-				"weekdays":       wText,
-				"departTime":     outboundTime,
-				"returnTime":     inboundTime,
-				"tripPattern":    maxTripPattern,
-				"distanceKm":     rowRes.DistanceKM,
-				"unitPrice":      unitPrice,
-				"isDraft":        rowRes.IsDraft,
-				"__hasError":     hasError,
-				"__hasWarning":   hasWarning,
+				"rowIndex":          actualRowIndex,
+				"name":              name,
+				"nationalId":        crypto.Mask(nationalID),
+				"region":            region,
+				"claimStartDate":    claimStartDate,
+				"siteName":          siteName,
+				"weekdays":          wText,
+				"departTime":        outboundTime,
+				"returnTime":        inboundTime,
+				"tripPattern":       maxTripPattern,
+				"distanceKm":        rowRes.DistanceKM,
+				"unitPrice":         unitPrice,
+				"isDraft":           rowRes.IsDraft,
+				"householdType":     householdType,
+				"gender":            gender,
+				"careContactRole":   careContactRole,
+				"registeredAddress": registeredAddress,
+				"__hasError":        hasError,
+				"__hasWarning":      hasWarning,
 			})
 		}
 	}
@@ -798,6 +802,13 @@ func (s *ImportService) processRawTables(tables [][][]string, sheetNames []strin
 }
 
 // CommitCases 將通過檢核的個案資料正式寫入資料庫。
+// CommitCases 逐列寫入個案主檔與排班設定。
+//
+// TODO(layering-rules.md §7)：本方法橫跨 masterService／siteRepo／vehicleRepo／
+// caseRepo 多次寫入，目前沒有共用交易，任何一列中途失敗只會讓該列被跳過，
+// 不會回滾同一列內已寫入的部分（例如已建立 case 但排班寫入失敗）。需要
+// platform/pgxdb.TxRunner 就緒、且能對真實 Postgres 驗證交易行為後再補上，
+// 屬於 Phase 4（caseimport 模組化）範圍，此處先誠實標記而非盲目引入未經驗證的交易包裝。
 func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPreviewResult, actorID uuid.UUID, actorRole, ip, ua string) (*CaseImportCommitResult, error) {
 	if preview == nil || len(preview.Rows) == 0 {
 		return &CaseImportCommitResult{}, nil
@@ -819,10 +830,19 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			claimStart = time.Now()
 		}
 
-		natID := row.NationalID
-		if natID == "" {
-			natID = fmt.Sprintf("A%09d", time.Now().UnixNano()%1000000000)
+		// 身分證字號為 cases 資料表的 NOT NULL UNIQUE 欄位，且需通過檢查碼驗證，
+		// 目前 schema 無法表示「尚無身分證的草稿個案」；與其合成一組可能矇混通過
+		// 檢查碼、進而寫入加密儲存與唯一索引的假身分證，誠實地將此列標記為
+		// 待人工補件，留待 schema 支援後再處理。
+		if row.NationalID == "" {
+			item := CaseImportSkippedRow{RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{"身分證字號空白，需人工補件後再匯入"}, RawValues: row.RawValues}
+			result.SkippedRows = append(result.SkippedRows, item)
+			if s.masterService != nil {
+				s.masterService.RecordSkippedCaseImport(ctx, item, actorID, actorRole, ip, ua)
+			}
+			continue
 		}
+		natID := row.NationalID
 		addr := row.HomeAddress
 		if addr == "" {
 			addr = "待補住家地址"

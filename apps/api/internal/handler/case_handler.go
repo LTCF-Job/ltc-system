@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,25 +12,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/repository"
 	"ltc-system/apps/api/internal/service"
 )
 
 // CaseHandler 處理個案相關之 HTTP 請求。
 type CaseHandler struct {
-	caseRepo      *repository.CaseRepository
 	masterService *service.MasterService
 	importService *service.ImportService
 }
 
 // NewCaseHandler 建立 CaseHandler 實例。
 func NewCaseHandler(
-	caseRepo *repository.CaseRepository,
 	masterService *service.MasterService,
 	importService *service.ImportService,
 ) *CaseHandler {
 	return &CaseHandler{
-		caseRepo:      caseRepo,
 		masterService: masterService,
 		importService: importService,
 	}
@@ -46,7 +43,7 @@ func (h *CaseHandler) List(c *gin.Context) {
 	status := c.Query("status")
 	q := c.Query("q")
 
-	cases, total, err := h.caseRepo.List(c.Request.Context(), region, status, q, page, pageSize)
+	cases, total, err := h.masterService.ListCases(c.Request.Context(), region, status, q, page, pageSize)
 	if err != nil {
 		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "查詢個案失敗", nil)
 		return
@@ -67,9 +64,9 @@ func (h *CaseHandler) List(c *gin.Context) {
 
 // Create 新增個案主檔。
 func (h *CaseHandler) Create(c *gin.Context) {
-	var req service.CreateCaseRequest
+	var req CreateCaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -77,14 +74,14 @@ func (h *CaseHandler) Create(c *gin.Context) {
 	actorRole := middleware.GetActorRole(c)
 
 	entity, err := h.masterService.CreateCase(
-		c.Request.Context(), req, actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
+		c.Request.Context(), req.ToService(), actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
 	)
 	if err != nil {
-		if err == service.ErrDuplicateNationalID {
+		if errors.Is(err, service.ErrDuplicateNationalID) {
 			middleware.RespondError(c, http.StatusConflict, middleware.CodeDuplicateNationalID, "身分證字號重複", nil)
 			return
 		}
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -116,15 +113,15 @@ func (h *CaseHandler) Reveal(c *gin.Context) {
 
 // CreateSchedule 建立個案排班設定與時段明細。
 func (h *CaseHandler) CreateSchedule(c *gin.Context) {
-	var req service.CreateScheduleRequest
+	var req CreateScheduleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
-	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req)
+	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req.ToService())
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -148,7 +145,7 @@ func (h *CaseHandler) ImportExcel(c *gin.Context) {
 
 	preview, err := h.importService.ParseCases(f, fileHeader.Filename)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -215,7 +212,7 @@ func (h *CaseHandler) Get(c *gin.Context) {
 		return
 	}
 
-	entity, err := h.caseRepo.GetByID(c.Request.Context(), id)
+	entity, err := h.masterService.GetCaseByID(c.Request.Context(), id)
 	if err != nil {
 		middleware.RespondError(c, http.StatusNotFound, middleware.CodeNotFound, "找不到此個案", nil)
 		return
@@ -233,51 +230,82 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		return
 	}
 
-	entity, err := h.caseRepo.GetByID(c.Request.Context(), id)
+	var req struct {
+		Name              *string `json:"name"`
+		HomeAddress       *string `json:"homeAddress"`
+		Region            *string `json:"region"`
+		LTCLevel          *string `json:"ltcLevel"`
+		ServiceCategory   *int    `json:"serviceCategory"`
+		ServiceUsageType  *int    `json:"serviceUsageType"`
+		ClaimStartDate    *string `json:"claimStartDate"`
+		ClaimEndDate      *string `json:"claimEndDate"`
+		Status            *string `json:"status"`
+		HouseholdType     *string `json:"householdType"`
+		Gender            *string `json:"gender"`
+		BirthDate         *string `json:"birthDate"`
+		CareContactRole   *string `json:"careContactRole"`
+		CareContactName   *string `json:"careContactName"`
+		RegisteredAddress *string `json:"registeredAddress"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		return
+	}
+
+	in := service.UpdateCaseInput{
+		Name:              req.Name,
+		HomeAddress:       req.HomeAddress,
+		Region:            req.Region,
+		LTCLevel:          req.LTCLevel,
+		ServiceCategory:   req.ServiceCategory,
+		ServiceUsageType:  req.ServiceUsageType,
+		Status:            req.Status,
+		HouseholdType:     req.HouseholdType,
+		Gender:            req.Gender,
+		CareContactRole:   req.CareContactRole,
+		CareContactName:   req.CareContactName,
+		RegisteredAddress: req.RegisteredAddress,
+	}
+	if req.BirthDate != nil {
+		if t, err := time.Parse("2006-01-02", *req.BirthDate); err == nil {
+			in.BirthDate = &t
+		}
+	}
+
+	entity, err := h.masterService.UpdateCase(c.Request.Context(), id, in)
 	if err != nil {
 		middleware.RespondError(c, http.StatusNotFound, middleware.CodeNotFound, "找不到此個案", nil)
 		return
 	}
 
-	var req struct {
-		Name             *string `json:"name"`
-		HomeAddress      *string `json:"homeAddress"`
-		Region           *string `json:"region"`
-		LTCLevel         *string `json:"ltcLevel"`
-		ServiceCategory  *int    `json:"serviceCategory"`
-		ServiceUsageType *int    `json:"serviceUsageType"`
-		ClaimStartDate   *string `json:"claimStartDate"`
-		ClaimEndDate     *string `json:"claimEndDate"`
-		Status           *string `json:"status"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+	middleware.RespondSuccess(c, http.StatusOK, entity, nil)
+}
+
+// UpdateTransportPreference 更新個案的交通偏好（所屬據點與去回程車輛）。
+func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的個案 ID", nil)
 		return
 	}
 
-	if req.Name != nil {
-		entity.Name = *req.Name
+	var req struct {
+		SiteID            uuid.UUID `json:"siteId" binding:"required"`
+		OutboundVehicleID uuid.UUID `json:"outboundVehicleId" binding:"required"`
+		InboundVehicleID  uuid.UUID `json:"inboundVehicleId" binding:"required"`
 	}
-	if req.HomeAddress != nil {
-		entity.HomeAddress = *req.HomeAddress
-	}
-	if req.Region != nil {
-		entity.Region = *req.Region
-	}
-	if req.LTCLevel != nil {
-		entity.LTCLevel = req.LTCLevel
-	}
-	if req.ServiceCategory != nil {
-		entity.ServiceCategory = *req.ServiceCategory
-	}
-	if req.ServiceUsageType != nil {
-		entity.ServiceUsageType = *req.ServiceUsageType
-	}
-	if req.Status != nil {
-		entity.Status = *req.Status
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		return
 	}
 
-	_ = h.caseRepo.Update(c.Request.Context(), entity)
+	entity, err := h.masterService.UpdateCaseTransportPreference(c.Request.Context(), id, req.SiteID, req.OutboundVehicleID, req.InboundVehicleID)
+	if err != nil {
+		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "更新交通偏好失敗", nil)
+		return
+	}
+
 	middleware.RespondSuccess(c, http.StatusOK, entity, nil)
 }
 
@@ -290,45 +318,16 @@ func (h *CaseHandler) GetSchedule(c *gin.Context) {
 		return
 	}
 
-	sched, err := h.caseRepo.GetActiveScheduleForCaseOnDate(c.Request.Context(), id, time.Now())
-	if err != nil || sched == nil {
-		// 回傳預設排班物件
-		siteID := uuid.MustParse("11111111-1111-1111-1111-111111111101")
-		vehID := uuid.MustParse("22222222-2222-2222-2222-222222222201")
-		defaultSched := gin.H{
-			"id":                 uuid.New().String(),
-			"caseId":             id.String(),
-			"siteId":             siteID.String(),
-			"siteName":           "竹北日照中心",
-			"effectiveFrom":      "2026-07-01",
-			"weekdays":           []int{1, 2, 3, 4, 5},
-			"tripPattern":        2,
-			"unitPrice":          115.00,
-			"distanceKm":         5.2,
-			"serviceDurationMin": 10,
-			"serviceCode":        "BD03",
-			"legs": []gin.H{
-				{
-					"legSeq":      1,
-					"direction":   "outbound",
-					"period":      "morning",
-					"departTime":  "09:00",
-					"runNo":       1,
-					"vehicleId":   vehID.String(),
-					"vehicleName": "竹北一車",
-				},
-				{
-					"legSeq":      2,
-					"direction":   "inbound",
-					"period":      "afternoon",
-					"departTime":  "16:00",
-					"runNo":       1,
-					"vehicleId":   vehID.String(),
-					"vehicleName": "竹北一車",
-				},
-			},
-		}
-		middleware.RespondSuccess(c, http.StatusOK, defaultSched, nil)
+	// TODO: 尚無「個案排班」在無現行排班時的產品規格確認，先誠實回傳查無資料，
+	// 不再回傳假造的竹北日照中心／竹北一車預設排班（原本無論真實查詢成功與否，
+	// 只要查無排班或查詢出錯都會回傳同一組寫死的假資料，兩種情況也未區分）。
+	sched, err := h.masterService.GetActiveScheduleForCaseOnDate(c.Request.Context(), id, time.Now())
+	if err != nil {
+		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "查詢個案排班失敗", nil)
+		return
+	}
+	if sched == nil {
+		middleware.RespondError(c, http.StatusNotFound, middleware.CodeNotFound, "查無現行排班", nil)
 		return
 	}
 
@@ -337,15 +336,15 @@ func (h *CaseHandler) GetSchedule(c *gin.Context) {
 
 // SaveSchedule 儲存/更新個案排班。
 func (h *CaseHandler) SaveSchedule(c *gin.Context) {
-	var req service.CreateScheduleRequest
+	var req CreateScheduleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
-	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req)
+	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req.ToService())
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 

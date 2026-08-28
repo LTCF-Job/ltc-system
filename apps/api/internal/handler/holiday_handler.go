@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/repository"
 	"ltc-system/apps/api/internal/service"
 )
 
@@ -60,7 +59,7 @@ func (h *HolidayHandler) List(c *gin.Context) {
 func (h *HolidayHandler) Create(c *gin.Context) {
 	var req CreateHolidayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -79,18 +78,17 @@ func (h *HolidayHandler) Create(c *gin.Context) {
 		isDayOff = *req.IsDayOff
 	}
 
-	item := &repository.HolidayEntity{
+	actorID := middleware.GetActorID(c)
+	actorRole := middleware.GetActorRole(c)
+
+	item, err := h.svc.UpsertHoliday(c.Request.Context(), service.UpsertHolidayInput{
 		HolidayDate: date,
 		Name:        req.Name,
 		Region:      req.Region,
 		Source:      source,
 		IsDayOff:    isDayOff,
-	}
-
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
-
-	if err := h.svc.UpsertHoliday(c.Request.Context(), item, actorID, actorRole); err != nil {
+	}, actorID, actorRole)
+	if err != nil {
 		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "儲存國定假日失敗", nil)
 		return
 	}

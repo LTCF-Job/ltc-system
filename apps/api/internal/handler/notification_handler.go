@@ -48,7 +48,7 @@ func (h *NotificationHandler) ListRecipients(c *gin.Context) {
 func (h *NotificationHandler) CreateRecipient(c *gin.Context) {
 	var req CreateRecipientRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -57,7 +57,7 @@ func (h *NotificationHandler) CreateRecipient(c *gin.Context) {
 
 	item, err := h.svc.CreateRecipient(c.Request.Context(), req.Topic, req.Email, req.DisplayName, actorID, actorRole)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -75,7 +75,7 @@ func (h *NotificationHandler) UpdateRecipient(c *gin.Context) {
 
 	var req UpdateRecipientRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
@@ -84,7 +84,7 @@ func (h *NotificationHandler) UpdateRecipient(c *gin.Context) {
 
 	item, err := h.svc.UpdateRecipient(c.Request.Context(), id, req.Email, req.DisplayName, req.Active, actorID, actorRole)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
 		return
 	}
 
