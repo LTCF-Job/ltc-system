@@ -12,6 +12,7 @@ import (
 	"ltc-system/apps/api/internal/adapter/google"
 	"ltc-system/apps/api/internal/config"
 	"ltc-system/apps/api/internal/handler"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 	"ltc-system/apps/api/internal/repository"
 	"ltc-system/apps/api/internal/service"
 
@@ -77,8 +78,9 @@ func main() {
 	siteSvc := service.NewSiteService(siteRepo)
 	vehicleSvc := service.NewVehicleService(vehicleRepo)
 	driverSvc := service.NewDriverService(driverRepo, cfg)
+	txRunner := pgxdb.NewTxRunner(pool)
 	masterSvc := service.NewMasterService(cfg, caseRepo, siteRepo, vehicleRepo, driverRepo, auditRepo)
-	importSvc := service.NewImportService(masterSvc, siteRepo, vehicleRepo, driverRepo, caseRepo)
+	importSvc := service.NewImportService(masterSvc, siteRepo, vehicleRepo, driverRepo, caseRepo, txRunner)
 	rideSvc := service.NewRideService(formRepo, driverRepo, caseRepo, vehicleRepo, auditRepo)
 	formSvc := service.NewFormService(formRepo, googleCli)
 	precheckSvc := service.NewPrecheckService(precheckRepo)

@@ -72,7 +72,7 @@ func TestGenerateCaseImportTemplateCSV_Structure(t *testing.T) {
 
 func TestParseCases_TemplateCSV_DailySchedules(t *testing.T) {
 	csvData := GenerateCaseImportTemplateCSV()
-	svc := NewImportService(nil, nil, nil, nil, nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil)
 
 	preview, err := svc.ParseCases(strings.NewReader(csvData), "template.csv")
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestParseCases_TemplateExcel(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, excelBytes)
 
-	svc := NewImportService(nil, nil, nil, nil, nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil)
 	preview, err := svc.ParseCases(bytes.NewReader(excelBytes), "template.xlsx")
 	require.NoError(t, err)
 	require.NotNil(t, preview)
@@ -140,7 +140,7 @@ func TestParseCases_ProfileWorkbook(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	svc := NewImportService(nil, nil, nil, nil, nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil)
 	preview, err := svc.ParseCases(bytes.NewReader(buf.Bytes()), "彙整-個案資料(竹南.頭份).xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
@@ -179,7 +179,7 @@ func TestParseCases_ProfileWorkbookReportsSkippedFields(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	preview, err := NewImportService(nil, nil, nil, nil, nil).ParseCases(bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	preview, err := NewImportService(nil, nil, nil, nil, nil, nil).ParseCases(bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
 	assert.Equal(t, 1, preview.ErrorRows)
@@ -190,7 +190,7 @@ func TestParseCases_ProfileWorkbookReportsSkippedFields(t *testing.T) {
 }
 
 func TestParseCases_EmptyAndCorruptedFiles(t *testing.T) {
-	svc := NewImportService(nil, nil, nil, nil, nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil)
 
 	// 測試空白 CSV 應回傳錯誤
 	_, err := svc.ParseCases(strings.NewReader(""), "empty.csv")
@@ -211,7 +211,7 @@ func TestParseCasesFromExcel_RealFile(t *testing.T) {
 	}
 	defer f.Close()
 
-	svc := NewImportService(nil, nil, nil, nil, nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil)
 	preview, err := svc.ParseCasesFromExcel(f)
 	require.NoError(t, err)
 	require.NotNil(t, preview)

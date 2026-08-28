@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // CaseRepository 提供 cases, case_schedules 與 schedule_legs 資料表之存取操作。
@@ -74,7 +75,8 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 }
 
 func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID, siteID, outboundVehicleID, inboundVehicleID uuid.UUID) error {
-	_, err := r.db.Exec(ctx, `INSERT INTO case_transport_preferences (case_id, site_id, outbound_vehicle_id, inbound_vehicle_id)
+	db := pgxdb.FromContext(ctx, r.db)
+	_, err := db.Exec(ctx, `INSERT INTO case_transport_preferences (case_id, site_id, outbound_vehicle_id, inbound_vehicle_id)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (case_id) DO UPDATE SET site_id = EXCLUDED.site_id, outbound_vehicle_id = EXCLUDED.outbound_vehicle_id, inbound_vehicle_id = EXCLUDED.inbound_vehicle_id, updated_at = now()`, caseID, siteID, outboundVehicleID, inboundVehicleID)
 	return err
@@ -96,7 +98,8 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*CaseEntity
 		WHERE c.id = $1
 	`
 	var c CaseEntity
-	err := r.db.QueryRow(ctx, query, id).Scan(
+	db := pgxdb.FromContext(ctx, r.db)
+	err := db.QueryRow(ctx, query, id).Scan(
 		&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
 		&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
 		&c.SiteID, &c.SiteName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.InboundVehicleID, &c.InboundVehicle,
@@ -118,7 +121,8 @@ func (r *CaseRepository) GetByHMAC(ctx context.Context, hmac []byte) (*CaseEntit
 		FROM cases WHERE national_id_hmac = $1 LIMIT 1
 	`
 	var c CaseEntity
-	err := r.db.QueryRow(ctx, query, hmac).Scan(
+	db := pgxdb.FromContext(ctx, r.db)
+	err := db.QueryRow(ctx, query, hmac).Scan(
 		&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
 		&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimStartDate, &c.ClaimEndDate,
 		&c.Status, &c.CreatedAt, &c.UpdatedAt,
@@ -171,7 +175,8 @@ func (r *CaseRepository) Create(ctx context.Context, c *CaseEntity) error {
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
 	}
-	return r.db.QueryRow(ctx, query,
+	db := pgxdb.FromContext(ctx, r.db)
+	return db.QueryRow(ctx, query,
 		c.ID, c.Code, c.Name, c.NameNormalized, c.NationalIDCipher, c.NationalIDHMAC, c.NationalIDMasked,
 		c.HouseholdType, c.Gender, c.BirthDate, c.CareContactRole, c.CareContactName, c.RegisteredAddress,
 		c.HomeAddress, c.Region, c.LTCLevel, c.ServiceCategory, c.ServiceUsageType, c.ClaimStartDate, c.ClaimEndDate, c.Status,
@@ -197,13 +202,26 @@ func (r *CaseRepository) Update(ctx context.Context, c *CaseEntity) error {
 }
 
 // CreateSchedule 建立排班設定與對應的 legs（包在同一個事務中）。
+// 若 ctx 已掛載外層事務（見 pgxdb.TxRunner），排班與 legs 寫入會併入該事務，
+// 由外層決定 commit／rollback；否則自行開啟並管理事務。
 func (r *CaseRepository) CreateSchedule(ctx context.Context, s *CaseScheduleEntity) error {
+	if tx, ok := pgxdb.TxFromContext(ctx); ok {
+		return r.insertSchedule(ctx, tx, s)
+	}
+
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 
+	if err := r.insertSchedule(ctx, tx, s); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *CaseRepository) insertSchedule(ctx context.Context, tx pgxdb.Querier, s *CaseScheduleEntity) error {
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
 	}
@@ -219,7 +237,7 @@ func (r *CaseRepository) CreateSchedule(ctx context.Context, s *CaseScheduleEnti
 	if s.EffectiveTo != nil {
 		toVal = s.EffectiveTo
 	}
-	err = tx.QueryRow(ctx, querySchedule,
+	err := tx.QueryRow(ctx, querySchedule,
 		s.ID, s.CaseID, s.SiteID, s.EffectiveFrom, toVal, s.Weekdays, s.TripPattern,
 		s.UnitPrice, s.DistanceKM, s.ServiceDurationMin, s.ServiceCode, s.Note,
 	).Scan(&s.CreatedAt, &s.UpdatedAt)
@@ -252,7 +270,7 @@ func (r *CaseRepository) CreateSchedule(ctx context.Context, s *CaseScheduleEnti
 		}
 	}
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 // GetActiveScheduleForCaseOnDate 查詢個案在指定日期的有效排班與時段細節。
