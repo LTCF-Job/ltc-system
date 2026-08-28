@@ -1,6 +1,3 @@
-// 展示帳號固定為帳號密碼皆為 demo；正式環境要換展示帳密時，改這兩個常數並重新部署
-const DEMO_ACCOUNT = 'demo'
-const DEMO_PASSWORD = 'demo'
 const DEMO_MODE_KEY = 'ltc_demo_mode'
 
 let workerStarted = false
@@ -9,10 +6,15 @@ export function isMockRuntimeEnabled(): boolean {
   return import.meta.env.VITE_ENABLE_MSW === 'true' && import.meta.env.VITE_E2E === 'true'
 }
 
+// 檢查是否為展示模式登入憑證
 export function isDemoCredentials(email: string, password: string): boolean {
-  return email === DEMO_ACCOUNT && password === DEMO_PASSWORD
+  const normalizedEmail = (email || '').trim().toLowerCase()
+  const isDemoUser = normalizedEmail === 'demo' || normalizedEmail.startsWith('demo@')
+  const isDemoPass = password === 'demo' || password === 'demo123'
+  return isDemoUser && isDemoPass
 }
 
+// 取得當前是否處於展示模式
 export function isDemoModeActive(): boolean {
   return localStorage.getItem(DEMO_MODE_KEY) === 'true'
 }
@@ -32,19 +34,19 @@ async function ensureWorkerStopped() {
   workerStarted = false
 }
 
-// 帳號密碼皆為 demo 時呼叫：略過真實登入，啟用 mock 攔截並記住狀態
+// 啟用展示模式並開啟 Mock 攔截
 export async function enterDemoMode() {
   await ensureWorkerStarted()
   localStorage.setItem(DEMO_MODE_KEY, 'true')
 }
 
-// 非展示帳號完成真實登入後呼叫：確保沒有殘留前一次展示模式的攔截
+// 登入真實帳號時清理展示模式殘留狀態
 export async function exitDemoModeIfActive() {
   await ensureWorkerStopped()
   localStorage.removeItem(DEMO_MODE_KEY)
 }
 
-// App 啟動時呼叫：重新整理頁面後，若上次是展示模式且尚未登出，還原 mock 攔截狀態
+// 應用程式啟動時依本機儲存狀態還原 Mock 攔截
 export async function restoreDemoModeOnBoot() {
   if (isDemoModeActive()) {
     await ensureWorkerStarted()
@@ -61,4 +63,10 @@ export async function clearDemoModeOnLogout() {
     const { resetDemoData } = await import('@/mocks/data/demoStore')
     resetDemoData()
   }
+}
+
+// 重設記憶體中所有展示資料至初始狀態
+export async function resetDemoData() {
+  const { resetDemoData: reset } = await import('@/mocks/data/demoStore')
+  reset()
 }

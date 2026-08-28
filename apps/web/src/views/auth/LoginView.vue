@@ -19,7 +19,7 @@
         <el-form-item label="帳號 / 電子郵件" prop="email">
           <el-input
             v-model="form.email"
-            placeholder="請輸入電子郵件"
+            placeholder="請輸入電子郵件或 demo"
             :prefix-icon="User"
             autocomplete="username"
           />
@@ -47,25 +47,39 @@
         </el-button>
       </el-form>
 
-      <!-- 展示模式快速身分切換：僅在明確啟用 mock 的開發／展示環境顯示 -->
-      <div v-if="isMockLoginEnabled" class="dev-quick-login">
+      <!-- Demo 展示模式快速體驗區 -->
+      <div class="demo-experience-box">
         <el-divider>
-          <span class="divider-tag">✨ 展示模式快速登入</span>
+          <span class="divider-tag">✨ 展示模式快速體驗</span>
         </el-divider>
-        <p class="demo-tip">系統已預載全類型個案、排班、搭乘矩陣、異常裁決與報表資料：</p>
-        <div class="quick-btns">
-          <el-button size="default" type="danger" plain @click="quickLogin('admin')">
-            系統管理員 (Admin)
-          </el-button>
-          <el-button size="default" type="primary" plain @click="quickLogin('dispatcher')">
-            調度員 (Dispatcher)
-          </el-button>
-          <el-button size="default" type="success" plain @click="quickLogin('driver')">
-            司機 (Driver)
-          </el-button>
-          <el-button size="default" type="info" plain @click="quickLogin('viewer')">
-            檢視者 (Viewer)
-          </el-button>
+        <p class="demo-tip">帳號 <code>demo</code> / 密碼 <code>demo</code>，預載完整模擬資料且變更不寫入資料庫：</p>
+        <el-button
+          type="warning"
+          plain
+          class="demo-fast-btn"
+          size="default"
+          :loading="loading"
+          @click="handleDemoLogin('admin')"
+        >
+          ✨ 一鍵以 Demo 管理員登入體驗
+        </el-button>
+
+        <div v-if="isMockLoginEnabled" class="dev-quick-login">
+          <p class="role-switch-title">切換其他角色登入：</p>
+          <div class="quick-btns">
+            <el-button size="small" type="danger" plain @click="handleDemoLogin('admin')">
+              管理員
+            </el-button>
+            <el-button size="small" type="primary" plain @click="handleDemoLogin('dispatcher')">
+              調度員
+            </el-button>
+            <el-button size="small" type="success" plain @click="handleDemoLogin('driver')">
+              司機
+            </el-button>
+            <el-button size="small" type="info" plain @click="handleDemoLogin('viewer')">
+              檢視者
+            </el-button>
+          </div>
         </div>
       </div>
     </el-card>
@@ -96,7 +110,7 @@ const form = reactive({
 })
 
 const rules = {
-  email: [{ required: true, message: '請輸入電子郵件', trigger: 'blur' }],
+  email: [{ required: true, message: '請輸入電子郵件或 demo', trigger: 'blur' }],
   password: [{ required: true, message: '請輸入密碼', trigger: 'blur' }]
 }
 
@@ -105,27 +119,14 @@ async function handleLogin() {
   await formRef.value.validate(async (valid) => {
     if (!valid) return
 
-    // 帳號密碼皆為 demo：略過真實 Supabase 登入，直接進展示模式
+    // 檢查是否使用 demo 帳號登入
     if (isDemoCredentials(form.email, form.password)) {
-      loading.value = true
-      try {
-        await enterDemoMode()
-        authStore.setSession('mock_jwt_demo', {
-          id: 'usr_demo',
-          email: 'demo',
-          displayName: '展示帳號',
-          role: 'admin'
-        })
-        ElMessage.success('已進入展示模式')
-        router.push((route.query.redirect as string) || '/')
-      } finally {
-        loading.value = false
-      }
+      await handleDemoLogin('admin')
       return
     }
 
     if (!supabase) {
-      ElMessage.error('帳號密碼錯誤或無此使用者')
+      ElMessage.error('尚未設定 Supabase 登入環境變數，請輸入 demo 體驗展示模式或聯絡系統管理員')
       return
     }
     loading.value = true
@@ -147,7 +148,7 @@ async function handleLogin() {
         displayName: data.user.user_metadata?.display_name || data.user.email || form.email,
         role
       })
-      // 確保不殘留前一次展示模式的攔截
+      // 確保清除前一次展示模式的攔截狀態
       await exitDemoModeIfActive()
 
       ElMessage.success('登入成功')
@@ -159,24 +160,35 @@ async function handleLogin() {
   })
 }
 
-function quickLogin(role: UserRole) {
-  const nameMap: Record<UserRole, string> = {
-    admin: '系統管理員 (王大明)',
-    dispatcher: '調度員 (李調度)',
-    driver: '司機 (張司機)',
-    staff: '行政人員 (陳專員)',
-    viewer: '主管檢視者 (林督導)'
-  }
+// 執行展示模式登入流程
+async function handleDemoLogin(role: UserRole = 'admin') {
+  loading.value = true
+  try {
+    await enterDemoMode()
+    const nameMap: Record<UserRole, string> = {
+      admin: '展示管理員 (王大明)',
+      dispatcher: '展示調度員 (李調度)',
+      driver: '展示司機 (張司機)',
+      staff: '展示行政 (陳專員)',
+      viewer: '展示檢視者 (林督導)'
+    }
 
-  authStore.setSession(`mock_jwt_${role}`, {
-    id: `usr_${role}`,
-    email: `${role}@ltc.example.com`,
-    displayName: nameMap[role] || '測試使用者',
-    role
-  })
-  ElMessage.success(`已快速切換為【${ROLE_LABELS[role] || role}】身分`)
-  const redirect = (route.query.redirect as string) || '/'
-  router.push(redirect)
+    authStore.setSession(`mock_jwt_${role}`, {
+      id: `usr_${role}`,
+      email: `${role}@ltc.example.com`,
+      displayName: nameMap[role] || '展示使用者',
+      role
+    })
+
+    ElMessage.success({
+      message: '已進入展示模式（所有操作僅在前端模擬，不會寫入資料庫）',
+      duration: 4000
+    })
+    const redirect = (route.query.redirect as string) || '/'
+    router.push(redirect)
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -202,8 +214,8 @@ function quickLogin(role: UserRole) {
   margin-top: 10px;
 }
 
-.dev-quick-login {
-  margin-top: 24px;
+.demo-experience-box {
+  margin-top: 20px;
 
   .divider-tag {
     font-weight: bold;
@@ -215,12 +227,37 @@ function quickLogin(role: UserRole) {
     color: var(--el-text-color-secondary);
     text-align: center;
     margin-bottom: 12px;
+    line-height: 1.5;
+
+    code {
+      background: #f0f2f5;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--el-color-primary);
+      font-weight: bold;
+    }
   }
 
-  .quick-btns {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
+  .demo-fast-btn {
+    width: 100%;
+    font-weight: 500;
+  }
+
+  .dev-quick-login {
+    margin-top: 14px;
+
+    .role-switch-title {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+      margin-bottom: 6px;
+      text-align: center;
+    }
+
+    .quick-btns {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+    }
   }
 }
 </style>

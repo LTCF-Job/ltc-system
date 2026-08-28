@@ -183,6 +183,17 @@
         </div>
 
         <div class="header-right">
+          <!-- 展示模式標籤 -->
+          <el-tag
+            v-if="isDemoMode"
+            type="warning"
+            effect="light"
+            size="small"
+            round
+            class="demo-mode-tag"
+          >
+            展示模式 (Mock Data)
+          </el-tag>
           <el-dropdown trigger="click" @command="handleCommand">
             <div class="user-dropdown-link">
               <div class="avatar-box">
@@ -253,11 +264,13 @@ import {
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'
+import { isDemoModeActive } from '@/lib/demoMode'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const isDemoMode = computed(() => isDemoModeActive() || !!authStore.token?.startsWith('mock_jwt_'))
 
 const isCollapse = ref(false)
 const isMobile = ref(false)
