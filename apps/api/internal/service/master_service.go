@@ -52,17 +52,23 @@ func NewMasterService(
 
 // CreateCaseRequest 代表新增個案之請求參數。
 type CreateCaseRequest struct {
-	Code             string     `json:"code"`
-	Name             string     `json:"name" binding:"required"`
-	NationalID       string     `json:"nationalId" binding:"required"`
-	HomeAddress      string     `json:"homeAddress" binding:"required"`
-	Region           string     `json:"region" binding:"required"`
-	LTCLevel         *string    `json:"ltcLevel"`
-	ServiceCategory  int        `json:"serviceCategory"`
-	ServiceUsageType int        `json:"serviceUsageType"`
-	ClaimStartDate   time.Time  `json:"claimStartDate" binding:"required"`
-	ClaimEndDate     *time.Time `json:"claimEndDate"`
-	Status           string     `json:"status"`
+	Code              string     `json:"code"`
+	Name              string     `json:"name" binding:"required"`
+	NationalID        string     `json:"nationalId" binding:"required"`
+	HouseholdType     *string    `json:"householdType"`
+	Gender            *string    `json:"gender"`
+	BirthDate         *time.Time `json:"birthDate"`
+	CareContactRole   *string    `json:"careContactRole"`
+	CareContactName   *string    `json:"careContactName"`
+	RegisteredAddress *string    `json:"registeredAddress"`
+	HomeAddress       string     `json:"homeAddress" binding:"required"`
+	Region            string     `json:"region" binding:"required"`
+	LTCLevel          *string    `json:"ltcLevel"`
+	ServiceCategory   int        `json:"serviceCategory"`
+	ServiceUsageType  int        `json:"serviceUsageType"`
+	ClaimStartDate    time.Time  `json:"claimStartDate" binding:"required"`
+	ClaimEndDate      *time.Time `json:"claimEndDate"`
+	Status            string     `json:"status"`
 }
 
 // CreateCase 建立個案主檔，執行身分證查重、加密與雜湊產生。
@@ -97,20 +103,26 @@ func (s *MasterService) CreateCase(ctx context.Context, req CreateCaseRequest, a
 	}
 
 	entity := repository.CaseEntity{
-		Code:             req.Code,
-		Name:             req.Name,
-		NameNormalized:   normName,
-		NationalIDCipher: cipherText,
-		NationalIDHMAC:   hmacIdx,
-		NationalIDMasked: maskedID,
-		HomeAddress:      req.HomeAddress,
-		Region:           req.Region,
-		LTCLevel:         req.LTCLevel,
-		ServiceCategory:  req.ServiceCategory,
-		ServiceUsageType: req.ServiceUsageType,
-		ClaimStartDate:   req.ClaimStartDate,
-		ClaimEndDate:     req.ClaimEndDate,
-		Status:           req.Status,
+		Code:              req.Code,
+		Name:              req.Name,
+		NameNormalized:    normName,
+		NationalIDCipher:  cipherText,
+		NationalIDHMAC:    hmacIdx,
+		NationalIDMasked:  maskedID,
+		HouseholdType:     req.HouseholdType,
+		Gender:            req.Gender,
+		BirthDate:         req.BirthDate,
+		CareContactRole:   req.CareContactRole,
+		CareContactName:   req.CareContactName,
+		RegisteredAddress: req.RegisteredAddress,
+		HomeAddress:       req.HomeAddress,
+		Region:            req.Region,
+		LTCLevel:          req.LTCLevel,
+		ServiceCategory:   req.ServiceCategory,
+		ServiceUsageType:  req.ServiceUsageType,
+		ClaimStartDate:    req.ClaimStartDate,
+		ClaimEndDate:      req.ClaimEndDate,
+		Status:            req.Status,
 	}
 
 	if err := s.caseRepo.Create(ctx, &entity); err != nil {
@@ -160,6 +172,18 @@ func (s *MasterService) RevealCaseNationalID(ctx context.Context, caseID uuid.UU
 	}
 
 	return plainID, nil
+}
+
+// RecordSkippedCaseImport 保留未寫入的來源列，讓操作人員能回查補正原因與原始欄位。
+func (s *MasterService) RecordSkippedCaseImport(ctx context.Context, item CaseImportSkippedRow, actorID uuid.UUID, actorRole, ip, ua string) {
+	if s.auditRepo == nil {
+		return
+	}
+	entityID := fmt.Sprintf("row-%d", item.RowIndex)
+	_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		ActorID: &actorID, ActorRole: &actorRole, Action: "import_skip", EntityType: "case_import", EntityID: &entityID,
+		AfterData: item, IPAddress: &ip, UserAgent: &ua,
+	})
 }
 
 // CreateScheduleRequest 代表建立個案排班設定之請求參數。

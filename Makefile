@@ -1,10 +1,16 @@
-.PHONY: test build run migrate-up migrate-down clean web-dev web-build web-typecheck docker-up docker-down docker-build
+.PHONY: test test-e2e test-web-e2e test-web-e2e-changed build run migrate-up migrate-down clean web-dev web-build web-typecheck docker-up docker-down docker-build
 
 test:
 	cd apps/api && go test -v ./...
 
 test-e2e:
 	node tests/e2e/e2e.spec.js
+
+test-web-e2e:
+	cd apps/web && npm run test:e2e
+
+test-web-e2e-changed:
+	cd apps/web && npm run test:e2e:changed
 
 build:
 	cd apps/api && go build -o bin/server.exe ./cmd/server

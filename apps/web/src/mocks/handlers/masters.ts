@@ -13,7 +13,6 @@ export const mastersHandlers = [
     if (q) {
       filtered = filtered.filter(
         (r) =>
-          r.code.toLowerCase().includes(q) ||
           r.name.toLowerCase().includes(q) ||
           (r.description && r.description.toLowerCase().includes(q))
       )
@@ -22,8 +21,8 @@ export const mastersHandlers = [
       filtered = filtered.filter((r) => r.status === status)
     }
 
-    // 依 sortOrder 與 code 排序
-    filtered.sort((a, b) => (a.sortOrder - b.sortOrder) || a.code.localeCompare(b.code))
+    // 依 sortOrder 與名稱排序
+    filtered.sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name))
 
     if (isAll) {
       return HttpResponse.json({ data: filtered })
@@ -42,13 +41,12 @@ export const mastersHandlers = [
 
   http.post('/api/v1/regions', async ({ request }) => {
     const body = (await request.json()) as any
-    const existing = mockRegions.find(r => r.code.toLowerCase() === body.code?.toLowerCase())
+    const existing = mockRegions.find(r => r.name.toLowerCase() === body.name?.trim().toLowerCase())
     if (existing) {
-      return HttpResponse.json({ error: { code: 'VALIDATION_FAILED', message: '區域代碼已存在' } }, { status: 409 })
+      return HttpResponse.json({ error: { code: 'VALIDATION_FAILED', message: '區域名稱已存在' } }, { status: 409 })
     }
     const newReg = {
       id: `reg_${Date.now()}`,
-      code: body.code.toLowerCase(),
       name: body.name,
       description: body.description || '',
       status: body.status || 'active',

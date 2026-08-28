@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -262,6 +263,7 @@ func (r *FormRepository) CorrectRideRecord(
 type GoogleFormEntity struct {
 	ID                 uuid.UUID
 	VehicleID          uuid.UUID
+	SheetID            string
 	VehicleDisplayName string
 	FormTitle          string
 	Region             string
@@ -295,7 +297,7 @@ func (r *FormRepository) ListGoogleForms(ctx context.Context) ([]GoogleFormEntit
 	}
 
 	query := `
-		SELECT f.id, f.vehicle_id, COALESCE(v.display_name, '未知車輛'), f.form_title, COALESCE(v.region, 'hsinchu'),
+		SELECT f.id, f.vehicle_id, f.sheet_id, COALESCE(v.display_name, '未知車輛'), f.form_title, COALESCE(v.region, 'hsinchu'),
 		       f.last_synced_at, f.status
 		FROM google_forms f
 		LEFT JOIN vehicles v ON f.vehicle_id = v.id
@@ -310,7 +312,7 @@ func (r *FormRepository) ListGoogleForms(ctx context.Context) ([]GoogleFormEntit
 	var forms []GoogleFormEntity
 	for rows.Next() {
 		var f GoogleFormEntity
-		if err := rows.Scan(&f.ID, &f.VehicleID, &f.VehicleDisplayName, &f.FormTitle, &f.Region, &f.LastSyncedAt, &f.Status); err == nil {
+		if err := rows.Scan(&f.ID, &f.VehicleID, &f.SheetID, &f.VehicleDisplayName, &f.FormTitle, &f.Region, &f.LastSyncedAt, &f.Status); err == nil {
 			forms = append(forms, f)
 		}
 	}
@@ -386,3 +388,62 @@ func (r *FormRepository) UpdateColumnMappingById(ctx context.Context, colID stri
 	return err
 }
 
+// CreateGoogleForm 於資料庫中建立 Google 表單關聯紀錄。
+func (r *FormRepository) CreateGoogleForm(ctx context.Context, id, vehicleID uuid.UUID, title, sheetID, secretRef string) error {
+	if r.db == nil {
+		return nil
+	}
+
+	query := `
+		INSERT INTO google_forms (id, vehicle_id, title, sheet_id, ingest_secret_ref, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, 'active', now(), now())
+		ON CONFLICT (sheet_id) DO UPDATE
+		SET title = EXCLUDED.title,
+		    vehicle_id = EXCLUDED.vehicle_id,
+		    updated_at = now()
+	`
+	_, err := r.db.Exec(ctx, query, id, vehicleID, title, sheetID, secretRef)
+	return err
+}
+
+// DeleteGoogleForm 從資料庫中刪除 Google 表單關聯。
+func (r *FormRepository) DeleteGoogleForm(ctx context.Context, formID uuid.UUID) error {
+	if r.db == nil {
+		return nil
+	}
+
+	query := `DELETE FROM google_forms WHERE id = $1`
+	_, err := r.db.Exec(ctx, query, formID)
+	return err
+}
+
+// SaveFormColumns 將試算表解析出的標題欄位儲存至 form_columns。
+func (r *FormRepository) SaveFormColumns(ctx context.Context, formID uuid.UUID, headers []string) error {
+	if r.db == nil || len(headers) == 0 {
+		return nil
+	}
+
+	for idx, h := range headers {
+		kind := "unknown"
+		cleaned := strings.TrimSpace(h)
+		if strings.Contains(h, "時間戳記") || strings.Contains(h, "今天日期") || strings.Contains(h, "駕駛") {
+			kind = "meta"
+		} else if strings.Contains(h, "問題") || strings.Contains(h, "回報") {
+			kind = "issue"
+		} else if strings.Contains(h, "去") || strings.Contains(h, "回") || strings.Contains(h, "車") {
+			kind = "ride"
+		}
+
+		query := `
+			INSERT INTO form_columns (id, form_id, column_index, column_header, cleaned_name, kind, mapping_status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, 'pending', now(), now())
+			ON CONFLICT (form_id, column_index) DO UPDATE
+			SET column_header = EXCLUDED.column_header,
+			    cleaned_name = EXCLUDED.cleaned_name,
+			    kind = EXCLUDED.kind,
+			    updated_at = now()
+		`
+		_, _ = r.db.Exec(ctx, query, uuid.New(), formID, idx+1, h, cleaned, kind)
+	}
+	return nil
+}

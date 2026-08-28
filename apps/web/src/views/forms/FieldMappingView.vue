@@ -2,7 +2,7 @@
   <div class="field-mapping-view">
     <el-card shadow="never" class="filter-card">
       <el-row :gutter="16" justify="space-between" align="middle">
-        <el-col :span="18" class="filter-inputs">
+        <el-col :xs="24" :lg="18" class="filter-inputs">
           <el-select
             v-model="selectedFormId"
             placeholder="選擇表單"
@@ -25,7 +25,7 @@
           </el-radio-group>
         </el-col>
 
-        <el-col :span="6" class="actions-col">
+        <el-col :xs="24" :lg="6" class="actions-col">
           <el-button
             v-if="authStore.can('staff') && statusFilter === 'pending'"
             type="success"
@@ -122,9 +122,10 @@
         >
           <template #default="{ row }">
             <el-button
-              type="primary"
+              type="success"
               link
               size="small"
+              :icon="Check"
               :disabled="!row.editCaseId"
               @click="handleSaveMapping(row)"
             >
@@ -135,6 +136,7 @@
               type="info"
               link
               size="small"
+              :icon="Close"
               @click="handleIgnoreMapping(row)"
             >
               略過此欄
@@ -149,6 +151,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { Check, Close } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   listForms,
@@ -288,6 +291,19 @@ onMounted(async () => {
 .actions-col {
   display: flex;
   justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .filter-inputs,
+  .actions-col {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .actions-col {
+    justify-content: flex-start;
+    margin-top: 12px;
+  }
 }
 
 .table-card {

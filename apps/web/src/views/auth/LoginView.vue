@@ -79,6 +79,7 @@ import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
+import { isDemoCredentials, enterDemoMode, exitDemoModeIfActive, isMockRuntimeEnabled } from '@/lib/demoMode'
 import { ROLE_LABELS, type UserRole } from '@/types/domain'
 
 const router = useRouter()
@@ -87,7 +88,7 @@ const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
-const isMockLoginEnabled = import.meta.env.VITE_ENABLE_MSW === 'true'
+const isMockLoginEnabled = isMockRuntimeEnabled()
 
 const form = reactive({
   email: isMockLoginEnabled ? 'admin@ltc.example.com' : '',
@@ -103,14 +104,35 @@ async function handleLogin() {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
+
+    // 帳號密碼皆為 demo：略過真實 Supabase 登入，直接進展示模式
+    if (isDemoCredentials(form.email, form.password)) {
+      loading.value = true
+      try {
+        await enterDemoMode()
+        authStore.setSession('mock_jwt_demo', {
+          id: 'usr_demo',
+          email: 'demo',
+          displayName: '展示帳號',
+          role: 'admin'
+        })
+        ElMessage.success('已進入展示模式')
+        router.push((route.query.redirect as string) || '/')
+      } finally {
+        loading.value = false
+      }
+      return
+    }
+
     if (!supabase) {
       ElMessage.error('尚未設定 Supabase 登入環境變數，請聯絡系統管理員')
       return
     }
     loading.value = true
     try {
+      const authEmail = form.email === 'ltcf-admin' ? 'ltcf-admin@ltc.example.com' : form.email
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: form.email,
+        email: authEmail,
         password: form.password
       })
       if (error || !data.session || !data.user) {
@@ -125,6 +147,8 @@ async function handleLogin() {
         displayName: data.user.user_metadata?.display_name || data.user.email || form.email,
         role
       })
+      // 確保不殘留前一次展示模式的攔截
+      await exitDemoModeIfActive()
 
       ElMessage.success('登入成功')
       const redirect = (route.query.redirect as string) || '/'

@@ -4,6 +4,7 @@ import type {
   CaseStatus,
   Direction,
   TripPattern,
+  CalendarTripPattern,
   EffectiveRideStatus,
   RideReportedStatus,
   MappingStatus,
@@ -120,6 +121,26 @@ export interface UpdateRoleRequest {
 }
 
 // 個案與排班
+export type ScheduleMode = 'monthly' | 'by_weekday' | 'unified'
+
+export interface WeekdayScheduleConfig {
+  weekday: number
+  label?: string
+  tripCount: number
+  departTime?: string
+  returnTime?: string
+  vehicleId?: string
+}
+
+export interface DayScheduleConfig {
+  date: string
+  tripCount: number
+  departTime?: string
+  returnTime?: string
+  vehicleId?: string
+  note?: string
+}
+
 export interface ScheduleLegDTO {
   id: string
   legSeq: number
@@ -146,6 +167,9 @@ export interface CaseScheduleDTO {
   serviceCode: string
   note?: string
   legs: ScheduleLegDTO[]
+  scheduleMode?: ScheduleMode
+  weeklyConfigs?: WeekdayScheduleConfig[]
+  monthlyConfigs?: Record<string, DayScheduleConfig>
 }
 
 export interface CaseDTO {
@@ -182,7 +206,7 @@ export interface CreateCaseRequest {
   status?: CaseStatus
 }
 
-export interface UpdateCaseRequest extends Partial<CreateCaseRequest> {}
+export interface UpdateCaseRequest extends Partial<CreateCaseRequest> { }
 
 export interface CreateScheduleRequest {
   siteId: string
@@ -195,6 +219,9 @@ export interface CreateScheduleRequest {
   serviceDurationMin: number
   serviceCode?: string
   note?: string
+  scheduleMode?: ScheduleMode
+  weeklyConfigs?: WeekdayScheduleConfig[]
+  monthlyConfigs?: Record<string, DayScheduleConfig>
   legs: Array<{
     legSeq: number
     direction: Direction
@@ -208,7 +235,6 @@ export interface CreateScheduleRequest {
 // 主檔：區域、據點、車輛、司機
 export interface RegionDTO {
   id: string
-  code: string
   name: string
   description?: string
   status: 'active' | 'inactive'
@@ -218,7 +244,6 @@ export interface RegionDTO {
 }
 
 export interface CreateRegionRequest {
-  code: string
   name: string
   description?: string
   status?: 'active' | 'inactive'
@@ -249,7 +274,7 @@ export interface CreateSiteRequest {
   openDays: number[]
 }
 
-export interface UpdateSiteRequest extends Partial<CreateSiteRequest> {}
+export interface UpdateSiteRequest extends Partial<CreateSiteRequest> { }
 
 export interface VehicleDTO {
   id: string
@@ -267,7 +292,7 @@ export interface CreateVehicleRequest {
   active?: boolean
 }
 
-export interface UpdateVehicleRequest extends Partial<CreateVehicleRequest> {}
+export interface UpdateVehicleRequest extends Partial<CreateVehicleRequest> { }
 
 export interface DriverAssignmentDTO {
   id: string
@@ -302,7 +327,7 @@ export interface CreateDriverRequest {
   active?: boolean
 }
 
-export interface UpdateDriverRequest extends Partial<CreateDriverRequest> {}
+export interface UpdateDriverRequest extends Partial<CreateDriverRequest> { }
 
 // Google 表單與欄位對應
 export interface FormDTO {
@@ -326,15 +351,39 @@ export interface CreateFormAssociationRequest {
   title: string
   sheetUrl: string
   vehicleId?: string
+  vehicleName?: string
   region?: Region
   sheetTabs?: string[]
   activeTab?: string
+  accessToken?: string
+}
+
+export interface InspectSheetRequest {
+  sheetUrl?: string
+  spreadsheetId?: string
+  accessToken?: string
+}
+
+export interface GoogleDriveSheetDTO {
+  id: string
+  name: string
+  mimeType?: string
+  modifiedTime?: string
+}
+
+export interface InspectSheetResultDTO {
+  spreadsheetId: string
+  title: string
+  sheetTabs: string[]
+  previewHeaders?: string[]
 }
 
 export interface SyncFormOptions {
   month?: string
   sheetTab?: string
   force?: boolean
+  spreadsheetId?: string
+  accessToken?: string
 }
 
 export interface FormColumnDTO {
@@ -412,6 +461,7 @@ export interface RideCalendarCellDTO {
   date: string
   dayOfWeek: number
   isExpected: boolean
+  expectedTripCount?: number
   isHoliday?: boolean
   holidayName?: string
   records: RideRecordDTO[]
@@ -422,7 +472,8 @@ export interface CaseRideCalendarRowDTO {
   caseCode: string
   caseName: string
   region: Region
-  tripPattern: TripPattern
+  tripPattern: CalendarTripPattern
+  tripPatternText?: string
   days: Record<string, RideCalendarCellDTO>
 }
 
@@ -756,7 +807,7 @@ export interface CreateMaintenanceRequest {
   note?: string
 }
 
-export interface UpdateMaintenanceRequest extends Partial<CreateMaintenanceRequest> {}
+export interface UpdateMaintenanceRequest extends Partial<CreateMaintenanceRequest> { }
 
 // 14. 司機出勤與請假 (Attendance)
 export interface DriverDayAttendanceDTO {
@@ -815,7 +866,7 @@ export interface CreateFuelLogRequest {
   receiptUrl?: string
 }
 
-export interface UpdateFuelLogRequest extends Partial<CreateFuelLogRequest> {}
+export interface UpdateFuelLogRequest extends Partial<CreateFuelLogRequest> { }
 
 // 16. 完整版營運儀表板指標 (Dashboard Advanced Metrics)
 export interface AttendanceDistributionDTO {

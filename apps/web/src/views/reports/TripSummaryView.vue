@@ -3,7 +3,7 @@
     <!-- 篩選與操作列 -->
     <el-card class="filter-card" shadow="never">
       <el-row :gutter="16" justify="space-between" align="middle">
-        <el-col :span="18">
+        <el-col :xs="24" :lg="18">
           <div class="filter-wrapper" style="display: flex; gap: 8px; align-items: center;">
             <el-date-picker
               v-model="queryMonth"
@@ -61,7 +61,7 @@
             </el-button>
           </div>
         </el-col>
-        <el-col :span="6" class="actions-col">
+        <el-col :xs="24" :lg="6" class="actions-col">
           <el-button
             type="success"
             icon="Download"
@@ -76,22 +76,22 @@
 
     <!-- 總覽資料統計卡片 -->
     <el-row :gutter="16">
-      <el-col :span="8">
-        <el-card shadow="hover" class="stat-card">
+      <el-col :xs="24" :sm="8">
+        <el-card shadow="never" class="stat-card">
           <div class="stat-title">全期去程趟數合計</div>
-          <div class="stat-number outbound-color">{{ reportData?.grandTotalOutbound || 0 }} <span>趟</span></div>
+          <div class="stat-number">{{ reportData?.grandTotalOutbound || 0 }} <span>趟</span></div>
         </el-card>
       </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover" class="stat-card">
+      <el-col :xs="24" :sm="8">
+        <el-card shadow="never" class="stat-card">
           <div class="stat-title">全期回程趟數合計</div>
-          <div class="stat-number inbound-color">{{ reportData?.grandTotalInbound || 0 }} <span>趟</span></div>
+          <div class="stat-number">{{ reportData?.grandTotalInbound || 0 }} <span>趟</span></div>
         </el-card>
       </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover" class="stat-card highlight">
+      <el-col :xs="24" :sm="8">
+        <el-card shadow="never" class="stat-card">
           <div class="stat-title">全期車輛總趟數</div>
-          <div class="stat-number total-color">{{ reportData?.grandTotal || 0 }} <span>趟</span></div>
+          <div class="stat-number font-bold">{{ reportData?.grandTotal || 0 }} <span>趟</span></div>
         </el-card>
       </el-col>
     </el-row>
@@ -110,11 +110,11 @@
               <div class="veh-title">
                 <el-icon><Van /></el-icon>
                 <span class="veh-name">{{ veh.vehicleName }}</span>
-                <el-tag size="small" type="info">{{ veh.plateNo }}</el-tag>
+                <span class="veh-plate">({{ veh.plateNo }})</span>
                 <span v-if="veh.driverName" class="veh-driver">主要司機：{{ veh.driverName }}</span>
               </div>
               <div class="veh-subtotal">
-                小計：去程 <b>{{ veh.subtotalOutbound }}</b> 趟 / 回程 <b>{{ veh.subtotalInbound }}</b> 趟 / 合計 <b class="total-text">{{ veh.subtotalTotal }}</b> 趟
+                小計：去程 <b>{{ veh.subtotalOutbound }}</b> 趟 / 回程 <b>{{ veh.subtotalInbound }}</b> 趟 / 合計 <b>{{ veh.subtotalTotal }}</b> 趟
               </div>
             </div>
           </template>
@@ -134,7 +134,7 @@
             </el-table-column>
             <el-table-column prop="totalCount" label="個人趟數合計" align="right">
               <template #default="{ row }">
-                <b class="count-cell total-text">{{ row.totalCount }}</b>
+                <b class="count-cell">{{ row.totalCount }}</b>
               </template>
             </el-table-column>
           </el-table>
@@ -154,6 +154,7 @@ import { getTripSummaryReport, exportTripSummaryExcel } from '@/api/reports'
 import { listVehicles } from '@/api/masters'
 import type { TripSummaryReportDTO, VehicleDTO } from '@/types/api'
 import { REGION_LABELS } from '@/types/domain'
+import { downloadBlob } from '@/utils/download'
 
 const queryMonth = ref('2026-07')
 const queryKeyword = ref('')
@@ -206,14 +207,7 @@ async function handleExportExcel() {
       region: queryRegion.value,
       vehicleId: queryVehicle.value
     })
-    const downloadUrl = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = downloadUrl
-    link.download = `車輛趟數表-${queryMonth.value}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(downloadUrl)
+    downloadBlob(blob, `車輛趟數表-${queryMonth.value}.xlsx`)
     ElMessage.success('趟數表已成功匯出！')
   } catch (error: any) {
     ElMessage.error(error?.message || '匯出 Excel 失敗')
@@ -255,39 +249,25 @@ onMounted(() => {
   border-radius: 8px;
   text-align: center;
   padding: 12px 0;
+  border: 1px solid var(--el-border-color-light);
 
   .stat-title {
-    font-size: 14px;
+    font-size: 13px;
     color: var(--el-text-color-secondary);
     margin-bottom: 8px;
   }
 
   .stat-number {
-    font-size: 28px;
-    font-weight: bold;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--el-text-color-primary);
 
     span {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: normal;
       color: var(--el-text-color-secondary);
       margin-left: 4px;
     }
-  }
-
-  .outbound-color {
-    color: var(--el-color-primary);
-  }
-
-  .inbound-color {
-    color: var(--el-color-success);
-  }
-
-  .total-color {
-    color: #1d5b79;
-  }
-
-  &.highlight {
-    background: linear-gradient(135deg, #f0f7fa 0%, #e1eff5 100%);
   }
 }
 
@@ -311,7 +291,14 @@ onMounted(() => {
       gap: 10px;
       font-size: 16px;
       font-weight: bold;
-      color: #1d5b79;
+      color: var(--el-text-color-primary);
+
+      .veh-plate {
+        font-size: 13px;
+        font-weight: normal;
+        color: var(--el-text-color-secondary);
+        font-family: var(--el-font-family);
+      }
 
       .veh-driver {
         font-size: 13px;
@@ -324,11 +311,6 @@ onMounted(() => {
     .veh-subtotal {
       font-size: 14px;
       color: var(--el-text-color-regular);
-
-      .total-text {
-        color: var(--el-color-primary);
-        font-size: 16px;
-      }
     }
   }
 }
@@ -336,9 +318,5 @@ onMounted(() => {
 .count-cell {
   font-family: monospace;
   font-size: 14px;
-}
-
-.total-text {
-  color: var(--el-color-primary);
 }
 </style>

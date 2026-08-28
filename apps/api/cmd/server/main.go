@@ -9,14 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/adapter"
+	"ltc-system/apps/api/internal/adapter/google"
 	"ltc-system/apps/api/internal/config"
 	"ltc-system/apps/api/internal/handler"
 	"ltc-system/apps/api/internal/middleware"
 	"ltc-system/apps/api/internal/repository"
 	"ltc-system/apps/api/internal/service"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -70,14 +73,22 @@ func main() {
 	taskRepo := repository.NewTaskRepository(pool)
 
 	// 初始化 Services
+	googleCli, err := google.NewClient(ctx, cfg.GoogleSAJSON)
+	if err != nil {
+		slog.Warn("Failed to initialize Google API client (falling back to offline mode)", slog.String("error", err.Error()))
+	}
 	regionSvc := service.NewRegionService(regionRepo, auditRepo)
 	masterSvc := service.NewMasterService(cfg, caseRepo, siteRepo, vehicleRepo, driverRepo, auditRepo)
 	importSvc := service.NewImportService(masterSvc, siteRepo, vehicleRepo, driverRepo, caseRepo)
 	rideSvc := service.NewRideService(formRepo, driverRepo, caseRepo, vehicleRepo, auditRepo)
-	formSvc := service.NewFormService(formRepo)
+	formSvc := service.NewFormService(formRepo, googleCli)
 	precheckSvc := service.NewPrecheckService(precheckRepo)
 	notificationSvc := service.NewNotificationService(notificationRepo, auditRepo, nil)
-	holidaySvc := service.NewHolidayService(holidayRepo, auditRepo)
+	holidayProvider := service.GovernmentHolidayProvider(&adapter.GovernmentHolidayHTTPClient{
+		Endpoint: adapter.GovernmentHolidayCSVEndpoint,
+		Client:   &http.Client{Timeout: cfg.GovernmentHolidayAPITimeout},
+	})
+	holidaySvc := service.NewHolidaySyncService(holidayRepo, auditRepo, holidayProvider)
 	reportSvc := service.NewReportService(reportRepo)
 	auditSvc := service.NewAuditService(auditRepo)
 	maintenanceSvc := service.NewMaintenanceService(maintenanceRepo, vehicleRepo, auditRepo)
@@ -93,7 +104,7 @@ func main() {
 	vehicleH := handler.NewVehicleHandler(vehicleRepo)
 	driverH := handler.NewDriverHandler(cfg, driverRepo)
 	rideH := handler.NewRideHandler(rideSvc)
-	exportH := handler.NewExportHandler(precheckSvc)
+	exportH := handler.NewExportHandler(precheckSvc, reportSvc)
 	notificationH := handler.NewNotificationHandler(notificationSvc)
 	holidayH := handler.NewHolidayHandler(holidaySvc)
 	reportH := handler.NewReportHandler(reportSvc)
@@ -153,6 +164,7 @@ func main() {
 		apiV1.GET("/cases", middleware.RequireRoles("viewer", "staff", "admin"), caseH.List)
 		apiV1.POST("/cases", middleware.RequireRoles("staff", "admin"), caseH.Create)
 		apiV1.GET("/cases/template", middleware.RequireRoles("viewer", "staff", "admin"), caseH.DownloadTemplate)
+		apiV1.GET("/cases/export", middleware.RequireRoles("viewer", "staff", "admin"), caseH.ExportProfileWorkbook)
 		apiV1.GET("/cases/:id", middleware.RequireRoles("viewer", "staff", "admin"), caseH.Get)
 		apiV1.PATCH("/cases/:id", middleware.RequireRoles("staff", "admin"), caseH.Update)
 		apiV1.POST("/cases/:id/reveal", middleware.RequireRoles("staff", "admin"), caseH.Reveal)
@@ -182,6 +194,10 @@ func main() {
 
 		// 5. 表單管理與欄位對應
 		apiV1.GET("/forms", middleware.RequireRoles("viewer", "staff", "admin"), formH.ListForms)
+		apiV1.POST("/forms", middleware.RequireRoles("staff", "admin"), formH.CreateFormAssociation)
+		apiV1.DELETE("/forms/:id", middleware.RequireRoles("staff", "admin"), formH.DeleteFormAssociation)
+		apiV1.GET("/forms/google-drive-files", middleware.RequireRoles("staff", "admin"), formH.ListGoogleDriveFiles)
+		apiV1.POST("/forms/inspect-sheet", middleware.RequireRoles("staff", "admin"), formH.InspectGoogleSheet)
 		apiV1.POST("/forms/:id/sync", middleware.RequireRoles("staff", "admin"), formH.SyncForm)
 		apiV1.GET("/forms/columns", middleware.RequireRoles("viewer", "staff", "admin"), formH.ListColumns)
 		apiV1.PATCH("/forms/columns/:id/mapping", middleware.RequireRoles("staff", "admin"), formH.UpdateColumnMapping)
@@ -202,6 +218,7 @@ func main() {
 		apiV1.GET("/exports", middleware.RequireRoles("viewer", "staff", "admin"), exportH.List)
 		apiV1.POST("/exports", middleware.RequireRoles("staff", "admin"), exportH.Create)
 		apiV1.GET("/exports/:id", middleware.RequireRoles("viewer", "staff", "admin"), exportH.Get)
+		apiV1.GET("/exports/:id/download", middleware.RequireRoles("viewer", "staff", "admin"), exportH.Download)
 
 		// 8. 國定假日與行事曆管理 (B5.1)
 		apiV1.GET("/holidays", middleware.RequireRoles("viewer", "staff", "admin"), holidayH.List)
@@ -250,7 +267,6 @@ func main() {
 		apiV1.POST("/tasks/check-missing-reports", middleware.RequireRoles("staff", "admin"), taskH.CheckMissingReports)
 		apiV1.POST("/tasks/month-end-reminder", middleware.RequireRoles("staff", "admin"), taskH.MonthEndReminder)
 	}
-
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	slog.Info("Starting LTC API Server", slog.String("addr", addr), slog.String("env", cfg.AppEnv))

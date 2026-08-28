@@ -68,7 +68,7 @@
       <el-table :data="records" border stripe size="small">
         <el-table-column prop="serviceDate" label="保養日期" width="110" align="center">
           <template #default="{ row }">
-            <el-tag size="small" type="info">{{ row.serviceDate?.slice(0, 10) }}</el-tag>
+            <span>{{ row.serviceDate?.slice(0, 10) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="vehicleName" label="車輛名稱" width="120" />
@@ -86,7 +86,7 @@
         </el-table-column>
         <el-table-column prop="cost" label="花費金額" width="110" align="right">
           <template #default="{ row }">
-            <span class="font-bold text-primary">${{ Number(row.cost).toLocaleString() }}</span>
+            <span class="font-bold">${{ Number(row.cost).toLocaleString() }}</span>
           </template>
         </el-table-column>
         <el-table-column label="收據憑證" width="100" align="center">
@@ -107,12 +107,12 @@
             {{ row.note || '-' }}
           </template>
         </el-table-column>
-        <el-table-column v-if="authStore.can('staff')" label="操作" width="130" align="center" fixed="right">
+        <el-table-column v-if="authStore.can('staff')" label="操作" width="140" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openEditDialog(row)">
+            <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row)">
               編輯
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row)">
+            <el-button link type="danger" size="small" :icon="Delete" @click="handleDelete(row)">
               刪除
             </el-button>
           </template>
@@ -227,7 +227,9 @@ import { ref, reactive, onMounted } from 'vue'
 import {
   Refresh,
   Document,
-  Plus
+  Plus,
+  Edit,
+  Delete
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import {
@@ -239,6 +241,7 @@ import {
 } from '@/api/maintenance'
 import { listVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
+import { downloadBlob } from '@/utils/download'
 import type { MaintenanceLogDTO, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
@@ -387,12 +390,7 @@ async function handleDownloadBlank() {
   downloadingBlank.value = true
   try {
     const blob = await downloadBlankMaintenanceExcel()
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = '車輛定期保養檢查表_空白範本.xlsx'
-    a.click()
-    window.URL.revokeObjectURL(url)
+    downloadBlob(blob, '車輛定期保養檢查表_空白範本.xlsx')
     ElMessage.success('空白保養表下載成功')
   } catch (err: any) {
     ElMessage.error(err.message || '下載空白保養表失敗')
@@ -425,7 +423,7 @@ onMounted(async () => {
     .page-title {
       font-size: 18px;
       font-weight: bold;
-      color: var(--el-color-primary);
+      color: var(--el-text-color-primary);
       margin: 0 0 4px 0;
     }
 
@@ -445,10 +443,6 @@ onMounted(async () => {
 
 .font-bold {
   font-weight: 600;
-}
-
-.text-primary {
-  color: var(--el-color-primary);
 }
 
 .text-muted {

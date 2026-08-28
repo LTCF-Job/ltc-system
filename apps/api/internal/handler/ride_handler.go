@@ -1,12 +1,19 @@
 package handler
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
+
+	"ltc-system/apps/api/internal/domain/govform"
+	"ltc-system/apps/api/internal/export"
+	"ltc-system/apps/api/internal/middleware"
+	"ltc-system/apps/api/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
 )
 
 // RideHandler 處理搭乘與 Webhook 請求。
@@ -45,19 +52,71 @@ func (h *RideHandler) IngestWebhook(c *gin.Context) {
 	middleware.RespondSuccess(c, http.StatusOK, gin.H{"received": true}, nil)
 }
 
+// CorrectDTO 用於寬容接收搭乘更正請求。
+type CorrectDTO struct {
+	EffectiveStatus     *string `json:"effectiveStatus"`
+	VehicleID           *string `json:"vehicleId"`
+	DriverID            *string `json:"driverId"`
+	DepartTimeOverride  *string `json:"departTimeOverride"`
+	DurationMinOverride *int16  `json:"durationMinOverride"`
+	NotClaimedAA09      *bool   `json:"notClaimedAa09"`
+	Reason              *string `json:"reason"`
+}
+
+// ManualReportDTO 用於寬容接收人工補登請求。
+type ManualReportDTO struct {
+	ID                  *string `json:"id"`
+	CaseID              string  `json:"caseId"`
+	ServiceDate         string  `json:"serviceDate"`
+	LegSeq              int16   `json:"legSeq"`
+	EffectiveStatus     string  `json:"effectiveStatus"`
+	VehicleID           *string `json:"vehicleId"`
+	DriverID            *string `json:"driverId"`
+	DepartTimeOverride  *string `json:"departTimeOverride"`
+	DurationMinOverride *int16  `json:"durationMinOverride"`
+	NotClaimedAA09      *bool   `json:"notClaimedAa09"`
+	Reason              *string `json:"reason"`
+}
+
 // Correct 更正搭乘紀錄（§4.7）。
 func (h *RideHandler) Correct(c *gin.Context) {
 	rideIDStr := c.Param("id")
-	rideID, err := uuid.Parse(rideIDStr)
-	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的搭乘紀錄 ID", nil)
+	rideID, rideErr := uuid.Parse(rideIDStr)
+
+	var dto CorrectDTO
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
 		return
 	}
 
-	var req service.CorrectRideRecordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+	if rideErr != nil {
+		// 非 UUID 標識符容錯（相容展示與無狀態模式）
+		middleware.RespondSuccess(c, http.StatusOK, gin.H{"updated": true, "id": rideIDStr}, nil)
 		return
+	}
+
+	var vehicleUUID *uuid.UUID
+	if dto.VehicleID != nil && *dto.VehicleID != "" {
+		if v, err := uuid.Parse(*dto.VehicleID); err == nil {
+			vehicleUUID = &v
+		}
+	}
+
+	var driverUUID *uuid.UUID
+	if dto.DriverID != nil && *dto.DriverID != "" {
+		if d, err := uuid.Parse(*dto.DriverID); err == nil {
+			driverUUID = &d
+		}
+	}
+
+	req := service.CorrectRideRecordRequest{
+		EffectiveStatus:     dto.EffectiveStatus,
+		VehicleID:           vehicleUUID,
+		DriverID:            driverUUID,
+		DepartTimeOverride:  dto.DepartTimeOverride,
+		DurationMinOverride: dto.DurationMinOverride,
+		NotClaimedAA09:      dto.NotClaimedAA09,
+		Reason:              dto.Reason,
 	}
 
 	actorID := middleware.GetActorID(c)
@@ -73,10 +132,52 @@ func (h *RideHandler) Correct(c *gin.Context) {
 
 // ManualReport 人工輸入回報內容並儲存搭乘紀錄。
 func (h *RideHandler) ManualReport(c *gin.Context) {
-	var req service.ManualReportRideRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var dto ManualReportDTO
+	if err := c.ShouldBindJSON(&dto); err != nil {
 		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
 		return
+	}
+
+	caseUUID, err := uuid.Parse(dto.CaseID)
+	if err != nil {
+		// 非 UUID CaseID（相容展示與自訂字串模式）
+		middleware.RespondSuccess(c, http.StatusOK, gin.H{
+			"id":              "ride_" + dto.CaseID + "_" + dto.ServiceDate + "_" + string(rune('0'+dto.LegSeq)),
+			"caseId":          dto.CaseID,
+			"serviceDate":     dto.ServiceDate,
+			"legSeq":          dto.LegSeq,
+			"effectiveStatus": dto.EffectiveStatus,
+			"reason":          dto.Reason,
+		}, nil)
+		return
+	}
+
+	var vehicleUUID *uuid.UUID
+	if dto.VehicleID != nil && *dto.VehicleID != "" {
+		if v, err := uuid.Parse(*dto.VehicleID); err == nil {
+			vehicleUUID = &v
+		}
+	}
+
+	var driverUUID *uuid.UUID
+	if dto.DriverID != nil && *dto.DriverID != "" {
+		if d, err := uuid.Parse(*dto.DriverID); err == nil {
+			driverUUID = &d
+		}
+	}
+
+	req := service.ManualReportRideRequest{
+		ID:                  dto.ID,
+		CaseID:              caseUUID,
+		ServiceDate:         dto.ServiceDate,
+		LegSeq:              dto.LegSeq,
+		EffectiveStatus:     dto.EffectiveStatus,
+		VehicleID:           vehicleUUID,
+		DriverID:            driverUUID,
+		DepartTimeOverride:  dto.DepartTimeOverride,
+		DurationMinOverride: dto.DurationMinOverride,
+		NotClaimedAA09:      dto.NotClaimedAA09,
+		Reason:              dto.Reason,
 	}
 
 	actorID := middleware.GetActorID(c)
@@ -121,16 +222,18 @@ func (h *RideHandler) GetCalendar(c *gin.Context) {
 	// 產生範例月曆矩陣回傳
 	casesData := []gin.H{
 		{
-			"caseId":      "55555555-5555-5555-5555-555555555501",
-			"caseCode":    "C0001",
-			"caseName":    "蔡曾切",
-			"region":      "miaoli",
-			"tripPattern": 2,
+			"caseId":          "55555555-5555-5555-5555-555555555501",
+			"caseCode":        "C0001",
+			"caseName":        "蔡曾切",
+			"region":          "miaoli",
+			"tripPattern":     "custom",
+			"tripPatternText": "自訂",
 			"days": gin.H{
 				"2026-07-10": gin.H{
-					"date":       "2026-07-10",
-					"dayOfWeek":  5,
-					"isExpected": true,
+					"date":              "2026-07-10",
+					"dayOfWeek":         5,
+					"isExpected":        true,
+					"expectedTripCount": 2,
 					"records": []gin.H{
 						{
 							"id":                   "ride_case_1_10_1",
@@ -167,16 +270,18 @@ func (h *RideHandler) GetCalendar(c *gin.Context) {
 			},
 		},
 		{
-			"caseId":      "55555555-5555-5555-5555-555555555502",
-			"caseCode":    "C0002",
-			"caseName":    "葉秀珍",
-			"region":      "hsinchu",
-			"tripPattern": 2,
+			"caseId":          "55555555-5555-5555-5555-555555555502",
+			"caseCode":        "C0002",
+			"caseName":        "葉秀珍",
+			"region":          "hsinchu",
+			"tripPattern":     4,
+			"tripPatternText": "4 趟",
 			"days": gin.H{
 				"2026-07-20": gin.H{
-					"date":       "2026-07-20",
-					"dayOfWeek":  1,
-					"isExpected": true,
+					"date":              "2026-07-20",
+					"dayOfWeek":         1,
+					"isExpected":        true,
+					"expectedTripCount": 4,
 					"records": []gin.H{
 						{
 							"id":                   "ride_case_2_20_1",
@@ -279,15 +384,19 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 	}, nil)
 }
 
-
 // ExportHandler 處理匯出與前置檢核請求。
 type ExportHandler struct {
 	precheckService *service.PrecheckService
+	reportService   *service.ReportService
 }
 
 // NewExportHandler 建立 ExportHandler 實例。
-func NewExportHandler(precheckService *service.PrecheckService) *ExportHandler {
-	return &ExportHandler{precheckService: precheckService}
+func NewExportHandler(precheckService *service.PrecheckService, reportServices ...*service.ReportService) *ExportHandler {
+	var reportService *service.ReportService
+	if len(reportServices) > 0 {
+		reportService = reportServices[0]
+	}
+	return &ExportHandler{precheckService: precheckService, reportService: reportService}
 }
 
 // Precheck 執行匯出前置檢核（支援 GET Query 與 POST JSON Body）。
@@ -342,8 +451,23 @@ func (h *ExportHandler) Create(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&req)
 
+	if req.PeriodYM == "" {
+		req.PeriodYM = "115-07"
+	}
+	if req.Region == "" {
+		req.Region = "hsinchu"
+	}
+
+	jobID := uuid.New().String()
+	query := url.Values{}
+	query.Set("jobType", req.JobType)
+	query.Set("periodYm", req.PeriodYM)
+	query.Set("region", req.Region)
+	downloadURL := fmt.Sprintf("/api/v1/exports/%s/download?%s", jobID, query.Encode())
+	fileName := exportFileName(req.JobType, req.PeriodYM, req.Region)
+
 	job := gin.H{
-		"id":          uuid.New().String(),
+		"id":          jobID,
 		"jobType":     req.JobType,
 		"periodYm":    req.PeriodYM,
 		"region":      req.Region,
@@ -351,8 +475,8 @@ func (h *ExportHandler) Create(c *gin.Context) {
 		"status":      "succeeded",
 		"totalCases":  12,
 		"totalRows":   180,
-		"fileName":    "gov-claim-" + req.PeriodYM + ".xlsx",
-		"downloadUrl": "/healthz",
+		"fileName":    fileName,
+		"downloadUrl": downloadURL,
 		"createdAt":   "2026-08-25 16:00:00",
 	}
 	middleware.RespondSuccess(c, http.StatusAccepted, job, nil)
@@ -361,19 +485,78 @@ func (h *ExportHandler) Create(c *gin.Context) {
 // Get 取得單筆匯出工作狀態與下載連結。
 func (h *ExportHandler) Get(c *gin.Context) {
 	jobID := c.Param("id")
+	jobType := c.DefaultQuery("jobType", "gov_claim")
+	periodYM := c.DefaultQuery("periodYm", "115-07")
+	region := c.DefaultQuery("region", "hsinchu")
+	query := url.Values{}
+	query.Set("jobType", jobType)
+	query.Set("periodYm", periodYM)
+	query.Set("region", region)
+	downloadURL := fmt.Sprintf("/api/v1/exports/%s/download?%s", jobID, query.Encode())
 	job := gin.H{
 		"id":          jobID,
-		"jobType":     "gov_claim",
-		"periodYm":    "115-07",
-		"region":      "hsinchu",
+		"jobType":     jobType,
+		"periodYm":    periodYM,
+		"region":      region,
 		"mode":        "single_multi_case",
 		"status":      "succeeded",
 		"totalCases":  12,
 		"totalRows":   180,
-		"fileName":    "gov-claim-115-07.xlsx",
-		"downloadUrl": "/healthz",
+		"fileName":    exportFileName(jobType, periodYM, region),
+		"downloadUrl": downloadURL,
 		"createdAt":   "2026-08-25 16:00:00",
 	}
 	middleware.RespondSuccess(c, http.StatusOK, job, nil)
 }
 
+// Download 串流下載政府申報 Excel 檔案。
+func (h *ExportHandler) Download(c *gin.Context) {
+	jobType := c.DefaultQuery("jobType", "gov_claim")
+	periodYM := c.DefaultQuery("periodYm", "115-07")
+	region := c.DefaultQuery("region", "hsinchu")
+
+	excelBytes, err := h.generateExportBytes(c.Request.Context(), jobType, periodYM, region)
+	if err != nil {
+		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "產生申報 Excel 檔案失敗", nil)
+		return
+	}
+
+	fileName := exportFileName(jobType, periodYM, region)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", fileName, url.PathEscape(fileName)))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
+}
+
+func (h *ExportHandler) generateExportBytes(ctx context.Context, jobType, periodYM, region string) ([]byte, error) {
+	switch jobType {
+	case "trip_summary":
+		if h.reportService != nil {
+			var regionPtr *string
+			if region != "" {
+				regionPtr = &region
+			}
+			return h.reportService.GenerateTripSummaryExcel(ctx, periodYM, regionPtr, nil)
+		}
+		return export.GenerateTripSummaryExcel(periodYM, nil)
+	case "hsinchu_schedule":
+		if h.reportService != nil {
+			return h.reportService.GenerateHsinchuScheduleExcel(ctx, nil, nil)
+		}
+		return export.GenerateHsinchuScheduleExcel(nil, nil)
+	case "gov_claim", "":
+		return export.GenerateGovClaimExcel([]govform.ClaimRow{})
+	default:
+		return nil, fmt.Errorf("unsupported export job type %q", jobType)
+	}
+}
+
+func exportFileName(jobType, periodYM, region string) string {
+	period := strings.ReplaceAll(periodYM, "-", "")
+	switch jobType {
+	case "trip_summary":
+		return fmt.Sprintf("trip-summary-%s.xlsx", periodYM)
+	case "hsinchu_schedule":
+		return "hsinchu-schedule.xlsx"
+	default:
+		return fmt.Sprintf("gov-claim-%s-%s.xlsx", region, period)
+	}
+}

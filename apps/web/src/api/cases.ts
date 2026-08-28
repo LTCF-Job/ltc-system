@@ -57,10 +57,15 @@ export async function deleteCase(id: string): Promise<void> {
   return apiClient.delete(`/cases/${id}`)
 }
 
-export async function downloadCaseImportTemplate(): Promise<Blob> {
+export async function downloadCaseImportTemplate(format: 'xlsx' | 'csv' = 'xlsx'): Promise<Blob> {
   return apiClient.get('/cases/template', {
+    params: { format },
     responseType: 'blob'
   })
+}
+
+export async function exportCaseProfileWorkbook(): Promise<Blob> {
+  return apiClient.get('/cases/export', { responseType: 'blob' })
 }
 
 export async function revealCaseId(id: string): Promise<{ nationalId: string }> {
@@ -86,7 +91,7 @@ export async function dryRunImportCases(file: File): Promise<DryRunImportResultD
   })
 }
 
-export async function commitImportCases(file: File): Promise<{ count: number }> {
+export async function commitImportCases(file: File): Promise<{ importedCount: number; skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }> }> {
   const formData = new FormData()
   formData.append('file', file)
   return apiClient.post('/cases/import?dryRun=false', formData, {

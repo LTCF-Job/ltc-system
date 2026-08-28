@@ -3,7 +3,7 @@
     <!-- 匯出條件設定卡片 -->
     <el-card shadow="never" class="export-settings-card">
       <template #header>
-        <span class="card-title">政府申報表匯出設定 (申報格式 33 欄規格)</span>
+        <span class="card-title">政府申報表匯出設定</span>
       </template>
 
       <el-form
@@ -13,7 +13,7 @@
         :disabled="!authStore.can('staff')"
       >
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="申報年月 (民國)">
               <div class="roc-month-picker">
                 <el-date-picker
@@ -30,7 +30,7 @@
             </el-form-item>
           </el-col>
 
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="申報地區">
               <el-select
                 v-model="form.region"
@@ -51,37 +51,39 @@
           </el-col>
         </el-row>
 
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="匯出檔案模式">
+        <el-row :gutter="20" align="middle" class="export-mode-row">
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="匯出檔案模式" class="mode-form-item">
               <el-radio-group v-model="form.mode">
                 <el-radio value="single_multi_case">單檔多案 (.xlsx)</el-radio>
                 <el-radio value="case_per_file">一案一檔壓縮包 (.zip)</el-radio>
               </el-radio-group>
             </el-form-item>
           </el-col>
+
+          <el-col :xs="24" :sm="12">
+            <div v-if="authStore.can('staff')" class="action-buttons">
+              <el-button
+                type="info"
+                plain
+                :loading="checking"
+                @click="handleRunPrecheck"
+              >
+                <el-icon><Warning /></el-icon>
+                執行前置檢核
+              </el-button>
+
+              <el-button
+                type="primary"
+                :loading="exporting"
+                @click="handleStartExport"
+              >
+                <el-icon><Download /></el-icon>
+                開始產生申報檔
+              </el-button>
+            </div>
+          </el-col>
         </el-row>
-
-        <div v-if="authStore.can('staff')" class="action-buttons">
-          <el-button
-            type="info"
-            plain
-            :loading="checking"
-            @click="handleRunPrecheck"
-          >
-            <el-icon><Warning /></el-icon>
-            執行前置檢核
-          </el-button>
-
-          <el-button
-            type="primary"
-            :loading="exporting"
-            @click="handleStartExport"
-          >
-            <el-icon><Download /></el-icon>
-            開始產生申報檔
-          </el-button>
-        </div>
       </el-form>
     </el-card>
 
@@ -128,7 +130,8 @@
             type="error"
             show-icon
             :closable="false"
-            :title="currentJob.errorMessage || '匯出失敗，請重試或聯絡管理員'"
+            title="匯出失敗"
+            :description="currentJob.errorMessage || '請檢查前置檢核結果後重試；若仍無法匯出，請聯絡管理員。'"
           />
         </div>
       </div>
@@ -194,10 +197,12 @@ import {
   precheckExport,
   createExportJob,
   getExportJob,
-  listExportJobs
+  listExportJobs,
+  downloadExportFile
 } from '@/api/exports'
 import { useAuthStore } from '@/stores/auth'
 import { useRocMonth } from '@/composables/useRocMonth'
+import { downloadBlob } from '@/utils/download'
 import {
   REGION_LABELS,
   EXPORT_STATUS_LABELS
@@ -307,8 +312,14 @@ function startPolling(jobId: string) {
   }, 2000)
 }
 
-function downloadFile(url: string) {
-  window.open(url, '_blank')
+async function downloadFile(url: string) {
+  try {
+    const blob = await downloadExportFile(url)
+    downloadBlob(blob, currentJob.value?.fileName || `gov-claim-${selectedDate.value}.xlsx`)
+    ElMessage.success('申報檔案下載成功')
+  } catch (err: any) {
+    ElMessage.error(err.message || '下載檔案失敗')
+  }
 }
 
 async function fetchHistory() {
@@ -358,11 +369,15 @@ onUnmounted(() => {
   }
 }
 
+.mode-form-item {
+  margin-bottom: 0;
+}
+
 .action-buttons {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 12px;
-  margin-top: 16px;
 }
 
 .job-status-container {
@@ -384,6 +399,20 @@ onUnmounted(() => {
 
   .error-box {
     margin-top: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .roc-month-picker,
+  .action-buttons,
+  .job-status-container .job-info {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .action-buttons,
+  .job-status-container .download-box {
+    justify-content: flex-start;
   }
 }
 </style>

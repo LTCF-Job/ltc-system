@@ -6,6 +6,7 @@ import {
   mockAttendanceReport,
   mockFuelLogs
 } from '../data/mockData'
+import { createMockExcelBlob } from '../utils/mockExcel'
 
 export const operationsHandlers = [
   // 車輛維修保養
@@ -75,10 +76,8 @@ export const operationsHandlers = [
   }),
 
   http.get('/api/v1/vehicles/maintenance/blank-template', () => {
-    const dummyBlob = new Blob(['mock-blank-maintenance-excel'], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    })
-    return new HttpResponse(dummyBlob, {
+    const excelBlob = createMockExcelBlob()
+    return new HttpResponse(excelBlob, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': 'attachment; filename="blank-maintenance-template.xlsx"'

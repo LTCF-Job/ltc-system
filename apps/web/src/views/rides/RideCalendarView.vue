@@ -3,9 +3,17 @@
     <!-- 篩選與月份切換列 -->
     <el-card shadow="never" class="filter-card">
       <el-row :gutter="16" justify="space-between" align="middle">
-        <el-col :span="18" class="filter-inputs">
+        <el-col :xs="24" :lg="18" class="filter-inputs">
           <div class="month-picker-wrapper">
             <span class="label">查詢月份：</span>
+            <el-button
+              :icon="ArrowLeft"
+              circle
+              size="small"
+              title="上一月"
+              aria-label="上一月"
+              @click="changeMonth(-1)"
+            />
             <el-date-picker
               v-model="selectedDate"
               type="month"
@@ -16,9 +24,14 @@
               :clearable="false"
               @change="fetchMatrix"
             />
-            <span class="roc-badge">
-              {{ formatRocMonthLabel(currentRocMonth) }}
-            </span>
+            <el-button
+              :icon="ArrowRight"
+              circle
+              size="small"
+              title="下一月"
+              aria-label="下一月"
+              @click="changeMonth(1)"
+            />
           </div>
 
           <el-select
@@ -46,10 +59,10 @@
             @keyup.enter="fetchMatrix"
           />
 
-          <el-button type="primary" @click="fetchMatrix">查詢</el-button>
+          <el-button type="primary" :icon="Search" @click="fetchMatrix">查詢</el-button>
         </el-col>
 
-        <el-col :span="6" class="actions-col">
+        <el-col :xs="24" :lg="6" class="actions-col">
           <el-button type="warning" plain @click="$router.push('/rides/issues')">
             <el-icon><Warning /></el-icon>
             異常集中處理 (衝突/未回報)
@@ -62,10 +75,10 @@
     <el-card shadow="never" class="legend-card">
       <div class="legend-items">
         <span class="legend-title">搭乘圖例：</span>
-        <span class="legend-item"><span class="mark status-boarded">√</span> 有坐 (Boarded)</span>
-        <span class="legend-item"><span class="mark status-absent">／</span> 沒坐 (Absent)</span>
-        <span class="legend-item"><span class="mark status-unreported">?</span> 未回報 (Unreported)</span>
-        <span class="legend-item"><span class="mark status-conflict">!</span> 混車衝突 (Conflict)</span>
+        <span class="legend-item"><span class="mark status-boarded"><el-icon><Check /></el-icon></span> 有坐 (Boarded)</span>
+        <span class="legend-item"><span class="mark status-absent"><el-icon><Close /></el-icon></span> 沒坐 (Absent)</span>
+        <span class="legend-item"><span class="mark status-unreported"><el-icon><QuestionFilled /></el-icon></span> 未回報 (Unreported)</span>
+        <span class="legend-item"><span class="mark status-conflict"><el-icon><WarningFilled /></el-icon></span> 混車衝突 (Conflict)</span>
         <span class="legend-item"><span class="mark is-corrected">●</span> 已人工更正 (帶右上圓點)</span>
         <span class="legend-item"><span class="mark status-non-scheduled"></span> 非應搭日</span>
       </div>
@@ -107,21 +120,32 @@
           align="center"
         >
           <template #default="{ row }">
-            <el-tag size="small" :type="row.region === 'miaoli' ? 'warning' : 'primary'">
+            <span class="inline-value">
               {{ REGION_LABELS[row.region] || row.region }}
-            </el-tag>
+            </span>
           </template>
         </el-table-column>
 
         <el-table-column
           prop="tripPattern"
           label="趟數"
-          width="70"
+          width="76"
           fixed="left"
           align="center"
         >
           <template #default="{ row }">
-            <span>{{ row.tripPattern }} 趟</span>
+            <el-tag
+              v-if="getTripPatternDisplay(row) === '自訂'"
+              size="small"
+              type="info"
+              effect="plain"
+              class="custom-trip-tag"
+            >
+              自訂
+            </el-tag>
+            <span v-else class="trip-count-text">
+              {{ getTripPatternDisplay(row) }}
+            </span>
           </template>
         </el-table-column>
 
@@ -129,55 +153,72 @@
         <el-table-column
           v-for="day in daysInMonth"
           :key="day"
-          :label="`${day}`"
+          :label="isHoliday(day) ? `${day} ★` : `${day}`"
           min-width="46"
           align="center"
         >
           <template #default="{ row }">
-            <template v-if="getCell(row, day)">
-              <!-- 該日若是應搭日 -->
-              <div v-if="getCell(row, day).isExpected" class="cell-legs-container">
+            <div class="cell-legs-container">
+              <template v-for="slot in getDaySlots(row, day)" :key="slot.legSeq">
+                <!-- 該趟次已有搭乘紀錄 -->
                 <el-tooltip
-                  v-for="record in getCell(row, day).records"
-                  :key="record.id"
+                  v-if="slot.record"
                   placement="top"
                   :show-after="300"
                 >
                   <template #content>
                     <div class="cell-tooltip">
-                      <div><strong>{{ record.serviceDate }} 第 {{ record.legSeq }} 趟 ({{ record.direction === 'outbound' ? '去程' : '回程' }})</strong></div>
-                      <div>實際狀態：{{ record.effectiveStatus === 'boarded' ? '有坐' : (record.effectiveStatus === 'absent' ? '沒坐' : '未回報') }}</div>
-                      <div>車輛：{{ record.vehicleName || '預設車輛' }}</div>
-                      <div>司機：{{ record.driverName || '主要司機' }}</div>
-                      <div v-if="record.hasConflict" style="color: #ff4d4f;">⚠️ 發現跨車回報衝突！</div>
-                      <div v-if="record.correctedAt" style="color: #409eff;">✏️ 已由 {{ record.correctedByName }} 於 {{ record.correctedAt }} 更正</div>
+                      <div><strong>{{ slot.record.serviceDate }} 第 {{ slot.record.legSeq }} 趟 ({{ slot.record.direction === 'outbound' ? '去程' : '回程' }})</strong></div>
+                      <div>實際狀態：{{ slot.record.effectiveStatus === 'boarded' ? '有坐' : (slot.record.effectiveStatus === 'absent' ? '沒坐' : '未回報') }}</div>
+                      <template v-if="slot.record.effectiveStatus === 'boarded'">
+                        <div>車輛：{{ slot.record.vehicleName || '預設車輛' }}</div>
+                        <div>司機：{{ slot.record.driverName || '主要司機' }}</div>
+                      </template>
+                      <template v-else-if="slot.record.effectiveStatus === 'absent'">
+                        <div>車輛：-（沒坐）</div>
+                        <div>司機：-（沒坐）</div>
+                      </template>
+                      <template v-else>
+                        <div>車輛：{{ slot.record.vehicleName || '未指定' }}</div>
+                        <div>司機：{{ slot.record.driverName || '未指定' }}</div>
+                      </template>
+                      <div v-if="slot.record.hasConflict" style="color: #ff4d4f;">⚠️ 發現跨車回報衝突！</div>
+                      <div v-if="slot.record.correctedAt" style="color: #409eff;">✏️ 已由 {{ slot.record.correctedByName }} 於 {{ formatDateTime(slot.record.correctedAt) }} 更正</div>
                     </div>
                   </template>
 
                   <div
                     class="calendar-cell"
                     :class="[
-                      `status-${record.hasConflict ? 'conflict' : record.effectiveStatus}`,
-                      { 'is-corrected': !!record.correctedAt }
+                      `status-${slot.record.hasConflict ? 'conflict' : slot.record.effectiveStatus}`,
+                      { 'is-corrected': !!slot.record.correctedAt }
                     ]"
-                    @click="openCorrection(record)"
+                    @click="openCorrection(slot.record)"
                   >
-                    {{ record.hasConflict ? '!' : (record.effectiveStatus === 'boarded' ? '√' : (record.effectiveStatus === 'absent' ? '／' : '?')) }}
+                    <el-icon v-if="slot.record.hasConflict"><WarningFilled /></el-icon>
+                    <el-icon v-else-if="slot.record.effectiveStatus === 'boarded'"><Check /></el-icon>
+                    <el-icon v-else-if="slot.record.effectiveStatus === 'absent'"><Close /></el-icon>
+                    <el-icon v-else-if="slot.record.effectiveStatus === 'unreported'"><QuestionFilled /></el-icon>
                   </div>
                 </el-tooltip>
-              </div>
 
-              <!-- 該日為非應搭日或假日 -->
-              <div
-                v-else
-                class="calendar-cell status-non-scheduled"
-                :title="getCell(row, day).holidayName || '非排定搭乘日'"
-              />
-            </template>
-            <div v-else class="calendar-cell status-non-scheduled" />
+                <!-- 該趟次尚無紀錄之空白槽位（依趟數顯示，點選直接設定該趟紀錄） -->
+                <el-tooltip
+                  v-else
+                  :content="`點選設定 第 ${slot.legSeq} 趟 (${slot.direction}) 搭乘記錄`"
+                  placement="top"
+                  :show-after="300"
+                >
+                  <div
+                    class="calendar-cell status-non-scheduled"
+                    @click="openManualEntry(row, day, slot.legSeq)"
+                  >
+                    <el-icon class="add-icon"><Plus /></el-icon>
+                  </div>
+                </el-tooltip>
+              </template>
+            </div>
           </template>
-
-
         </el-table-column>
       </el-table>
     </el-card>
@@ -187,26 +228,47 @@
       ref="drawerRef"
       @updated="fetchMatrix"
     />
+
+    <!-- 人工填寫搭乘紀錄對話框 -->
+    <RideManualEntryDialog
+      ref="manualEntryDialogRef"
+      @saved="fetchMatrix"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Warning } from '@element-plus/icons-vue'
+import {
+  Warning,
+  WarningFilled,
+  Check,
+  Close,
+  QuestionFilled,
+  Search,
+  Plus,
+  ArrowLeft,
+  ArrowRight
+} from '@element-plus/icons-vue'
 import RideCorrectionDrawer from './RideCorrectionDrawer.vue'
+import RideManualEntryDialog from './RideManualEntryDialog.vue'
 import { getRideCalendarMatrix } from '@/api/rides'
+import { listHolidays } from '@/api/holidays'
+import { formatDateTime } from '@/utils/formatters'
 import { useRocMonth } from '@/composables/useRocMonth'
 import { REGION_LABELS } from '@/types/domain'
 import type { RideCalendarMatrixDTO, CaseRideCalendarRowDTO, RideRecordDTO } from '@/types/api'
 
-const { toRocMonth, formatRocMonthLabel } = useRocMonth()
+const { toRocMonth } = useRocMonth()
 
 const selectedDate = ref<string>('2026-07')
 const regionFilter = ref<string>('')
 const searchQuery = ref<string>('')
 const loading = ref(false)
 const matrixData = ref<RideCalendarMatrixDTO | null>(null)
+const holidayMap = ref<Record<string, { name: string; isDayOff?: boolean }>>({})
 const drawerRef = ref<InstanceType<typeof RideCorrectionDrawer>>()
+const manualEntryDialogRef = ref<InstanceType<typeof RideManualEntryDialog>>()
 
 const currentRocMonth = computed(() => {
   return toRocMonth(selectedDate.value)
@@ -218,27 +280,136 @@ const daysInMonth = computed(() => {
   return new Date(year, month, 0).getDate()
 })
 
+function changeMonth(delta: number) {
+  if (!selectedDate.value) {
+    selectedDate.value = '2026-07'
+  }
+  const [yearStr, monthStr] = selectedDate.value.split('-')
+  let year = parseInt(yearStr, 10)
+  let month = parseInt(monthStr, 10)
+
+  month += delta
+  if (month < 1) {
+    month = 12
+    year -= 1
+  } else if (month > 12) {
+    month = 1
+    year += 1
+  }
+
+  selectedDate.value = `${year}-${String(month).padStart(2, '0')}`
+  fetchMatrix()
+}
+
 async function fetchMatrix() {
   loading.value = true
   try {
-    const res = await getRideCalendarMatrix({
+    const [res, holidayResponse] = await Promise.all([getRideCalendarMatrix({
       month: currentRocMonth.value,
       region: regionFilter.value || undefined,
       q: searchQuery.value || undefined
-    })
-    matrixData.value = res
+    }), listHolidays({ startDate: `${selectedDate.value}-01`, endDate: `${selectedDate.value}-${String(daysInMonth.value).padStart(2, '0')}`, region: regionFilter.value || undefined })])
+    matrixData.value = (res as any)?.cases ? res : ((res as any)?.data || res)
+    holidayMap.value = Object.fromEntries((holidayResponse.data || []).map((item) => [item.holidayDate, item]))
   } finally {
     loading.value = false
   }
 }
 
+function isHoliday(day: number) {
+  return Boolean(holidayMap.value[`${selectedDate.value}-${String(day).padStart(2, '0')}`])
+}
+
 function getCell(row: any, day: number) {
   const dayKey = `${selectedDate.value}-${String(day).padStart(2, '0')}`
-  return row.days[dayKey]
+  return row.days?.[dayKey]
+}
+
+// 取得個案月曆趟數顯示文字：當月應搭日趟數一致時顯示 N 趟，不一致時顯示自訂
+function getTripPatternDisplay(row: any): string {
+  if (row.tripPattern === 'custom' || row.tripPatternText === '自訂') {
+    return '自訂'
+  }
+
+  if (row.days) {
+    const scheduledTripCounts = new Set<number>()
+    for (const dateKey in row.days) {
+      const cell = row.days[dateKey]
+      if (cell && cell.isExpected) {
+        const count = cell.expectedTripCount ?? cell.records?.length ?? 0
+        if (count > 0) {
+          scheduledTripCounts.add(count)
+        }
+      }
+    }
+    if (scheduledTripCounts.size > 1) {
+      return '自訂'
+    } else if (scheduledTripCounts.size === 1) {
+      const count = Array.from(scheduledTripCounts)[0]
+      return `${count} 趟`
+    }
+  }
+
+  if (typeof row.tripPattern === 'number') {
+    return `${row.tripPattern} 趟`
+  }
+  return '2 趟'
+}
+
+// 計算該個案在指定日期的搭乘槽位列表（依該日預期趟數與實際紀錄動態展開）
+function getDaySlots(row: any, day: number) {
+  const cell = getCell(row, day)
+  const records = cell?.records || []
+  const isExpected = cell ? cell.isExpected : false
+  const expectedTripCount = cell?.expectedTripCount ?? (isExpected ? (typeof row.tripPattern === 'number' ? row.tripPattern : 2) : 0)
+
+  let maxLegSeq = 0
+  for (const r of records) {
+    if (r.legSeq > maxLegSeq) {
+      maxLegSeq = r.legSeq
+    }
+  }
+
+  // 應搭日至少滿足預期趟數；非應搭日依實際紀錄數（無紀錄時為單一非應搭槽位）
+  let totalSlots = 0
+  if (isExpected) {
+    totalSlots = Math.max(expectedTripCount, maxLegSeq, 1)
+  } else {
+    totalSlots = Math.max(maxLegSeq, records.length, 1)
+  }
+
+  const slots = []
+  for (let legSeq = 1; legSeq <= totalSlots; legSeq++) {
+    const record = records.find((r: any) => r.legSeq === legSeq)
+    const direction = legSeq % 2 === 1 ? '去程' : '回程'
+    slots.push({
+      legSeq,
+      direction,
+      record: record || null,
+      isExpected: isExpected && legSeq <= expectedTripCount
+    })
+  }
+  return slots
 }
 
 function openCorrection(record: RideRecordDTO) {
   drawerRef.value?.open(record)
+}
+
+function openManualEntry(row: any, day: number, targetLegSeq?: number) {
+  const dayKey = `${selectedDate.value}-${String(day).padStart(2, '0')}`
+  const cell = getCell(row, day)
+  const existingLegs = (cell?.records || []).map((r: any) => r.legSeq)
+  const dayTripCount = cell?.expectedTripCount || (typeof row.tripPattern === 'number' ? row.tripPattern : 2)
+  manualEntryDialogRef.value?.open({
+    caseId: row.caseId,
+    caseName: row.caseName,
+    caseCode: row.caseCode,
+    serviceDate: dayKey,
+    tripPattern: dayTripCount || 2,
+    targetLegSeq,
+    existingLegs
+  })
 }
 
 onMounted(() => {
@@ -253,6 +424,20 @@ onMounted(() => {
   gap: 12px;
 }
 
+.inline-value {
+  color: var(--el-text-color-regular);
+}
+
+.custom-trip-tag {
+  font-weight: 500;
+  border-radius: 4px;
+}
+
+.trip-count-text {
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+
 .filter-card, .legend-card, .matrix-card {
   border-radius: 8px;
 }
@@ -265,17 +450,12 @@ onMounted(() => {
   .month-picker-wrapper {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 
     .label {
       font-size: 14px;
       font-weight: 500;
-    }
-
-    .roc-badge {
-      font-weight: bold;
-      color: var(--el-color-primary);
-      font-size: 15px;
+      white-space: nowrap;
     }
   }
 }
@@ -314,6 +494,10 @@ onMounted(() => {
         border-radius: 4px;
         font-weight: bold;
         font-size: 13px;
+
+        .el-icon {
+          font-size: 13px;
+        }
       }
     }
   }
@@ -329,10 +513,99 @@ onMounted(() => {
   gap: 2px;
 }
 
+.calendar-cell {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  margin: 0 auto;
+  transition: all 0.2s;
+
+  &.status-boarded {
+    background-color: var(--el-color-success-light-8);
+    color: var(--el-color-success);
+    border: 1px solid var(--el-color-success-light-5);
+  }
+
+  &.status-absent {
+    background-color: var(--el-color-info-light-8);
+    color: var(--el-text-color-secondary);
+    border: 1px solid var(--el-border-color);
+  }
+
+  &.status-unreported {
+    background-color: var(--el-color-warning-light-8);
+    color: var(--el-color-warning);
+    border: 1px solid var(--el-color-warning-light-5);
+  }
+
+  &.status-conflict {
+    background-color: var(--el-color-danger-light-8);
+    color: var(--el-color-danger);
+    border: 1px solid var(--el-color-danger-light-5);
+  }
+
+  &.is-corrected {
+    position: relative;
+    &::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background-color: var(--el-color-primary);
+    }
+  }
+
+  &.status-non-scheduled {
+    background-color: var(--el-fill-color-light);
+    border: 1px dashed var(--el-border-color-lighter);
+    color: transparent;
+
+    .add-icon {
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 0.2s;
+      color: var(--el-color-primary);
+    }
+
+    &:hover {
+      background-color: var(--el-color-primary-light-9);
+      border-color: var(--el-color-primary-light-5);
+      .add-icon {
+        opacity: 1;
+      }
+    }
+  }
+}
+
 .cell-tooltip {
   display: flex;
   flex-direction: column;
   gap: 4px;
   font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .filter-inputs {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .filter-inputs .month-picker-wrapper,
+  .actions-col {
+    width: 100%;
+  }
+
+  .actions-col {
+    justify-content: flex-start;
+    margin-top: 12px;
+  }
 }
 </style>

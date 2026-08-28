@@ -32,3 +32,11 @@ export async function listExportJobs(params?: {
 export async function getDashboardStats(): Promise<DashboardStatsDTO> {
   return apiClient.get('/dashboard/stats')
 }
+
+export async function downloadExportFile(url: string): Promise<Blob> {
+  const baseURL = String(apiClient.defaults.baseURL || '')
+  const requestPath = url.startsWith(baseURL) ? url.slice(baseURL.length) : url
+  return apiClient.get(requestPath, {
+    responseType: 'blob'
+  })
+}

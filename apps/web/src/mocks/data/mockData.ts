@@ -13,6 +13,7 @@ import type {
   NotificationRecipientDTO,
   NotificationLogDTO,
   MissingRideDTO,
+  IssueRideDTO,
   TripSummaryReportDTO,
   MaintenanceLogDTO,
   MonthAttendanceReportDTO,
@@ -26,28 +27,28 @@ import { DEFAULT_ROLE_PERMISSIONS } from '@/types/domain'
 
 // 區域主檔展示資料：涵蓋全台灣 22 縣市
 export const mockRegions: RegionDTO[] = [
-  { id: 'reg_1', code: 'hsinchu', name: '新竹縣', description: '新竹縣營運區域', status: 'active', sortOrder: 1, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_2', code: 'hsinchu_city', name: '新竹市', description: '新竹市營運區域', status: 'active', sortOrder: 2, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_3', code: 'miaoli', name: '苗栗縣', description: '苗栗縣營運區域', status: 'active', sortOrder: 3, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_4', code: 'taipei', name: '臺北市', description: '臺北市營運區域', status: 'active', sortOrder: 4, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_5', code: 'new_taipei', name: '新北市', description: '新北市營運區域', status: 'active', sortOrder: 5, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_6', code: 'keelung', name: '基隆市', description: '基隆市營運區域', status: 'active', sortOrder: 6, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_7', code: 'taoyuan', name: '桃園市', description: '桃園市營運區域', status: 'active', sortOrder: 7, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_8', code: 'taichung', name: '臺中市', description: '臺中市營運區域', status: 'active', sortOrder: 8, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_9', code: 'changhua', name: '彰化縣', description: '彰化縣營運區域', status: 'active', sortOrder: 9, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_10', code: 'nantou', name: '南投縣', description: '南投縣營運區域', status: 'active', sortOrder: 10, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_11', code: 'yunlin', name: '雲林縣', description: '雲林縣營運區域', status: 'active', sortOrder: 11, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_12', code: 'chiayi_city', name: '嘉義市', description: '嘉義市營運區域', status: 'active', sortOrder: 12, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_13', code: 'chiayi', name: '嘉義縣', description: '嘉義縣營運區域', status: 'active', sortOrder: 13, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_14', code: 'tainan', name: '臺南市', description: '臺南市營運區域', status: 'active', sortOrder: 14, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_15', code: 'kaohsiung', name: '高雄市', description: '高雄市營運區域', status: 'active', sortOrder: 15, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_16', code: 'pingtung', name: '屏東縣', description: '屏東縣營運區域', status: 'active', sortOrder: 16, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_17', code: 'yilan', name: '宜蘭縣', description: '宜蘭縣營運區域', status: 'active', sortOrder: 17, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_18', code: 'hualien', name: '花蓮縣', description: '花蓮縣營運區域', status: 'active', sortOrder: 18, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_19', code: 'taitung', name: '臺東縣', description: '臺東縣營運區域', status: 'active', sortOrder: 19, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_20', code: 'penghu', name: '澎湖縣', description: '澎湖縣營運區域', status: 'active', sortOrder: 20, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_21', code: 'kinmen', name: '金門縣', description: '金門縣營運區域', status: 'active', sortOrder: 21, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
-  { id: 'reg_22', code: 'lienchiang', name: '連江縣', description: '連江縣營運區域', status: 'active', sortOrder: 22, createdAt: '2026-01-01', updatedAt: '2026-01-01' }
+  { id: 'reg_1', name: '新竹縣', description: '新竹縣營運區域', status: 'active', sortOrder: 1, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_2', name: '新竹市', description: '新竹市營運區域', status: 'active', sortOrder: 2, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_3', name: '苗栗縣', description: '苗栗縣營運區域', status: 'active', sortOrder: 3, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_4', name: '臺北市', description: '臺北市營運區域', status: 'active', sortOrder: 4, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_5', name: '新北市', description: '新北市營運區域', status: 'active', sortOrder: 5, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_6', name: '基隆市', description: '基隆市營運區域', status: 'active', sortOrder: 6, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_7', name: '桃園市', description: '桃園市營運區域', status: 'active', sortOrder: 7, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_8', name: '臺中市', description: '臺中市營運區域', status: 'active', sortOrder: 8, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_9', name: '彰化縣', description: '彰化縣營運區域', status: 'active', sortOrder: 9, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_10', name: '南投縣', description: '南投縣營運區域', status: 'active', sortOrder: 10, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_11', name: '雲林縣', description: '雲林縣營運區域', status: 'active', sortOrder: 11, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_12', name: '嘉義市', description: '嘉義市營運區域', status: 'active', sortOrder: 12, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_13', name: '嘉義縣', description: '嘉義縣營運區域', status: 'active', sortOrder: 13, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_14', name: '臺南市', description: '臺南市營運區域', status: 'active', sortOrder: 14, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_15', name: '高雄市', description: '高雄市營運區域', status: 'active', sortOrder: 15, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_16', name: '屏東縣', description: '屏東縣營運區域', status: 'active', sortOrder: 16, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_17', name: '宜蘭縣', description: '宜蘭縣營運區域', status: 'active', sortOrder: 17, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_18', name: '花蓮縣', description: '花蓮縣營運區域', status: 'active', sortOrder: 18, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_19', name: '臺東縣', description: '臺東縣營運區域', status: 'active', sortOrder: 19, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_20', name: '澎湖縣', description: '澎湖縣營運區域', status: 'active', sortOrder: 20, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_21', name: '金門縣', description: '金門縣營運區域', status: 'active', sortOrder: 21, createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+  { id: 'reg_22', name: '連江縣', description: '連江縣營運區域', status: 'active', sortOrder: 22, createdAt: '2026-01-01', updatedAt: '2026-01-01' }
 ]
 
 
@@ -175,6 +176,20 @@ export const mockCases: CaseDTO[] = [
       distanceKm: 5.0,
       serviceDurationMin: 10,
       serviceCode: 'BD03',
+      scheduleMode: 'monthly',
+      weeklyConfigs: [
+        { weekday: 1, label: '週一', tripCount: 2, departTime: '09:40', returnTime: '16:00', vehicleId: 'veh_4' },
+        { weekday: 2, label: '週二', tripCount: 2, departTime: '09:40', returnTime: '16:00', vehicleId: 'veh_4' },
+        { weekday: 3, label: '週三', tripCount: 2, departTime: '09:40', returnTime: '16:00', vehicleId: 'veh_4' },
+        { weekday: 4, label: '週四', tripCount: 2, departTime: '09:40', returnTime: '16:00', vehicleId: 'veh_4' },
+        { weekday: 5, label: '週五', tripCount: 2, departTime: '09:40', returnTime: '16:00', vehicleId: 'veh_4' },
+        { weekday: 6, label: '週六', tripCount: 0, departTime: '09:40', returnTime: '16:00', vehicleId: 'veh_4' },
+        { weekday: 7, label: '週日', tripCount: 0, departTime: '09:40', returnTime: '16:00', vehicleId: 'veh_4' }
+      ],
+      monthlyConfigs: {
+        '2026-07-15': { date: '2026-07-15', tripCount: 0, note: '個案家屬通知請假' },
+        '2026-07-20': { date: '2026-07-20', tripCount: 4, departTime: '08:30', returnTime: '16:30', vehicleId: 'veh_4', note: '全日活動特開四趟' }
+      },
       legs: [
         { id: 'leg_1_1', legSeq: 1, direction: 'outbound', departTime: '09:40', arriveTime: '09:50', runNo: 1, vehicleId: 'veh_4', vehicleName: '竹南2車' },
         { id: 'leg_1_2', legSeq: 2, direction: 'inbound', departTime: '16:00', arriveTime: '16:10', runNo: 1, vehicleId: 'veh_4', vehicleName: '竹南2車' }
@@ -468,12 +483,22 @@ export const mockCases: CaseDTO[] = [
       siteId: 'site_2',
       siteName: '竹南日照據點',
       effectiveFrom: '2026-07-01',
-      weekdays: [1, 3, 5],
+      weekdays: [1, 2, 3, 4, 5],
       tripPattern: 2,
       unitPrice: 115,
       distanceKm: 6.0,
       serviceDurationMin: 12,
       serviceCode: 'BD03',
+      scheduleMode: 'by_weekday',
+      weeklyConfigs: [
+        { weekday: 1, label: '週一', tripCount: 2, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 2, label: '週二', tripCount: 1, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 3, label: '週三', tripCount: 2, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 4, label: '週四', tripCount: 1, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 5, label: '週五', tripCount: 2, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 6, label: '週六', tripCount: 0, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' },
+        { weekday: 7, label: '週日', tripCount: 0, departTime: '08:50', returnTime: '15:50', vehicleId: 'veh_4' }
+      ],
       legs: [
         { id: 'leg_10_1', legSeq: 1, direction: 'outbound', departTime: '08:50', arriveTime: '09:05', runNo: 1, vehicleId: 'veh_4', vehicleName: '竹南2車' },
         { id: 'leg_10_2', legSeq: 2, direction: 'inbound', departTime: '15:50', arriveTime: '16:05', runNo: 1, vehicleId: 'veh_4', vehicleName: '竹南2車' }
@@ -872,8 +897,32 @@ export const mockDashboardStats: DashboardStatsDTO = {
   recentExports: mockExportJobs
 }
 
-// 系統操作紀錄展示資料：涵蓋登入 (login)、主檔 CUD、更正 (correct)、衝突裁決 (resolve_conflict)、匯出 (export) 與設定變更
+// 系統操作紀錄展示資料：涵蓋登入 (login)、主檔 CUD、事後補報 (manual_report)、更正 (correct)、衝突裁決 (resolve_conflict)、匯出 (export) 與設定變更
 export const mockAuditLogs: AuditLogDTO[] = [
+  {
+    id: 'audit_manual_report_demo',
+    actorId: 'usr_staff',
+    actorName: '行政承辦',
+    actorRole: 'staff',
+    action: 'manual_report',
+    entityType: 'ride_records',
+    entityId: 'c87eefa5-8b94-4362-b6e2-aa564f52080a',
+    beforeData: undefined,
+    afterData: {
+      caseId: 'case_1',
+      caseName: '蔡曾切',
+      serviceDate: '2026-08-28',
+      legSeq: 1,
+      effectiveStatus: 'boarded',
+      departTimeOverride: '09:15',
+      durationMinOverride: 15,
+      notClaimedAa09: false,
+      reason: '司機電話回報補登'
+    },
+    ipAddress: '192.168.1.105',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    createdAt: '2026-08-28 09:20:00'
+  },
   {
     id: 'audit_0',
     actorId: 'usr_admin',
@@ -1099,6 +1148,169 @@ export const mockNotificationRecipients: NotificationRecipientDTO[] = [
   }
 ]
 
+// 異常搭乘集中處理展示資料：涵蓋混車衝突待裁決 (conflict)、應搭未回報清單 (unreported) 與表單匯入異常 (import_error)
+export const mockIssueRides: IssueRideDTO[] = [
+  // 1. 混車衝突待裁決 (conflict)
+  {
+    id: 'ride_conflict_1',
+    caseId: 'case_2',
+    caseName: '葉秀珍',
+    serviceDate: '2026-08-20',
+    legSeq: 1,
+    issueType: 'conflict',
+    hasConflict: true,
+    description: '竹北一車與竹北二車皆於 08:30 回報「有坐」，需指定正確承載車輛與司機',
+    vehicles: ['竹北一車', '竹北二車']
+  },
+  {
+    id: 'ride_conflict_2',
+    caseId: 'case_1',
+    caseName: '蔡曾切',
+    serviceDate: '2026-08-22',
+    legSeq: 2,
+    issueType: 'conflict',
+    hasConflict: true,
+    description: '竹南1車與竹南2車於下午回程皆勾選載送，司機填報紀錄衝突',
+    vehicles: ['竹南1車', '竹南2車']
+  },
+  {
+    id: 'ride_conflict_3',
+    caseId: 'case_5',
+    caseName: '李國盛',
+    serviceDate: '2026-08-25',
+    legSeq: 1,
+    issueType: 'conflict',
+    hasConflict: true,
+    description: '排定竹北二車承載，但竹北一車表單亦提交該員搭乘，需人工確認實際接送車輛',
+    vehicles: ['竹北二車', '竹北一車']
+  },
+  {
+    id: 'ride_conflict_4',
+    caseId: 'case_8',
+    caseName: '彭阿土',
+    serviceDate: '2026-08-26',
+    legSeq: 3,
+    issueType: 'conflict',
+    hasConflict: true,
+    description: '苗栗市1車與竹南2車下午第 3 趟重複載送回報，跨車排程衝突',
+    vehicles: ['苗栗市1車', '竹南2車']
+  },
+
+  // 2. 應搭未回報清單 (unreported)
+  {
+    id: 'ride_unrep_1',
+    caseId: 'case_1',
+    caseName: '蔡曾切',
+    serviceDate: '2026-08-15',
+    legSeq: 2,
+    issueType: 'unreported',
+    hasConflict: false,
+    description: '08/15 第 2 趟（回程）司機尚未提交表單回覆',
+    vehicles: ['竹南2車']
+  },
+  {
+    id: 'ride_unrep_2',
+    caseId: 'case_2',
+    caseName: '葉秀珍',
+    serviceDate: '2026-08-24',
+    legSeq: 4,
+    issueType: 'unreported',
+    hasConflict: false,
+    description: '08/24 第 4 趟（回程）司機未提交回覆，已發送催報提醒',
+    vehicles: ['竹北一車']
+  },
+  {
+    id: 'ride_unrep_3',
+    caseId: 'case_3',
+    caseName: '吳𣵛桂',
+    serviceDate: '2026-08-22',
+    legSeq: 1,
+    issueType: 'unreported',
+    hasConflict: false,
+    description: '08/22 第 1 趟（去程）排班應搭，司機忘記填寫回報表',
+    vehicles: ['竹北一車']
+  },
+  {
+    id: 'ride_unrep_4',
+    caseId: 'case_7',
+    caseName: '黃天賜',
+    serviceDate: '2026-08-20',
+    legSeq: 1,
+    issueType: 'unreported',
+    hasConflict: false,
+    description: '08/20 第 1 趟（去程）竹南1車未見回報日誌，逾期 5 天',
+    vehicles: ['竹南1車']
+  },
+  {
+    id: 'ride_unrep_5',
+    caseId: 'case_10',
+    caseName: '林阿祥',
+    serviceDate: '2026-08-25',
+    legSeq: 2,
+    issueType: 'unreported',
+    hasConflict: false,
+    description: '08/25 第 2 趟（回程）竹南2車未提交回報，待行政人員確認',
+    vehicles: ['竹南2車']
+  },
+
+  // 3. 表單匯入異常 (import_error)
+  {
+    id: 'err_1',
+    caseId: 'case_unknown',
+    caseName: '去程到08/21',
+    serviceDate: '2026-08-21',
+    legSeq: 1,
+    issueType: 'import_error',
+    hasConflict: false,
+    description: '搭乘欄填寫非標準字串「去程到08/21」，無法自動解析為有坐/沒坐',
+    vehicles: ['竹北一車']
+  },
+  {
+    id: 'err_2',
+    caseId: 'case_unknown',
+    caseName: '家屬臨時改下午一點接',
+    serviceDate: '2026-08-23',
+    legSeq: 2,
+    issueType: 'import_error',
+    hasConflict: false,
+    description: '回報欄位填入說明文字「家屬臨時改下午一點接」，無法對應標準時間或搭乘狀態欄位',
+    vehicles: ['竹南1車']
+  },
+  {
+    id: 'err_3',
+    caseId: 'case_2',
+    caseName: '葉秀珍 (重複時間戳記)',
+    serviceDate: '2026-08-24',
+    legSeq: 1,
+    issueType: 'import_error',
+    hasConflict: false,
+    description: '同一司機於 1 分鐘內重複提交兩次相異狀態表單（第一次勾沒坐，第二次勾有坐）',
+    vehicles: ['竹北一車']
+  },
+  {
+    id: 'err_4',
+    caseId: 'case_unknown',
+    caseName: '未知個案「王大明」',
+    serviceDate: '2026-08-25',
+    legSeq: 1,
+    issueType: 'import_error',
+    hasConflict: false,
+    description: '表單回報名冊中包含未建檔之個案姓名「王大明」，無法自動關聯個案主檔代碼',
+    vehicles: ['苗栗市1車']
+  },
+  {
+    id: 'err_5',
+    caseId: 'case_unknown',
+    caseName: '日期格式異常 (115/8/26 下午)',
+    serviceDate: '2026-08-26',
+    legSeq: 1,
+    issueType: 'import_error',
+    hasConflict: false,
+    description: '表單服務日期填寫為「115/8/26 下午」，非標準 ISO 日期格式致系統解析失敗',
+    vehicles: ['竹北二車']
+  }
+]
+
 // 通知發送歷史日誌：涵蓋全部 4 種主題、成功與失敗狀態
 export const mockNotificationLogs: NotificationLogDTO[] = [
   {
@@ -1106,25 +1318,115 @@ export const mockNotificationLogs: NotificationLogDTO[] = [
     topic: 'missing_report',
     channel: 'email',
     recipientEmails: ['admin@ltc.example.com', 'staff.miaoli@ltc.example.com'],
-    subject: '【長照交通系統】今日未回報催報通知 (2026-08-25)',
-    contentSummary: '竹南2車 (回覆) 尚有 3 筆應搭乘趟次未提交回報，請儘速核對。',
+    subject: '【長照交通系統】今日未回報催報通知 (2026-08-26)',
+    contentSummary: '竹南2車、竹北一車尚有 2 筆今日應搭乘趟次未提交回報，請司機或調度員儘速核對。',
     status: 'sent',
     triggeredByName: '系統定時排程 (Cloud Scheduler)',
-    sentAt: '2026-08-25 18:00:02'
+    sentAt: '2026-08-26 18:00:02'
   },
   {
     id: 'nlog_2',
+    topic: 'missing_report',
+    channel: 'email',
+    recipientEmails: ['dispatcher@ltc.example.com', 'dispatch_lead@ltc.example.com'],
+    subject: '【長照交通系統】手動催報執行通知 (2026-08-26)',
+    contentSummary: '調度員手動執行全車隊未回報檢核，已發送未回報提醒，共計 12 筆待回報項目。',
+    status: 'sent',
+    triggeredByName: '當前操作人員 (手動觸發)',
+    sentAt: '2026-08-26 11:30:15'
+  },
+  {
+    id: 'nlog_3',
+    topic: 'month_end',
+    channel: 'email',
+    recipientEmails: ['finance@ltc.example.com', 'supervisor@gov.example.tw'],
+    subject: '【長照交通系統】115年08月份申報資料結算提醒 (月底即將截數)',
+    contentSummary: '本月營運日即將結束，目前尚有 4 筆混車衝突待裁決與 12 筆未回報，請於月底前完成處理以利申報匯出。',
+    status: 'sent',
+    triggeredByName: '系統定時排程 (Cloud Scheduler)',
+    sentAt: '2026-08-26 09:00:00'
+  },
+  {
+    id: 'nlog_4',
+    topic: 'driver_leave',
+    channel: 'email',
+    recipientEmails: ['dispatch@ltc.example.com', 'dispatch_lead@ltc.example.com'],
+    subject: '【調度通報】司機 林志豪 於 2026-08-27 請事假一日',
+    contentSummary: '竹北二車需安排代班司機（郭澤威）或跨車支援調整。',
+    status: 'sent',
+    triggeredByName: '出勤登記作業',
+    sentAt: '2026-08-25 17:15:00'
+  },
+  {
+    id: 'nlog_5',
+    topic: 'missing_report',
+    channel: 'email',
+    recipientEmails: ['admin@ltc.example.com'],
+    subject: '【長照交通系統】今日未回報催報通知 (2026-08-25)',
+    contentSummary: '竹北一車、竹北二車尚有 2 筆應搭乘趟次未提交回報。',
+    status: 'sent',
+    triggeredByName: '系統定時排程 (Cloud Scheduler)',
+    sentAt: '2026-08-25 18:00:01'
+  },
+  {
+    id: 'nlog_6',
+    topic: 'export_failed',
+    channel: 'email',
+    recipientEmails: ['tech@ltc.example.com'],
+    subject: '【警報】空白保養表產生異常',
+    contentSummary: '批次產生任務 job_202608_04 模板套用失敗',
+    status: 'failed',
+    errorMessage: '模板樣式套用異常：工作表名稱「保養紀錄表」衝突',
+    triggeredByName: '匯出非同步任務',
+    sentAt: '2026-08-25 15:45:05'
+  },
+  {
+    id: 'nlog_7',
+    topic: 'driver_leave',
+    channel: 'email',
+    recipientEmails: ['dispatch@ltc.example.com'],
+    subject: '【調度通報】司機 曾建宏 於 2026-08-21 請病假一日',
+    contentSummary: '竹南1車當日出勤異動，已指派陳國華司機跨車支援。',
+    status: 'sent',
+    triggeredByName: '出勤登記作業',
+    sentAt: '2026-08-20 18:30:00'
+  },
+  {
+    id: 'nlog_8',
+    topic: 'missing_report',
+    channel: 'email',
+    recipientEmails: ['staff.miaoli@ltc.example.com'],
+    subject: '【長照交通系統】苗栗區未回報趟次催報警示',
+    contentSummary: '竹南1車、苗栗市1車逾期逾 3 天之未回報趟次共 3 筆，請承辦人員電話確認。',
+    status: 'sent',
+    triggeredByName: '系統定時排程 (Cloud Scheduler)',
+    sentAt: '2026-08-20 08:30:00'
+  },
+  {
+    id: 'nlog_9',
+    topic: 'export_failed',
+    channel: 'email',
+    recipientEmails: ['tech@ltc.example.com', 'admin@ltc.example.com'],
+    subject: '【警報】新竹縣申報表批次匯出連線逾時',
+    contentSummary: '申報批次匯出 job_202607_02 產生過程發生 Google API 額度限制連線逾時',
+    status: 'failed',
+    errorMessage: 'Google Sheets API Rate Limit Exceeded (HTTP 429)',
+    triggeredByName: '申報匯出排程',
+    sentAt: '2026-08-01 10:30:22'
+  },
+  {
+    id: 'nlog_10',
     topic: 'month_end',
     channel: 'email',
     recipientEmails: ['finance@ltc.example.com'],
     subject: '【長照交通系統】115年07月份申報資料結算提醒',
-    contentSummary: '本月已達26日，目前仍有 1 筆混車衝突未裁決，請於月底前完成處理。',
+    contentSummary: '本月已達 26 日，目前仍有 1 筆混車衝突未裁決，請於月底前完成處理。',
     status: 'sent',
     triggeredByName: '系統定時排程 (Cloud Scheduler)',
     sentAt: '2026-07-26 09:00:00'
   },
   {
-    id: 'nlog_3',
+    id: 'nlog_11',
     topic: 'driver_leave',
     channel: 'email',
     recipientEmails: ['dispatch@ltc.example.com'],
@@ -1135,26 +1437,26 @@ export const mockNotificationLogs: NotificationLogDTO[] = [
     sentAt: '2026-07-06 17:30:00'
   },
   {
-    id: 'nlog_4',
-    topic: 'export_failed',
+    id: 'nlog_12',
+    topic: 'missing_report',
     channel: 'email',
-    recipientEmails: ['tech@ltc.example.com'],
-    subject: '【警報】空白保養表產生異常',
-    contentSummary: '批次產生任務 job_202607_04 模板套用失敗',
+    recipientEmails: ['driver.invalid@ltc.example.com'],
+    subject: '【長照交通系統】未回報通知發送失敗警報',
+    contentSummary: '嘗試發送未回報提醒至司機信箱 driver.invalid@ltc.example.com 失敗',
     status: 'failed',
-    errorMessage: '模板樣式套用異常：工作表名稱衝突',
-    triggeredByName: '匯出非同步任務',
-    sentAt: '2026-08-25 15:45:05'
+    errorMessage: 'SMTP 550: 5.1.1 User unknown / 郵件伺服器退信',
+    triggeredByName: '系統定時排程 (Cloud Scheduler)',
+    sentAt: '2026-07-02 18:00:05'
   }
 ]
 
-// 未回報搭乘清單：涵蓋多天逾期 (1天、3天、5天、10天) 與多台車輛
+// 未回報搭乘清單：涵蓋多天逾期 (1天至12天)、各車輛與司機
 export const mockMissingRides: MissingRideDTO[] = [
   {
     id: 'mis_1',
     caseId: 'case_1',
     caseName: '蔡曾切',
-    serviceDate: '2026-08-24',
+    serviceDate: '2026-08-26',
     legSeq: 2,
     direction: 'inbound',
     departTime: '16:00',
@@ -1167,7 +1469,7 @@ export const mockMissingRides: MissingRideDTO[] = [
     id: 'mis_2',
     caseId: 'case_2',
     caseName: '葉秀珍',
-    serviceDate: '2026-08-24',
+    serviceDate: '2026-08-26',
     legSeq: 4,
     direction: 'inbound',
     departTime: '16:30',
@@ -1180,40 +1482,131 @@ export const mockMissingRides: MissingRideDTO[] = [
     id: 'mis_3',
     caseId: 'case_3',
     caseName: '吳𣵛桂',
-    serviceDate: '2026-08-22',
+    serviceDate: '2026-08-25',
     legSeq: 1,
     direction: 'outbound',
     departTime: '09:10',
     vehicleId: 'veh_1',
     vehicleName: '竹北一車',
     driverName: '郭澤威',
-    daysOverdue: 3
+    daysOverdue: 2
   },
   {
     id: 'mis_4',
+    caseId: 'case_5',
+    caseName: '李國盛',
+    serviceDate: '2026-08-25',
+    legSeq: 2,
+    direction: 'inbound',
+    departTime: '15:30',
+    vehicleId: 'veh_2',
+    vehicleName: '竹北二車',
+    driverName: '林志豪',
+    daysOverdue: 2
+  },
+  {
+    id: 'mis_5',
     caseId: 'case_7',
     caseName: '黃天賜',
-    serviceDate: '2026-08-20',
+    serviceDate: '2026-08-24',
     legSeq: 1,
     direction: 'outbound',
     departTime: '08:15',
     vehicleId: 'veh_3',
     vehicleName: '竹南1車',
     driverName: '曾建宏',
+    daysOverdue: 3
+  },
+  {
+    id: 'mis_6',
+    caseId: 'case_4',
+    caseName: '張詹竹妹',
+    serviceDate: '2026-08-24',
+    legSeq: 2,
+    direction: 'inbound',
+    departTime: '16:15',
+    vehicleId: 'veh_1',
+    vehicleName: '竹北一車',
+    driverName: '郭澤威',
+    daysOverdue: 3
+  },
+  {
+    id: 'mis_7',
+    caseId: 'case_10',
+    caseName: '林阿祥',
+    serviceDate: '2026-08-22',
+    legSeq: 1,
+    direction: 'outbound',
+    departTime: '08:50',
+    vehicleId: 'veh_4',
+    vehicleName: '竹南2車',
+    driverName: '陳國華',
     daysOverdue: 5
   },
   {
-    id: 'mis_5',
+    id: 'mis_8',
+    caseId: 'case_9',
+    caseName: '邱美蘭',
+    serviceDate: '2026-08-22',
+    legSeq: 1,
+    direction: 'outbound',
+    departTime: '09:30',
+    vehicleId: 'veh_2',
+    vehicleName: '竹北二車',
+    driverName: '林志豪',
+    daysOverdue: 5
+  },
+  {
+    id: 'mis_9',
     caseId: 'case_8',
     caseName: '彭阿土',
-    serviceDate: '2026-08-15',
+    serviceDate: '2026-08-20',
     legSeq: 2,
     direction: 'inbound',
     departTime: '11:00',
     vehicleId: 'veh_6',
     vehicleName: '苗栗市1車',
     driverName: '吳秀珠',
-    daysOverdue: 10
+    daysOverdue: 7
+  },
+  {
+    id: 'mis_10',
+    caseId: 'case_8',
+    caseName: '彭阿土',
+    serviceDate: '2026-08-20',
+    legSeq: 4,
+    direction: 'inbound',
+    departTime: '16:00',
+    vehicleId: 'veh_6',
+    vehicleName: '苗栗市1車',
+    driverName: '吳秀珠',
+    daysOverdue: 7
+  },
+  {
+    id: 'mis_11',
+    caseId: 'case_1',
+    caseName: '蔡曾切',
+    serviceDate: '2026-08-18',
+    legSeq: 1,
+    direction: 'outbound',
+    departTime: '09:40',
+    vehicleId: 'veh_4',
+    vehicleName: '竹南2車',
+    driverName: '陳國華',
+    daysOverdue: 9
+  },
+  {
+    id: 'mis_12',
+    caseId: 'case_2',
+    caseName: '葉秀珍',
+    serviceDate: '2026-08-15',
+    legSeq: 2,
+    direction: 'inbound',
+    departTime: '11:30',
+    vehicleId: 'veh_1',
+    vehicleName: '竹北一車',
+    driverName: '郭澤威',
+    daysOverdue: 12
   }
 ]
 

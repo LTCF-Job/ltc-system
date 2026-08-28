@@ -1,17 +1,9 @@
 <template>
   <div class="ride-issues-view">
-    <div class="page-header">
-      <el-button link @click="$router.push('/rides')">
-        <el-icon><ArrowLeft /></el-icon>
-        返回搭乘月曆
-      </el-button>
-      <h2>異常搭乘集中處理</h2>
-    </div>
-
     <!-- 篩選列 -->
     <el-card shadow="never" class="filter-card mb-3" style="margin-bottom: 12px;">
       <el-row :gutter="16" align="middle">
-        <el-col :span="18" style="display: flex; gap: 8px;">
+        <el-col :xs="24" :lg="18" class="issue-filter-controls">
           <el-input
             v-model="issueQuery"
             placeholder="搜尋個案姓名／涉及車輛／說明"
@@ -19,7 +11,7 @@
             style="width: 260px;"
             @keyup.enter="fetchIssues"
           />
-          <el-button type="primary" icon="Search" @click="fetchIssues">
+          <el-button type="primary" :icon="Search" @click="fetchIssues">
             查詢
           </el-button>
           <el-button @click="handleReset">
@@ -43,15 +35,9 @@
           <el-table-column prop="description" label="衝突說明" min-width="260" />
           <el-table-column label="涉及車輛" width="200">
             <template #default="{ row }">
-              <el-tag
-                v-for="(v, idx) in row.vehicles"
-                :key="idx"
-                type="danger"
-                size="small"
-                style="margin-right: 4px;"
-              >
-                {{ v }}
-              </el-tag>
+              <span v-for="(v, idx) in row.vehicles" :key="idx" class="vehicle-name">
+                {{ v }}<span v-if="Number(idx) < row.vehicles.length - 1" class="vehicle-separator">、</span>
+              </span>
             </template>
           </el-table-column>
 
@@ -62,13 +48,10 @@
             align="center"
           >
             <template #default="{ row }">
-              <el-button type="primary" size="small" @click="openResolveDialog(row as any)">
+              <el-button type="success" size="small" :icon="Edit" @click="openResolveDialog(row as any)">
                 人工裁決
               </el-button>
             </template>
-
-
-
           </el-table-column>
         </el-table>
       </el-tab-pane>
@@ -149,7 +132,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { Search, Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listIssueRides, resolveConflict } from '@/api/rides'
 import { listVehicles, listDrivers } from '@/api/masters'
@@ -244,23 +227,26 @@ onMounted(async () => {
   gap: 16px;
 }
 
-.page-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background-color: #ffffff;
-  padding: 16px 20px;
-  border-radius: 8px;
-
-  h2 {
-    margin: 0;
-    font-size: 20px;
-    color: var(--el-color-primary);
-  }
-}
-
 .issues-tabs {
   border-radius: 8px;
   background-color: #ffffff;
+}
+
+.vehicle-name { color: var(--el-text-color-regular); }
+.vehicle-separator { color: var(--el-text-color-placeholder); }
+
+.issue-filter-controls {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .issue-filter-controls {
+    flex-wrap: wrap;
+  }
+
+  .issue-filter-controls :deep(.el-input) {
+    width: 100%;
+  }
 }
 </style>

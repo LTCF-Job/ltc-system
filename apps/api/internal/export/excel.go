@@ -15,7 +15,9 @@ func GenerateGovClaimExcel(rows []govform.ClaimRow) ([]byte, error) {
 
 	// 確保預設工作表名稱更名為「工作表1」
 	defaultSheet := f.GetSheetName(0)
-	f.SetSheetName(defaultSheet, govform.GovClaimSheetName)
+	if err := f.SetSheetName(defaultSheet, govform.GovClaimSheetName); err != nil {
+		return nil, fmt.Errorf("failed to rename gov claim sheet: %w", err)
+	}
 
 	// 1. 寫入第 1 列標題（33 欄）
 	for colIdx, header := range govform.Headers33 {
@@ -42,6 +44,14 @@ func GenerateGovClaimExcel(rows []govform.ClaimRow) ([]byte, error) {
 				return nil, fmt.Errorf("failed to set cell value at %s: %w", cellAxis, err)
 			}
 		}
+	}
+
+	lastRow := len(rows) + 1
+	if lastRow < 1 {
+		lastRow = 1
+	}
+	if err := f.SetSheetDimension(govform.GovClaimSheetName, fmt.Sprintf("A1:AG%d", lastRow)); err != nil {
+		return nil, fmt.Errorf("failed to set gov claim sheet dimension: %w", err)
 	}
 
 	buf := new(bytes.Buffer)

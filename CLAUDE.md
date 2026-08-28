@@ -16,6 +16,9 @@
 - Go backend code style：`.agents/skills/go-backend-code-style/SKILL.md`
 - Go unit testing：`.agents/skills/golang-unit-testing/SKILL.md`
 - Vue 3 frontend：`.agents/skills/frontend-architecture/SKILL.md`
+- Admin UI design：`.agents/skills/admin-ui-design/SKILL.md`
+- LTC dashboard visual language：`.agents/skills/ltc-dashboard-visual-language/SKILL.md`
+- Frontend accessibility：`.agents/skills/accessibility/SKILL.md`
 - mock／demo／seed／MSW：`.agents/skills/mock-and-demo-boundaries/SKILL.md`
 - architecture audit／refactoring review：`.agents/skills/architecture-review/SKILL.md`
 
@@ -30,6 +33,7 @@
 - 先讀 `AGENTS.md`、相關 skills 與目前工作樹狀態。
 - 使用目前分支的原始碼作為現況證據，保留既有未提交修改。
 - 修改 application source code 前，先完成相關架構 skill 的邊界判斷；以最小功能切片實作，避免一次進行全專案搬遷。
+- 前端修改完成後，執行 `npm run test:e2e:changed` 或對應的 `npm run test:e2e:<feature>`（共 11 組功能模組），確保未破壞既有功能。
 - mock、demo、seed 與 production behavior 必須標示清楚的啟用條件。
 - 不自行 commit、push、rebase、merge 或重設使用者修改。
 - 回報驗證結果時區分 static inspection、automated test、build/type-check 與 runtime proof。

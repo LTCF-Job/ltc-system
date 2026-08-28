@@ -2,6 +2,26 @@ import { http, HttpResponse } from 'msw'
 import { mockForms, mockFormColumns } from '../data/mockData'
 
 export const formsHandlers = [
+  http.get('/api/v1/forms/google-drive-files', () => {
+    return HttpResponse.json([
+      { id: '1A2B3C4D5E6F7G8H9I0J_zhubei1', name: '竹北一車每日接送回報 (回覆)' },
+      { id: '1A2B3C4D5E6F7G8H9I0J_zhubei2', name: '竹北二車每日接送回報 (回覆)' },
+      { id: '1A2B3C4D5E6F7G8H9I0J_zhunan1', name: '竹南1車每日接送回報 (回覆)' },
+      { id: '1A2B3C4D5E6F7G8H9I0J_zhunan2', name: '竹南2車每日接送回報 (回覆)' }
+    ])
+  }),
+
+  http.post('/api/v1/forms/inspect-sheet', async ({ request }) => {
+    const body = (await request.json()) as any
+    const sheetId = body.spreadsheetId || body.sheetUrl || 'demo_sheet_id'
+    return HttpResponse.json({
+      spreadsheetId: sheetId,
+      title: body.sheetUrl?.includes('zhunan') ? '竹南1車每日接送回報 (回覆)' : '竹北一車每日接送回報 (回覆)',
+      sheetTabs: ['8月回報', '7月回報', '表單回覆 1'],
+      previewHeaders: ['時間戳記', '今天日期', '今日駕駛人', '蔡曾切（去）', '蔡曾切（回）', '問題回報']
+    })
+  }),
+
   http.get('/api/v1/forms', ({ request }) => {
     const url = new URL(request.url)
     const q = url.searchParams.get('q')?.trim().toLowerCase()

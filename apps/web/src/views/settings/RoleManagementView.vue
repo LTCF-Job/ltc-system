@@ -53,12 +53,10 @@
         >
           <div class="role-card-header">
             <div class="header-tag-group">
-              <el-tag :type="role.tagType" effect="dark" size="default" class="role-main-tag">
+              <span class="role-title-text" :class="`role-${role.key || role.id}`">
+                <span class="role-dot" :class="`dot-${role.key || role.id}`"></span>
                 {{ role.name }}
-              </el-tag>
-              <el-tag v-if="role.isSystem" size="small" type="info" effect="plain">
-                系統內建
-              </el-tag>
+              </span>
             </div>
           </div>
 
@@ -82,7 +80,7 @@
 
           <div class="role-actions" @click.stop>
             <el-button
-              type="primary"
+              type="success"
               link
               size="small"
               icon="Edit"
@@ -91,7 +89,7 @@
               編輯設定
             </el-button>
             <el-button
-              type="success"
+              type="primary"
               link
               size="small"
               icon="CopyDocument"
@@ -139,16 +137,13 @@
             <span class="matrix-title">
               【{{ selectedRole.name }}】功能模組權限矩陣
             </span>
-            <el-tag v-if="selectedRole.isSystem" size="small" type="info" effect="plain" style="margin-left: 8px">
-              系統內建角色
-            </el-tag>
           </div>
           <div class="matrix-header-right">
-            <el-tag :type="selectedRole.tagType" effect="plain">
+            <span class="matrix-stat-text">
               支援 {{ countRolePerms(selectedRole.permissions).views }} 項檢視、{{ countRolePerms(selectedRole.permissions).edits }} 項操作
-            </el-tag>
+            </span>
             <el-button
-              type="primary"
+              type="success"
               size="small"
               icon="Edit"
               plain
@@ -169,7 +164,7 @@
       >
         <el-table-column prop="categoryName" label="分類" width="130" align="center">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain" type="info">{{ row.categoryName }}</el-tag>
+            <span>{{ row.categoryName }}</span>
           </template>
         </el-table-column>
 
@@ -182,33 +177,29 @@
 
         <el-table-column label="檢視權限 (View)" width="180" align="center">
           <template #default="{ row }">
-            <el-tag
+            <span
               v-if="selectedRole?.permissions?.[row.id]?.view"
-              type="success"
-              size="small"
-              effect="dark"
+              class="perm-status perm-view"
             >
               <el-icon><Check /></el-icon> 允許檢視
-            </el-tag>
-            <el-tag v-else type="info" size="small" effect="plain">
+            </span>
+            <span v-else class="perm-status perm-none">
               <el-icon><Close /></el-icon> 無權限
-            </el-tag>
+            </span>
           </template>
         </el-table-column>
 
         <el-table-column label="編輯／操作權限 (Edit)" width="180" align="center">
           <template #default="{ row }">
-            <el-tag
+            <span
               v-if="selectedRole?.permissions?.[row.id]?.edit"
-              type="primary"
-              size="small"
-              effect="dark"
+              class="perm-status perm-edit"
             >
               <el-icon><Check /></el-icon> 允許新增/修改
-            </el-tag>
-            <el-tag v-else type="info" size="small" effect="plain">
+            </span>
+            <span v-else class="perm-status perm-none">
               <el-icon><Close /></el-icon> 僅讀/無權限
-            </el-tag>
+            </span>
           </template>
         </el-table-column>
       </el-table>
@@ -230,13 +221,13 @@
         label-position="right"
       >
         <el-row :gutter="16">
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="角色名稱" prop="name">
               <el-input v-model="form.name" placeholder="如：外部稽核員、車隊專員" />
             </el-form-item>
           </el-col>
 
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="標籤色彩" prop="tagType">
               <el-select v-model="form.tagType" placeholder="請選擇標籤樣式" style="width: 100%">
                 <el-option
@@ -274,7 +265,7 @@
               <el-button size="small" @click="handleBatchSet(true, false)">全選檢視</el-button>
               <el-button size="small" type="primary" plain @click="handleBatchSet(true, true)">全選編輯</el-button>
               <el-button size="small" type="info" plain @click="handleBatchSet(false, false)">全部清空</el-button>
-              
+
               <el-select
                 v-model="templateRoleKey"
                 placeholder="複製既有角色..."
@@ -477,7 +468,7 @@ function openEditDialog(role: RoleDTO) {
   form.name = role.name
   form.description = role.description || ''
   form.tagType = role.tagType || 'primary'
-  
+
   // 複製現有權限並確保 20 個模組都有鍵值
   const p = initEmptyPermissions()
   if (role.permissions) {
@@ -709,8 +700,31 @@ onMounted(() => {
       align-items: center;
       gap: 6px;
 
-      .role-main-tag {
-        font-weight: bold;
+      .role-title-text {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 15px;
+        font-weight: 600;
+
+        &.role-admin { color: #be123c; }
+        &.role-dispatcher { color: #1d4ed8; }
+        &.role-staff { color: #15803d; }
+        &.role-driver { color: #b45309; }
+        &.role-viewer { color: #475569; }
+      }
+
+      .role-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+
+        &.dot-admin { background-color: #e11d48; }
+        &.dot-dispatcher { background-color: #2563eb; }
+        &.dot-staff { background-color: #16a34a; }
+        &.dot-driver { background-color: #d97706; }
+        &.dot-viewer { background-color: #64748b; }
       }
     }
 
@@ -824,6 +838,31 @@ onMounted(() => {
       align-items: center;
       gap: 6px;
     }
+  }
+}
+
+.matrix-stat-text {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+.perm-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+
+  &.perm-view {
+    color: var(--el-color-success);
+  }
+
+  &.perm-edit {
+    color: var(--el-color-primary);
+  }
+
+  &.perm-none {
+    color: var(--el-text-color-placeholder);
   }
 }
 </style>

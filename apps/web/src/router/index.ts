@@ -73,7 +73,7 @@ const router = createRouter({
           path: 'rides',
           name: 'RideCalendar',
           component: () => import('@/views/rides/RideCalendarView.vue'),
-          meta: { title: '搭乘月曆矩陣', module: 'rides_calendar', roles: ['admin', 'staff', 'dispatcher', 'driver', 'viewer'] }
+          meta: { title: '搭乘月曆表', module: 'rides_calendar', roles: ['admin', 'staff', 'dispatcher', 'driver', 'viewer'] }
         },
         {
           path: 'rides/issues',
@@ -134,6 +134,12 @@ const router = createRouter({
           name: 'NotificationSettings',
           component: () => import('@/views/settings/NotificationSettingsView.vue'),
           meta: { title: '通知收件人管理', module: 'settings_notifications', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+        },
+        {
+          path: 'settings/holidays',
+          name: 'HolidayCalendar',
+          component: () => import('@/views/settings/HolidayCalendarView.vue'),
+          meta: { title: '政府假日與工作日設定', module: 'settings_notifications', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
         },
         {
           path: 'exports',

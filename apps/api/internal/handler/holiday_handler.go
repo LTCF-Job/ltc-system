@@ -26,6 +26,7 @@ type CreateHolidayRequest struct {
 	Name        string  `json:"name" binding:"required"`
 	Region      *string `json:"region"`
 	Source      string  `json:"source"`
+	IsDayOff    *bool   `json:"isDayOff"`
 }
 
 // ImportHolidayRequest 定義批次匯入年份行事曆請求。
@@ -73,12 +74,17 @@ func (h *HolidayHandler) Create(c *gin.Context) {
 	if source == "" {
 		source = "manual"
 	}
+	isDayOff := true
+	if req.IsDayOff != nil {
+		isDayOff = *req.IsDayOff
+	}
 
 	item := &repository.HolidayEntity{
 		HolidayDate: date,
 		Name:        req.Name,
 		Region:      req.Region,
 		Source:      source,
+		IsDayOff:    isDayOff,
 	}
 
 	actorID := middleware.GetActorID(c)

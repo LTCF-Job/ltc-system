@@ -75,9 +75,7 @@
 
         <el-table-column label="通知主題" width="160">
           <template #default="{ row }">
-            <el-tag :type="getTopicTagType(row.topic as NotificationTopic)">
-              {{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}
-            </el-tag>
+            <span>{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
           </template>
         </el-table-column>
 
@@ -120,7 +118,7 @@
           align="center"
         >
           <template #default="{ row }">
-            <el-button type="primary" link icon="Edit" @click="openEditDialog(row as any)">
+            <el-button type="success" link icon="Edit" @click="openEditDialog(row as any)">
               編輯
             </el-button>
             <el-button type="danger" link icon="Delete" @click="handleDelete(row as any)">
@@ -415,21 +413,6 @@ const duplicateCount = computed(() => {
 const filteredRecipientList = computed(() => {
   return recipientList.value
 })
-
-function getTopicTagType(topic: NotificationTopic): 'primary' | 'success' | 'warning' | 'info' | 'danger' {
-  switch (topic) {
-    case 'missing_report':
-      return 'warning'
-    case 'driver_leave':
-      return 'primary'
-    case 'month_end':
-      return 'danger'
-    case 'export_failed':
-      return 'danger'
-    default:
-      return 'info'
-  }
-}
 
 // 載入收件信箱清單
 async function fetchRecipients() {

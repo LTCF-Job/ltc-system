@@ -51,9 +51,15 @@ jobs:
 
       - name: Build and publish API image
         run: |
-          gcloud builds submit apps/api \
+          BUILD_ID=$(gcloud builds submit apps/api \
             --project "$GCP_PROJECT_ID" \
-            --tag "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/api:${IMAGE_TAG}"
+            --tag "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/api:${IMAGE_TAG}" \
+            --async \
+            --format="value(id)")
+          gcloud builds log "$BUILD_ID" --project "$GCP_PROJECT_ID" --stream || true
+          STATUS=$(gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format="value(status)")
+          echo "Build $BUILD_ID finished with status: $STATUS"
+          [ "$STATUS" = "SUCCESS" ]
 
       - name: Update migration job image
         run: |

@@ -6,6 +6,7 @@ import {
   type SystemPermissions
 } from '@/types/domain'
 import type { UserDTO } from '@/types/api'
+import { clearDemoModeOnLogout } from '@/lib/demoMode'
 
 const TOKEN_KEY = 'ltc_auth_token'
 const USER_KEY = 'ltc_auth_user'
@@ -58,6 +59,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    clearDemoModeOnLogout()
   }
 
   // 檢查當前角色是否滿足基本身分限制

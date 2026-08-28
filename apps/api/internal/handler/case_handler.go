@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -128,7 +131,7 @@ func (h *CaseHandler) CreateSchedule(c *gin.Context) {
 	middleware.RespondSuccess(c, http.StatusCreated, sched, nil)
 }
 
-// ImportExcel 批次上傳解析個案新增資料.xlsx。
+// ImportExcel 批次上傳解析個案新增資料 Excel 或 CSV 檔案。
 func (h *CaseHandler) ImportExcel(c *gin.Context) {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
@@ -143,23 +146,64 @@ func (h *CaseHandler) ImportExcel(c *gin.Context) {
 	}
 	defer f.Close()
 
-	preview, err := h.importService.ParseCasesFromExcel(f)
+	preview, err := h.importService.ParseCases(f, fileHeader.Filename)
 	if err != nil {
 		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
+		return
+	}
+
+	// 依 dryRun 參數區分預覽或正式寫入
+	dryRun := c.DefaultQuery("dryRun", "true")
+	if dryRun == "false" {
+		actorID := middleware.GetActorID(c)
+		actorRole := middleware.GetActorRole(c)
+		result, err := h.importService.CommitCases(
+			c.Request.Context(), preview, actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
+		)
+		if err != nil {
+			middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "匯入個案寫入失敗", nil)
+			return
+		}
+		middleware.RespondSuccess(c, http.StatusOK, result, nil)
 		return
 	}
 
 	middleware.RespondSuccess(c, http.StatusOK, preview, nil)
 }
 
-// DownloadTemplate 下載個案批次匯入 CSV 範本。
+// DownloadTemplate 下載個案批次匯入範本 (支援 .xlsx 與 .csv)。
 func (h *CaseHandler) DownloadTemplate(c *gin.Context) {
-	csvContent := "\uFEFF個案姓名*,身分證字號*,申報地區*(苗栗/新竹),住家地址*,開始申報日*(YYYY-MM-DD),服務類別*(1:補助/2:自費),服務使用類型*(1:社區長照/2:社區據點/3:輔具中心/4:身障日照),所屬據點*,每週搭乘日*(如 1,2,3,4,5),趟數型態*(1:單趟/2:來回/4:四趟),去程時間(HH:mm),回程時間(HH:mm),申報單價(元),單趟里程(公里),服務時長(分鐘)\r\n" +
-		"張曾阿妹,A202559750,苗栗,苗栗縣竹南鎮大營路123號,2026-07-01,1,2,竹南日照據點,\"1,2,3,4,5\",2,09:00,16:00,115,5.0,10\r\n" +
-		"李國盛,J123458899,新竹,新竹縣竹北市文興路一段200號,2026-07-01,2,1,竹北日照中心,\"1,3,5\",2,09:30,15:30,200,8.0,20\r\n"
+	format := strings.ToLower(c.DefaultQuery("format", "xlsx"))
 
-	c.Header("Content-Disposition", "attachment; filename=\"個案批次匯入範本.csv\"")
-	c.Data(http.StatusOK, "text/csv; charset=utf-8", []byte(csvContent))
+	if format == "csv" {
+		csvContent := service.GenerateCaseImportTemplateCSV()
+		fileName := "個案批次匯入範本.csv"
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"case_template.csv\"; filename*=UTF-8''%s", url.PathEscape(fileName)))
+		c.Data(http.StatusOK, "text/csv; charset=utf-8", []byte(csvContent))
+		return
+	}
+
+	excelBytes, err := service.GenerateCaseImportTemplateExcel()
+	if err != nil {
+		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "產生 Excel 範本失敗", nil)
+		return
+	}
+
+	fileName := "個案批次匯入範本.xlsx"
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"case_template.xlsx\"; filename*=UTF-8''%s", url.PathEscape(fileName)))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
+}
+
+// ExportProfileWorkbook 下載與個案彙整表相同格式的主檔資料。
+func (h *CaseHandler) ExportProfileWorkbook(c *gin.Context) {
+	excelBytes, err := h.masterService.GenerateCaseProfileWorkbook(c.Request.Context())
+	if err != nil {
+		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "產生個案主檔 Excel 失敗", nil)
+		return
+	}
+	fileName := "個案資料彙整.xlsx"
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"case_profile.xlsx\"; filename*=UTF-8''%s", url.PathEscape(fileName)))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
 }
 
 // Get 取得單筆個案主檔明細。
@@ -196,15 +240,15 @@ func (h *CaseHandler) Update(c *gin.Context) {
 	}
 
 	var req struct {
-		Name             *string    `json:"name"`
-		HomeAddress      *string    `json:"homeAddress"`
-		Region           *string    `json:"region"`
-		LTCLevel         *string    `json:"ltcLevel"`
-		ServiceCategory  *int       `json:"serviceCategory"`
-		ServiceUsageType *int       `json:"serviceUsageType"`
-		ClaimStartDate   *string    `json:"claimStartDate"`
-		ClaimEndDate     *string    `json:"claimEndDate"`
-		Status           *string    `json:"status"`
+		Name             *string `json:"name"`
+		HomeAddress      *string `json:"homeAddress"`
+		Region           *string `json:"region"`
+		LTCLevel         *string `json:"ltcLevel"`
+		ServiceCategory  *int    `json:"serviceCategory"`
+		ServiceUsageType *int    `json:"serviceUsageType"`
+		ClaimStartDate   *string `json:"claimStartDate"`
+		ClaimEndDate     *string `json:"claimEndDate"`
+		Status           *string `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, err.Error(), nil)
@@ -307,4 +351,3 @@ func (h *CaseHandler) SaveSchedule(c *gin.Context) {
 
 	middleware.RespondSuccess(c, http.StatusOK, sched, nil)
 }
-

@@ -25,7 +25,7 @@ func (r *HolidayRepository) List(ctx context.Context, startDate, endDate time.Ti
 	}
 
 	query := `
-		SELECT holiday_date, name, region, source, created_at
+		SELECT holiday_date, name, region, source, is_day_off, created_at
 		FROM holidays
 		WHERE holiday_date >= $1 AND holiday_date <= $2
 		  AND ($3 = '' OR region IS NULL OR region = $3)
@@ -40,7 +40,7 @@ func (r *HolidayRepository) List(ctx context.Context, startDate, endDate time.Ti
 	var holidays []HolidayEntity
 	for rows.Next() {
 		var h HolidayEntity
-		if err := rows.Scan(&h.HolidayDate, &h.Name, &h.Region, &h.Source, &h.CreatedAt); err != nil {
+		if err := rows.Scan(&h.HolidayDate, &h.Name, &h.Region, &h.Source, &h.IsDayOff, &h.CreatedAt); err != nil {
 			return nil, err
 		}
 		holidays = append(holidays, h)
@@ -64,7 +64,9 @@ func (r *HolidayRepository) GetHolidayMap(ctx context.Context, year, month int, 
 	}
 
 	for _, h := range holidays {
-		result[h.HolidayDate.Format("2006-01-02")] = true
+		if h.IsDayOff {
+			result[h.HolidayDate.Format("2006-01-02")] = true
+		}
 	}
 	return result, nil
 }
@@ -76,13 +78,13 @@ func (r *HolidayRepository) Upsert(ctx context.Context, h *HolidayEntity) error 
 	}
 
 	query := `
-		INSERT INTO holidays (holiday_date, name, region, source)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO holidays (holiday_date, name, region, source, is_day_off)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (holiday_date) DO UPDATE
-		SET name = EXCLUDED.name, region = EXCLUDED.region, source = EXCLUDED.source
+		SET name = EXCLUDED.name, region = EXCLUDED.region, source = EXCLUDED.source, is_day_off = EXCLUDED.is_day_off
 		RETURNING created_at
 	`
-	return r.db.QueryRow(ctx, query, h.HolidayDate, h.Name, h.Region, h.Source).Scan(&h.CreatedAt)
+	return r.db.QueryRow(ctx, query, h.HolidayDate, h.Name, h.Region, h.Source, h.IsDayOff).Scan(&h.CreatedAt)
 }
 
 // BatchUpsert 批次匯入國定假日。
@@ -98,14 +100,15 @@ func (r *HolidayRepository) BatchUpsert(ctx context.Context, holidays []HolidayE
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO holidays (holiday_date, name, region, source)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO holidays (holiday_date, name, region, source, is_day_off)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (holiday_date) DO UPDATE
-		SET name = EXCLUDED.name, region = EXCLUDED.region, source = EXCLUDED.source
+		SET name = EXCLUDED.name, region = EXCLUDED.region, source = EXCLUDED.source, is_day_off = EXCLUDED.is_day_off
+		WHERE holidays.source <> 'manual'
 	`
 
 	for _, h := range holidays {
-		if _, err := tx.Exec(ctx, query, h.HolidayDate, h.Name, h.Region, h.Source); err != nil {
+		if _, err := tx.Exec(ctx, query, h.HolidayDate, h.Name, h.Region, h.Source, h.IsDayOff); err != nil {
 			return fmt.Errorf("failed to upsert holiday %s: %w", h.HolidayDate.Format("2006-01-02"), err)
 		}
 	}

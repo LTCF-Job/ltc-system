@@ -1,0 +1,4 @@
+interface:
+  display_name: "LTC Dashboard Visual Language"
+  short_description: "Apply the calm operations dashboard visual system"
+  default_prompt: "Apply the LTC dashboard visual language to this Vue page while preserving existing architecture and behavior."

@@ -48,17 +48,17 @@
           </el-descriptions>
 
           <el-row :gutter="20">
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="個案姓名" prop="name">
                 <el-input v-model="editForm.name" />
               </el-form-item>
             </el-col>
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="聯絡電話" prop="phone">
                 <el-input v-model="editForm.phone" placeholder="如：0912345678" />
               </el-form-item>
             </el-col>
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="申報地區" prop="region">
                 <el-select v-model="editForm.region" filterable style="width: 100%">
                   <el-option
@@ -70,7 +70,7 @@
                 </el-select>
               </el-form-item>
             </el-col>
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="個案狀態" prop="status">
                 <el-select v-model="editForm.status" style="width: 100%">
                   <el-option value="active" label="在案" />
@@ -90,7 +90,7 @@
           </el-row>
 
           <el-row :gutter="20">
-            <el-col :span="12">
+            <el-col :xs="24" :lg="12">
               <el-form-item label="服務類別" prop="serviceCategory">
                 <el-radio-group v-model="editForm.serviceCategory">
                   <el-radio :value="1">1. 補助</el-radio>
@@ -98,7 +98,7 @@
                 </el-radio-group>
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :xs="24" :lg="12">
               <el-form-item label="服務使用類型" prop="serviceUsageType">
                 <el-select v-model="editForm.serviceUsageType" style="width: 100%">
                   <el-option :value="1" label="1. 社區式長照機構" />
@@ -111,7 +111,7 @@
           </el-row>
 
           <el-row :gutter="20">
-            <el-col :span="12">
+            <el-col :xs="24" :lg="12">
               <el-form-item label="開始申報日" prop="claimStartDate">
                 <el-date-picker
                   v-model="editForm.claimStartDate"
@@ -121,7 +121,7 @@
                 />
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :xs="24" :lg="12">
               <el-form-item label="結束申報日">
                 <el-date-picker
                   v-model="editForm.claimEndDate"
