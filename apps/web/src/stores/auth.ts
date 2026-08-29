@@ -54,12 +54,13 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem(USER_KEY, JSON.stringify(newUser))
   }
 
-  function logout() {
+  async function logout() {
     token.value = null
     user.value = null
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
-    clearDemoModeOnLogout()
+    // 必須等待展示模式清理完成，避免緊接著的下一次登入與 mock 停用/重置互相競態
+    await clearDemoModeOnLogout()
   }
 
   // 檢查當前角色是否滿足基本身分限制

@@ -239,5 +239,30 @@ export const mastersHandlers = [
       }
     ]
     return HttpResponse.json({ success: true })
+  }),
+
+  // 主檔批次匯入（車輛／司機／班表），預覽契約比照 /cases/import
+  http.post('/api/v1/masters/import', ({ request }) => {
+    const url = new URL(request.url)
+    const isDryRun = url.searchParams.get('dryRun') === 'true'
+
+    if (isDryRun) {
+      return HttpResponse.json({
+        totalRows: 6,
+        validRows: 5,
+        errorRows: 1,
+        warningRows: 0,
+        previewRows: [
+          { rowIndex: 2, name: '林小明', code: 'DRV004', vehiclePlateNo: 'BZG-7915', phone: '0912345678' },
+          { rowIndex: 3, name: '陳大同', code: 'DRV005', vehiclePlateNo: 'BZH-2201', phone: '0923456789' }
+        ],
+        errors: [
+          { rowIndex: 6, caseName: '未指定車牌', field: '車牌號碼', message: '車牌號碼未填寫或格式錯誤' }
+        ],
+        warnings: []
+      })
+    }
+
+    return HttpResponse.json({ count: 5 })
   })
 ]

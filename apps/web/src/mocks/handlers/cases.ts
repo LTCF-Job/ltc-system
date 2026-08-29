@@ -69,6 +69,16 @@ export const casesHandlers = [
     })
   }),
 
+  http.get('/api/v1/cases/export', () => {
+    const excelBlob = createMockExcelBlob()
+    return new HttpResponse(excelBlob, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': 'attachment; filename="case_profiles.xlsx"'
+      }
+    })
+  }),
+
   http.get('/api/v1/cases/:id', ({ params }) => {
     const c = mockCases.find((item) => item.id === params.id)
     if (!c) return new HttpResponse(null, { status: 404 })

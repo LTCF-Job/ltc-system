@@ -13,14 +13,15 @@ export function isDemoCredentials(email: string, password: string): boolean {
   return email === DEMO_ACCOUNT && password === DEMO_PASSWORD
 }
 
-function isDemoModeFlagged(): boolean {
+export function isDemoModeActive(): boolean {
   return localStorage.getItem(DEMO_MODE_KEY) === 'true'
 }
 
 async function ensureWorkerStarted() {
   if (workerStarted) return
   const { worker } = await import('@/mocks/browser')
-  await worker.start({ onUnhandledRequest: 'bypass' })
+  const { onUnhandledRequest } = await import('@/mocks/onUnhandledRequest')
+  await worker.start({ onUnhandledRequest })
   workerStarted = true
 }
 
@@ -45,13 +46,19 @@ export async function exitDemoModeIfActive() {
 
 // App 啟動時呼叫：重新整理頁面後，若上次是展示模式且尚未登出，還原 mock 攔截狀態
 export async function restoreDemoModeOnBoot() {
-  if (isDemoModeFlagged()) {
+  if (isDemoModeActive()) {
     await ensureWorkerStarted()
   }
 }
 
-// 登出時呼叫：停用 mock 攔截，避免下一次用真實帳號登入時仍攔到假資料
-export function clearDemoModeOnLogout() {
-  void ensureWorkerStopped()
+// 登出時呼叫：停用 mock 攔截並清空展示資料，確保下一次 demo/demo 登入拿到乾淨的初始資料集
+// 必須等待 worker 停止與資料重置完成才能返回，避免與緊接著的下一次登入互相競態
+export async function clearDemoModeOnLogout() {
+  const wasActive = isDemoModeActive()
+  await ensureWorkerStopped()
   localStorage.removeItem(DEMO_MODE_KEY)
+  if (wasActive) {
+    const { resetDemoData } = await import('@/mocks/data/demoStore')
+    resetDemoData()
+  }
 }

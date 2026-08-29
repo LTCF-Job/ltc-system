@@ -13,7 +13,6 @@ declare module 'vue' {
   export interface GlobalComponents {
     ChangePasswordDialog: typeof import('./components/ChangePasswordDialog.vue')['default']
     DataTablePage: typeof import('./components/DataTablePage.vue')['default']
-    DemoGuideDrawer: typeof import('./components/DemoGuideDrawer.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']

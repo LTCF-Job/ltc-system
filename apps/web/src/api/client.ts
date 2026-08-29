@@ -51,7 +51,7 @@ apiClient.interceptors.response.use(
 
     if (status === 401) {
       const wasAuthenticated = authStore.isAuthenticated
-      authStore.logout()
+      await authStore.logout()
       if (router.currentRoute.value.path !== '/login') {
         router.push('/login')
         if (wasAuthenticated) {

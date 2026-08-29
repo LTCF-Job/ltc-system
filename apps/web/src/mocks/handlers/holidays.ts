@@ -787,7 +787,7 @@ const governmentHolidayCSV = `date,year,name,isholiday,holidaycategory,descripti
 20271226,2027,,是,星期六、星期日,
 20271231,2027,,是,補假,`
 
-const mockHolidays: Array<{ holidayDate: string; name: string; source: string; isDayOff: boolean }> = []
+export const mockHolidays: Array<{ holidayDate: string; name: string; source: string; isDayOff: boolean }> = []
 
 function parseGovernmentHolidayCSV(year: number) {
   const [, ...rows] = governmentHolidayCSV.split(/\r?\n/)

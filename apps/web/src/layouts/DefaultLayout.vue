@@ -179,19 +179,6 @@
         </div>
 
         <div class="header-right">
-          <!-- Demo 控制中心按鈕 -->
-          <el-button
-            type="warning"
-            size="small"
-            round
-            plain
-            class="demo-center-btn"
-            @click="openDemoGuide"
-          >
-            <el-icon><Guide /></el-icon>
-            ✨ Demo 控制中心
-          </el-button>
-
           <el-dropdown trigger="click" @command="handleCommand">
             <div class="user-dropdown-link">
               <div class="avatar-box">
@@ -227,9 +214,6 @@
       </el-main>
     </el-container>
 
-    <!-- Demo 展示導覽抽屜 -->
-    <DemoGuideDrawer ref="demoGuideRef" />
-
     <!-- 修改個人密碼彈窗 -->
     <ChangePasswordDialog ref="changePasswordDialogRef" />
   </el-container>
@@ -259,13 +243,11 @@ import {
   DataAnalysis,
   List,
   Setting,
-  Guide,
   MapLocation,
   Lock
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'
-import DemoGuideDrawer from '@/components/DemoGuideDrawer.vue'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 
 const route = useRoute()
@@ -275,7 +257,6 @@ const authStore = useAuthStore()
 const isCollapse = ref(false)
 const isMobile = ref(false)
 const isMobileMenuOpen = ref(false)
-const demoGuideRef = ref<InstanceType<typeof DemoGuideDrawer>>()
 const changePasswordDialogRef = ref<InstanceType<typeof ChangePasswordDialog>>()
 
 const menuLabels = [
@@ -353,13 +334,10 @@ const currentRouteTitle = computed(() => {
   return (route.meta.title as string) || ''
 })
 
-function openDemoGuide() {
-  demoGuideRef.value?.open()
-}
-
-function handleCommand(cmd: string) {
+async function handleCommand(cmd: string) {
   if (cmd === 'logout') {
-    authStore.logout()
+    // 等待展示模式清理（停用 mock、重置展示資料）完成後再導頁，避免與下一次登入競態
+    await authStore.logout()
     router.push('/login')
   } else if (cmd === 'change-password') {
     changePasswordDialogRef.value?.open()
@@ -518,21 +496,6 @@ function handleCommand(cmd: string) {
     align-items: center;
     gap: 14px;
 
-    .demo-center-btn {
-      font-weight: 600;
-      border-color: #f8d6a6;
-      background-color: var(--app-orange-light);
-      color: var(--app-orange-dark);
-
-      &:hover {
-        background-color: #ffe7d3;
-        box-shadow: 0 2px 8px rgba(47, 111, 237, 0.14);
-        transform: translateY(-1px);
-      }
-
-      &:active { transform: translateY(0) scale(0.98); }
-    }
-
     .user-dropdown-link {
       display: flex;
       align-items: center;
@@ -632,14 +595,13 @@ function handleCommand(cmd: string) {
   .aside-menu.is-mobile.is-mobile-open { transform: translateX(0); }
   .layout-header { padding-left: 12px; }
   .layout-header .header-right { gap: 8px; }
-  .layout-header .demo-center-btn { padding: 8px; }
   .layout-header .user-name, .layout-header .dropdown-arrow { display: none; }
   .layout-main { padding: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .aside-menu, .el-menu-vertical :deep(.el-menu-item), .el-menu-vertical :deep(.el-sub-menu__title),
-  .layout-header .demo-center-btn, .user-dropdown-link, .page-enter-active, .page-leave-active, .skip-link { transition: none !important; }
+  .user-dropdown-link, .page-enter-active, .page-leave-active, .skip-link { transition: none !important; }
   .el-menu-item.is-active::before { animation: none !important; }
 }
 </style>
