@@ -3,6 +3,8 @@ import { mockHolidays } from '../handlers/holidays'
 import { mockRideOverrides } from '../handlers/rides'
 
 const STORAGE_KEY = 'ltc_demo_data'
+// mockData.ts 內容有結構性變動（新增/調整資料集鍵值、資料形狀）時遞增，讓舊版持久化快照失效，避免蓋掉新版展示資料
+const DEMO_DATA_VERSION = 2
 
 // mockData.ts 匯出的資料集（陣列與物件皆有）＋ handler 內獨立維護的展示狀態，共同構成展示模式的可持久化資料
 const MOCK_DATA_KEYS = Object.keys(mockData) as (keyof typeof mockData)[]
@@ -43,19 +45,24 @@ export function restoreDemoData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
-      applySnapshot(JSON.parse(raw))
-      return
+      const parsed = JSON.parse(raw)
+      // 快照版本與目前 mockData 結構不符（改版新增的資料集鍵值/形狀）時視為過期，改用最新展示資料
+      if (parsed.version === DEMO_DATA_VERSION) {
+        applySnapshot(parsed.data)
+        return
+      }
     }
   } catch {
     // localStorage 內容毀損時退回初始展示資料，避免整站因壞資料無法啟動
   }
+  localStorage.removeItem(STORAGE_KEY)
   applySnapshot(initialSnapshot)
 }
 
 // 展示模式下每次寫入類請求完成後呼叫：落地目前狀態，讓重新整理不遺失
 export function persistDemoData() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot()))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: DEMO_DATA_VERSION, data: snapshot() }))
   } catch {
     // storage 滿版或被封鎖時展示模式仍可運作，只是重新整理會遺失本次寫入
   }

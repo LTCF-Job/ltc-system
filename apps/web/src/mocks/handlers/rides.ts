@@ -457,6 +457,85 @@ export const ridesHandlers = [
     })
   }),
 
+  // 具體路徑須排在 /api/v1/rides/:id 之前，否則 issues/missing 會被當成 :id 參數攔截，回傳單筆假資料而非清單
+  http.get('/api/v1/rides/issues', ({ request }) => {
+    const url = new URL(request.url)
+    const type = url.searchParams.get('issueType') || 'conflict'
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
+    let conflictList = mockIssueRides
+      .filter((item) => item.issueType === 'conflict')
+      .filter((item) => {
+        const override = findRideOverride(item.caseId, item.serviceDate, item.legSeq, item.id)
+        return !override || override.hasConflict !== false
+      })
+
+    let unreportedList = mockIssueRides
+      .filter((item) => item.issueType === 'unreported')
+      .filter((item) => {
+        const override = findRideOverride(item.caseId, item.serviceDate, item.legSeq, item.id)
+        return !override || override.effectiveStatus === 'unreported'
+      })
+
+    let errorList = mockIssueRides.filter((item) => item.issueType === 'import_error')
+
+    if (q) {
+      const matchItem = (item: any) =>
+        item.caseName.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        (item.vehicles && item.vehicles.some((v: string) => v.toLowerCase().includes(q)))
+
+      conflictList = conflictList.filter(matchItem)
+      unreportedList = unreportedList.filter(matchItem)
+      errorList = errorList.filter(matchItem)
+    }
+
+    if (type === 'conflict') {
+      return HttpResponse.json({
+        data: conflictList,
+        meta: { total: conflictList.length }
+      })
+    } else if (type === 'unreported') {
+      return HttpResponse.json({
+        data: unreportedList,
+        meta: { total: unreportedList.length }
+      })
+    }
+
+    return HttpResponse.json({
+      data: errorList,
+      meta: { total: errorList.length }
+    })
+  }),
+
+  http.get('/api/v1/rides/missing', ({ request }) => {
+    const url = new URL(request.url)
+    const vehicleId = url.searchParams.get('vehicleId')
+    const q = url.searchParams.get('q')?.trim().toLowerCase()
+
+    let list = [...mockMissingRides]
+    if (vehicleId) {
+      list = list.filter((r) => r.vehicleId === vehicleId)
+    }
+    if (q) {
+      list = list.filter(
+        (r) =>
+          r.caseName.toLowerCase().includes(q) ||
+          (r.vehicleName && r.vehicleName.toLowerCase().includes(q)) ||
+          (r.driverName && r.driverName.toLowerCase().includes(q))
+      )
+    }
+    return HttpResponse.json({
+      data: list,
+      meta: {
+        page: 1,
+        pageSize: 20,
+        total: list.length,
+        totalPages: 1
+      }
+    })
+  }),
+
   http.get('/api/v1/rides/:id', ({ params }) => {
     const rideId = params.id as string
     const override = mockRideOverrides[rideId]
@@ -684,83 +763,5 @@ export const ridesHandlers = [
     })
 
     return HttpResponse.json(override)
-  }),
-
-  http.get('/api/v1/rides/issues', ({ request }) => {
-    const url = new URL(request.url)
-    const type = url.searchParams.get('issueType') || 'conflict'
-    const q = url.searchParams.get('q')?.trim().toLowerCase()
-
-    let conflictList = mockIssueRides
-      .filter((item) => item.issueType === 'conflict')
-      .filter((item) => {
-        const override = findRideOverride(item.caseId, item.serviceDate, item.legSeq, item.id)
-        return !override || override.hasConflict !== false
-      })
-
-    let unreportedList = mockIssueRides
-      .filter((item) => item.issueType === 'unreported')
-      .filter((item) => {
-        const override = findRideOverride(item.caseId, item.serviceDate, item.legSeq, item.id)
-        return !override || override.effectiveStatus === 'unreported'
-      })
-
-    let errorList = mockIssueRides.filter((item) => item.issueType === 'import_error')
-
-    if (q) {
-      const matchItem = (item: any) =>
-        item.caseName.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q) ||
-        (item.vehicles && item.vehicles.some((v: string) => v.toLowerCase().includes(q)))
-
-      conflictList = conflictList.filter(matchItem)
-      unreportedList = unreportedList.filter(matchItem)
-      errorList = errorList.filter(matchItem)
-    }
-
-    if (type === 'conflict') {
-      return HttpResponse.json({
-        data: conflictList,
-        meta: { total: conflictList.length }
-      })
-    } else if (type === 'unreported') {
-      return HttpResponse.json({
-        data: unreportedList,
-        meta: { total: unreportedList.length }
-      })
-    }
-
-    return HttpResponse.json({
-      data: errorList,
-      meta: { total: errorList.length }
-    })
-  }),
-
-  http.get('/api/v1/rides/missing', ({ request }) => {
-    const url = new URL(request.url)
-    const vehicleId = url.searchParams.get('vehicleId')
-    const q = url.searchParams.get('q')?.trim().toLowerCase()
-
-    let list = [...mockMissingRides]
-    if (vehicleId) {
-      list = list.filter((r) => r.vehicleId === vehicleId)
-    }
-    if (q) {
-      list = list.filter(
-        (r) =>
-          r.caseName.toLowerCase().includes(q) ||
-          (r.vehicleName && r.vehicleName.toLowerCase().includes(q)) ||
-          (r.driverName && r.driverName.toLowerCase().includes(q))
-      )
-    }
-    return HttpResponse.json({
-      data: list,
-      meta: {
-        page: 1,
-        pageSize: 20,
-        total: list.length,
-        totalPages: 1
-      }
-    })
   })
 ]
