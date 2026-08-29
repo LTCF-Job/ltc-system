@@ -96,7 +96,7 @@ Google 表單回填走另一條路：`POST /api/v1/ingest/google-form`，不走 
 { "error": { "code": "VALIDATION_FAILED", "message": "...", "details": [{"field":"...", "reason":"..."}] } }
 ```
 
-錯誤碼是 `httpx` 的常數：`VALIDATION_FAILED`、`UNAUTHENTICATED`、`FORBIDDEN`、`NOT_FOUND`、`DUPLICATE_NATIONAL_ID`、`ASSIGNMENT_OVERLAP`、`EXPORT_IN_PROGRESS`、`PRECHECK_FAILED`、`MAPPING_REQUIRED`、`INGEST_TOKEN_INVALID`、`INTERNAL_ERROR`。新增錯誤情境優先看有沒有現成碼可以用，真的沒有再加新常數，不要在 handler 裡面手打字串。
+錯誤碼是 `httpx` 的常數：`VALIDATION_FAILED`、`UNAUTHENTICATED`、`FORBIDDEN`、`NOT_FOUND`、`DUPLICATE_NATIONAL_ID`、`ASSIGNMENT_OVERLAP`、`EXPORT_IN_PROGRESS`、`PRECHECK_FAILED`、`MAPPING_REQUIRED`、`INGEST_TOKEN_INVALID`、`FORM_SOURCE_FAILED`、`FORM_SYNC_FAILED`、`FORM_MAPPING_FAILED`、`INTERNAL_ERROR`。新增錯誤情境優先看有沒有現成碼可以用，真的沒有再加新常數，不要在 handler 裡面手打字串。
 
 ## 設定（環境變數）
 

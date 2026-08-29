@@ -1,3 +1,8 @@
+---
+doc_type: api
+covers: ["apps/api/cmd/server/routes.go"]
+---
+
 # 後端 API 路由總覽
 
 Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/health`（不驗證）跟 `/api/v1/ingest/google-form`（走 `X-Ingest-Token`）。角色欄是 `auth.RequireRoles(...)` 白名單，實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
@@ -29,6 +34,8 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/cases/schedules` | staff, admin | 批次建立排班 |
 | POST | `/cases/import` | staff, admin | 批次匯入個案 Excel |
 | POST | `/masters/import` | staff, admin | 同上，走另一條相容路徑（歷史因素，實際都打 `caseH.ImportExcel`） |
+| GET | `/cases/export` | viewer, staff, admin | 匯出個案彙整表 |
+| PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定 |
 
 ## 據點主檔 `siteH`
 
@@ -66,6 +73,8 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/forms/columns` | viewer, staff, admin | 表單欄位清單與對應狀態 |
 | PATCH | `/forms/columns/:id/mapping` | staff, admin | 設定單一欄位對應到哪個個案的哪一趟 |
 | POST | `/forms/columns/batch-mapping` | staff, admin | 批次設定欄位對應 |
+| GET | `/forms/google-drive-files` | staff, admin | 列出 Google Drive 可串接的表單檔案 |
+| POST | `/forms/inspect-sheet` | staff, admin | 讀取指定 Google Sheet 的欄名（串接前預覽） |
 
 ## 搭乘月曆、異常與更正 `rideH` / `taskH`
 

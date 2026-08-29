@@ -1,3 +1,8 @@
+---
+doc_type: module
+covers: ["apps/web/src/router/index.ts"]
+---
+
 # 前端頁面總覽
 
 依 `apps/web/src/router/index.ts` 的實際路由整理。`允許角色` 欄是路由 `meta.roles`，**只是標註用**，實際權限判斷是另一套模組權限表，見 [frontend-permission-logic.md](frontend-permission-logic.md)。`API` 欄對應到 [backend-api-reference.md](backend-api-reference.md) 的路由分組，方便追一個功能的前後端兩端程式碼。「全部」＝`['admin', 'staff', 'dispatcher', 'driver', 'viewer']`。
@@ -25,6 +30,7 @@
 | `/settings/users` | `views/settings/UserManagementView.vue` | admin only | `users/*`（⚠️ 後端未實作，見 [backend-api-reference.md](backend-api-reference.md)） |
 | `/settings/roles` | `views/settings/RoleManagementView.vue` | admin only | `roles/*`（⚠️ 後端未實作，見 [backend-api-reference.md](backend-api-reference.md)） |
 | `/settings/notifications` | `views/settings/NotificationSettingsView.vue` | admin/staff/dispatcher/viewer | `settings/notification-recipients*`、`notifications/logs` |
+| `/settings/holidays` | `views/settings/HolidayCalendarView.vue` | admin/staff/dispatcher/viewer | `holidays*` |
 | `/exports` | `views/exports/ExportView.vue` | admin/staff/dispatcher | `exports/precheck`、`exports/*` |
 
 ## 共用元件（非路由）

@@ -7,8 +7,10 @@
 | 動作 | 結果 |
 |---|---|
 | Pull Request 到 `develop` 或 `main` | 執行 API `go vet`、`go test -race`，以及前端 type-check、build |
-| Push 到 `develop` | 執行 test／CI 驗證，不部署正式環境 |
-| Push 到 `main` | CI 成功後，先執行 Cloud Run migration job 更新 Supabase 並部署 API，同時透過 Vercel CLI 部署前端 |
+| Push 到 `develop` | CI 通過後，`deploy-api.yml`／`deploy-web.yml` 一樣會觸發部署，只是 gate 在 GitHub Environment `develop`（Vercel 端對應 `preview` 部署），**不是「不部署」** |
+| Push 到 `main` | CI 成功後，gate 在 GitHub Environment `production`：先執行 Cloud Run migration job 更新 Supabase 並部署 API，同時透過 Vercel CLI 部署前端（Vercel 端為 `production` 部署） |
+
+`deploy-api.yml`／`deploy-web.yml` 都是用 `workflow_run` 監聽 CI 完成，再依觸發分支選擇 `environment: production` 或 `environment: develop`（見兩份 workflow 的 `if:`／`environment:` 設定），兩個分支都會實際跑一次部署，差別只在 GitHub Environment 與其對應的 secrets／variables。**目前 `GCP_PROJECT_ID`／`API_SERVICE`／`MIGRATION_JOB` 等變數只在下方「GitHub 設定」以 repository 層級設定**，若沒有另外在 `develop` 這個 GitHub Environment 覆寫成不同的專案或服務名稱，develop 分支的部署會打到跟 production 完全相同的 Cloud Run service／migration job——等於 develop 分支的每次 push 都會直接覆蓋正式環境。要讓 develop 真的只影響測試環境，必須在 GitHub repository 的 **Settings → Environments** 分別建立 `production`／`develop` 兩個 Environment，並在 `develop` Environment 覆寫指向測試用的 GCP 專案／Cloud Run service。
 
 目前資料庫 migration 使用 `apps/api/migrations/*.up.sql`，由 `apps/api/cmd/migrate` 執行。不要同時使用 Supabase CLI 的 `supabase/migrations`，避免兩套 migration history 互相衝突。
 

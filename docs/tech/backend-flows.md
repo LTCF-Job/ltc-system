@@ -81,6 +81,10 @@ GET /exports/:id 輪詢狀態拿下載連結
 
 `SendNotification` 依 topic（例如未回報告警、月底提醒）撈出啟用中的收件人清單逐一寄信，寄送介面是 `EmailSender`，正式環境用 Resend（`RESEND_API_KEY`），本機沒設定時退化成 `LogEmailSender`（只印 log，不真的寄信）。收件人管理走 `settings/notification-recipients` 系列端點。
 
-## 7. 稽核留痕（`middleware.RecordAuditLog`）
+## 7. 表單來源設定（Google Drive 檔案列表與 Sheet 欄名預覽）
+
+串新表單前，`GET /forms/google-drive-files` 列出 Google Drive 上的候選試算表，`POST /forms/inspect-sheet` 預覽指定 Sheet 的欄名，兩支都呼叫 `FormService` 底層的 Google API client（`internal/modules/formsync/app/form_service.go`）。**沒有設定 Google 服務帳號憑證（`GOOGLE_SA_JSON`）時，這兩支會直接回 `FORM_SOURCE_FAILED` 錯誤，不會回傳假資料**——這是刻意修正過的行為，避免本機或測試環境誤以為串接成功。
+
+## 8. 稽核留痕（`middleware.RecordAuditLog`）
 
 凡是會動到個資或關鍵狀態的操作（新增、修改、reveal PII、更正搭乘紀錄、裁決衝突、匯出、設定變更、匯入）都會呼叫 `RecordAuditLog` 寫一筆 `audit_log`，記錄操作者、角色、動作類型、異動前後的資料快照。`GET /audit` 只有 `admin` 能查，是唯一的稽核紀錄查詢入口。

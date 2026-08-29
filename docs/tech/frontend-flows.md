@@ -29,6 +29,8 @@
 
 沒設定對應（`mapping_status != mapped`）的欄位，Webhook 收到答案也不會處理成搭乘紀錄。
 
+串新表單前，`FormListView` 可以先用 `GET /forms/google-drive-files` 選 Google Drive 上的候選檔案、`POST /forms/inspect-sheet` 預覽欄名（見 `apps/web/src/api/forms.ts`）。**後端沒有設定 Google 服務帳號憑證時，這兩支呼叫會回 `FORM_SOURCE_FAILED` 錯誤**，畫面要把這個錯誤原樣顯示給使用者（表示尚未完成 Google 串接設定），不要當成一般的「查無資料」處理。
+
 ## 政府申報匯出
 
 `ExportView` 的操作順序是強制的：
