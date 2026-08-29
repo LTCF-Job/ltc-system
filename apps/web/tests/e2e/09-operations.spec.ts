@@ -39,6 +39,7 @@ test.describe('09. 車輛保養與出勤油資 (Operations: Maintenance & Attend
     // 驗證出勤彙總指標標籤包含 O / 假別文字與國定假日
     await expect(page.locator('.attendance-summary-pills')).toContainText('出勤 (O)')
     await expect(page.locator('.attendance-summary-pills')).toContainText('事假 (事)')
+    await expect(page.locator('.attendance-summary-pills')).toContainText('漏報缺勤 (缺)')
     await expect(page.locator('.attendance-summary-pills')).toContainText('國定假日')
 
     // 驗證出勤矩陣表格包含 O 與 假別文字

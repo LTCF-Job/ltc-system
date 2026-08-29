@@ -1895,7 +1895,8 @@ export const mockAttendanceReport: MonthAttendanceReportDTO = {
       workDays: 21,
       leaveDays: 1,
       sickDays: 0,
-      offDays: 9
+      offDays: 9,
+      absentDays: 0
     },
     {
       driverId: 'drv_2',
@@ -1911,7 +1912,8 @@ export const mockAttendanceReport: MonthAttendanceReportDTO = {
       workDays: 20,
       leaveDays: 0,
       sickDays: 1,
-      offDays: 10
+      offDays: 10,
+      absentDays: 0
     },
     {
       driverId: 'drv_3',
@@ -1925,7 +1927,8 @@ export const mockAttendanceReport: MonthAttendanceReportDTO = {
       workDays: 22,
       leaveDays: 0,
       sickDays: 0,
-      offDays: 9
+      offDays: 9,
+      absentDays: 0
     },
     {
       driverId: 'drv_4',
@@ -1938,7 +1941,8 @@ export const mockAttendanceReport: MonthAttendanceReportDTO = {
       workDays: 22,
       leaveDays: 0,
       sickDays: 0,
-      offDays: 9
+      offDays: 9,
+      absentDays: 0
     }
   ]
 }

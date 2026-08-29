@@ -74,6 +74,12 @@
                 <span class="val">{{ totalAttendanceStats.off }}</span>
                 <span class="unit">人天</span>
               </div>
+              <div class="summary-pill">
+                <span class="dot dot-absent"></span>
+                <span class="label">漏報缺勤 (缺)</span>
+                <span class="val">{{ totalAttendanceStats.absent }}</span>
+                <span class="unit">人天</span>
+              </div>
               <div class="summary-pill holiday-pill">
                 <span class="dot dot-holiday"></span>
                 <span class="label">國定假日</span>
@@ -112,6 +118,10 @@
                     <span>出 {{ row.workDays }}</span>
                     <span class="summary-divider">/</span>
                     <span>假 {{ row.leaveDays + row.sickDays }}</span>
+                    <template v-if="row.absentDays > 0">
+                      <span class="summary-divider">/</span>
+                      <span class="summary-absent">缺 {{ row.absentDays }}</span>
+                    </template>
                   </div>
                 </template>
               </el-table-column>
@@ -520,13 +530,14 @@ const editStatus = ref<'work' | 'leave' | 'sick' | 'off'>('work')
 const editNote = ref('')
 
 const totalAttendanceStats = computed(() => {
-  const stats = { work: 0, leave: 0, sick: 0, off: 0 }
+  const stats = { work: 0, leave: 0, sick: 0, off: 0, absent: 0 }
   if (!attendanceReport.value) return stats
   for (const d of attendanceReport.value.drivers) {
     stats.work += d.workDays
     stats.leave += d.leaveDays
     stats.sick += d.sickDays
     stats.off += d.offDays
+    stats.absent += d.absentDays
   }
   return stats
 })
@@ -650,6 +661,8 @@ function getStatusDisplay(status?: string): { symbol: string; text: string } {
       return { symbol: '病', text: '病' }
     case 'off':
       return { symbol: '休', text: '休' }
+    case 'absent':
+      return { symbol: '缺', text: '缺' }
     default:
       return { symbol: '-', text: '-' }
   }
@@ -666,6 +679,7 @@ function getCellBgClass(driver: any, day: number): string {
     case 'leave': return `cell-leave ${holidayClass}`.trim()
     case 'sick': return `cell-sick ${holidayClass}`.trim()
     case 'off': return `cell-off ${holidayClass}`.trim()
+    case 'absent': return `cell-absent ${holidayClass}`.trim()
     default: return holidayClass ? 'cell-holiday' : ''
   }
 }
@@ -684,7 +698,8 @@ function getTooltipContent(driver: any, day: number): string {
     work: '正常出勤 (O)',
     leave: '事假 (事)',
     sick: '病假 (病)',
-    off: '休假 (休)'
+    off: '休假 (休)',
+    absent: '應出勤未回報 (缺)'
   }
   let str = `${date} ${holidayInfo}：${map[rec.status] || rec.status}`.trim()
   if (rec.note) {
@@ -702,7 +717,7 @@ function handleCellClick(driver: any, day: number) {
     driverName: driver.driverName,
     date: dateKey
   }
-  editStatus.value = rec?.status || 'work'
+  editStatus.value = rec?.status && rec.status !== 'absent' ? rec.status : 'work'
   editNote.value = rec?.note || ''
   attendanceDialogVisible.value = true
 }
@@ -885,6 +900,9 @@ onMounted(async () => {
         &.dot-off {
           background-color: var(--el-text-color-placeholder);
         }
+        &.dot-absent {
+          background-color: #f97316;
+        }
         &.dot-holiday {
           background-color: #94a3b8;
         }
@@ -961,6 +979,11 @@ onMounted(async () => {
   .summary-divider {
     color: var(--el-text-color-placeholder);
   }
+
+  .summary-absent {
+    color: #c2410c;
+    font-weight: 700;
+  }
 }
 
 .day-cell {
@@ -1007,6 +1030,10 @@ onMounted(async () => {
     &.symbol-off {
       color: #64748b;
     }
+
+    &.symbol-absent {
+      color: #c2410c;
+    }
   }
 
   &.cell-work {
@@ -1029,6 +1056,13 @@ onMounted(async () => {
   &.cell-off {
     background-color: var(--el-fill-color-light);
     color: var(--el-text-color-placeholder);
+  }
+
+  &.cell-absent {
+    background-color: #fff7ed;
+    color: #c2410c;
+    font-weight: 700;
+    border: 1px solid #fb923c;
   }
 
   &.cell-holiday {

@@ -836,7 +836,7 @@ export interface UpdateMaintenanceRequest extends Partial<CreateMaintenanceReque
 // 14. 司機出勤與請假 (Attendance)
 export interface DriverDayAttendanceDTO {
   date: string
-  status: 'work' | 'leave' | 'sick' | 'off'
+  status: 'work' | 'leave' | 'sick' | 'off' | 'absent'
   note?: string
 }
 
@@ -850,6 +850,7 @@ export interface DriverMonthAttendanceDTO {
   leaveDays: number
   sickDays: number
   offDays: number
+  absentDays: number
 }
 
 export interface MonthAttendanceReportDTO {
