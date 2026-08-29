@@ -1,6 +1,6 @@
 # 後端 API 路由總覽
 
-Base path：`/api/v1`，全部要帶 JWT（`middleware.AuthMiddleware`），除了 `/api/health`（不驗證）跟 `/api/v1/ingest/google-form`（走 `X-Ingest-Token`）。角色欄是 `middleware.RequireRoles(...)` 白名單，實作對應 `internal/handler/*.go`。路由表以 `apps/api/cmd/server/main.go` 為唯一事實來源，改路由記得同步更新這份文件。
+Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/health`（不驗證）跟 `/api/v1/ingest/google-form`（走 `X-Ingest-Token`）。角色欄是 `auth.RequireRoles(...)` 白名單，實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
 
 架構背景見 [backend-framework.md](backend-framework.md)，每支端點背後的業務流程見 [backend-flows.md](backend-flows.md)。
 

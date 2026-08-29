@@ -1,20 +1,20 @@
-package handler
+package transport
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/reporting/app"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 // DashboardHandler 處理儀表板圖表與指標請求。
 type DashboardHandler struct {
-	dashboardSvc *service.DashboardService
+	dashboardSvc *app.DashboardService
 }
 
 // NewDashboardHandler 建立 DashboardHandler 實例。
-func NewDashboardHandler(dashboardSvc *service.DashboardService) *DashboardHandler {
+func NewDashboardHandler(dashboardSvc *app.DashboardService) *DashboardHandler {
 	return &DashboardHandler{dashboardSvc: dashboardSvc}
 }
 
@@ -23,11 +23,11 @@ func (h *DashboardHandler) GetMetrics(c *gin.Context) {
 	periodYm := c.Query("month")
 	metrics, err := h.dashboardSvc.GetMetrics(c.Request.Context(), periodYm)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, metrics, nil)
+	httpx.RespondSuccess(c, http.StatusOK, metrics, nil)
 }
 
 // GetStats 取得儀表板統計摘要與近期申報匯出紀錄清單。
@@ -35,6 +35,5 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 	stats := gin.H{
 		"recentExports": []gin.H{},
 	}
-	middleware.RespondSuccess(c, http.StatusOK, stats, nil)
+	httpx.RespondSuccess(c, http.StatusOK, stats, nil)
 }
-

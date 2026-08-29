@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"ltc-system/apps/api/internal/config"
+	"ltc-system/apps/api/internal/platform/config"
 )
 
 var versionPattern = regexp.MustCompile(`^(\d+)_(.+)$`)

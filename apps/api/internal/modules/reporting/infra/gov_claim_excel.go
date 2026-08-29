@@ -1,4 +1,4 @@
-package export
+package infra
 
 import (
 	"bytes"
@@ -8,8 +8,8 @@ import (
 	"ltc-system/apps/api/internal/domain/govform"
 )
 
-// GenerateGovClaimExcel 使用 excelize/v2 產生完全符合政府規範之申報 Excel 檔案位元組。
-func GenerateGovClaimExcel(rows []govform.ClaimRow) ([]byte, error) {
+// RenderGovClaim 使用 excelize/v2 產生完全符合政府規範之申報 Excel 檔案位元組。
+func (ExcelRenderer) RenderGovClaim(rows []govform.ClaimRow) ([]byte, error) {
 	f := excelize.NewFile()
 	defer f.Close()
 

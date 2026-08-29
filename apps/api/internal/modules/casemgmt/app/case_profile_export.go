@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -6,17 +6,16 @@ import (
 	"time"
 
 	"ltc-system/apps/api/internal/domain/crypto"
-	"ltc-system/apps/api/internal/export"
 )
 
 // GenerateCaseProfileWorkbook 匯出與來源工作簿一致的個案彙整欄位。
-func (s *MasterService) GenerateCaseProfileWorkbook(ctx context.Context) ([]byte, error) {
+func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context) ([]byte, error) {
 	cases, _, err := s.caseRepo.List(ctx, "", "", "", 1, 10000)
 	if err != nil {
 		return nil, fmt.Errorf("list case profiles: %w", err)
 	}
 
-	rows := make([]export.CaseProfileRow, 0, len(cases))
+	rows := make([]CaseProfileRow, 0, len(cases))
 	for _, item := range cases {
 		id, err := crypto.Decrypt(item.NationalIDCipher, s.cfg.EncryptionKey)
 		if err != nil {
@@ -33,7 +32,7 @@ func (s *MasterService) GenerateCaseProfileWorkbook(ctx context.Context) ([]byte
 			}
 			return *v
 		}
-		rows = append(rows, export.CaseProfileRow{
+		rows = append(rows, CaseProfileRow{
 			Name:              item.Name,
 			HouseholdType:     value(item.HouseholdType),
 			NationalID:        id,
@@ -50,5 +49,5 @@ func (s *MasterService) GenerateCaseProfileWorkbook(ctx context.Context) ([]byte
 		})
 	}
 
-	return export.GenerateCaseProfileWorkbook(rows)
+	return s.renderer.RenderCaseProfileWorkbook(rows)
 }

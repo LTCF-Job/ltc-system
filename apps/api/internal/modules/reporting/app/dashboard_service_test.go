@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"ltc-system/apps/api/internal/repository"
 )
 
 // fakeDashboardRepo is a deterministic DashboardRepositoryPort test double.
@@ -15,7 +14,7 @@ type fakeDashboardRepo struct {
 	reportedTrips    int
 	pendingConflicts int
 	pendingColumns   int
-	tripTrends       []repository.VehicleTripTrendData
+	tripTrends       []VehicleTripTrend
 	attendance       map[string]int
 }
 
@@ -35,7 +34,7 @@ func (f *fakeDashboardRepo) GetPendingFormColumnsCount(ctx context.Context) (int
 	return f.pendingColumns, nil
 }
 
-func (f *fakeDashboardRepo) GetVehicleTripTrends(ctx context.Context, start, end time.Time) ([]repository.VehicleTripTrendData, error) {
+func (f *fakeDashboardRepo) GetVehicleTripTrends(ctx context.Context, start, end time.Time) ([]VehicleTripTrend, error) {
 	return f.tripTrends, nil
 }
 
@@ -64,7 +63,7 @@ func TestDashboardService_GetMetrics_QueriesRepoWhenConfigured(t *testing.T) {
 		reportedTrips:    34,
 		pendingConflicts: 1,
 		pendingColumns:   2,
-		tripTrends: []repository.VehicleTripTrendData{
+		tripTrends: []VehicleTripTrend{
 			{VehicleName: "測試車", PlateNo: "TEST-01", TripCount: 5},
 		},
 		attendance: map[string]int{"work": 8, "leave": 1, "sick": 1, "off": 0},

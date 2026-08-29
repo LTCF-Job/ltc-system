@@ -1,9 +1,10 @@
-package export
+package infra
 
 import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"ltc-system/apps/api/internal/modules/reporting/app"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,14 +12,14 @@ import (
 )
 
 func TestVerifyCleanOpenXMLOutput(t *testing.T) {
-	vehicles := []TripSummaryExportVehicle{
+	vehicles := []app.TripSummaryVehicle{
 		{
 			VehicleName:      "長照1號車",
 			PlateNo:          "ABC-1234",
 			SubtotalOutbound: 10,
 			SubtotalInbound:  10,
 			SubtotalTotal:    20,
-			Rows: []TripSummaryExportCaseRow{
+			Rows: []app.TripSummaryCaseRow{
 				{
 					CaseCode:      "C001",
 					CaseName:      "王大明",
@@ -30,7 +31,7 @@ func TestVerifyCleanOpenXMLOutput(t *testing.T) {
 		},
 	}
 
-	data, err := GenerateTripSummaryExcel("115-07", vehicles)
+	data, err := NewExcelRenderer().RenderTripSummary("115-07", vehicles)
 	require.NoError(t, err)
 
 	f, err := excelize.OpenReader(bytes.NewReader(data))

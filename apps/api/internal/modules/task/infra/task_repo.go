@@ -1,27 +1,13 @@
-package repository
+package infra
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/task/app"
 )
-
-// ReportedRideSlot 代表已回報趟次之辨識鍵。
-type ReportedRideSlot struct {
-	CaseID uuid.UUID
-	LegSeq int16
-}
-
-// MonthEndRideStats 代表月統計搭乘數據。
-type MonthEndRideStats struct {
-	TotalRides      int
-	BoardedRides    int
-	UnreportedRides int
-	ConflictCount   int
-}
 
 // TaskRepository 提供排程任務與背景檢核所需之資料庫查詢。
 type TaskRepository struct {
@@ -34,9 +20,9 @@ func NewTaskRepository(db *pgxpool.Pool) *TaskRepository {
 }
 
 // GetReportedRideSlots 查詢指定日期已回報且非未回報狀態之趟次清單。
-func (r *TaskRepository) GetReportedRideSlots(ctx context.Context, targetDate time.Time) ([]ReportedRideSlot, error) {
+func (r *TaskRepository) GetReportedRideSlots(ctx context.Context, targetDate time.Time) ([]app.ReportedRideSlot, error) {
 	if r.db == nil {
-		return []ReportedRideSlot{}, nil
+		return []app.ReportedRideSlot{}, nil
 	}
 
 	query := `
@@ -50,9 +36,9 @@ func (r *TaskRepository) GetReportedRideSlots(ctx context.Context, targetDate ti
 	}
 	defer rows.Close()
 
-	var list []ReportedRideSlot
+	var list []app.ReportedRideSlot
 	for rows.Next() {
-		var slot ReportedRideSlot
+		var slot app.ReportedRideSlot
 		if err := rows.Scan(&slot.CaseID, &slot.LegSeq); err != nil {
 			return nil, fmt.Errorf("failed to scan reported ride slot: %w", err)
 		}
@@ -62,8 +48,8 @@ func (r *TaskRepository) GetReportedRideSlots(ctx context.Context, targetDate ti
 }
 
 // GetMonthEndRideStats 統計指定日期區間之搭乘狀態分佈與衝突數量。
-func (r *TaskRepository) GetMonthEndRideStats(ctx context.Context, start, end time.Time) (MonthEndRideStats, error) {
-	var stats MonthEndRideStats
+func (r *TaskRepository) GetMonthEndRideStats(ctx context.Context, start, end time.Time) (app.MonthEndRideStats, error) {
+	var stats app.MonthEndRideStats
 	if r.db == nil {
 		return stats, nil
 	}

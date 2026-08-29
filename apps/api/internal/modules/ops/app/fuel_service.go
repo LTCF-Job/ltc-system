@@ -1,23 +1,22 @@
-package service
+package app
 
 import (
 	"context"
 	"time"
 
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/repository"
 )
 
 // FuelService 提供車輛油資登錄與管理服務。
 type FuelService struct {
-	fuelRepo  *repository.FuelRepository
-	auditRepo *repository.AuditRepository
+	fuelRepo  FuelStore
+	auditRepo AuditWriter
 }
 
 // NewFuelService 建立 FuelService 實例。
 func NewFuelService(
-	fuelRepo *repository.FuelRepository,
-	auditRepo *repository.AuditRepository,
+	fuelRepo FuelStore,
+	auditRepo AuditWriter,
 ) *FuelService {
 	return &FuelService{
 		fuelRepo:  fuelRepo,
@@ -26,7 +25,7 @@ func NewFuelService(
 }
 
 // List 查詢油資紀錄清單。
-func (s *FuelService) List(ctx context.Context, page, pageSize int, vehicleID, driverID *uuid.UUID, startDate, endDate *time.Time, q string) ([]repository.FuelLogEntity, int, error) {
+func (s *FuelService) List(ctx context.Context, page, pageSize int, vehicleID, driverID *uuid.UUID, startDate, endDate *time.Time, q string) ([]FuelLog, int, error) {
 	return s.fuelRepo.List(ctx, page, pageSize, vehicleID, driverID, startDate, endDate, q)
 }
 
@@ -42,8 +41,8 @@ type FuelLogInput struct {
 }
 
 // Create 新增油資紀錄並寫入稽核日誌。
-func (s *FuelService) Create(ctx context.Context, in FuelLogInput, actorID *uuid.UUID, actorRole *string) (*repository.FuelLogEntity, error) {
-	item := &repository.FuelLogEntity{
+func (s *FuelService) Create(ctx context.Context, in FuelLogInput, actorID *uuid.UUID, actorRole *string) (*FuelLog, error) {
+	item := &FuelLog{
 		VehicleID:  in.VehicleID,
 		DriverID:   in.DriverID,
 		FuelDate:   in.FuelDate,
@@ -57,22 +56,21 @@ func (s *FuelService) Create(ctx context.Context, in FuelLogInput, actorID *uuid
 	}
 
 	if s.auditRepo != nil {
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    actorID,
 			ActorRole:  actorRole,
 			Action:     "create",
 			EntityType: "fuel_logs",
 			EntityID:   strPtr(item.ID.String()),
 			AfterData:  item,
-			CreatedAt:  time.Now(),
 		})
 	}
 	return item, nil
 }
 
 // Update 修改油資紀錄。
-func (s *FuelService) Update(ctx context.Context, id uuid.UUID, in FuelLogInput, actorID *uuid.UUID, actorRole *string) (*repository.FuelLogEntity, error) {
-	item := &repository.FuelLogEntity{
+func (s *FuelService) Update(ctx context.Context, id uuid.UUID, in FuelLogInput, actorID *uuid.UUID, actorRole *string) (*FuelLog, error) {
+	item := &FuelLog{
 		ID:         id,
 		VehicleID:  in.VehicleID,
 		DriverID:   in.DriverID,
@@ -86,14 +84,13 @@ func (s *FuelService) Update(ctx context.Context, id uuid.UUID, in FuelLogInput,
 	}
 
 	if s.auditRepo != nil {
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    actorID,
 			ActorRole:  actorRole,
 			Action:     "update",
 			EntityType: "fuel_logs",
 			EntityID:   strPtr(item.ID.String()),
 			AfterData:  item,
-			CreatedAt:  time.Now(),
 		})
 	}
 	return item, nil
@@ -106,13 +103,12 @@ func (s *FuelService) Delete(ctx context.Context, id uuid.UUID, actorID *uuid.UU
 	}
 
 	if s.auditRepo != nil {
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    actorID,
 			ActorRole:  actorRole,
 			Action:     "delete",
 			EntityType: "fuel_logs",
 			EntityID:   strPtr(id.String()),
-			CreatedAt:  time.Now(),
 		})
 	}
 	return nil

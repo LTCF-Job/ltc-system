@@ -1,10 +1,10 @@
-package handler
+package transport
 
 import (
 	"time"
 
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/casemgmt/app"
 )
 
 // CreateCaseRequest 代表新增個案主檔請求。
@@ -29,8 +29,8 @@ type CreateCaseRequest struct {
 }
 
 // ToService 轉換為 service 層的建立個案輸入。
-func (r CreateCaseRequest) ToService() service.CreateCaseRequest {
-	return service.CreateCaseRequest{
+func (r CreateCaseRequest) ToService() app.CreateCaseRequest {
+	return app.CreateCaseRequest{
 		Code:              r.Code,
 		Name:              r.Name,
 		NationalID:        r.NationalID,
@@ -76,17 +76,17 @@ type CreateScheduleLegItemRequest struct {
 }
 
 // ToService 轉換為 service 層的建立排班輸入。
-func (r CreateScheduleRequest) ToService() service.CreateScheduleRequest {
-	legs := make([]service.CreateScheduleLegItemRequest, len(r.Legs))
+func (r CreateScheduleRequest) ToService() app.CreateScheduleRequest {
+	legs := make([]app.CreateScheduleLegItemRequest, len(r.Legs))
 	for i, l := range r.Legs {
-		legs[i] = service.CreateScheduleLegItemRequest{
+		legs[i] = app.CreateScheduleLegItemRequest{
 			LegSeq:     l.LegSeq,
 			Direction:  l.Direction,
 			DepartTime: l.DepartTime,
 			VehicleID:  l.VehicleID,
 		}
 	}
-	return service.CreateScheduleRequest{
+	return app.CreateScheduleRequest{
 		CaseID:             r.CaseID,
 		SiteID:             r.SiteID,
 		EffectiveFrom:      r.EffectiveFrom,

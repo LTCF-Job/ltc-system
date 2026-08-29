@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/config"
 	"ltc-system/apps/api/internal/domain/crypto"
 	"ltc-system/apps/api/internal/domain/namenorm"
-	"ltc-system/apps/api/internal/repository"
+	"ltc-system/apps/api/internal/platform/config"
 )
 
 var (
@@ -21,32 +20,29 @@ var (
 	ErrLegTimesNotOrdered  = errors.New("schedule leg departure times must be strictly increasing")
 )
 
-// MasterService 封裝個案、據點、車輛、司機與排班之業務邏輯。
-type MasterService struct {
-	cfg         *config.Config
-	caseRepo    *repository.CaseRepository
-	siteRepo    *repository.SiteRepository
-	vehicleRepo *repository.VehicleRepository
-	driverRepo  *repository.DriverRepository
-	auditRepo   *repository.AuditRepository
+// CaseService 封裝個案、據點、車輛、司機與排班之業務邏輯。
+type CaseService struct {
+	cfg       *config.Config
+	caseRepo  CaseStore
+	siteRepo  SiteFinder
+	auditRepo AuditWriter
+	renderer  ProfileRenderer
 }
 
-// NewMasterService 建立 MasterService 實例。
-func NewMasterService(
+// NewCaseService 建立 CaseService 實例。
+func NewCaseService(
 	cfg *config.Config,
-	caseRepo *repository.CaseRepository,
-	siteRepo *repository.SiteRepository,
-	vehicleRepo *repository.VehicleRepository,
-	driverRepo *repository.DriverRepository,
-	auditRepo *repository.AuditRepository,
-) *MasterService {
-	return &MasterService{
-		cfg:         cfg,
-		caseRepo:    caseRepo,
-		siteRepo:    siteRepo,
-		vehicleRepo: vehicleRepo,
-		driverRepo:  driverRepo,
-		auditRepo:   auditRepo,
+	caseRepo CaseStore,
+	siteRepo SiteFinder,
+	auditRepo AuditWriter,
+	renderer ProfileRenderer,
+) *CaseService {
+	return &CaseService{
+		cfg:       cfg,
+		caseRepo:  caseRepo,
+		siteRepo:  siteRepo,
+		auditRepo: auditRepo,
+		renderer:  renderer,
 	}
 }
 
@@ -72,7 +68,7 @@ type CreateCaseRequest struct {
 }
 
 // CreateCase 建立個案主檔，執行身分證查重、加密與雜湊產生。
-func (s *MasterService) CreateCase(ctx context.Context, req CreateCaseRequest, actorID uuid.UUID, actorRole, ip, ua string) (*repository.CaseEntity, error) {
+func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, actorID uuid.UUID, actorRole, ip, ua string) (*Case, error) {
 	req.NationalID = strings.TrimSpace(strings.ToUpper(req.NationalID))
 	if !crypto.ValidateNationalID(req.NationalID) {
 		return nil, errors.New("invalid national ID format")
@@ -102,7 +98,7 @@ func (s *MasterService) CreateCase(ctx context.Context, req CreateCaseRequest, a
 		req.ServiceUsageType = 2
 	}
 
-	entity := repository.CaseEntity{
+	entity := Case{
 		Code:              req.Code,
 		Name:              req.Name,
 		NameNormalized:    normName,
@@ -131,7 +127,7 @@ func (s *MasterService) CreateCase(ctx context.Context, req CreateCaseRequest, a
 
 	if s.auditRepo != nil {
 		entityIDStr := entity.ID.String()
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "create",
@@ -147,12 +143,12 @@ func (s *MasterService) CreateCase(ctx context.Context, req CreateCaseRequest, a
 }
 
 // ListCases 查詢個案清單（回傳遮罩身分證）。
-func (s *MasterService) ListCases(ctx context.Context, region, status, q string, page, pageSize int) ([]repository.CaseEntity, int64, error) {
+func (s *CaseService) ListCases(ctx context.Context, region, status, q string, page, pageSize int) ([]Case, int64, error) {
 	return s.caseRepo.List(ctx, region, status, q, page, pageSize)
 }
 
 // GetCaseByID 取得單筆個案主檔明細。
-func (s *MasterService) GetCaseByID(ctx context.Context, id uuid.UUID) (*repository.CaseEntity, error) {
+func (s *CaseService) GetCaseByID(ctx context.Context, id uuid.UUID) (*Case, error) {
 	return s.caseRepo.GetByID(ctx, id)
 }
 
@@ -174,7 +170,7 @@ type UpdateCaseInput struct {
 }
 
 // UpdateCase 更新個案主檔資料，僅套用有提供的欄位。
-func (s *MasterService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCaseInput) (*repository.CaseEntity, error) {
+func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCaseInput) (*Case, error) {
 	entity, err := s.caseRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -227,7 +223,7 @@ func (s *MasterService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateC
 }
 
 // UpdateCaseTransportPreference 更新個案的交通偏好（所屬據點與去回程車輛），回傳更新後的個案主檔。
-func (s *MasterService) UpdateCaseTransportPreference(ctx context.Context, caseID, siteID, outboundVehicleID, inboundVehicleID uuid.UUID) (*repository.CaseEntity, error) {
+func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID, siteID, outboundVehicleID, inboundVehicleID uuid.UUID) (*Case, error) {
 	if err := s.caseRepo.UpsertTransportPreference(ctx, caseID, siteID, outboundVehicleID, inboundVehicleID); err != nil {
 		return nil, err
 	}
@@ -236,12 +232,12 @@ func (s *MasterService) UpdateCaseTransportPreference(ctx context.Context, caseI
 
 // GetActiveScheduleForCaseOnDate 取得個案於指定日期生效之排班；查無資料時回傳 nil、nil，
 // 底層查詢失敗時回傳 error（呼叫端不應將兩者混為一談）。
-func (s *MasterService) GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*repository.CaseScheduleEntity, error) {
+func (s *CaseService) GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*CaseSchedule, error) {
 	return s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, serviceDate)
 }
 
 // RevealCaseNationalID 解密個案身分證並留存稽核日誌。
-func (s *MasterService) RevealCaseNationalID(ctx context.Context, caseID uuid.UUID, actorID uuid.UUID, actorRole, ip, ua string) (string, error) {
+func (s *CaseService) RevealCaseNationalID(ctx context.Context, caseID uuid.UUID, actorID uuid.UUID, actorRole, ip, ua string) (string, error) {
 	caseEntity, err := s.caseRepo.GetByID(ctx, caseID)
 	if err != nil {
 		return "", err
@@ -254,7 +250,7 @@ func (s *MasterService) RevealCaseNationalID(ctx context.Context, caseID uuid.UU
 
 	if s.auditRepo != nil {
 		entityIDStr := caseID.String()
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "reveal_pii",
@@ -268,13 +264,22 @@ func (s *MasterService) RevealCaseNationalID(ctx context.Context, caseID uuid.UU
 	return plainID, nil
 }
 
+// CaseImportSkippedRow 是寫入稽核日誌的略過列快照。json tag 即為 audit_log 中
+// import_skip 紀錄的資料契約，不得與呼叫端的型別分歧。
+type CaseImportSkippedRow struct {
+	RowIndex  int               `json:"rowIndex"`
+	CaseName  string            `json:"caseName"`
+	Reasons   []string          `json:"reasons"`
+	RawValues map[string]string `json:"rawValues"`
+}
+
 // RecordSkippedCaseImport 保留未寫入的來源列，讓操作人員能回查補正原因與原始欄位。
-func (s *MasterService) RecordSkippedCaseImport(ctx context.Context, item CaseImportSkippedRow, actorID uuid.UUID, actorRole, ip, ua string) {
+func (s *CaseService) RecordSkippedCaseImport(ctx context.Context, item CaseImportSkippedRow, actorID uuid.UUID, actorRole, ip, ua string) {
 	if s.auditRepo == nil {
 		return
 	}
 	entityID := fmt.Sprintf("row-%d", item.RowIndex)
-	_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+	_ = s.auditRepo.Write(ctx, AuditEntry{
 		ActorID: &actorID, ActorRole: &actorRole, Action: "import_skip", EntityType: "case_import", EntityID: &entityID,
 		AfterData: item, IPAddress: &ip, UserAgent: &ua,
 	})
@@ -305,7 +310,7 @@ type CreateScheduleLegItemRequest struct {
 }
 
 // CreateCaseSchedule 建立個案之有效排班設定並校驗趟次時段與遞增順序。
-func (s *MasterService) CreateCaseSchedule(ctx context.Context, req CreateScheduleRequest) (*repository.CaseScheduleEntity, error) {
+func (s *CaseService) CreateCaseSchedule(ctx context.Context, req CreateScheduleRequest) (*CaseSchedule, error) {
 	if int(req.TripPattern) != len(req.Legs) {
 		return nil, ErrInvalidTripPattern
 	}
@@ -324,7 +329,7 @@ func (s *MasterService) CreateCaseSchedule(ctx context.Context, req CreateSchedu
 		return nil, ErrSiteRegionMismatch
 	}
 
-	var legs []repository.ScheduleLegEntity
+	var legs []ScheduleLeg
 	var lastTime string
 	for _, l := range req.Legs {
 		if lastTime != "" && l.DepartTime <= lastTime {
@@ -337,7 +342,7 @@ func (s *MasterService) CreateCaseSchedule(ctx context.Context, req CreateSchedu
 			period = "pm"
 		}
 
-		legs = append(legs, repository.ScheduleLegEntity{
+		legs = append(legs, ScheduleLeg{
 			LegSeq:     l.LegSeq,
 			Direction:  l.Direction,
 			Period:     period,
@@ -347,7 +352,7 @@ func (s *MasterService) CreateCaseSchedule(ctx context.Context, req CreateSchedu
 		})
 	}
 
-	entity := repository.CaseScheduleEntity{
+	entity := CaseSchedule{
 		CaseID:             req.CaseID,
 		SiteID:             req.SiteID,
 		EffectiveFrom:      req.EffectiveFrom,

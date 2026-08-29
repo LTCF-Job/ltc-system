@@ -1,13 +1,11 @@
-package google_test
+package app_test
 
 import (
-	"context"
 	"testing"
 
-	"ltc-system/apps/api/internal/adapter/google"
+	"ltc-system/apps/api/internal/modules/formsync/app"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestExtractSpreadsheetID(t *testing.T) {
@@ -45,36 +43,8 @@ func TestExtractSpreadsheetID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := google.ExtractSpreadsheetID(tt.input)
+			actual := app.ExtractSpreadsheetID(tt.input)
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
-}
-
-func TestOfflineGoogleClient(t *testing.T) {
-	ctx := context.Background()
-	client, err := google.NewClient(ctx, "")
-	require.NoError(t, err)
-	require.NotNil(t, client)
-
-	t.Run("離線模式列出試算表清單", func(t *testing.T) {
-		sheets, err := client.ListDriveSheets(ctx)
-		require.NoError(t, err)
-		assert.NotEmpty(t, sheets)
-		assert.Contains(t, sheets[0].Name, "竹北一車")
-	})
-
-	t.Run("離線模式解析試算表結構", func(t *testing.T) {
-		info, err := client.GetSpreadsheetInfo(ctx, "https://docs.google.com/spreadsheets/d/demo-id/edit", "")
-		require.NoError(t, err)
-		assert.Equal(t, "demo-id", info.SpreadsheetID)
-		assert.NotEmpty(t, info.SheetTabs)
-	})
-
-	t.Run("離線模式讀取資料列", func(t *testing.T) {
-		rows, err := client.ReadSheetRows(ctx, "demo-id", "8月回報", "")
-		require.NoError(t, err)
-		assert.NotEmpty(t, rows)
-		assert.Equal(t, "時間戳記", rows[0][0])
-	})
 }

@@ -1,4 +1,4 @@
-package repository
+package infra
 
 import (
 	"context"
@@ -7,46 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/reporting/app"
 )
-
-// ReportVehicleItem 代表報表車輛基礎資料。
-type ReportVehicleItem struct {
-	ID          uuid.UUID
-	PlateNo     string
-	DisplayName string
-	Region      string
-}
-
-// ReportTripSummaryCaseRow 代表個案趟數統計資料。
-type ReportTripSummaryCaseRow struct {
-	CaseID        uuid.UUID
-	CaseCode      string
-	CaseName      string
-	OutboundCount int
-	InboundCount  int
-	TotalCount    int
-}
-
-// ReportVehicleTripSummary 代表單一車輛趟數彙總資料。
-type ReportVehicleTripSummary struct {
-	Vehicle ReportVehicleItem
-	Rows    []ReportTripSummaryCaseRow
-}
-
-// ReportHsinchuScheduleRow 代表新竹接送時刻表查詢列。
-type ReportHsinchuScheduleRow struct {
-	Direction    string
-	RunNo        int16
-	CaseCode     string
-	CaseName     string
-	Note         *string
-	DepartTime   string
-	ArriveTime   *string
-	HomeAddress  string
-	SiteAddress  string
-	VehicleName  string
-	SiteName     string
-}
 
 // ReportRepository 提供報表統計查詢操作。
 type ReportRepository struct {
@@ -59,9 +21,9 @@ func NewReportRepository(db *pgxpool.Pool) *ReportRepository {
 }
 
 // QueryTripSummaryData 查詢車輛趟數表所需之資料庫聚合資料。
-func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, region *string, vehicleID *uuid.UUID) ([]ReportVehicleTripSummary, error) {
+func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, region *string, vehicleID *uuid.UUID) ([]app.ReportVehicleTripSummary, error) {
 	if r.db == nil {
-		return []ReportVehicleTripSummary{}, nil
+		return []app.ReportVehicleTripSummary{}, nil
 	}
 
 	vehQuery := "SELECT id, plate_no, display_name, region FROM vehicles WHERE 1=1"
@@ -85,15 +47,15 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 	}
 	defer vehRows.Close()
 
-	var vehicles []ReportVehicleItem
+	var vehicles []app.ReportVehicleItem
 	for vehRows.Next() {
-		var v ReportVehicleItem
+		var v app.ReportVehicleItem
 		if err := vehRows.Scan(&v.ID, &v.PlateNo, &v.DisplayName, &v.Region); err == nil {
 			vehicles = append(vehicles, v)
 		}
 	}
 
-	var results []ReportVehicleTripSummary
+	var results []app.ReportVehicleTripSummary
 	statQuery := `
 		SELECT 
 			c.id, c.code, c.name,
@@ -115,9 +77,9 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 			continue
 		}
 
-		var rows []ReportTripSummaryCaseRow
+		var rows []app.ReportTripSummaryCaseRow
 		for rRows.Next() {
-			var row ReportTripSummaryCaseRow
+			var row app.ReportTripSummaryCaseRow
 			if err := rRows.Scan(&row.CaseID, &row.CaseCode, &row.CaseName, &row.OutboundCount, &row.InboundCount, &row.TotalCount); err == nil {
 				rows = append(rows, row)
 			}
@@ -125,7 +87,7 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 		rRows.Close()
 
 		if len(rows) > 0 {
-			results = append(results, ReportVehicleTripSummary{
+			results = append(results, app.ReportVehicleTripSummary{
 				Vehicle: v,
 				Rows:    rows,
 			})
@@ -136,9 +98,9 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 }
 
 // QueryHsinchuScheduleData 查詢新竹接送時刻表排班資料。
-func (r *ReportRepository) QueryHsinchuScheduleData(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID) ([]ReportHsinchuScheduleRow, error) {
+func (r *ReportRepository) QueryHsinchuScheduleData(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID) ([]app.ReportHsinchuScheduleRow, error) {
 	if r.db == nil {
-		return []ReportHsinchuScheduleRow{}, nil
+		return []app.ReportHsinchuScheduleRow{}, nil
 	}
 
 	query := `
@@ -179,9 +141,9 @@ func (r *ReportRepository) QueryHsinchuScheduleData(ctx context.Context, siteID 
 	}
 	defer rows.Close()
 
-	var result []ReportHsinchuScheduleRow
+	var result []app.ReportHsinchuScheduleRow
 	for rows.Next() {
-		var item ReportHsinchuScheduleRow
+		var item app.ReportHsinchuScheduleRow
 		if err := rows.Scan(
 			&item.Direction, &item.RunNo, &item.CaseCode, &item.CaseName, &item.Note,
 			&item.DepartTime, &item.ArriveTime, &item.HomeAddress, &item.SiteAddress,

@@ -19,12 +19,12 @@ Vercel（前端）、Cloud Run（API／migration job）、Supabase（資料庫�
 | 參數 | 來源服務 | 用途服務 | 說明 |
 |---|---|---|---|
 | Supabase Transaction Pooler 連線字串 | Supabase → Project Settings → Database | Cloud Run API service、migration job 的 `DATABASE_URL` | 需保留 `sslmode=require`，範例見 `.env.prod.example` |
-| Supabase JWKS URL | Supabase → Project Settings → API（`https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json`） | Cloud Run API service 的 `SUPABASE_JWKS_URL` | `APP_ENV=production` 時必填，缺少會導致啟動失敗（見 `internal/config/config.go`） |
+| Supabase JWKS URL | Supabase → Project Settings → API（`https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json`） | Cloud Run API service 的 `SUPABASE_JWKS_URL` | `APP_ENV=production` 時必填，缺少會導致啟動失敗（見 `internal/platform/config/config.go`） |
 | Supabase Project Ref | Supabase → Project Settings → General | Cloud Run API service 的 `SUPABASE_PROJECT_REF` | 用於驗證 JWT 的 issuer |
 | Cloud Run API service 的公開網址 | Cloud Run 部署後由 `gcloud run deploy` 輸出 | Vercel Production 環境變數 `VITE_API_BASE_URL` | 前端所有 API 請求的 base URL，需在 Vercel Dashboard 手動填入完整網址（含 `https://`） |
-| Vercel Production 網址 | Vercel 部署後由 `vercel deploy --prod` 輸出（或 Dashboard 上的 Domains） | Cloud Run API service 的 `ALLOWED_ORIGINS` | CORS 白名單，逗號分隔可填多個網域；`APP_ENV=production` 時必填，否則 API 啟動即失敗（見 `internal/config/config.go`） |
+| Vercel Production 網址 | Vercel 部署後由 `vercel deploy --prod` 輸出（或 Dashboard 上的 Domains） | Cloud Run API service 的 `ALLOWED_ORIGINS` | CORS 白名單，逗號分隔可填多個網域；`APP_ENV=production` 時必填，否則 API 啟動即失敗（見 `internal/platform/config/config.go`） |
 
-migration job 與 API service 共用同一份 config（`apps/api/internal/config/config.go`），因此 `APP_ENV`、`ENCRYPTION_KEY`、`HMAC_KEY` 兩邊都要設定一致，即使 migration job 本身只使用 `DATABASE_URL`。
+migration job 與 API service 共用同一份 config（`apps/api/internal/platform/config/config.go`），因此 `APP_ENV`、`ENCRYPTION_KEY`、`HMAC_KEY` 兩邊都要設定一致，即使 migration job 本身只使用 `DATABASE_URL`。
 
 ## GitHub 設定
 
@@ -60,7 +60,7 @@ migration job 與 API service 共用同一份 config（`apps/api/internal/config
 1. Artifact Registry repository，名稱需與 `ARTIFACT_REPOSITORY` 相同。
 2. Cloud Run API service，名稱需與 `API_SERVICE` 相同。
 3. Cloud Run Job，名稱需與 `MIGRATION_JOB` 相同，執行指令設定為 `/app/migrate up`。
-4. API service 與 migration job 都要設定下列環境變數或 Secret Manager 參照（對應 `apps/api/internal/config/config.go`）：
+4. API service 與 migration job 都要設定下列環境變數或 Secret Manager 參照（對應 `apps/api/internal/platform/config/config.go`）：
    - `APP_ENV=production`（必填，缺少或非 `local`/`production` 會拒絕啟動）
    - `DATABASE_URL`（必填，見下方 Supabase Transaction Pooler 連線字串）
    - `ENCRYPTION_KEY`、`HMAC_KEY`（必填，32 bytes base64，且兩者不可相同）

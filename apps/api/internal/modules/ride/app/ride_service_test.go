@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestRideService_ManualReportRide_Validation(t *testing.T) {
-	svc := NewRideService(nil, nil, nil, nil, nil)
+	svc := NewRideService(nil, nil, nil, nil)
 	ctx := context.Background()
 	actorID := uuid.New()
 

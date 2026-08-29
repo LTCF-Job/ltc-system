@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -9,14 +9,7 @@ import (
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/calendar"
 	"ltc-system/apps/api/internal/domain/rocdate"
-	"ltc-system/apps/api/internal/repository"
 )
-
-// TaskRepositoryPort 定義排程檢核所需的資料庫操作介面。
-type TaskRepositoryPort interface {
-	GetReportedRideSlots(ctx context.Context, targetDate time.Time) ([]repository.ReportedRideSlot, error)
-	GetMonthEndRideStats(ctx context.Context, start, end time.Time) (repository.MonthEndRideStats, error)
-}
 
 // MissingRideItem 代表未回報之搭乘趟次。
 type MissingRideItem struct {
@@ -43,18 +36,18 @@ type MonthEndSummary struct {
 
 // TaskService 負責處理定期與後台非同步排程任務。
 type TaskService struct {
-	taskRepo        TaskRepositoryPort
-	caseRepo        *repository.CaseRepository
-	holidayRepo     *repository.HolidayRepository
-	notificationSvc *NotificationService
+	taskRepo        TaskStore
+	caseRepo        MonthScheduleReader
+	holidayRepo     HolidayMapReader
+	notificationSvc Notifier
 }
 
 // NewTaskService 建立 TaskService 實例。
 func NewTaskService(
-	taskRepo TaskRepositoryPort,
-	caseRepo *repository.CaseRepository,
-	holidayRepo *repository.HolidayRepository,
-	notificationSvc *NotificationService,
+	taskRepo TaskStore,
+	caseRepo MonthScheduleReader,
+	holidayRepo HolidayMapReader,
+	notificationSvc Notifier,
 ) *TaskService {
 	return &TaskService{
 		taskRepo:        taskRepo,
@@ -185,4 +178,3 @@ func (s *TaskService) MonthEndReminder(ctx context.Context, year, month int) (*M
 
 	return summary, nil
 }
-

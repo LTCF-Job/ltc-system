@@ -14,7 +14,7 @@
 | Excel 匯出 | `xuri/excelize/v2` |
 | 測試 | 標準庫 `testing` + `stretchr/testify` |
 
-沒有用任何 DI 框架，所有物件組裝（repository → service → handler）都寫在 `cmd/server/main.go` 裡，一行一行手動 new 出來再傳進去。
+沒有用任何 DI 框架，所有物件組裝（infra → app → transport）都寫在 `cmd/server/main.go` 裡，一行一行手動 new 出來再傳進去。
 
 ## 目錄與分層
 
@@ -23,28 +23,39 @@ cmd/server    HTTP 服務入口。main.go 只做 dependency wiring，routes.go �
 cmd/migrate   跑 migration 的 CLI
 cmd/exporter  Cloud Run Job，跑政府申報 Excel 匯出
 
-internal/handler      解 request、呼叫 service、組 response，不碰 SQL
-internal/service       商業邏輯：驗證、狀態轉換、跨 repo 協調
-internal/repository    SQL 查詢、transaction，回傳 repository 自己的 entity struct
-internal/domain        跟框架無關的純邏輯（見下方）
-internal/middleware    JWT 驗證、角色檢查、CORS、audit log、統一 response 格式
-internal/export        Excel 產生
-internal/config        環境變數載入跟啟動檢查
-internal/arch          架構測試：匯入矩陣檢查，跟著 go test ./... 一起跑
+internal/modules/<capability>/
+  transport   解 request、呼叫 app、組 response，是唯一有 binding tag 與 gin 的地方
+  app         use case、業務規則，以及這個模組需要的 port interface
+  infra       SQL、交易、外部服務呼叫、檔案產生，實作 app 的 port
+
+internal/platform     跨模組的技術底層：config、httpx、auth、logging、pgxdb
+internal/domain       跟框架無關的純業務邏輯（見下方）
+internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... 一起跑
 ```
 
-這是目前的實際結構，不是目標結構。專案的目標是 modular monolith：業務能力逐一搬進 `internal/modules/<capability>/{transport,app,infra}`，上面的扁平套件隨之縮小。
+目前的能力模組：
 
-現況與目標之間有已知落差，`internal/arch/arch_test.go` 把它們凍結成 baseline，只准變少不准變多：
+| module | 範圍 |
+|---|---|
+| `masterdata` | 據點、車輛、司機、區域主檔 |
+| `casemgmt` | 個案主檔、排班設定、交通偏好、個案彙整表匯出 |
+| `caseimport` | 個案批次 Excel／CSV 解析、預覽與匯入 |
+| `ride` | Google 表單回報、搭乘紀錄合併與人工更正 |
+| `formsync` | Google 表單登錄與欄位對應 |
+| `reporting` | 趟數表、新竹時刻表、儀表板、前置檢核、政府申報匯出 |
+| `ops` | 司機出勤、油資、車輛維修 |
+| `notification` | 通知收件人與寄送留痕 |
+| `holiday` | 國定假日維護與政府行事曆同步 |
+| `audit` | 稽核日誌寫入與查詢 |
+| `task` | 缺報偵測與月結排程作業 |
 
-- 7 個 handler 直接呼叫 `repository`，跳過 service（`audit`／`case`／`driver`／`fuel`／`holiday`／`maintenance`／`site`）
-- `site_handler.go`、`driver_handler.go` 直接把 request body 綁進 `repository` 的 entity struct
-- `service` 層仍持有具體的 `*repository.X` 而非 port interface
-- `service/ride_service.go` 反向依賴 `middleware`、`adapter/government_holiday.go` 反向依賴 `repository`
+模組之間**不互相 import**。跨模組協作一律由消費端在自己的 `app/ports.go` 宣告 port，
+再由 `cmd/server` 注入 adapter（見 `cmd/server/module_adapters.go`）；稽核寫入也是同一個
+模式（`cmd/server/audit_adapters.go`）。
 
-新增或修改功能時，依賴方向、模型所有權、驗證位置、錯誤與交易歸屬、port 定義位置、檔案拆分時機，以 [`layering-rules.md`](../../.agents/skills/backend-architecture/references/layering-rules.md) 為準；那份文件裡的規則多數已被 `internal/arch/arch_test.go` 編碼，違反會讓 `go test ./...` 失敗。邊界背後的原則見 [`backend-architecture/SKILL.md`](../../.agents/skills/backend-architecture/SKILL.md) 與 [`go-backend-code-style/SKILL.md`](../../.agents/skills/go-backend-code-style/SKILL.md)。
+新增或修改功能時，依賴方向、模型所有權、驗證位置、錯誤與交易歸屬、port 定義位置、檔案拆分時機，以 [`layering-rules.md`](../../.agents/skills/backend-architecture/references/layering-rules.md) 為準；那份文件裡的規則多數已被 `internal/arch/arch_test.go` 編碼，違反會讓 `go test ./...` 失敗。`arch_test.go` 的 baseline 目前是空的——過渡期的既有違規已全數清除，新的違規是要修的缺陷，不是可以加進 baseline 的項目。邊界背後的原則見 [`backend-architecture/SKILL.md`](../../.agents/skills/backend-architecture/SKILL.md) 與 [`go-backend-code-style/SKILL.md`](../../.agents/skills/go-backend-code-style/SKILL.md)。
 
-`main.go` 裡每個 `xxxRepo := repository.NewXxxRepository(pool)` → `xxxSvc := service.NewXxxService(xxxRepo, ...)` → `handlers{...}` 欄位就是一組完整的 vertical slice，看不懂某個功能全貌時，從這幾行找起最快。
+`main.go` 裡每個 `xxxRepo := xxxinfra.NewXxxRepository(pool)` → `xxxSvc := xxxapp.NewXxxService(xxxRepo, ...)` → `handlers{...}` 欄位就是一組完整的 vertical slice，看不懂某個功能全貌時，從這幾行找起最快。
 
 ## domain 套件（純邏輯，不碰 DB／HTTP）
 
@@ -69,13 +80,13 @@ internal/arch          架構測試：匯入矩陣檢查，跟著 go test ./... 
 - header 帶 `X-Mock-Role: admin`（可搭配 `X-Mock-User-ID`）直接跳過 JWT 驗證。
 - `Authorization: Bearer mock_jwt_admin` 這種 token 字串（token 裡包含角色名稱關鍵字就吃該角色，預設 `staff`）。
 
-這兩種只在 `local` 生效，寫死在 `internal/middleware/auth.go`，改動時要非常小心不要讓它漏到 production 判斷分支裡。
+這兩種只在 `local` 生效，寫死在 `internal/platform/auth/auth.go`，改動時要非常小心不要讓它漏到 production 判斷分支裡。
 
 Google 表單回填走另一條路：`POST /api/v1/ingest/google-form`，不走 JWT，用 `X-Ingest-Token` header 驗證（token 存在 `forms.secret` 欄位，一個表單一組）。
 
 ## Response 格式
 
-統一封裝在 `internal/middleware/response.go`：
+統一封裝在 `internal/platform/httpx/response.go`：
 
 ```jsonc
 // 成功
@@ -85,11 +96,11 @@ Google 表單回填走另一條路：`POST /api/v1/ingest/google-form`，不走 
 { "error": { "code": "VALIDATION_FAILED", "message": "...", "details": [{"field":"...", "reason":"..."}] } }
 ```
 
-錯誤碼是常數：`VALIDATION_FAILED`、`UNAUTHENTICATED`、`FORBIDDEN`、`NOT_FOUND`、`DUPLICATE_NATIONAL_ID`、`ASSIGNMENT_OVERLAP`、`EXPORT_IN_PROGRESS`、`PRECHECK_FAILED`、`MAPPING_REQUIRED`、`INGEST_TOKEN_INVALID`、`INTERNAL_ERROR`。新增錯誤情境優先看有沒有現成碼可以用，真的沒有再加新常數，不要在 handler 裡面手打字串。
+錯誤碼是 `httpx` 的常數：`VALIDATION_FAILED`、`UNAUTHENTICATED`、`FORBIDDEN`、`NOT_FOUND`、`DUPLICATE_NATIONAL_ID`、`ASSIGNMENT_OVERLAP`、`EXPORT_IN_PROGRESS`、`PRECHECK_FAILED`、`MAPPING_REQUIRED`、`INGEST_TOKEN_INVALID`、`INTERNAL_ERROR`。新增錯誤情境優先看有沒有現成碼可以用，真的沒有再加新常數，不要在 handler 裡面手打字串。
 
 ## 設定（環境變數）
 
-集中在 `internal/config/config.go`，啟動時直接驗證並在缺漏必填值時拒絕啟動：
+集中在 `internal/platform/config/config.go`，啟動時直接驗證並在缺漏必填值時拒絕啟動：
 
 - 必填：`APP_ENV`（僅接受 `local` 或 `production`）、`DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`（兩把 32 bytes base64 金鑰，且不可相同）。
 - `APP_ENV=production` 時額外必填：`SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`。

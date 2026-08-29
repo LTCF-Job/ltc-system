@@ -1,4 +1,4 @@
-package handler
+package transport
 
 import (
 	"net/http"
@@ -7,17 +7,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/ops/app"
+	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 // FuelHandler 處理車輛油資 API 請求。
 type FuelHandler struct {
-	fuelSvc *service.FuelService
+	fuelSvc *app.FuelService
 }
 
 // NewFuelHandler 建立 FuelHandler 實例。
-func NewFuelHandler(fuelSvc *service.FuelService) *FuelHandler {
+func NewFuelHandler(fuelSvc *app.FuelService) *FuelHandler {
 	return &FuelHandler{fuelSvc: fuelSvc}
 }
 
@@ -54,12 +55,12 @@ func (h *FuelHandler) List(c *gin.Context) {
 
 	list, total, err := h.fuelSvc.List(c.Request.Context(), page, pageSize, vehicleID, driverID, startDate, endDate, q)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
-	middleware.RespondSuccess(c, http.StatusOK, list, &middleware.PaginationMeta{
+	httpx.RespondSuccess(c, http.StatusOK, list, &httpx.PaginationMeta{
 		Page:       page,
 		PageSize:   pageSize,
 		Total:      int64(total),
@@ -79,20 +80,20 @@ func (h *FuelHandler) Create(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	fuelDate, err := time.Parse("2006-01-02", req.FuelDate)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "加油日期格式必須為 YYYY-MM-DD", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "加油日期格式必須為 YYYY-MM-DD", nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
-	item, err := h.fuelSvc.Create(c.Request.Context(), service.FuelLogInput{
+	item, err := h.fuelSvc.Create(c.Request.Context(), app.FuelLogInput{
 		VehicleID:  req.VehicleID,
 		DriverID:   req.DriverID,
 		FuelDate:   fuelDate,
@@ -102,11 +103,11 @@ func (h *FuelHandler) Create(c *gin.Context) {
 		CreatedBy:  actorID,
 	}, &actorID, &actorRole)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusCreated, item, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, item, nil)
 }
 
 // Update 修改油資紀錄。
@@ -114,7 +115,7 @@ func (h *FuelHandler) Update(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的紀錄 ID", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的紀錄 ID", nil)
 		return
 	}
 
@@ -128,20 +129,20 @@ func (h *FuelHandler) Update(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	fuelDate, err := time.Parse("2006-01-02", req.FuelDate)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "加油日期格式必須為 YYYY-MM-DD", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "加油日期格式必須為 YYYY-MM-DD", nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
-	item, err := h.fuelSvc.Update(c.Request.Context(), id, service.FuelLogInput{
+	item, err := h.fuelSvc.Update(c.Request.Context(), id, app.FuelLogInput{
 		VehicleID:  req.VehicleID,
 		DriverID:   req.DriverID,
 		FuelDate:   fuelDate,
@@ -150,11 +151,11 @@ func (h *FuelHandler) Update(c *gin.Context) {
 		ReceiptURL: req.ReceiptURL,
 	}, &actorID, &actorRole)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, item, nil)
+	httpx.RespondSuccess(c, http.StatusOK, item, nil)
 }
 
 // Delete 刪除油資紀錄。
@@ -162,16 +163,16 @@ func (h *FuelHandler) Delete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的紀錄 ID", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的紀錄 ID", nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 	if err := h.fuelSvc.Delete(c.Request.Context(), id, &actorID, &actorRole); err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
 }

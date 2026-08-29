@@ -1,4 +1,4 @@
-package repository
+package infra
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/casemgmt/app"
 	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
@@ -22,7 +23,7 @@ func NewCaseRepository(db *pgxpool.Pool) *CaseRepository {
 }
 
 // List 取得個案清單（預設回傳遮罩身分證）。
-func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int) ([]CaseEntity, int64, error) {
+func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int) ([]app.Case, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT c.id, c.code, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
@@ -47,9 +48,9 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 	}
 	defer rows.Close()
 
-	var list []CaseEntity
+	var list []app.Case
 	for rows.Next() {
-		var c CaseEntity
+		var c app.Case
 		if err := rows.Scan(
 			&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
 			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
@@ -83,7 +84,7 @@ func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID, 
 }
 
 // GetByID 依 UUID 取得個案。
-func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*CaseEntity, error) {
+func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, error) {
 	query := `
 		SELECT c.id, c.code, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
 		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
@@ -97,7 +98,7 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*CaseEntity
 		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
 		WHERE c.id = $1
 	`
-	var c CaseEntity
+	var c app.Case
 	db := pgxdb.FromContext(ctx, r.db)
 	err := db.QueryRow(ctx, query, id).Scan(
 		&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
@@ -113,14 +114,14 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*CaseEntity
 }
 
 // GetByHMAC 依 HMAC 索引檢查是否已存在。
-func (r *CaseRepository) GetByHMAC(ctx context.Context, hmac []byte) (*CaseEntity, error) {
+func (r *CaseRepository) GetByHMAC(ctx context.Context, hmac []byte) (*app.Case, error) {
 	query := `
 		SELECT id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 		       home_address, region, ltc_level, service_category, service_usage_type, claim_start_date, claim_end_date,
 		       status, created_at, updated_at
 		FROM cases WHERE national_id_hmac = $1 LIMIT 1
 	`
-	var c CaseEntity
+	var c app.Case
 	db := pgxdb.FromContext(ctx, r.db)
 	err := db.QueryRow(ctx, query, hmac).Scan(
 		&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
@@ -134,7 +135,7 @@ func (r *CaseRepository) GetByHMAC(ctx context.Context, hmac []byte) (*CaseEntit
 }
 
 // GetByNameNormalized 依正規化姓名搜尋個案。
-func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm string) ([]CaseEntity, error) {
+func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm string) ([]app.Case, error) {
 	query := `
 		SELECT id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 		       home_address, region, ltc_level, service_category, service_usage_type, claim_start_date, claim_end_date,
@@ -147,9 +148,9 @@ func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm strin
 	}
 	defer rows.Close()
 
-	var list []CaseEntity
+	var list []app.Case
 	for rows.Next() {
-		var c CaseEntity
+		var c app.Case
 		if err := rows.Scan(
 			&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
 			&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimStartDate, &c.ClaimEndDate,
@@ -163,7 +164,7 @@ func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm strin
 }
 
 // Create 新增個案主檔。
-func (r *CaseRepository) Create(ctx context.Context, c *CaseEntity) error {
+func (r *CaseRepository) Create(ctx context.Context, c *app.Case) error {
 	query := `
 		INSERT INTO cases (
 			id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
@@ -184,7 +185,7 @@ func (r *CaseRepository) Create(ctx context.Context, c *CaseEntity) error {
 }
 
 // Update 修改個案資料。
-func (r *CaseRepository) Update(ctx context.Context, c *CaseEntity) error {
+func (r *CaseRepository) Update(ctx context.Context, c *app.Case) error {
 	query := `
 		UPDATE cases
 		SET name = $2, name_normalized = $3, home_address = $4, region = $5, ltc_level = $6,
@@ -204,7 +205,7 @@ func (r *CaseRepository) Update(ctx context.Context, c *CaseEntity) error {
 // CreateSchedule 建立排班設定與對應的 legs（包在同一個事務中）。
 // 若 ctx 已掛載外層事務（見 pgxdb.TxRunner），排班與 legs 寫入會併入該事務，
 // 由外層決定 commit／rollback；否則自行開啟並管理事務。
-func (r *CaseRepository) CreateSchedule(ctx context.Context, s *CaseScheduleEntity) error {
+func (r *CaseRepository) CreateSchedule(ctx context.Context, s *app.CaseSchedule) error {
 	if tx, ok := pgxdb.TxFromContext(ctx); ok {
 		return r.insertSchedule(ctx, tx, s)
 	}
@@ -221,7 +222,7 @@ func (r *CaseRepository) CreateSchedule(ctx context.Context, s *CaseScheduleEnti
 	return tx.Commit(ctx)
 }
 
-func (r *CaseRepository) insertSchedule(ctx context.Context, tx pgxdb.Querier, s *CaseScheduleEntity) error {
+func (r *CaseRepository) insertSchedule(ctx context.Context, tx pgxdb.Querier, s *app.CaseSchedule) error {
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
 	}
@@ -274,7 +275,7 @@ func (r *CaseRepository) insertSchedule(ctx context.Context, tx pgxdb.Querier, s
 }
 
 // GetActiveScheduleForCaseOnDate 查詢個案在指定日期的有效排班與時段細節。
-func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*CaseScheduleEntity, error) {
+func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*app.CaseSchedule, error) {
 	query := `
 		SELECT s.id, s.case_id, s.site_id, st.name as site_name, s.weekdays, s.trip_pattern,
 		       s.unit_price, s.distance_km, s.service_duration_min, s.service_code, s.note,
@@ -285,7 +286,7 @@ func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, cas
 		  AND s.effective_range @> $2::date
 		LIMIT 1
 	`
-	var s CaseScheduleEntity
+	var s app.CaseSchedule
 	err := r.db.QueryRow(ctx, query, caseID, serviceDate).Scan(
 		&s.ID, &s.CaseID, &s.SiteID, &s.SiteName, &s.Weekdays, &s.TripPattern,
 		&s.UnitPrice, &s.DistanceKM, &s.ServiceDurationMin, &s.ServiceCode, &s.Note,
@@ -316,7 +317,7 @@ func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, cas
 	defer rows.Close()
 
 	for rows.Next() {
-		var leg ScheduleLegEntity
+		var leg app.ScheduleLeg
 		if err := rows.Scan(
 			&leg.ID, &leg.ScheduleID, &leg.LegSeq, &leg.Direction, &leg.Period,
 			&leg.DepartTime, &leg.ArriveTime, &leg.RunNo, &leg.VehicleID, &leg.VehicleName, &leg.CreatedAt,
@@ -329,27 +330,10 @@ func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, cas
 	return &s, nil
 }
 
-// ActiveCaseScheduleInfo 代表個案於指定月份之有效排班與關聯基本資訊。
-type ActiveCaseScheduleInfo struct {
-	CaseID         uuid.UUID           `json:"caseId"`
-	CaseCode       string              `json:"caseCode"`
-	CaseName       string              `json:"caseName"`
-	Region         string              `json:"region"`
-	ClaimStartDate time.Time           `json:"claimStartDate"`
-	ClaimEndDate   *time.Time          `json:"claimEndDate,omitempty"`
-	SiteID         uuid.UUID           `json:"siteId"`
-	SiteOpenDays   []int16             `json:"siteOpenDays"`
-	EffectiveFrom  time.Time           `json:"effectiveFrom"`
-	EffectiveTo    *time.Time          `json:"effectiveTo,omitempty"`
-	Weekdays       []int16             `json:"weekdays"`
-	TripPattern    int16               `json:"tripPattern"`
-	Legs           []ScheduleLegEntity `json:"legs"`
-}
-
 // GetActiveSchedulesForMonth 查詢特定月份所有在案個案的有效排班與 Legs。
-func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]ActiveCaseScheduleInfo, error) {
+func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]app.ActiveCaseScheduleInfo, error) {
 	if r.db == nil {
-		return []ActiveCaseScheduleInfo{}, nil
+		return []app.ActiveCaseScheduleInfo{}, nil
 	}
 
 	firstDay := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
@@ -376,7 +360,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 	defer rows.Close()
 
 	type scheduleRow struct {
-		info       ActiveCaseScheduleInfo
+		info       app.ActiveCaseScheduleInfo
 		scheduleID uuid.UUID
 	}
 	var list []scheduleRow
@@ -401,7 +385,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 		list = append(list, sr)
 	}
 
-	var results []ActiveCaseScheduleInfo
+	var results []app.ActiveCaseScheduleInfo
 	for _, item := range list {
 		legQuery := `
 			SELECT id, schedule_id, leg_seq, direction, period,
@@ -417,7 +401,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 			return nil, err
 		}
 		for lRows.Next() {
-			var leg ScheduleLegEntity
+			var leg app.ScheduleLeg
 			if err := lRows.Scan(
 				&leg.ID, &leg.ScheduleID, &leg.LegSeq, &leg.Direction, &leg.Period,
 				&leg.DepartTime, &leg.ArriveTime, &leg.RunNo, &leg.VehicleID, &leg.CreatedAt,

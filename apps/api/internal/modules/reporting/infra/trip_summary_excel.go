@@ -1,4 +1,4 @@
-package export
+package infra
 
 import (
 	"bytes"
@@ -6,27 +6,10 @@ import (
 	"strings"
 
 	"github.com/xuri/excelize/v2"
+	"ltc-system/apps/api/internal/modules/reporting/app"
 )
 
-// TripSummaryExportCaseRow 代表單一個案之趟數資料。
-type TripSummaryExportCaseRow struct {
-	CaseCode      string
-	CaseName      string
-	OutboundCount int
-	InboundCount  int
-	TotalCount    int
-}
-
-// TripSummaryExportVehicle 代表單一車輛之趟數資料。
-type TripSummaryExportVehicle struct {
-	VehicleName      string
-	PlateNo          string
-	Rows             []TripSummaryExportCaseRow
-	SubtotalOutbound int
-	SubtotalInbound  int
-	SubtotalTotal    int
-}
-
+// sanitizeSheetName 將車輛名稱轉為 Excel 可接受的工作表名稱（去除保留字元、限長 31 字）。
 func sanitizeSheetName(name string, fallback string) string {
 	invalidChars := []string{"\\", "/", "?", "*", ":", "[", "]", "'"}
 	for _, ch := range invalidChars {
@@ -43,8 +26,8 @@ func sanitizeSheetName(name string, fallback string) string {
 	return name
 }
 
-// GenerateTripSummaryExcel 產生車輛趟數表 Excel 檔案。
-func GenerateTripSummaryExcel(periodYM string, vehicles []TripSummaryExportVehicle) ([]byte, error) {
+// RenderTripSummary 產生車輛趟數表 Excel 檔案。
+func (ExcelRenderer) RenderTripSummary(periodYM string, vehicles []app.TripSummaryVehicle) ([]byte, error) {
 	f := excelize.NewFile()
 	defer f.Close()
 

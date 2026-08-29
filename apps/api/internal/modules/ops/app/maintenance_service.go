@@ -1,36 +1,37 @@
-package service
+package app
 
 import (
 	"context"
 	"time"
 
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/export"
-	"ltc-system/apps/api/internal/repository"
 )
 
 // MaintenanceService 提供車輛維修保養管理與空白表產生服務。
 type MaintenanceService struct {
-	maintenanceRepo *repository.MaintenanceRepository
-	vehicleRepo     *repository.VehicleRepository
-	auditRepo       *repository.AuditRepository
+	maintenanceRepo MaintenanceStore
+	vehicleRepo     VehicleLister
+	auditRepo       AuditWriter
+	renderer        MaintenanceTemplateRenderer
 }
 
 // NewMaintenanceService 建立 MaintenanceService 實例。
 func NewMaintenanceService(
-	maintenanceRepo *repository.MaintenanceRepository,
-	vehicleRepo *repository.VehicleRepository,
-	auditRepo *repository.AuditRepository,
+	maintenanceRepo MaintenanceStore,
+	vehicleRepo VehicleLister,
+	auditRepo AuditWriter,
+	renderer MaintenanceTemplateRenderer,
 ) *MaintenanceService {
 	return &MaintenanceService{
 		maintenanceRepo: maintenanceRepo,
 		vehicleRepo:     vehicleRepo,
 		auditRepo:       auditRepo,
+		renderer:        renderer,
 	}
 }
 
 // List 查詢維修保養紀錄清單。
-func (s *MaintenanceService) List(ctx context.Context, page, pageSize int, vehicleID *uuid.UUID, startDate, endDate *time.Time, q string) ([]repository.MaintenanceLogEntity, int, error) {
+func (s *MaintenanceService) List(ctx context.Context, page, pageSize int, vehicleID *uuid.UUID, startDate, endDate *time.Time, q string) ([]MaintenanceLog, int, error) {
 	return s.maintenanceRepo.List(ctx, page, pageSize, vehicleID, startDate, endDate, q)
 }
 
@@ -48,8 +49,8 @@ type MaintenanceLogInput struct {
 	CreatedBy   uuid.UUID
 }
 
-func (s *MaintenanceService) Create(ctx context.Context, in MaintenanceLogInput, actorID *uuid.UUID, actorRole *string) (*repository.MaintenanceLogEntity, error) {
-	item := &repository.MaintenanceLogEntity{
+func (s *MaintenanceService) Create(ctx context.Context, in MaintenanceLogInput, actorID *uuid.UUID, actorRole *string) (*MaintenanceLog, error) {
+	item := &MaintenanceLog{
 		VehicleID:   in.VehicleID,
 		ServiceDate: in.ServiceDate,
 		Mileage:     in.Mileage,
@@ -65,22 +66,21 @@ func (s *MaintenanceService) Create(ctx context.Context, in MaintenanceLogInput,
 	}
 
 	if s.auditRepo != nil {
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    actorID,
 			ActorRole:  actorRole,
 			Action:     "create",
 			EntityType: "maintenance_logs",
 			EntityID:   strPtr(item.ID.String()),
 			AfterData:  item,
-			CreatedAt:  time.Now(),
 		})
 	}
 	return item, nil
 }
 
 // Update 修改維修保養紀錄。
-func (s *MaintenanceService) Update(ctx context.Context, id uuid.UUID, in MaintenanceLogInput, actorID *uuid.UUID, actorRole *string) (*repository.MaintenanceLogEntity, error) {
-	item := &repository.MaintenanceLogEntity{
+func (s *MaintenanceService) Update(ctx context.Context, id uuid.UUID, in MaintenanceLogInput, actorID *uuid.UUID, actorRole *string) (*MaintenanceLog, error) {
+	item := &MaintenanceLog{
 		ID:          id,
 		VehicleID:   in.VehicleID,
 		ServiceDate: in.ServiceDate,
@@ -96,14 +96,13 @@ func (s *MaintenanceService) Update(ctx context.Context, id uuid.UUID, in Mainte
 	}
 
 	if s.auditRepo != nil {
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    actorID,
 			ActorRole:  actorRole,
 			Action:     "update",
 			EntityType: "maintenance_logs",
 			EntityID:   strPtr(item.ID.String()),
 			AfterData:  item,
-			CreatedAt:  time.Now(),
 		})
 	}
 	return item, nil
@@ -116,13 +115,12 @@ func (s *MaintenanceService) Delete(ctx context.Context, id uuid.UUID, actorID *
 	}
 
 	if s.auditRepo != nil {
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    actorID,
 			ActorRole:  actorRole,
 			Action:     "delete",
 			EntityType: "maintenance_logs",
 			EntityID:   strPtr(id.String()),
-			CreatedAt:  time.Now(),
 		})
 	}
 	return nil
@@ -130,27 +128,19 @@ func (s *MaintenanceService) Delete(ctx context.Context, id uuid.UUID, actorID *
 
 // GenerateBlankMaintenanceExcel 產生符合規格書 §8.3 的 15 車空白維修保養檢查表格。
 func (s *MaintenanceService) GenerateBlankMaintenanceExcel(ctx context.Context) ([]byte, error) {
-	var vehicles []repository.VehicleEntity
-	if s.vehicleRepo != nil {
-		vList, _, _ := s.vehicleRepo.List(ctx, "", "", 1, 100)
-		vehicles = vList
-	}
-	if len(vehicles) == 0 {
-		vehicles = []repository.VehicleEntity{
-			{DisplayName: "竹北一車", PlateNo: "BZG-7915"},
-			{DisplayName: "竹北二車", PlateNo: "BZG-7916"},
-			{DisplayName: "竹北三車", PlateNo: "BZG-7917"},
-			{DisplayName: "竹南一車", PlateNo: "BZG-8801"},
-			{DisplayName: "竹南二車", PlateNo: "BZG-8802"},
-		}
+	// 空白表格上的車輛一律取自車輛主檔。先前在查無車輛時填入五組寫死的車號，
+	// 會讓人拿到一份印著不存在車輛的正式表單；查無資料時就產生沒有車輛列的空表。
+	vehicles, _, err := s.vehicleRepo.List(ctx, "", "", 1, 100)
+	if err != nil {
+		return nil, err
 	}
 
-	labels := make([]export.MaintenanceVehicleLabel, len(vehicles))
+	labels := make([]VehicleLabel, len(vehicles))
 	for i, v := range vehicles {
-		labels[i] = export.MaintenanceVehicleLabel{DisplayName: v.DisplayName, PlateNo: v.PlateNo}
+		labels[i] = VehicleLabel{DisplayName: v.DisplayName, PlateNo: v.PlateNo}
 	}
 
-	return export.GenerateBlankMaintenanceExcel(labels)
+	return s.renderer.RenderBlankMaintenanceTemplate(labels)
 }
 
 func strPtr(s string) *string {

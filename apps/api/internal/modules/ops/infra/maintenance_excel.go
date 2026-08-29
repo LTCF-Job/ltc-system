@@ -1,20 +1,15 @@
-package export
+package infra
 
 import (
 	"bytes"
 	"fmt"
 
 	"github.com/xuri/excelize/v2"
+	"ltc-system/apps/api/internal/modules/ops/app"
 )
 
-// MaintenanceVehicleLabel 代表空白維修保養表要建立分頁的單一車輛識別資訊。
-type MaintenanceVehicleLabel struct {
-	DisplayName string
-	PlateNo     string
-}
-
-// GenerateBlankMaintenanceExcel 依車輛清單產生空白維修保養檢查表格，每車一個分頁。
-func GenerateBlankMaintenanceExcel(vehicles []MaintenanceVehicleLabel) ([]byte, error) {
+// RenderBlankMaintenanceTemplate 依車輛清單產生空白維修保養檢查表格，每車一個分頁。
+func (ExcelRenderer) RenderBlankMaintenanceTemplate(vehicles []app.VehicleLabel) ([]byte, error) {
 	f := excelize.NewFile()
 	defer f.Close()
 
@@ -98,3 +93,9 @@ func GenerateBlankMaintenanceExcel(vehicles []MaintenanceVehicleLabel) ([]byte, 
 
 	return buf.Bytes(), nil
 }
+
+// ExcelRenderer 以 excelize 產生營運表單，是 ops 唯一接觸試算表 SDK 的地方。
+type ExcelRenderer struct{}
+
+// NewExcelRenderer 建立 ExcelRenderer 實例。
+func NewExcelRenderer() ExcelRenderer { return ExcelRenderer{} }

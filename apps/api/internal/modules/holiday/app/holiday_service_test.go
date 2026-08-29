@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"ltc-system/apps/api/internal/repository"
 )
 
 type holidayProviderStub struct{}
@@ -24,11 +23,20 @@ func (holidayProviderStub) Fetch(context.Context, int) ([]HolidayRecord, error) 
 }
 
 func TestHolidayService_ImportTaiwanGovHolidays(t *testing.T) {
-	repo := repository.NewHolidayRepository(nil)
-	svc := NewHolidaySyncService(repo, nil, holidayProviderStub{})
+	svc := NewHolidaySyncService(discardHolidayStore{}, nil, holidayProviderStub{})
 
 	ctx := context.Background()
 	count, err := svc.ImportTaiwanGovHolidays(ctx, 2026, uuid.New(), "admin")
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, count, 6)
 }
+
+// discardHolidayStore 接受任何寫入且回傳空清單，供不驗證持久化的 use case 測試使用。
+type discardHolidayStore struct{}
+
+func (discardHolidayStore) List(context.Context, time.Time, time.Time, string) ([]Holiday, error) {
+	return nil, nil
+}
+func (discardHolidayStore) Upsert(context.Context, *Holiday) error       { return nil }
+func (discardHolidayStore) BatchUpsert(context.Context, []Holiday) error { return nil }
+func (discardHolidayStore) Delete(context.Context, time.Time) error      { return nil }

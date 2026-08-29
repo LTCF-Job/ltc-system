@@ -1,4 +1,4 @@
-package handler
+package transport
 
 import (
 	"fmt"
@@ -6,17 +6,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/reporting/app"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 // ReportHandler 處理趟數表與新竹接送時刻表等報表相關 HTTP 請求。
 type ReportHandler struct {
-	reportSvc *service.ReportService
+	reportSvc *app.ReportService
 }
 
 // NewReportHandler 建立 ReportHandler 實例。
-func NewReportHandler(reportSvc *service.ReportService) *ReportHandler {
+func NewReportHandler(reportSvc *app.ReportService) *ReportHandler {
 	return &ReportHandler{reportSvc: reportSvc}
 }
 
@@ -38,7 +38,7 @@ func (h *ReportHandler) GetTripSummary(c *gin.Context) {
 
 	report, err := h.reportSvc.GetTripSummary(c.Request.Context(), periodYm, regionPtr, vehID)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
@@ -63,7 +63,7 @@ func (h *ReportHandler) ExportTripSummaryExcel(c *gin.Context) {
 
 	excelBytes, err := h.reportSvc.GenerateTripSummaryExcel(c.Request.Context(), periodYm, regionPtr, vehID)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
@@ -88,7 +88,7 @@ func (h *ReportHandler) GetHsinchuSchedule(c *gin.Context) {
 
 	report, err := h.reportSvc.GetHsinchuSchedule(c.Request.Context(), siteID, vehID)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
@@ -111,7 +111,7 @@ func (h *ReportHandler) ExportHsinchuScheduleExcel(c *gin.Context) {
 
 	excelBytes, err := h.reportSvc.GenerateHsinchuScheduleExcel(c.Request.Context(), siteID, vehID)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 

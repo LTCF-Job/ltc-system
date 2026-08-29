@@ -1,4 +1,4 @@
-package handler
+package transport
 
 import (
 	"net/http"
@@ -7,17 +7,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/audit/app"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 // AuditHandler 處理系統稽核日誌之 HTTP 請求。
 type AuditHandler struct {
-	svc *service.AuditService
+	svc *app.Service
 }
 
 // NewAuditHandler 建立 AuditHandler 實例。
-func NewAuditHandler(svc *service.AuditService) *AuditHandler {
+func NewAuditHandler(svc *app.Service) *AuditHandler {
 	return &AuditHandler{svc: svc}
 }
 
@@ -29,7 +29,7 @@ func (h *AuditHandler) List(c *gin.Context) {
 		pageSize = 100
 	}
 
-	filter := service.AuditFilter{
+	filter := app.Filter{
 		Action:     c.Query("action"),
 		EntityType: c.Query("entityType"),
 		EntityID:   c.Query("entityId"),
@@ -57,9 +57,9 @@ func (h *AuditHandler) List(c *gin.Context) {
 		}
 	}
 
-	logs, total, err := h.svc.ListAuditLogs(c.Request.Context(), filter)
+	logs, total, err := h.svc.List(c.Request.Context(), filter)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "查詢稽核日誌失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢稽核日誌失敗", nil)
 		return
 	}
 
@@ -68,7 +68,7 @@ func (h *AuditHandler) List(c *gin.Context) {
 		totalPages++
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, logs, middleware.PaginationMeta{
+	httpx.RespondSuccess(c, http.StatusOK, newRecordResponses(logs), httpx.PaginationMeta{
 		Page:       page,
 		PageSize:   pageSize,
 		Total:      total,

@@ -8,13 +8,42 @@ import (
 	"os"
 	"time"
 
-	"ltc-system/apps/api/internal/adapter"
-	"ltc-system/apps/api/internal/adapter/google"
-	"ltc-system/apps/api/internal/config"
-	"ltc-system/apps/api/internal/handler"
+	auditapp "ltc-system/apps/api/internal/modules/audit/app"
+	auditinfra "ltc-system/apps/api/internal/modules/audit/infra"
+	audittransport "ltc-system/apps/api/internal/modules/audit/transport"
+	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
+	importinfra "ltc-system/apps/api/internal/modules/caseimport/infra"
+	importtransport "ltc-system/apps/api/internal/modules/caseimport/transport"
+	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
+	caseinfra "ltc-system/apps/api/internal/modules/casemgmt/infra"
+	casetransport "ltc-system/apps/api/internal/modules/casemgmt/transport"
+	formapp "ltc-system/apps/api/internal/modules/formsync/app"
+	forminfra "ltc-system/apps/api/internal/modules/formsync/infra"
+	"ltc-system/apps/api/internal/modules/formsync/infra/google"
+	formtransport "ltc-system/apps/api/internal/modules/formsync/transport"
+	holidayapp "ltc-system/apps/api/internal/modules/holiday/app"
+	holidayinfra "ltc-system/apps/api/internal/modules/holiday/infra"
+	holidaytransport "ltc-system/apps/api/internal/modules/holiday/transport"
+	masterapp "ltc-system/apps/api/internal/modules/masterdata/app"
+	masterinfra "ltc-system/apps/api/internal/modules/masterdata/infra"
+	mastertransport "ltc-system/apps/api/internal/modules/masterdata/transport"
+	notifyapp "ltc-system/apps/api/internal/modules/notification/app"
+	notifyinfra "ltc-system/apps/api/internal/modules/notification/infra"
+	notifytransport "ltc-system/apps/api/internal/modules/notification/transport"
+	opsapp "ltc-system/apps/api/internal/modules/ops/app"
+	opsinfra "ltc-system/apps/api/internal/modules/ops/infra"
+	opstransport "ltc-system/apps/api/internal/modules/ops/transport"
+	reportapp "ltc-system/apps/api/internal/modules/reporting/app"
+	reportinfra "ltc-system/apps/api/internal/modules/reporting/infra"
+	reporttransport "ltc-system/apps/api/internal/modules/reporting/transport"
+	rideapp "ltc-system/apps/api/internal/modules/ride/app"
+	rideinfra "ltc-system/apps/api/internal/modules/ride/infra"
+	ridetransport "ltc-system/apps/api/internal/modules/ride/transport"
+	taskapp "ltc-system/apps/api/internal/modules/task/app"
+	taskinfra "ltc-system/apps/api/internal/modules/task/infra"
+	tasktransport "ltc-system/apps/api/internal/modules/task/transport"
+	"ltc-system/apps/api/internal/platform/config"
 	"ltc-system/apps/api/internal/platform/pgxdb"
-	"ltc-system/apps/api/internal/repository"
-	"ltc-system/apps/api/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -52,71 +81,96 @@ func main() {
 	}
 
 	// 初始化 Repositories
-	regionRepo := repository.NewRegionRepository(pool)
-	caseRepo := repository.NewCaseRepository(pool)
-	siteRepo := repository.NewSiteRepository(pool)
-	vehicleRepo := repository.NewVehicleRepository(pool)
-	driverRepo := repository.NewDriverRepository(pool)
-	formRepo := repository.NewFormRepository(pool)
-	holidayRepo := repository.NewHolidayRepository(pool)
-	notificationRepo := repository.NewNotificationRepository(pool)
-	auditRepo := repository.NewAuditRepository(pool)
-	maintenanceRepo := repository.NewMaintenanceRepository(pool)
-	attendanceRepo := repository.NewAttendanceRepository(pool)
-	fuelRepo := repository.NewFuelRepository(pool)
-	reportRepo := repository.NewReportRepository(pool)
-	dashboardRepo := repository.NewDashboardRepository(pool)
-	precheckRepo := repository.NewPrecheckRepository(pool)
-	taskRepo := repository.NewTaskRepository(pool)
+	caseRepo := caseinfra.NewCaseRepository(pool)
+	rideRepo := rideinfra.NewRideRepository(pool)
+	holidayRepo := holidayinfra.NewHolidayRepository(pool)
+	notificationRepo := notifyinfra.NewNotificationRepository(pool)
+	auditSvc := auditapp.NewService(auditinfra.NewAuditRepository(pool))
+
+	// masterdata 模組自有的 repository，legacy service 透過本檔的 adapter 取用
+	mdRegionRepo := masterinfra.NewRegionRepository(pool)
+	mdSiteRepo := masterinfra.NewSiteRepository(pool)
+	mdVehicleRepo := masterinfra.NewVehicleRepository(pool)
+	mdDriverRepo := masterinfra.NewDriverRepository(pool)
+	maintenanceRepo := opsinfra.NewMaintenanceRepository(pool)
+	attendanceRepo := opsinfra.NewAttendanceRepository(pool)
+	fuelRepo := opsinfra.NewFuelRepository(pool)
+	reportRepo := reportinfra.NewReportRepository(pool)
+	dashboardRepo := reportinfra.NewDashboardRepository(pool)
+	precheckRepo := reportinfra.NewPrecheckRepository(pool)
+	taskRepo := taskinfra.NewTaskRepository(pool)
 
 	// 初始化 Services
 	googleCli, err := google.NewClient(ctx, cfg.GoogleSAJSON)
 	if err != nil {
-		slog.Warn("Failed to initialize Google API client (falling back to offline mode)", slog.String("error", err.Error()))
+		slog.Warn("Failed to initialize Google API client (form sync features requiring Google credentials will be unavailable)", slog.String("error", err.Error()))
 	}
-	regionSvc := service.NewRegionService(regionRepo, auditRepo)
-	siteSvc := service.NewSiteService(siteRepo)
-	vehicleSvc := service.NewVehicleService(vehicleRepo)
-	driverSvc := service.NewDriverService(driverRepo, cfg)
+	// 明確轉型為介面零值：nil 的具體型別指標直接指派給介面欄位會變成
+	// 「非 nil 介面、nil 內容」，導致下游 s.googleCli == nil 的判斷永遠不成立；
+	// NewGoogleClient 回傳的 *infra.GoogleClient 傳進 formapp.GoogleClient 介面參數時也有相同風險，故兩層都要做零值轉換
+	var googleAdapter google.Adapter
+	if googleCli != nil {
+		googleAdapter = googleCli
+	}
+	var formGoogleClient formapp.GoogleClient
+	if gc := forminfra.NewGoogleClient(googleAdapter); gc != nil {
+		formGoogleClient = gc
+	}
+	mdAudit := masterdataAuditWriter{svc: auditSvc}
+	regionSvc := masterapp.NewRegionService(mdRegionRepo, mdAudit)
+	siteSvc := masterapp.NewSiteService(mdSiteRepo)
+	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo)
+	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg)
 	txRunner := pgxdb.NewTxRunner(pool)
-	masterSvc := service.NewMasterService(cfg, caseRepo, siteRepo, vehicleRepo, driverRepo, auditRepo)
-	importSvc := service.NewImportService(masterSvc, siteRepo, vehicleRepo, driverRepo, caseRepo, txRunner)
-	rideSvc := service.NewRideService(formRepo, driverRepo, caseRepo, vehicleRepo, auditRepo)
-	formSvc := service.NewFormService(formRepo, googleCli)
-	precheckSvc := service.NewPrecheckService(precheckRepo)
-	notificationSvc := service.NewNotificationService(notificationRepo, auditRepo, nil)
-	holidayProvider := service.GovernmentHolidayProvider(&adapter.GovernmentHolidayHTTPClient{
-		Endpoint: adapter.GovernmentHolidayCSVEndpoint,
+	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer())
+	excelAdapter := importinfra.NewExcelAdapter()
+	importSvc := importapp.NewImportService(
+		caseRegistrar{svc: caseSvc},
+		importSiteLookup{repo: mdSiteRepo},
+		importVehicleLookup{repo: mdVehicleRepo},
+		caseRepo,
+		excelAdapter,
+		excelAdapter,
+		txRunner,
+	)
+	rideSvc := rideapp.NewRideService(rideRepo, rideDriverResolver{repo: mdDriverRepo}, rideScheduleReader{repo: caseRepo}, rideAuditWriter{svc: auditSvc})
+	formSvc := formapp.NewFormService(forminfra.NewFormRepository(pool), formGoogleClient)
+	excelRenderer := reportinfra.NewExcelRenderer()
+	precheckSvc := reportapp.NewPrecheckService(precheckRepo)
+	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, nil)
+	holidayProvider := holidayapp.GovernmentHolidayProvider(&holidayinfra.GovernmentHolidayHTTPClient{
+		Endpoint: holidayinfra.GovernmentHolidayCSVEndpoint,
 		Client:   &http.Client{Timeout: cfg.GovernmentHolidayAPITimeout},
 	})
-	holidaySvc := service.NewHolidaySyncService(holidayRepo, auditRepo, holidayProvider)
-	reportSvc := service.NewReportService(reportRepo)
-	auditSvc := service.NewAuditService(auditRepo)
-	maintenanceSvc := service.NewMaintenanceService(maintenanceRepo, vehicleRepo, auditRepo)
-	attendanceSvc := service.NewAttendanceService(attendanceRepo, driverRepo, auditRepo)
-	fuelSvc := service.NewFuelService(fuelRepo, auditRepo)
-	dashboardSvc := service.NewDashboardService(dashboardRepo)
-	taskSvc := service.NewTaskService(taskRepo, caseRepo, holidayRepo, notificationSvc)
+	holidaySvc := holidayapp.NewHolidaySyncService(holidayRepo, holidayAuditWriter{svc: auditSvc}, holidayProvider)
+	reportSvc := reportapp.NewReportService(reportRepo, excelRenderer)
+	opsAudit := opsAuditWriter{svc: auditSvc}
+	maintenanceSvc := opsapp.NewMaintenanceService(maintenanceRepo, opsVehicleLister{repo: mdVehicleRepo}, opsAudit, opsinfra.NewExcelRenderer())
+	attendanceSvc := opsapp.NewAttendanceService(attendanceRepo, opsDriverLister{repo: mdDriverRepo}, opsAudit)
+	fuelSvc := opsapp.NewFuelService(fuelRepo, opsAudit)
+	dashboardSvc := reportapp.NewDashboardService(dashboardRepo)
+	taskSvc := taskapp.NewTaskService(taskRepo, taskScheduleReader{repo: caseRepo}, holidayRepo, notificationSvc)
 
 	// 初始化 Handlers
 	h := handlers{
-		region:       handler.NewRegionHandler(regionSvc),
-		kase:         handler.NewCaseHandler(masterSvc, importSvc),
-		site:         handler.NewSiteHandler(siteSvc),
-		vehicle:      handler.NewVehicleHandler(vehicleSvc),
-		driver:       handler.NewDriverHandler(driverSvc),
-		ride:         handler.NewRideHandler(rideSvc),
-		export:       handler.NewExportHandler(precheckSvc, reportSvc),
-		notification: handler.NewNotificationHandler(notificationSvc),
-		holiday:      handler.NewHolidayHandler(holidaySvc),
-		report:       handler.NewReportHandler(reportSvc),
-		audit:        handler.NewAuditHandler(auditSvc),
-		task:         handler.NewTaskHandler(taskSvc),
-		maintenance:  handler.NewMaintenanceHandler(maintenanceSvc),
-		attendance:   handler.NewAttendanceHandler(attendanceSvc),
-		fuel:         handler.NewFuelHandler(fuelSvc),
-		dashboard:    handler.NewDashboardHandler(dashboardSvc),
-		form:         handler.NewFormHandler(formSvc),
+		region:       mastertransport.NewRegionHandler(regionSvc),
+		kase:         casetransport.NewCaseHandler(caseSvc),
+		caseImport:   importtransport.NewImportHandler(importSvc),
+		site:         mastertransport.NewSiteHandler(siteSvc),
+		vehicle:      mastertransport.NewVehicleHandler(vehicleSvc),
+		driver:       mastertransport.NewDriverHandler(driverSvc),
+		ride:         ridetransport.NewRideHandler(rideSvc),
+		export:       reporttransport.NewExportHandler(precheckSvc, reportSvc),
+		notification: notifytransport.NewNotificationHandler(notificationSvc),
+		holiday:      holidaytransport.NewHolidayHandler(holidaySvc),
+		report:       reporttransport.NewReportHandler(reportSvc),
+		audit:        audittransport.NewAuditHandler(auditSvc),
+		task:         tasktransport.NewTaskHandler(taskSvc),
+		maintenance:  opstransport.NewMaintenanceHandler(maintenanceSvc),
+		attendance:   opstransport.NewAttendanceHandler(attendanceSvc),
+		fuel:         opstransport.NewFuelHandler(fuelSvc),
+		dashboard:    reporttransport.NewDashboardHandler(dashboardSvc),
+		form:         formtransport.NewFormHandler(formSvc),
 	}
 
 	r := newRouter(cfg, pool, h)

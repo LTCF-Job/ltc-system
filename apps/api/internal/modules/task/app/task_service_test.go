@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -7,32 +7,31 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"ltc-system/apps/api/internal/repository"
 )
 
 type mockTaskRepo struct {
-	slots []repository.ReportedRideSlot
-	stats repository.MonthEndRideStats
+	slots []ReportedRideSlot
+	stats MonthEndRideStats
 	err   error
 }
 
-func (m *mockTaskRepo) GetReportedRideSlots(ctx context.Context, targetDate time.Time) ([]repository.ReportedRideSlot, error) {
+func (m *mockTaskRepo) GetReportedRideSlots(ctx context.Context, targetDate time.Time) ([]ReportedRideSlot, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.slots, nil
 }
 
-func (m *mockTaskRepo) GetMonthEndRideStats(ctx context.Context, start, end time.Time) (repository.MonthEndRideStats, error) {
+func (m *mockTaskRepo) GetMonthEndRideStats(ctx context.Context, start, end time.Time) (MonthEndRideStats, error) {
 	if m.err != nil {
-		return repository.MonthEndRideStats{}, m.err
+		return MonthEndRideStats{}, m.err
 	}
 	return m.stats, nil
 }
 
 func TestTaskService_MonthEndReminder(t *testing.T) {
 	mockRepo := &mockTaskRepo{
-		stats: repository.MonthEndRideStats{
+		stats: MonthEndRideStats{
 			TotalRides:      100,
 			BoardedRides:    90,
 			UnreportedRides: 8,
@@ -56,13 +55,13 @@ func TestTaskService_MonthEndReminder(t *testing.T) {
 func TestTaskService_CheckMissingReports_WithMock(t *testing.T) {
 	caseID := uuid.New()
 	mockRepo := &mockTaskRepo{
-		slots: []repository.ReportedRideSlot{
+		slots: []ReportedRideSlot{
 			{CaseID: caseID, LegSeq: 1},
 		},
 	}
 
-	// 驗證 TaskService 與 TaskRepositoryPort 介面相容
-	var _ TaskRepositoryPort = mockRepo
+	// 驗證 TaskService 與 TaskStore 介面相容
+	var _ TaskStore = mockRepo
 	svc := NewTaskService(mockRepo, nil, nil, nil)
 	assert.NotNil(t, svc)
 }

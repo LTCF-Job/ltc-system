@@ -3,6 +3,7 @@ package rocdate
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -75,3 +76,33 @@ func ParseROCYearMonth(str string) (int, int, error) {
 	return 0, 0, errors.New("invalid ROC year-month format, expected RRR-MM or RRRMM")
 }
 
+// MonthRange 將期別字串解析為當月第一天、下月第一天與當月天數。
+//
+// 接受民國與西元兩種寫法（"115-07"、"11507"、"2026-07"）：年份小於 1000 時視為
+// 民國年。無法解析時退回當前月份，讓報表在期別遺失時仍回傳當月資料而非空值。
+func MonthRange(periodYM string) (start, end time.Time, daysInMonth int) {
+	var year, month int
+	if strings.Contains(periodYM, "-") {
+		parts := strings.Split(periodYM, "-")
+		if len(parts) == 2 {
+			fmt.Sscanf(parts[0], "%d", &year)
+			fmt.Sscanf(parts[1], "%d", &month)
+			if year < 1000 {
+				year += 1911
+			}
+		}
+	} else if len(periodYM) == 5 {
+		fmt.Sscanf(periodYM[:3], "%d", &year)
+		fmt.Sscanf(periodYM[3:], "%d", &month)
+		year += 1911
+	}
+
+	if year == 0 || month == 0 {
+		now := time.Now()
+		year, month = now.Year(), int(now.Month())
+	}
+
+	start = time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	end = start.AddDate(0, 1, 0)
+	return start, end, end.AddDate(0, 0, -1).Day()
+}

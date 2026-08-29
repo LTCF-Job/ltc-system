@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -7,26 +7,23 @@ import (
 	"strings"
 	"time"
 
-	"ltc-system/apps/api/internal/adapter/google"
-	"ltc-system/apps/api/internal/repository"
-
 	"github.com/google/uuid"
 )
 
-// FormRepositoryPort 定義表單資料存取介面。
-type FormRepositoryPort interface {
-	ListGoogleForms(ctx context.Context) ([]repository.GoogleFormEntity, error)
-	ListColumnsWithMapping(ctx context.Context, mappingStatus string) ([]repository.FormColumnMappingEntity, error)
+// FormStore 定義表單資料存取介面。
+type FormStore interface {
+	ListGoogleForms(ctx context.Context) ([]GoogleForm, error)
+	ListColumnsWithMapping(ctx context.Context, mappingStatus string) ([]ColumnMapping, error)
 	UpdateColumnMappingById(ctx context.Context, colID string, status string, caseID *string, legSeq *int16) error
 	CreateGoogleForm(ctx context.Context, id, vehicleID uuid.UUID, title, sheetID, secretRef string) error
 	DeleteGoogleForm(ctx context.Context, formID uuid.UUID) error
 	SaveFormColumns(ctx context.Context, formID uuid.UUID, headers []string) error
 }
 
-// GoogleAdapterPort 定義 Google 試算表與雲端硬碟適配器介面。
-type GoogleAdapterPort interface {
-	ListDriveSheets(ctx context.Context) ([]google.DriveFileItem, error)
-	GetSpreadsheetInfo(ctx context.Context, spreadsheetID string, accessToken string) (*google.SpreadsheetInfo, error)
+// GoogleClient 定義 Google 試算表與雲端硬碟適配器介面。
+type GoogleClient interface {
+	ListDriveSheets(ctx context.Context) ([]DriveFile, error)
+	GetSpreadsheetInfo(ctx context.Context, spreadsheetID string, accessToken string) (*SpreadsheetInfo, error)
 	ReadSheetRows(ctx context.Context, spreadsheetID string, tabName string, accessToken string) ([][]interface{}, error)
 }
 
@@ -117,14 +114,17 @@ type SyncFormOptions struct {
 	AccessToken   string `json:"accessToken,omitempty"`
 }
 
+// ErrGoogleClientUnavailable 代表未設定 Google 憑證，無法存取雲端試算表。
+var ErrGoogleClientUnavailable = errors.New("google client is not configured")
+
 // FormService 負責處理表單清單查詢、同步與欄位對應業務邏輯。
 type FormService struct {
-	repo      FormRepositoryPort
-	googleCli GoogleAdapterPort
+	repo      FormStore
+	googleCli GoogleClient
 }
 
 // NewFormService 建立 FormService 實例。
-func NewFormService(repo FormRepositoryPort, googleCli GoogleAdapterPort) *FormService {
+func NewFormService(repo FormStore, googleCli GoogleClient) *FormService {
 	return &FormService{
 		repo:      repo,
 		googleCli: googleCli,
@@ -133,12 +133,10 @@ func NewFormService(repo FormRepositoryPort, googleCli GoogleAdapterPort) *FormS
 
 // ListGoogleDriveFiles 查詢雲端硬碟中可選用的 Google 試算表清單。
 func (s *FormService) ListGoogleDriveFiles(ctx context.Context) ([]GoogleDriveFileDTO, error) {
+	// 未設定 Google 憑證時無法得知雲端硬碟實際內容；先前在此回傳一份寫死的檔案清單，
+	// 會讓使用者以為已成功讀取遠端硬碟。
 	if s.googleCli == nil {
-		return []GoogleDriveFileDTO{
-			{ID: "demo_zhubei1", Name: "竹北一車每日接送回報 (回覆)"},
-			{ID: "demo_zhubei2", Name: "竹北二車每日接送回報 (回覆)"},
-			{ID: "demo_zhunan1", Name: "竹南1車每日接送回報 (回覆)"},
-		}, nil
+		return nil, ErrGoogleClientUnavailable
 	}
 
 	files, err := s.googleCli.ListDriveSheets(ctx)
@@ -160,18 +158,15 @@ func (s *FormService) ListGoogleDriveFiles(ctx context.Context) ([]GoogleDriveFi
 
 // InspectGoogleSheet 解析特定試算表結構、標題與所有工作表分頁。
 func (s *FormService) InspectGoogleSheet(ctx context.Context, inputURLOrID string, accessToken string) (*InspectSheetDTO, error) {
-	sheetID := google.ExtractSpreadsheetID(inputURLOrID)
+	sheetID := ExtractSpreadsheetID(inputURLOrID)
 	if sheetID == "" {
 		return nil, errors.New("請輸入有效的 Google 試算表連結或 ID")
 	}
 
+	// 未設定 Google 憑證時無法得知試算表結構；先前在此回傳一份寫死的分頁與表頭，
+	// 會讓使用者以為已成功讀取遠端試算表。
 	if s.googleCli == nil {
-		return &InspectSheetDTO{
-			SpreadsheetID:  sheetID,
-			Title:          "竹北一車每日接送回報 (回覆)",
-			SheetTabs:      []string{"8月回報", "7月回報", "表單回覆 1"},
-			PreviewHeaders: []string{"時間戳記", "今天日期", "今日駕駛人", "蔡曾切（去）", "蔡曾切（回）"},
-		}, nil
+		return nil, ErrGoogleClientUnavailable
 	}
 
 	info, err := s.googleCli.GetSpreadsheetInfo(ctx, sheetID, accessToken)
@@ -258,7 +253,7 @@ func (s *FormService) CreateFormAssociation(ctx context.Context, req CreateFormA
 		return nil, errors.New("Google 試算表連結不可為空")
 	}
 
-	sheetID := google.ExtractSpreadsheetID(req.SheetURL)
+	sheetID := ExtractSpreadsheetID(req.SheetURL)
 	if sheetID == "" {
 		return nil, errors.New("無效的 Google 試算表連結或 ID")
 	}
@@ -380,7 +375,7 @@ func (s *FormService) SyncForm(ctx context.Context, formID string, opts *SyncFor
 		accessToken := ""
 		if opts != nil {
 			if opts.SpreadsheetID != "" {
-				spreadsheetID = google.ExtractSpreadsheetID(opts.SpreadsheetID)
+				spreadsheetID = ExtractSpreadsheetID(opts.SpreadsheetID)
 			}
 			accessToken = opts.AccessToken
 		}
@@ -399,104 +394,40 @@ func (s *FormService) SyncForm(ctx context.Context, formID string, opts *SyncFor
 	}, nil
 }
 
-// ListColumns 查詢表單欄位對應清單。
+// ListColumns 查詢表單欄位對應清單。查無資料時回傳空清單；先前在此回傳三筆寫死
+// 的示範欄位（含真實姓名與捏造的個案 UUID），會讓操作人員誤以為對應已完成。
 func (s *FormService) ListColumns(ctx context.Context, mappingStatus string) ([]FormColumnDTO, error) {
-	if s.repo != nil {
-		entities, err := s.repo.ListColumnsWithMapping(ctx, mappingStatus)
-		if err == nil && len(entities) > 0 {
-			var dtos []FormColumnDTO
-			for _, e := range entities {
-				dtos = append(dtos, FormColumnDTO{
-					ID:                e.ID,
-					FormID:            e.FormID,
-					FormTitle:         e.FormTitle,
-					VehicleName:       e.VehicleName,
-					ColumnIndex:       e.ColumnIndex,
-					ColumnHeader:      e.ColumnHeader,
-					CleanedName:       e.CleanedName,
-					Kind:              e.Kind,
-					MappingStatus:     e.MappingStatus,
-					CaseID:            e.CaseID,
-					CaseName:          e.CaseName,
-					LegSeq:            e.LegSeq,
-					SuggestedCaseID:   e.SuggestedCaseID,
-					SuggestedCaseName: e.SuggestedCaseName,
-					SuggestionScore:   e.SuggestionScore,
-				})
-			}
-			return dtos, nil
-		}
+	entities, err := s.repo.ListColumnsWithMapping(ctx, mappingStatus)
+	if err != nil {
+		return nil, err
 	}
 
-	// 預設示範欄位清單
-	defaultCols := []FormColumnDTO{
-		{
-			ID:                "col_001",
-			FormID:            "44444444-4444-4444-4444-444444444401",
-			FormTitle:         "竹北一車每日接送回報表",
-			VehicleName:       "竹北一車",
-			ColumnIndex:       4,
-			ColumnHeader:      "蔡曾切（去）",
-			CleanedName:       "蔡曾切",
-			Kind:              "ride_status",
-			MappingStatus:     "mapped",
-			CaseID:            strPtr("55555555-5555-5555-5555-555555555501"),
-			CaseName:          strPtr("蔡曾切"),
-			LegSeq:            int16Ptr(1),
-			SuggestedCaseID:   strPtr("55555555-5555-5555-5555-555555555501"),
-			SuggestedCaseName: strPtr("蔡曾切"),
-			SuggestionScore:   1.0,
-		},
-		{
-			ID:                "col_002",
-			FormID:            "44444444-4444-4444-4444-444444444401",
-			FormTitle:         "竹北一車每日接送回報表",
-			VehicleName:       "竹北一車",
-			ColumnIndex:       5,
-			ColumnHeader:      "蔡曾切（回）",
-			CleanedName:       "蔡曾切",
-			Kind:              "ride_status",
-			MappingStatus:     "mapped",
-			CaseID:            strPtr("55555555-5555-5555-5555-555555555501"),
-			CaseName:          strPtr("蔡曾切"),
-			LegSeq:            int16Ptr(2),
-			SuggestedCaseID:   strPtr("55555555-5555-5555-5555-555555555501"),
-			SuggestedCaseName: strPtr("蔡曾切"),
-			SuggestionScore:   1.0,
-		},
-		{
-			ID:                "col_003",
-			FormID:            "44444444-4444-4444-4444-444444444403",
-			FormTitle:         "竹南1車每日接送回報表",
-			VehicleName:       "竹南1車",
-			ColumnIndex:       8,
-			ColumnHeader:      "李國盛（去程）",
-			CleanedName:       "李國盛",
-			Kind:              "ride_status",
-			MappingStatus:     "pending",
-			CaseID:            nil,
-			LegSeq:            nil,
-			SuggestedCaseID:   strPtr("55555555-5555-5555-5555-555555555505"),
-			SuggestedCaseName: strPtr("李國盛"),
-			SuggestionScore:   0.95,
-		},
+	dtos := make([]FormColumnDTO, 0, len(entities))
+	for _, e := range entities {
+		dtos = append(dtos, FormColumnDTO{
+			ID:                e.ID,
+			FormID:            e.FormID,
+			FormTitle:         e.FormTitle,
+			VehicleName:       e.VehicleName,
+			ColumnIndex:       e.ColumnIndex,
+			ColumnHeader:      e.ColumnHeader,
+			CleanedName:       e.CleanedName,
+			Kind:              e.Kind,
+			MappingStatus:     e.MappingStatus,
+			CaseID:            e.CaseID,
+			CaseName:          e.CaseName,
+			LegSeq:            e.LegSeq,
+			SuggestedCaseID:   e.SuggestedCaseID,
+			SuggestedCaseName: e.SuggestedCaseName,
+			SuggestionScore:   e.SuggestionScore,
+		})
 	}
-
-	var filtered []FormColumnDTO
-	for _, col := range defaultCols {
-		if mappingStatus == "" || col.MappingStatus == mappingStatus {
-			filtered = append(filtered, col)
-		}
-	}
-	return filtered, nil
+	return dtos, nil
 }
 
 // UpdateColumnMapping 更新單一欄位之對應狀態。
 func (s *FormService) UpdateColumnMapping(ctx context.Context, colID string, status string, caseID *string, legSeq *int16) error {
-	if s.repo != nil {
-		return s.repo.UpdateColumnMappingById(ctx, colID, status, caseID, legSeq)
-	}
-	return nil
+	return s.repo.UpdateColumnMappingById(ctx, colID, status, caseID, legSeq)
 }
 
 // BatchMapping 批次更新欄位對應狀態。

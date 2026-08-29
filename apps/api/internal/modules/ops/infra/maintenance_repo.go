@@ -1,4 +1,4 @@
-package repository
+package infra
 
 import (
 	"context"
@@ -7,24 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/ops/app"
 )
-
-// MaintenanceLogEntity 代表 maintenance_logs 資料表實體。
-type MaintenanceLogEntity struct {
-	ID          uuid.UUID `json:"id"`
-	VehicleID   uuid.UUID `json:"vehicleId"`
-	VehicleName string    `json:"vehicleName,omitempty"`
-	PlateNo     string    `json:"plateNo,omitempty"`
-	ServiceDate time.Time `json:"serviceDate"`
-	Mileage     float64   `json:"mileage"`
-	Items       string    `json:"items"`
-	Vendor      *string   `json:"vendor,omitempty"`
-	Cost        float64   `json:"cost"`
-	ReceiptURL  *string   `json:"receiptUrl,omitempty"`
-	Note        *string   `json:"note,omitempty"`
-	CreatedBy   uuid.UUID `json:"createdBy"`
-	CreatedAt   time.Time `json:"createdAt"`
-}
 
 // MaintenanceRepository 提供車輛維修保養紀錄之資料存取。
 type MaintenanceRepository struct {
@@ -37,9 +21,9 @@ func NewMaintenanceRepository(db *pgxpool.Pool) *MaintenanceRepository {
 }
 
 // List 查詢維修保養紀錄清單，支援分頁與車輛／日期／關鍵字模糊篩選。
-func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, vehicleID *uuid.UUID, startDate, endDate *time.Time, q string) ([]MaintenanceLogEntity, int, error) {
+func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, vehicleID *uuid.UUID, startDate, endDate *time.Time, q string) ([]app.MaintenanceLog, int, error) {
 	if r.db == nil {
-		return []MaintenanceLogEntity{}, 0, nil
+		return []app.MaintenanceLog{}, 0, nil
 	}
 
 	whereClause := "WHERE 1=1"
@@ -92,9 +76,9 @@ func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, ve
 	}
 	defer rows.Close()
 
-	list := []MaintenanceLogEntity{}
+	list := []app.MaintenanceLog{}
 	for rows.Next() {
-		var item MaintenanceLogEntity
+		var item app.MaintenanceLog
 		if err := rows.Scan(
 			&item.ID, &item.VehicleID, &item.VehicleName, &item.PlateNo, &item.ServiceDate,
 			&item.Mileage, &item.Items, &item.Vendor, &item.Cost, &item.ReceiptURL, &item.Note,
@@ -109,7 +93,7 @@ func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, ve
 }
 
 // Create 新增單筆維修保養紀錄。
-func (r *MaintenanceRepository) Create(ctx context.Context, item *MaintenanceLogEntity) error {
+func (r *MaintenanceRepository) Create(ctx context.Context, item *app.MaintenanceLog) error {
 	if r.db == nil {
 		item.ID = uuid.New()
 		item.CreatedAt = time.Now()
@@ -129,7 +113,7 @@ func (r *MaintenanceRepository) Create(ctx context.Context, item *MaintenanceLog
 }
 
 // Update 修改維修保養紀錄。
-func (r *MaintenanceRepository) Update(ctx context.Context, item *MaintenanceLogEntity) error {
+func (r *MaintenanceRepository) Update(ctx context.Context, item *app.MaintenanceLog) error {
 	if r.db == nil {
 		return nil
 	}

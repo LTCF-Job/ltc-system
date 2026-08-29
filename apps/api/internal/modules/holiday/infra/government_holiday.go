@@ -1,4 +1,4 @@
-package adapter
+package infra
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/holiday/app"
 )
 
 const GovernmentHolidayCSVEndpoint = "https://data.ntpc.gov.tw/api/datasets/308dcd75-6434-45bc-a95f-584da4fed251/csv/file"
@@ -23,7 +23,7 @@ type GovernmentHolidayHTTPClient struct {
 	Client   *http.Client
 }
 
-func (c *GovernmentHolidayHTTPClient) Fetch(ctx context.Context, year int) ([]service.HolidayRecord, error) {
+func (c *GovernmentHolidayHTTPClient) Fetch(ctx context.Context, year int) ([]app.HolidayRecord, error) {
 	if c == nil || c.Endpoint == "" {
 		return nil, fmt.Errorf("government holiday endpoint is empty")
 	}
@@ -55,7 +55,7 @@ func (c *GovernmentHolidayHTTPClient) Fetch(ctx context.Context, year int) ([]se
 	return parseHolidayCSV(body, year)
 }
 
-func parseHolidayCSV(body []byte, year int) ([]service.HolidayRecord, error) {
+func parseHolidayCSV(body []byte, year int) ([]app.HolidayRecord, error) {
 	records, err := csv.NewReader(strings.NewReader(string(body))).ReadAll()
 	if err != nil || len(records) < 2 {
 		return nil, fmt.Errorf("decode government holiday CSV: %w", err)
@@ -70,7 +70,7 @@ func parseHolidayCSV(body []byte, year int) ([]service.HolidayRecord, error) {
 	}
 	nameIndex, _ := csvColumn(header, "name", "節日")
 	offIndex, _ := csvColumn(header, "isholiday", "isdayoff", "放假與否")
-	result := make([]service.HolidayRecord, 0, len(records)-1)
+	result := make([]app.HolidayRecord, 0, len(records)-1)
 	for _, record := range records[1:] {
 		if dateIndex >= len(record) || strings.TrimSpace(record[dateIndex]) == "" {
 			continue
@@ -91,7 +91,7 @@ func parseHolidayCSV(body []byte, year int) ([]service.HolidayRecord, error) {
 		if offIndex >= 0 && offIndex < len(record) {
 			isDayOff = parseBool(record[offIndex])
 		}
-		result = append(result, service.HolidayRecord{HolidayDate: date, Name: name, Source: "gov_calendar", IsDayOff: isDayOff})
+		result = append(result, app.HolidayRecord{HolidayDate: date, Name: name, Source: "gov_calendar", IsDayOff: isDayOff})
 	}
 	return result, nil
 }
@@ -105,7 +105,7 @@ func csvColumn(header map[string]int, names ...string) (int, bool) {
 	return -1, false
 }
 
-func parseHolidayRecords(raw interface{}, year int) ([]service.HolidayRecord, error) {
+func parseHolidayRecords(raw interface{}, year int) ([]app.HolidayRecord, error) {
 	if obj, ok := raw.(map[string]interface{}); ok {
 		for _, key := range []string{"data", "records", "items", "result"} {
 			if value, exists := obj[key]; exists {
@@ -117,7 +117,7 @@ func parseHolidayRecords(raw interface{}, year int) ([]service.HolidayRecord, er
 	if !ok {
 		return nil, fmt.Errorf("government holiday response must contain an array of records")
 	}
-	result := make([]service.HolidayRecord, 0, len(items))
+	result := make([]app.HolidayRecord, 0, len(items))
 	for _, item := range items {
 		obj, ok := item.(map[string]interface{})
 		if !ok {
@@ -133,7 +133,7 @@ func parseHolidayRecords(raw interface{}, year int) ([]service.HolidayRecord, er
 		if value, exists := firstValue(obj, "isDayOff", "isHoliday", "is_holiday", "休假"); exists {
 			isDayOff = parseBool(value)
 		}
-		result = append(result, service.HolidayRecord{HolidayDate: date, Name: name, Source: "gov_calendar", IsDayOff: isDayOff})
+		result = append(result, app.HolidayRecord{HolidayDate: date, Name: name, Source: "gov_calendar", IsDayOff: isDayOff})
 	}
 	return result, nil
 }

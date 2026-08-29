@@ -1,4 +1,4 @@
-package handler
+package transport
 
 import (
 	"net/http"
@@ -6,17 +6,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/ops/app"
+	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 // AttendanceHandler 處理司機出勤與請假 API 請求。
 type AttendanceHandler struct {
-	attendanceSvc *service.AttendanceService
+	attendanceSvc *app.AttendanceService
 }
 
 // NewAttendanceHandler 建立 AttendanceHandler 實例。
-func NewAttendanceHandler(attendanceSvc *service.AttendanceService) *AttendanceHandler {
+func NewAttendanceHandler(attendanceSvc *app.AttendanceService) *AttendanceHandler {
 	return &AttendanceHandler{attendanceSvc: attendanceSvc}
 }
 
@@ -32,11 +33,11 @@ func (h *AttendanceHandler) GetMonthAttendance(c *gin.Context) {
 
 	report, err := h.attendanceSvc.GetMonthAttendance(c.Request.Context(), periodYm, driverID)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, report, nil)
+	httpx.RespondSuccess(c, http.StatusOK, report, nil)
 }
 
 // Upsert 登記單日出勤狀態。
@@ -49,23 +50,23 @@ func (h *AttendanceHandler) Upsert(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	recDate, err := time.Parse("2006-01-02", req.RecordDate)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "日期格式必須為 YYYY-MM-DD", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "日期格式必須為 YYYY-MM-DD", nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 	item, err := h.attendanceSvc.Upsert(c.Request.Context(), req.DriverID, recDate, req.Status, req.Note, &actorID, &actorRole)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, item, nil)
+	httpx.RespondSuccess(c, http.StatusOK, item, nil)
 }

@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -6,14 +6,38 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/repository"
 )
+
+// Holiday 代表一個國定假日或停駛日。
+type Holiday struct {
+	HolidayDate time.Time
+	Name        string
+	Region      *string
+	Source      string
+	IsDayOff    bool
+	CreatedAt   time.Time
+}
+
+// AuditEntry 是本模組寫入稽核日誌的內容。
+type AuditEntry struct {
+	ActorID    *uuid.UUID
+	ActorRole  *string
+	Action     string
+	EntityType string
+	EntityID   *string
+	AfterData  interface{}
+}
+
+// AuditWriter 定義假日異動留痕的寫入邊界。
+type AuditWriter interface {
+	Write(ctx context.Context, e AuditEntry) error
+}
 
 // HolidayStore 定義假日同步所需的資料存取邊界。
 type HolidayStore interface {
-	List(context.Context, time.Time, time.Time, string) ([]repository.HolidayEntity, error)
-	Upsert(context.Context, *repository.HolidayEntity) error
-	BatchUpsert(context.Context, []repository.HolidayEntity) error
+	List(context.Context, time.Time, time.Time, string) ([]Holiday, error)
+	Upsert(context.Context, *Holiday) error
+	BatchUpsert(context.Context, []Holiday) error
 	Delete(context.Context, time.Time) error
 }
 
@@ -33,19 +57,19 @@ type GovernmentHolidayProvider interface {
 
 type HolidayService struct {
 	repo      HolidayStore
-	auditRepo *repository.AuditRepository
+	auditRepo AuditWriter
 	provider  GovernmentHolidayProvider
 }
 
-func NewHolidayService(repo *repository.HolidayRepository, auditRepo *repository.AuditRepository) *HolidayService {
+func NewHolidayService(repo HolidayStore, auditRepo AuditWriter) *HolidayService {
 	return &HolidayService{repo: repo, auditRepo: auditRepo}
 }
 
-func NewHolidaySyncService(repo HolidayStore, auditRepo *repository.AuditRepository, provider GovernmentHolidayProvider) *HolidayService {
+func NewHolidaySyncService(repo HolidayStore, auditRepo AuditWriter, provider GovernmentHolidayProvider) *HolidayService {
 	return &HolidayService{repo: repo, auditRepo: auditRepo, provider: provider}
 }
 
-func (s *HolidayService) ListHolidays(ctx context.Context, startDate, endDate time.Time, region string) ([]repository.HolidayEntity, error) {
+func (s *HolidayService) ListHolidays(ctx context.Context, startDate, endDate time.Time, region string) ([]Holiday, error) {
 	return s.repo.List(ctx, startDate, endDate, region)
 }
 
@@ -58,12 +82,12 @@ type UpsertHolidayInput struct {
 	IsDayOff    bool
 }
 
-func (s *HolidayService) UpsertHoliday(ctx context.Context, in UpsertHolidayInput, actorID uuid.UUID, actorRole string) (*repository.HolidayEntity, error) {
+func (s *HolidayService) UpsertHoliday(ctx context.Context, in UpsertHolidayInput, actorID uuid.UUID, actorRole string) (*Holiday, error) {
 	source := in.Source
 	if source == "" {
 		source = "manual"
 	}
-	h := &repository.HolidayEntity{
+	h := &Holiday{
 		HolidayDate: in.HolidayDate,
 		Name:        in.Name,
 		Region:      in.Region,
@@ -75,7 +99,7 @@ func (s *HolidayService) UpsertHoliday(ctx context.Context, in UpsertHolidayInpu
 	}
 	if s.auditRepo != nil {
 		dateStr := h.HolidayDate.Format("2006-01-02")
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{ActorID: &actorID, ActorRole: &actorRole, Action: "create", EntityType: "holiday", EntityID: &dateStr, AfterData: h})
+		_ = s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: "create", EntityType: "holiday", EntityID: &dateStr, AfterData: h})
 	}
 	return h, nil
 }
@@ -92,12 +116,12 @@ func (s *HolidayService) ImportTaiwanGovHolidays(ctx context.Context, year int, 
 	if err != nil {
 		return 0, fmt.Errorf("fetch government holidays for %d: %w", year, err)
 	}
-	holidays := make([]repository.HolidayEntity, 0, len(records))
+	holidays := make([]Holiday, 0, len(records))
 	for _, rec := range records {
 		if rec.HolidayDate.Year() != year {
 			return 0, fmt.Errorf("government holiday date %s is outside year %d", rec.HolidayDate.Format("2006-01-02"), year)
 		}
-		holidays = append(holidays, repository.HolidayEntity{
+		holidays = append(holidays, Holiday{
 			HolidayDate: rec.HolidayDate,
 			Name:        rec.Name,
 			Source:      "gov_calendar",
@@ -109,7 +133,7 @@ func (s *HolidayService) ImportTaiwanGovHolidays(ctx context.Context, year int, 
 	}
 	if s.auditRepo != nil {
 		yearID := fmt.Sprintf("%d", year)
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{ActorID: &actorID, ActorRole: &actorRole, Action: "import", EntityType: "holiday_calendar", EntityID: &yearID, AfterData: map[string]interface{}{"count": len(holidays), "year": year}})
+		_ = s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: "import", EntityType: "holiday_calendar", EntityID: &yearID, AfterData: map[string]interface{}{"count": len(holidays), "year": year}})
 	}
 	return len(holidays), nil
 }
@@ -120,7 +144,7 @@ func (s *HolidayService) DeleteHoliday(ctx context.Context, date time.Time, acto
 	}
 	if s.auditRepo != nil {
 		dateStr := date.Format("2006-01-02")
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{ActorID: &actorID, ActorRole: &actorRole, Action: "delete", EntityType: "holiday", EntityID: &dateStr})
+		_ = s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: "delete", EntityType: "holiday", EntityID: &dateStr})
 	}
 	return nil
 }

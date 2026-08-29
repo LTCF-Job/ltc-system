@@ -1,72 +1,29 @@
-package repository
+package infra
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/ride/app"
 )
 
-// FormColumnEntity 代表 form_columns 實體。
-type FormColumnEntity struct {
-	ID              uuid.UUID  `json:"id"`
-	FormID          uuid.UUID  `json:"formId"`
-	ColumnIndex     int        `json:"columnIndex"`
-	ColumnHeader    string     `json:"columnHeader"`
-	CleanedName     string     `json:"cleanedName"`
-	Kind            string     `json:"kind"`
-	MappingStatus   string     `json:"mappingStatus"`
-	CaseID          *uuid.UUID `json:"caseId,omitempty"`
-	LegSeq          *int16     `json:"legSeq,omitempty"`
-	SuggestedCaseID *uuid.UUID `json:"suggestedCaseId,omitempty"`
-	SuggestionScore float64    `json:"suggestionScore"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
-}
-
-// RideRecordEntity 代表 ride_records 實體。
-type RideRecordEntity struct {
-	ID                  uuid.UUID  `json:"id"`
-	CaseID              uuid.UUID  `json:"caseId"`
-	CaseName            string     `json:"caseName,omitempty"`
-	ServiceDate         time.Time  `json:"serviceDate"`
-	LegSeq              int16      `json:"legSeq"`
-	MergedStatus        string     `json:"mergedStatus"`
-	EffectiveStatus     string     `json:"effectiveStatus"`
-	VehicleID           uuid.UUID  `json:"vehicleId"`
-	VehicleName         string     `json:"vehicleName,omitempty"`
-	DriverID            *uuid.UUID `json:"driverId,omitempty"`
-	DriverName          string     `json:"driverName,omitempty"`
-	HasConflict         bool       `json:"hasConflict"`
-	ConflictResolvedAt  *time.Time `json:"conflictResolvedAt,omitempty"`
-	ConflictResolvedBy  *uuid.UUID `json:"conflictResolvedBy,omitempty"`
-	DepartTimeOverride  *string    `json:"departTimeOverride,omitempty"`
-	DurationMinOverride *int16     `json:"durationMinOverride,omitempty"`
-	NotClaimedAA09      bool       `json:"notClaimedAa09"`
-	CorrectedBy         *uuid.UUID `json:"correctedBy,omitempty"`
-	CorrectedAt         *time.Time `json:"correctedAt,omitempty"`
-	CorrectionReason    *string    `json:"correctionReason,omitempty"`
-	CreatedAt           time.Time  `json:"createdAt"`
-	UpdatedAt           time.Time  `json:"updatedAt"`
-}
-
-// FormRepository 提供表單、提交紀錄、回報來源與搭乘紀錄之存取。
-type FormRepository struct {
+// RideRepository 提供表單、提交紀錄、回報來源與搭乘紀錄之存取。
+type RideRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewFormRepository 建立 FormRepository 實例。
-func NewFormRepository(db *pgxpool.Pool) *FormRepository {
-	return &FormRepository{db: db}
+// NewRideRepository 建立 RideRepository 實例。
+func NewRideRepository(db *pgxpool.Pool) *RideRepository {
+	return &RideRepository{db: db}
 }
 
 // GetFormBySecret 依 Webhook Token 尋找註冊表單。
-func (r *FormRepository) GetFormBySecret(ctx context.Context, secret string) (uuid.UUID, uuid.UUID, error) {
+func (r *RideRepository) GetFormBySecret(ctx context.Context, secret string) (uuid.UUID, uuid.UUID, error) {
 	query := `SELECT id, vehicle_id FROM google_forms WHERE ingest_secret_ref = $1 AND status = 'active' LIMIT 1`
 	var formID, vehicleID uuid.UUID
 	err := r.db.QueryRow(ctx, query, secret).Scan(&formID, &vehicleID)
@@ -74,7 +31,7 @@ func (r *FormRepository) GetFormBySecret(ctx context.Context, secret string) (uu
 }
 
 // GetFormColumns 取得特定表單之所有欄位定義。
-func (r *FormRepository) GetFormColumns(ctx context.Context, formID uuid.UUID) ([]FormColumnEntity, error) {
+func (r *RideRepository) GetFormColumns(ctx context.Context, formID uuid.UUID) ([]app.FormColumn, error) {
 	query := `
 		SELECT id, form_id, column_index, column_header, cleaned_name, kind, mapping_status,
 		       case_id, leg_seq, suggested_case_id, suggestion_score, created_at, updated_at
@@ -88,9 +45,9 @@ func (r *FormRepository) GetFormColumns(ctx context.Context, formID uuid.UUID) (
 	}
 	defer rows.Close()
 
-	var cols []FormColumnEntity
+	var cols []app.FormColumn
 	for rows.Next() {
-		var col FormColumnEntity
+		var col app.FormColumn
 		if err := rows.Scan(
 			&col.ID, &col.FormID, &col.ColumnIndex, &col.ColumnHeader, &col.CleanedName, &col.Kind, &col.MappingStatus,
 			&col.CaseID, &col.LegSeq, &col.SuggestedCaseID, &col.SuggestionScore, &col.CreatedAt, &col.UpdatedAt,
@@ -103,7 +60,7 @@ func (r *FormRepository) GetFormColumns(ctx context.Context, formID uuid.UUID) (
 }
 
 // SaveFormSubmission 先完整寫入原始 payload 與中繼資訊。
-func (r *FormRepository) SaveFormSubmission(
+func (r *RideRepository) SaveFormSubmission(
 	ctx context.Context,
 	formID uuid.UUID,
 	serviceDate time.Time,
@@ -138,7 +95,7 @@ func (r *FormRepository) SaveFormSubmission(
 }
 
 // InsertRideSource 寫入單筆來源搭乘回報。
-func (r *FormRepository) InsertRideSource(
+func (r *RideRepository) InsertRideSource(
 	ctx context.Context,
 	submissionID, caseID uuid.UUID,
 	serviceDate time.Time,
@@ -160,7 +117,7 @@ func (r *FormRepository) InsertRideSource(
 }
 
 // GetRideRecordForSlot 查詢指定個案、日期、時段之既有搭乘主紀錄。
-func (r *FormRepository) GetRideRecordForSlot(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) (*RideRecordEntity, error) {
+func (r *RideRepository) GetRideRecordForSlot(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) (*app.RideRecord, error) {
 	query := `
 		SELECT id, case_id, service_date, leg_seq, merged_status, effective_status,
 		       vehicle_id, driver_id, has_conflict, conflict_resolved_at, conflict_resolved_by,
@@ -170,7 +127,7 @@ func (r *FormRepository) GetRideRecordForSlot(ctx context.Context, caseID uuid.U
 		WHERE case_id = $1 AND service_date = $2 AND leg_seq = $3
 		LIMIT 1
 	`
-	var rec RideRecordEntity
+	var rec app.RideRecord
 	err := r.db.QueryRow(ctx, query, caseID, serviceDate, legSeq).Scan(
 		&rec.ID, &rec.CaseID, &rec.ServiceDate, &rec.LegSeq, &rec.MergedStatus, &rec.EffectiveStatus,
 		&rec.VehicleID, &rec.DriverID, &rec.HasConflict, &rec.ConflictResolvedAt, &rec.ConflictResolvedBy,
@@ -187,7 +144,7 @@ func (r *FormRepository) GetRideRecordForSlot(ctx context.Context, caseID uuid.U
 }
 
 // UpsertRideRecord 建立或更新 ride_records 主紀錄。
-func (r *FormRepository) UpsertRideRecord(ctx context.Context, rec *RideRecordEntity) error {
+func (r *RideRepository) UpsertRideRecord(ctx context.Context, rec *app.RideRecord) error {
 	query := `
 		INSERT INTO ride_records (
 			id, case_id, service_date, leg_seq, merged_status, effective_status,
@@ -226,7 +183,7 @@ func (r *FormRepository) UpsertRideRecord(ctx context.Context, rec *RideRecordEn
 }
 
 // CorrectRideRecord 人工更正搭乘紀錄。
-func (r *FormRepository) CorrectRideRecord(
+func (r *RideRepository) CorrectRideRecord(
 	ctx context.Context,
 	rideID uuid.UUID,
 	effectiveStatus *string,
@@ -257,193 +214,4 @@ func (r *FormRepository) CorrectRideRecord(
 		durationMinOverride, notClaimedAA09, reason, operatorID,
 	)
 	return err
-}
-
-// GoogleFormEntity 代表 google_forms 查詢實體。
-type GoogleFormEntity struct {
-	ID                 uuid.UUID
-	VehicleID          uuid.UUID
-	SheetID            string
-	VehicleDisplayName string
-	FormTitle          string
-	Region             string
-	LastSyncedAt       *time.Time
-	Status             string
-}
-
-// FormColumnMappingEntity 代表包含關聯資訊的表單欄位對應實體。
-type FormColumnMappingEntity struct {
-	ID                string
-	FormID            string
-	FormTitle         string
-	VehicleName       string
-	ColumnIndex       int
-	ColumnHeader      string
-	CleanedName       string
-	Kind              string
-	MappingStatus     string
-	CaseID            *string
-	CaseName          *string
-	LegSeq            *int16
-	SuggestedCaseID   *string
-	SuggestedCaseName *string
-	SuggestionScore   float64
-}
-
-// ListGoogleForms 查詢所有 Google 表單與所屬車輛資訊。
-func (r *FormRepository) ListGoogleForms(ctx context.Context) ([]GoogleFormEntity, error) {
-	if r.db == nil {
-		return nil, nil
-	}
-
-	query := `
-		SELECT f.id, f.vehicle_id, f.sheet_id, COALESCE(v.display_name, '未知車輛'), f.form_title, COALESCE(v.region, 'hsinchu'),
-		       f.last_synced_at, f.status
-		FROM google_forms f
-		LEFT JOIN vehicles v ON f.vehicle_id = v.id
-		ORDER BY f.created_at ASC
-	`
-	rows, err := r.db.Query(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var forms []GoogleFormEntity
-	for rows.Next() {
-		var f GoogleFormEntity
-		if err := rows.Scan(&f.ID, &f.VehicleID, &f.SheetID, &f.VehicleDisplayName, &f.FormTitle, &f.Region, &f.LastSyncedAt, &f.Status); err == nil {
-			forms = append(forms, f)
-		}
-	}
-	return forms, nil
-}
-
-// ListColumnsWithMapping 查詢表單欄位對應狀態。
-func (r *FormRepository) ListColumnsWithMapping(ctx context.Context, mappingStatus string) ([]FormColumnMappingEntity, error) {
-	if r.db == nil {
-		return nil, nil
-	}
-
-	query := `
-		SELECT fc.id::text, fc.form_id::text, COALESCE(gf.form_title, ''), COALESCE(v.display_name, ''),
-		       fc.column_index, fc.column_header, fc.cleaned_name, fc.kind, fc.mapping_status,
-		       fc.case_id::text, COALESCE(c.name, ''), fc.leg_seq,
-		       fc.suggested_case_id::text, COALESCE(sc.name, ''), fc.suggestion_score
-		FROM form_columns fc
-		LEFT JOIN google_forms gf ON fc.form_id = gf.id
-		LEFT JOIN vehicles v ON gf.vehicle_id = v.id
-		LEFT JOIN cases c ON fc.case_id = c.id
-		LEFT JOIN cases sc ON fc.suggested_case_id = sc.id
-		WHERE 1=1
-	`
-	var args []interface{}
-	if mappingStatus != "" {
-		query += " AND fc.mapping_status = $1"
-		args = append(args, mappingStatus)
-	}
-	query += " ORDER BY fc.form_id, fc.column_index ASC"
-
-	rows, err := r.db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var cols []FormColumnMappingEntity
-	for rows.Next() {
-		var c FormColumnMappingEntity
-		var caseID, caseName, suggID, suggName *string
-		if err := rows.Scan(
-			&c.ID, &c.FormID, &c.FormTitle, &c.VehicleName,
-			&c.ColumnIndex, &c.ColumnHeader, &c.CleanedName, &c.Kind, &c.MappingStatus,
-			&caseID, &caseName, &c.LegSeq,
-			&suggID, &suggName, &c.SuggestionScore,
-		); err == nil {
-			c.CaseID = caseID
-			c.CaseName = caseName
-			c.SuggestedCaseID = suggID
-			c.SuggestedCaseName = suggName
-			cols = append(cols, c)
-		}
-	}
-	return cols, nil
-}
-
-// UpdateColumnMappingById 更新指定欄位的對應狀態與個案綁定。
-func (r *FormRepository) UpdateColumnMappingById(ctx context.Context, colID string, status string, caseID *string, legSeq *int16) error {
-	if r.db == nil {
-		return nil
-	}
-
-	query := `
-		UPDATE form_columns
-		SET mapping_status = $2,
-		    case_id = $3::uuid,
-		    leg_seq = $4,
-		    updated_at = now()
-		WHERE id = $1::uuid
-	`
-	_, err := r.db.Exec(ctx, query, colID, status, caseID, legSeq)
-	return err
-}
-
-// CreateGoogleForm 於資料庫中建立 Google 表單關聯紀錄。
-func (r *FormRepository) CreateGoogleForm(ctx context.Context, id, vehicleID uuid.UUID, title, sheetID, secretRef string) error {
-	if r.db == nil {
-		return nil
-	}
-
-	query := `
-		INSERT INTO google_forms (id, vehicle_id, title, sheet_id, ingest_secret_ref, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 'active', now(), now())
-		ON CONFLICT (sheet_id) DO UPDATE
-		SET title = EXCLUDED.title,
-		    vehicle_id = EXCLUDED.vehicle_id,
-		    updated_at = now()
-	`
-	_, err := r.db.Exec(ctx, query, id, vehicleID, title, sheetID, secretRef)
-	return err
-}
-
-// DeleteGoogleForm 從資料庫中刪除 Google 表單關聯。
-func (r *FormRepository) DeleteGoogleForm(ctx context.Context, formID uuid.UUID) error {
-	if r.db == nil {
-		return nil
-	}
-
-	query := `DELETE FROM google_forms WHERE id = $1`
-	_, err := r.db.Exec(ctx, query, formID)
-	return err
-}
-
-// SaveFormColumns 將試算表解析出的標題欄位儲存至 form_columns。
-func (r *FormRepository) SaveFormColumns(ctx context.Context, formID uuid.UUID, headers []string) error {
-	if r.db == nil || len(headers) == 0 {
-		return nil
-	}
-
-	for idx, h := range headers {
-		kind := "unknown"
-		cleaned := strings.TrimSpace(h)
-		if strings.Contains(h, "時間戳記") || strings.Contains(h, "今天日期") || strings.Contains(h, "駕駛") {
-			kind = "meta"
-		} else if strings.Contains(h, "問題") || strings.Contains(h, "回報") {
-			kind = "issue"
-		} else if strings.Contains(h, "去") || strings.Contains(h, "回") || strings.Contains(h, "車") {
-			kind = "ride"
-		}
-
-		query := `
-			INSERT INTO form_columns (id, form_id, column_index, column_header, cleaned_name, kind, mapping_status, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, 'pending', now(), now())
-			ON CONFLICT (form_id, column_index) DO UPDATE
-			SET column_header = EXCLUDED.column_header,
-			    cleaned_name = EXCLUDED.cleaned_name,
-			    kind = EXCLUDED.kind,
-			    updated_at = now()
-		`
-		_, _ = r.db.Exec(ctx, query, uuid.New(), formID, idx+1, h, cleaned, kind)
-	}
-	return nil
 }

@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -7,13 +7,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"ltc-system/apps/api/internal/repository"
 )
 
 func TestAttendanceService_GetMonthAttendance(t *testing.T) {
-	attendanceRepo := repository.NewAttendanceRepository(nil)
-	driverRepo := repository.NewDriverRepository(nil)
-	auditRepo := repository.NewAuditRepository(nil)
+	attendanceRepo := stubAttendanceStore{}
+	driverRepo := emptyDriverLister{}
+	auditRepo := discardAuditWriter{}
 
 	svc := NewAttendanceService(attendanceRepo, driverRepo, auditRepo)
 	ctx := context.Background()
@@ -26,9 +25,9 @@ func TestAttendanceService_GetMonthAttendance(t *testing.T) {
 }
 
 func TestAttendanceService_Upsert(t *testing.T) {
-	attendanceRepo := repository.NewAttendanceRepository(nil)
-	driverRepo := repository.NewDriverRepository(nil)
-	auditRepo := repository.NewAuditRepository(nil)
+	attendanceRepo := stubAttendanceStore{}
+	driverRepo := emptyDriverLister{}
+	auditRepo := discardAuditWriter{}
 
 	svc := NewAttendanceService(attendanceRepo, driverRepo, auditRepo)
 	ctx := context.Background()

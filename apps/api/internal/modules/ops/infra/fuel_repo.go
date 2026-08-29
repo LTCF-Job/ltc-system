@@ -1,4 +1,4 @@
-package repository
+package infra
 
 import (
 	"context"
@@ -7,23 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/ops/app"
 )
-
-// FuelLogEntity 代表 fuel_logs 資料表實體。
-type FuelLogEntity struct {
-	ID          uuid.UUID  `json:"id"`
-	VehicleID   uuid.UUID  `json:"vehicleId"`
-	VehicleName string     `json:"vehicleName,omitempty"`
-	PlateNo     string     `json:"plateNo,omitempty"`
-	DriverID    *uuid.UUID `json:"driverId,omitempty"`
-	DriverName  *string    `json:"driverName,omitempty"`
-	FuelDate    time.Time  `json:"fuelDate"`
-	Liters      float64    `json:"liters"`
-	Cost        float64    `json:"cost"`
-	ReceiptURL  *string    `json:"receiptUrl,omitempty"`
-	CreatedBy   uuid.UUID  `json:"createdBy"`
-	CreatedAt   time.Time  `json:"createdAt"`
-}
 
 // FuelRepository 提供車輛油資紀錄之資料存取。
 type FuelRepository struct {
@@ -36,9 +21,9 @@ func NewFuelRepository(db *pgxpool.Pool) *FuelRepository {
 }
 
 // List 查詢油資紀錄清單，支援分頁與車輛／司機／日期／關鍵字模糊篩選。
-func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID, driverID *uuid.UUID, startDate, endDate *time.Time, q string) ([]FuelLogEntity, int, error) {
+func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID, driverID *uuid.UUID, startDate, endDate *time.Time, q string) ([]app.FuelLog, int, error) {
 	if r.db == nil {
-		return []FuelLogEntity{}, 0, nil
+		return []app.FuelLog{}, 0, nil
 	}
 
 	whereClause := "WHERE 1=1"
@@ -97,9 +82,9 @@ func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID
 	}
 	defer rows.Close()
 
-	list := []FuelLogEntity{}
+	list := []app.FuelLog{}
 	for rows.Next() {
-		var item FuelLogEntity
+		var item app.FuelLog
 		if err := rows.Scan(
 			&item.ID, &item.VehicleID, &item.VehicleName, &item.PlateNo,
 			&item.DriverID, &item.DriverName, &item.FuelDate, &item.Liters,
@@ -114,7 +99,7 @@ func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID
 }
 
 // Create 新增單筆油資紀錄。
-func (r *FuelRepository) Create(ctx context.Context, item *FuelLogEntity) error {
+func (r *FuelRepository) Create(ctx context.Context, item *app.FuelLog) error {
 	if r.db == nil {
 		item.ID = uuid.New()
 		item.CreatedAt = time.Now()
@@ -134,7 +119,7 @@ func (r *FuelRepository) Create(ctx context.Context, item *FuelLogEntity) error 
 }
 
 // Update 修改油資紀錄。
-func (r *FuelRepository) Update(ctx context.Context, item *FuelLogEntity) error {
+func (r *FuelRepository) Update(ctx context.Context, item *app.FuelLog) error {
 	if r.db == nil {
 		return nil
 	}

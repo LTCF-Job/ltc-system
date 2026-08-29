@@ -1,31 +1,15 @@
-package export
+package infra
 
 import (
 	"bytes"
 
 	"github.com/xuri/excelize/v2"
+	"ltc-system/apps/api/internal/modules/casemgmt/app"
 )
 
-// CaseProfileRow 代表個案彙整工作簿之單筆已解密資料，由呼叫端組裝完成後傳入渲染。
-type CaseProfileRow struct {
-	Name              string
-	HouseholdType     string
-	NationalID        string
-	Gender            string
-	Birthday          string
-	Age               string
-	SiteName          string
-	OutboundVehicle   string
-	InboundVehicle    string
-	CareContactRole   string
-	CareContactName   string
-	RegisteredAddress string
-	HomeAddress       string
-}
-
-// GenerateCaseProfileWorkbook 匯出與來源工作簿一致的個案彙整欄位。
+// RenderCaseProfileWorkbook 匯出與來源工作簿一致的個案彙整欄位。
 // 純粹負責試算表渲染，不做資料查詢或解密（那是呼叫端的職責）。
-func GenerateCaseProfileWorkbook(rows []CaseProfileRow) ([]byte, error) {
+func (ExcelRenderer) RenderCaseProfileWorkbook(rows []app.CaseProfileRow) ([]byte, error) {
 	f := excelize.NewFile()
 	defer f.Close()
 	sheet := "進系統個案個資"
@@ -57,3 +41,9 @@ func GenerateCaseProfileWorkbook(rows []CaseProfileRow) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+// ExcelRenderer 以 excelize 產生個案彙整表，是 casemgmt 唯一接觸試算表 SDK 的地方。
+type ExcelRenderer struct{}
+
+// NewExcelRenderer 建立 ExcelRenderer 實例。
+func NewExcelRenderer() ExcelRenderer { return ExcelRenderer{} }

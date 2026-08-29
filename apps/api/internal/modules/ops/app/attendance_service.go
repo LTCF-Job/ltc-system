@@ -1,13 +1,12 @@
-package service
+package app
 
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/repository"
+	"ltc-system/apps/api/internal/domain/rocdate"
 )
 
 // DriverDayAttendanceDTO 代表司機單日出勤紀錄。
@@ -47,16 +46,16 @@ type AttendanceRecordInput struct {
 
 // AttendanceService 提供司機出勤與請假登錄服務。
 type AttendanceService struct {
-	attendanceRepo *repository.AttendanceRepository
-	driverRepo     *repository.DriverRepository
-	auditRepo      *repository.AuditRepository
+	attendanceRepo AttendanceStore
+	driverRepo     DriverLister
+	auditRepo      AuditWriter
 }
 
 // NewAttendanceService 建立 AttendanceService 實例。
 func NewAttendanceService(
-	attendanceRepo *repository.AttendanceRepository,
-	driverRepo *repository.DriverRepository,
-	auditRepo *repository.AuditRepository,
+	attendanceRepo AttendanceStore,
+	driverRepo DriverLister,
+	auditRepo AuditWriter,
 ) *AttendanceService {
 	return &AttendanceService{
 		attendanceRepo: attendanceRepo,
@@ -65,48 +64,17 @@ func NewAttendanceService(
 	}
 }
 
-// parsePeriodYM 解析西元或民國年月為當月第 1 天與下月第 1 天。
-func parsePeriodYM(periodYm string) (time.Time, time.Time, int) {
-	var year, month int
-	if strings.Contains(periodYm, "-") {
-		parts := strings.Split(periodYm, "-")
-		if len(parts) == 2 {
-			fmt.Sscanf(parts[0], "%d", &year)
-			fmt.Sscanf(parts[1], "%d", &month)
-			if year < 1000 {
-				year += 1911 // 民國轉西元
-			}
-		}
-	} else if len(periodYm) == 5 {
-		fmt.Sscanf(periodYm[:3], "%d", &year)
-		fmt.Sscanf(periodYm[3:], "%d", &month)
-		year += 1911
-	}
-
-	if year == 0 || month == 0 {
-		now := time.Now()
-		year = now.Year()
-		month = int(now.Month())
-	}
-
-	startDate := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-	endDate := startDate.AddDate(0, 1, 0)
-	daysInMonth := endDate.AddDate(0, 0, -1).Day()
-
-	return startDate, endDate, daysInMonth
-}
-
 // GetMonthAttendance 查詢指定月份司機月曆出勤矩陣。
 func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm string, driverID *uuid.UUID) (*MonthAttendanceReportDTO, error) {
-	startDate, endDate, daysInMonth := parsePeriodYM(periodYm)
+	startDate, endDate, daysInMonth := rocdate.MonthRange(periodYm)
 
-	var drivers []repository.DriverEntity
+	var drivers []DriverRef
 	if s.driverRepo != nil {
 		dList, _, _ := s.driverRepo.List(ctx, "", "", 1, 100)
 		drivers = dList
 	}
 	if len(drivers) == 0 {
-		drivers = []repository.DriverEntity{
+		drivers = []DriverRef{
 			{ID: uuid.New(), Code: "D001", Name: "郭澤威", Region: "hsinchu"},
 			{ID: uuid.New(), Code: "D002", Name: "林大慶", Region: "hsinchu"},
 			{ID: uuid.New(), Code: "D003", Name: "陳志豪", Region: "miaoli"},
@@ -118,11 +86,11 @@ func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm str
 		return nil, fmt.Errorf("failed to get month attendance records: %w", err)
 	}
 
-	recordMap := make(map[string]map[string]repository.AttendanceRecordEntity)
+	recordMap := make(map[string]map[string]AttendanceRecord)
 	for _, rec := range records {
 		dID := rec.DriverID.String()
 		if _, ok := recordMap[dID]; !ok {
-			recordMap[dID] = make(map[string]repository.AttendanceRecordEntity)
+			recordMap[dID] = make(map[string]AttendanceRecord)
 		}
 		dateKey := rec.RecordDate.Format("2006-01-02")
 		recordMap[dID][dateKey] = rec
@@ -195,21 +163,20 @@ func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm str
 }
 
 // Upsert 登記單筆出勤。
-func (s *AttendanceService) Upsert(ctx context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string, actorID *uuid.UUID, actorRole *string) (*repository.AttendanceRecordEntity, error) {
+func (s *AttendanceService) Upsert(ctx context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string, actorID *uuid.UUID, actorRole *string) (*AttendanceRecord, error) {
 	item, err := s.attendanceRepo.Upsert(ctx, driverID, recordDate, status, note)
 	if err != nil {
 		return nil, err
 	}
 
 	if s.auditRepo != nil {
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    actorID,
 			ActorRole:  actorRole,
 			Action:     "update",
 			EntityType: "attendance_records",
 			EntityID:   strPtr(item.ID.String()),
 			AfterData:  item,
-			CreatedAt:  time.Now(),
 		})
 	}
 

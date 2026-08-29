@@ -1,4 +1,4 @@
-package middleware
+package logging
 
 import (
 	"log/slog"
@@ -7,8 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SlogLoggerMiddleware 以 JSON 結構化日誌記錄傳入請求與執行耗時。
-func SlogLoggerMiddleware() gin.HandlerFunc {
+// Middleware 以 JSON 結構化日誌記錄傳入請求與執行耗時。
+func Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path

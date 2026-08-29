@@ -69,4 +69,4 @@
 
 ## 統一錯誤碼
 
-見 [backend-framework.md](backend-framework.md) 的「Response 格式」一節；`DUPLICATE_NATIONAL_ID` 是新增個案時身分證 HMAC 索引查到重複觸發（`case_handler.go`）。`ASSIGNMENT_OVERLAP` 目前只有常數定義，程式碼裡沒有任何地方實際觸發它，屬於預留但未串接的錯誤碼。其他錯誤碼對應到哪種業務規則違反，要看實際呼叫端 `RespondError` 的 handler 程式碼，這裡不重複列。
+見 [backend-framework.md](backend-framework.md) 的「Response 格式」一節；`DUPLICATE_NATIONAL_ID` 是新增個案時身分證 HMAC 索引查到重複觸發（`internal/modules/casemgmt/transport/case_handler.go`）。`ASSIGNMENT_OVERLAP` 目前只有常數定義，程式碼裡沒有任何地方實際觸發它，屬於預留但未串接的錯誤碼。其他錯誤碼對應到哪種業務規則違反，要看實際呼叫端 `RespondError` 的 handler 程式碼，這裡不重複列。

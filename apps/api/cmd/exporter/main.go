@@ -7,12 +7,12 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"ltc-system/apps/api/internal/config"
 	"ltc-system/apps/api/internal/domain/govform"
-	"ltc-system/apps/api/internal/export"
-	"ltc-system/apps/api/internal/repository"
-	"ltc-system/apps/api/internal/service"
+	reportapp "ltc-system/apps/api/internal/modules/reporting/app"
+	reportinfra "ltc-system/apps/api/internal/modules/reporting/infra"
+	"ltc-system/apps/api/internal/platform/config"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -44,8 +44,8 @@ func main() {
 
 	slog.Info("Starting Export Job", slog.String("periodYM", periodYM), slog.String("region", region))
 
-	precheckRepo := repository.NewPrecheckRepository(pool)
-	precheckSvc := service.NewPrecheckService(precheckRepo)
+	precheckRepo := reportinfra.NewPrecheckRepository(pool)
+	precheckSvc := reportapp.NewPrecheckService(precheckRepo)
 	report, err := precheckSvc.RunPrecheck(ctx, periodYM, region)
 	if err != nil || !report.Passed {
 		slog.Error("Precheck failed, aborting export", slog.Int("errors", report.TotalErrors))
@@ -54,7 +54,7 @@ func main() {
 
 	// 產生範例申報行
 	var sampleRows []govform.ClaimRow
-	govExcelBytes, err := export.GenerateGovClaimExcel(sampleRows)
+	govExcelBytes, err := reportinfra.NewExcelRenderer().RenderGovClaim(sampleRows)
 	if err != nil {
 		slog.Error("Failed to generate excel", slog.String("error", err.Error()))
 		os.Exit(1)

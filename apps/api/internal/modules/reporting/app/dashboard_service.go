@@ -1,11 +1,11 @@
-package service
+package app
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"ltc-system/apps/api/internal/repository"
+	"ltc-system/apps/api/internal/domain/rocdate"
 )
 
 // DashboardRepositoryPort 定義儀表板資料庫操作介面。
@@ -14,7 +14,7 @@ type DashboardRepositoryPort interface {
 	GetReportedTripsCount(ctx context.Context, start, end time.Time) (int, error)
 	GetPendingConflictsCount(ctx context.Context) (int, error)
 	GetPendingFormColumnsCount(ctx context.Context) (int, error)
-	GetVehicleTripTrends(ctx context.Context, start, end time.Time) ([]repository.VehicleTripTrendData, error)
+	GetVehicleTripTrends(ctx context.Context, start, end time.Time) ([]VehicleTripTrend, error)
 	GetAttendanceDistribution(ctx context.Context, start, end time.Time) (map[string]int, error)
 }
 
@@ -66,7 +66,7 @@ func (s *DashboardService) GetMetrics(ctx context.Context, periodYm string) (*Da
 		currentMonthStr = periodYm
 	}
 
-	startDate, endDate, _ := parsePeriodYM(currentMonthStr)
+	startDate, endDate, _ := rocdate.MonthRange(currentMonthStr)
 
 	dto := &DashboardMetricsDTO{
 		CurrentMonth: currentMonthStr,

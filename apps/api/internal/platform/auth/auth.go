@@ -1,4 +1,4 @@
-package middleware
+package auth
 
 import (
 	"context"
@@ -10,7 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/config"
+	"ltc-system/apps/api/internal/platform/config"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 const (
@@ -53,8 +54,8 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
 	c.Set(ContextKeyActorRole, role)
 }
 
-// AuthMiddleware 驗證傳入的 Supabase JWT Token 簽章並將使用者角色與 ID 注入 Gin Context。
-func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
+// Middleware 驗證傳入的 Supabase JWT Token 簽章並將使用者角色與 ID 注入 Gin Context。
+func Middleware(cfg *config.Config) gin.HandlerFunc {
 	jwks, err := newSupabaseJWKS(cfg.SupabaseJWKSURL)
 	if err != nil {
 		// 正式環境缺少可用 JWKS 時無法驗證任何憑證，直接 fail fast 避免帶著漏洞啟動
@@ -80,13 +81,13 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			RespondError(c, http.StatusUnauthorized, CodeUnauthenticated, "未提供認證憑證", nil)
+			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "未提供認證憑證", nil)
 			return
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			RespondError(c, http.StatusUnauthorized, CodeUnauthenticated, "憑證格式錯誤，必須為 Bearer Token", nil)
+			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "憑證格式錯誤，必須為 Bearer Token", nil)
 			return
 		}
 
@@ -128,7 +129,7 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		if jwks == nil {
-			RespondError(c, http.StatusInternalServerError, CodeInternalError, "伺服器未設定 JWKS，無法驗證身分", nil)
+			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "伺服器未設定 JWKS，無法驗證身分", nil)
 			return
 		}
 
@@ -137,7 +138,7 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			jwt.WithValidMethods([]string{"RS256", "ES256"}),
 			jwt.WithExpirationRequired())
 		if err != nil || !token.Valid {
-			RespondError(c, http.StatusUnauthorized, CodeUnauthenticated, "無效的 JWT Token", nil)
+			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "無效的 JWT Token", nil)
 			return
 		}
 
@@ -151,7 +152,7 @@ func RequireRoles(allowedRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		roleVal, exists := c.Get(ContextKeyActorRole)
 		if !exists {
-			RespondError(c, http.StatusUnauthorized, CodeUnauthenticated, "未登入或無法識別角色", nil)
+			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "未登入或無法識別角色", nil)
 			return
 		}
 
@@ -163,7 +164,7 @@ func RequireRoles(allowedRoles ...string) gin.HandlerFunc {
 			}
 		}
 
-		RespondError(c, http.StatusForbidden, CodeForbidden, "權限不足，拒絕存取", nil)
+		httpx.RespondError(c, http.StatusForbidden, httpx.CodeForbidden, "權限不足，拒絕存取", nil)
 	}
 }
 

@@ -1,19 +1,14 @@
-package handler
+package transport
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
-	"ltc-system/apps/api/internal/domain/govform"
 	"ltc-system/apps/api/internal/domain/rocdate"
-	"ltc-system/apps/api/internal/export"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/ride/app"
+	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/httpx"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -21,11 +16,11 @@ import (
 
 // RideHandler 處理搭乘與 Webhook 請求。
 type RideHandler struct {
-	rideService *service.RideService
+	rideService *app.RideService
 }
 
 // NewRideHandler 建立 RideHandler 實例。
-func NewRideHandler(rideService *service.RideService) *RideHandler {
+func NewRideHandler(rideService *app.RideService) *RideHandler {
 	return &RideHandler{rideService: rideService}
 }
 
@@ -33,26 +28,26 @@ func NewRideHandler(rideService *service.RideService) *RideHandler {
 func (h *RideHandler) IngestWebhook(c *gin.Context) {
 	secret := c.GetHeader("X-Ingest-Token")
 	if secret == "" {
-		middleware.RespondError(c, http.StatusUnauthorized, middleware.CodeIngestTokenInvalid, "未提供 X-Ingest-Token", nil)
+		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeIngestTokenInvalid, "未提供 X-Ingest-Token", nil)
 		return
 	}
 
-	var req service.ProcessFormWebhookRequest
+	var req app.ProcessFormWebhookRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	if err := h.rideService.IngestWebhook(c.Request.Context(), secret, req); err != nil {
-		if errors.Is(err, service.ErrInvalidIngestToken) {
-			middleware.RespondError(c, http.StatusUnauthorized, middleware.CodeIngestTokenInvalid, "無效的 Ingest Token", nil)
+		if errors.Is(err, app.ErrInvalidIngestToken) {
+			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeIngestTokenInvalid, "無效的 Ingest Token", nil)
 			return
 		}
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{"received": true}, nil)
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"received": true}, nil)
 }
 
 // CorrectDTO 用於寬容接收搭乘更正請求。
@@ -88,13 +83,13 @@ func (h *RideHandler) Correct(c *gin.Context) {
 
 	var dto CorrectDTO
 	if err := c.ShouldBindJSON(&dto); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	if rideErr != nil {
 		// 非 UUID 標識符容錯（相容展示與無狀態模式）
-		middleware.RespondSuccess(c, http.StatusOK, gin.H{"updated": true, "id": rideIDStr}, nil)
+		httpx.RespondSuccess(c, http.StatusOK, gin.H{"updated": true, "id": rideIDStr}, nil)
 		return
 	}
 
@@ -112,7 +107,7 @@ func (h *RideHandler) Correct(c *gin.Context) {
 		}
 	}
 
-	req := service.CorrectRideRecordRequest{
+	req := app.CorrectRideRecordRequest{
 		EffectiveStatus:     dto.EffectiveStatus,
 		VehicleID:           vehicleUUID,
 		DriverID:            driverUUID,
@@ -122,29 +117,29 @@ func (h *RideHandler) Correct(c *gin.Context) {
 		Reason:              dto.Reason,
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
 	if err := h.rideService.CorrectRideRecord(c.Request.Context(), rideID, req, actorID, actorRole, c.ClientIP(), c.Request.UserAgent()); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{"updated": true}, nil)
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"updated": true}, nil)
 }
 
 // ManualReport 人工輸入回報內容並儲存搭乘紀錄。
 func (h *RideHandler) ManualReport(c *gin.Context) {
 	var dto ManualReportDTO
 	if err := c.ShouldBindJSON(&dto); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	caseUUID, err := uuid.Parse(dto.CaseID)
 	if err != nil {
 		// 非 UUID CaseID（相容展示與自訂字串模式）
-		middleware.RespondSuccess(c, http.StatusOK, gin.H{
+		httpx.RespondSuccess(c, http.StatusOK, gin.H{
 			"id":              "ride_" + dto.CaseID + "_" + dto.ServiceDate + "_" + string(rune('0'+dto.LegSeq)),
 			"caseId":          dto.CaseID,
 			"serviceDate":     dto.ServiceDate,
@@ -169,7 +164,7 @@ func (h *RideHandler) ManualReport(c *gin.Context) {
 		}
 	}
 
-	req := service.ManualReportRideRequest{
+	req := app.ManualReportRideRequest{
 		ID:                  dto.ID,
 		CaseID:              caseUUID,
 		ServiceDate:         dto.ServiceDate,
@@ -183,16 +178,16 @@ func (h *RideHandler) ManualReport(c *gin.Context) {
 		Reason:              dto.Reason,
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
 	rec, err := h.rideService.ManualReportRide(c.Request.Context(), req, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, rec, nil)
+	httpx.RespondSuccess(c, http.StatusOK, rec, nil)
 }
 
 // GetRecord 取得單筆搭乘紀錄。
@@ -200,7 +195,7 @@ func (h *RideHandler) ManualReport(c *gin.Context) {
 // TODO: 尚無 RideService 查單筆紀錄的方法，待補上真實查詢後串接；
 // 目前誠實回傳查無資料，避免回傳假造內容。
 func (h *RideHandler) GetRecord(c *gin.Context) {
-	middleware.RespondError(c, http.StatusNotImplemented, middleware.CodeNotFound, "搭乘紀錄查詢尚未串接資料來源", nil)
+	httpx.RespondError(c, http.StatusNotImplemented, httpx.CodeNotFound, "搭乘紀錄查詢尚未串接資料來源", nil)
 }
 
 // GetCalendar 取得搭乘月曆矩陣資料。
@@ -221,7 +216,7 @@ func (h *RideHandler) GetCalendar(c *gin.Context) {
 		daysInMonth = time.Date(gregorianYear, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day()
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{
 		"month":       monthStr,
 		"totalCases":  0,
 		"daysInMonth": daysInMonth,
@@ -236,7 +231,7 @@ func (h *RideHandler) GetCalendar(c *gin.Context) {
 func (h *RideHandler) ListIssues(c *gin.Context) {
 	list := []gin.H{}
 
-	middleware.RespondSuccess(c, http.StatusOK, list, middleware.PaginationMeta{
+	httpx.RespondSuccess(c, http.StatusOK, list, httpx.PaginationMeta{
 		Page:     1,
 		PageSize: 20,
 		Total:    0,
@@ -248,182 +243,5 @@ func (h *RideHandler) ListIssues(c *gin.Context) {
 // TODO: 尚無 RideService 寫入衝突裁決結果的方法，待補上真實寫入後串接；
 // 目前誠實回傳未實作，避免回傳假造的解決成功狀態。
 func (h *RideHandler) ResolveConflict(c *gin.Context) {
-	middleware.RespondError(c, http.StatusNotImplemented, middleware.CodeInternalError, "混車衝突裁決尚未串接資料來源", nil)
-}
-
-// ExportHandler 處理匯出與前置檢核請求。
-type ExportHandler struct {
-	precheckService *service.PrecheckService
-	reportService   *service.ReportService
-}
-
-// NewExportHandler 建立 ExportHandler 實例。
-func NewExportHandler(precheckService *service.PrecheckService, reportServices ...*service.ReportService) *ExportHandler {
-	var reportService *service.ReportService
-	if len(reportServices) > 0 {
-		reportService = reportServices[0]
-	}
-	return &ExportHandler{precheckService: precheckService, reportService: reportService}
-}
-
-// Precheck 執行匯出前置檢核（支援 GET Query 與 POST JSON Body）。
-func (h *ExportHandler) Precheck(c *gin.Context) {
-	periodYM := c.Query("periodYm")
-	if periodYM == "" {
-		periodYM = c.DefaultQuery("month", "115-07")
-	}
-	region := c.DefaultQuery("region", "hsinchu")
-
-	if c.Request.Method == http.MethodPost {
-		var req struct {
-			PeriodYM string `json:"periodYm"`
-			Region   string `json:"region"`
-		}
-		if err := c.ShouldBindJSON(&req); err == nil {
-			if req.PeriodYM != "" {
-				periodYM = req.PeriodYM
-			}
-			if req.Region != "" {
-				region = req.Region
-			}
-		}
-	}
-
-	report, err := h.precheckService.RunPrecheck(c.Request.Context(), periodYM, region)
-	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "前置檢核失敗", nil)
-		return
-	}
-
-	middleware.RespondSuccess(c, http.StatusOK, report, nil)
-}
-
-// List 取得申報匯出工作歷史紀錄清單。
-func (h *ExportHandler) List(c *gin.Context) {
-	middleware.RespondSuccess(c, http.StatusOK, []gin.H{}, middleware.PaginationMeta{
-		Page:       1,
-		PageSize:   10,
-		Total:      0,
-		TotalPages: 0,
-	})
-}
-
-// Create 建立申報匯出工作任務。
-func (h *ExportHandler) Create(c *gin.Context) {
-	var req struct {
-		JobType  string `json:"jobType"`
-		PeriodYM string `json:"periodYm"`
-		Region   string `json:"region"`
-		Mode     string `json:"mode"`
-	}
-	_ = c.ShouldBindJSON(&req)
-
-	if req.PeriodYM == "" {
-		req.PeriodYM = "115-07"
-	}
-	if req.Region == "" {
-		req.Region = "hsinchu"
-	}
-
-	jobID := uuid.New().String()
-	query := url.Values{}
-	query.Set("jobType", req.JobType)
-	query.Set("periodYm", req.PeriodYM)
-	query.Set("region", req.Region)
-	downloadURL := fmt.Sprintf("/api/v1/exports/%s/download?%s", jobID, query.Encode())
-	fileName := exportFileName(req.JobType, req.PeriodYM, req.Region)
-
-	job := gin.H{
-		"id":          jobID,
-		"jobType":     req.JobType,
-		"periodYm":    req.PeriodYM,
-		"region":      req.Region,
-		"mode":        req.Mode,
-		"status":      "succeeded",
-		"totalCases":  12,
-		"totalRows":   180,
-		"fileName":    fileName,
-		"downloadUrl": downloadURL,
-		"createdAt":   "2026-08-25 16:00:00",
-	}
-	middleware.RespondSuccess(c, http.StatusAccepted, job, nil)
-}
-
-// Get 取得單筆匯出工作狀態與下載連結。
-func (h *ExportHandler) Get(c *gin.Context) {
-	jobID := c.Param("id")
-	jobType := c.DefaultQuery("jobType", "gov_claim")
-	periodYM := c.DefaultQuery("periodYm", "115-07")
-	region := c.DefaultQuery("region", "hsinchu")
-	query := url.Values{}
-	query.Set("jobType", jobType)
-	query.Set("periodYm", periodYM)
-	query.Set("region", region)
-	downloadURL := fmt.Sprintf("/api/v1/exports/%s/download?%s", jobID, query.Encode())
-	job := gin.H{
-		"id":          jobID,
-		"jobType":     jobType,
-		"periodYm":    periodYM,
-		"region":      region,
-		"mode":        "single_multi_case",
-		"status":      "succeeded",
-		"totalCases":  12,
-		"totalRows":   180,
-		"fileName":    exportFileName(jobType, periodYM, region),
-		"downloadUrl": downloadURL,
-		"createdAt":   "2026-08-25 16:00:00",
-	}
-	middleware.RespondSuccess(c, http.StatusOK, job, nil)
-}
-
-// Download 串流下載政府申報 Excel 檔案。
-func (h *ExportHandler) Download(c *gin.Context) {
-	jobType := c.DefaultQuery("jobType", "gov_claim")
-	periodYM := c.DefaultQuery("periodYm", "115-07")
-	region := c.DefaultQuery("region", "hsinchu")
-
-	excelBytes, err := h.generateExportBytes(c.Request.Context(), jobType, periodYM, region)
-	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "產生申報 Excel 檔案失敗", nil)
-		return
-	}
-
-	fileName := exportFileName(jobType, periodYM, region)
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", fileName, url.PathEscape(fileName)))
-	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
-}
-
-func (h *ExportHandler) generateExportBytes(ctx context.Context, jobType, periodYM, region string) ([]byte, error) {
-	switch jobType {
-	case "trip_summary":
-		if h.reportService != nil {
-			var regionPtr *string
-			if region != "" {
-				regionPtr = &region
-			}
-			return h.reportService.GenerateTripSummaryExcel(ctx, periodYM, regionPtr, nil)
-		}
-		return export.GenerateTripSummaryExcel(periodYM, nil)
-	case "hsinchu_schedule":
-		if h.reportService != nil {
-			return h.reportService.GenerateHsinchuScheduleExcel(ctx, nil, nil)
-		}
-		return export.GenerateHsinchuScheduleExcel(nil, nil)
-	case "gov_claim", "":
-		return export.GenerateGovClaimExcel([]govform.ClaimRow{})
-	default:
-		return nil, fmt.Errorf("unsupported export job type %q", jobType)
-	}
-}
-
-func exportFileName(jobType, periodYM, region string) string {
-	period := strings.ReplaceAll(periodYM, "-", "")
-	switch jobType {
-	case "trip_summary":
-		return fmt.Sprintf("trip-summary-%s.xlsx", periodYM)
-	case "hsinchu_schedule":
-		return "hsinchu-schedule.xlsx"
-	default:
-		return fmt.Sprintf("gov-claim-%s-%s.xlsx", region, period)
-	}
+	httpx.RespondError(c, http.StatusNotImplemented, httpx.CodeInternalError, "混車衝突裁決尚未串接資料來源", nil)
 }

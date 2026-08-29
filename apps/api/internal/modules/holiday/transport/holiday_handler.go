@@ -1,21 +1,22 @@
-package handler
+package transport
 
 import (
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/holiday/app"
+	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 // HolidayHandler 處理國定假日與行事曆之 HTTP 請求。
 type HolidayHandler struct {
-	svc *service.HolidayService
+	svc *app.HolidayService
 }
 
 // NewHolidayHandler 建立 HolidayHandler 實例。
-func NewHolidayHandler(svc *service.HolidayService) *HolidayHandler {
+func NewHolidayHandler(svc *app.HolidayService) *HolidayHandler {
 	return &HolidayHandler{svc: svc}
 }
 
@@ -42,30 +43,30 @@ func (h *HolidayHandler) List(c *gin.Context) {
 	start, err1 := time.Parse("2006-01-02", startStr)
 	end, err2 := time.Parse("2006-01-02", endStr)
 	if err1 != nil || err2 != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "日期格式錯誤，請使用 YYYY-MM-DD", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "日期格式錯誤，請使用 YYYY-MM-DD", nil)
 		return
 	}
 
 	holidays, err := h.svc.ListHolidays(c.Request.Context(), start, end, region)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "查詢國定假日失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢國定假日失敗", nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, holidays, nil)
+	httpx.RespondSuccess(c, http.StatusOK, holidays, nil)
 }
 
 // Create 新增或更新單一國定假日。
 func (h *HolidayHandler) Create(c *gin.Context) {
 	var req CreateHolidayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	date, err := time.Parse("2006-01-02", req.HolidayDate)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "日期格式錯誤", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "日期格式錯誤", nil)
 		return
 	}
 
@@ -78,10 +79,10 @@ func (h *HolidayHandler) Create(c *gin.Context) {
 		isDayOff = *req.IsDayOff
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
-	item, err := h.svc.UpsertHoliday(c.Request.Context(), service.UpsertHolidayInput{
+	item, err := h.svc.UpsertHoliday(c.Request.Context(), app.UpsertHolidayInput{
 		HolidayDate: date,
 		Name:        req.Name,
 		Region:      req.Region,
@@ -89,11 +90,11 @@ func (h *HolidayHandler) Create(c *gin.Context) {
 		IsDayOff:    isDayOff,
 	}, actorID, actorRole)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "儲存國定假日失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "儲存國定假日失敗", nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusCreated, item, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, item, nil)
 }
 
 // Import 匯入官方標準國定假日。
@@ -103,16 +104,16 @@ func (h *HolidayHandler) Import(c *gin.Context) {
 		req.Year = time.Now().Year()
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
 	count, err := h.svc.ImportTaiwanGovHolidays(c.Request.Context(), req.Year, actorID, actorRole)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "匯入官方假日失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "匯入官方假日失敗", nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{"importedCount": count, "year": req.Year}, nil)
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"importedCount": count, "year": req.Year}, nil)
 }
 
 // Delete 刪除指定日期假日。
@@ -120,17 +121,17 @@ func (h *HolidayHandler) Delete(c *gin.Context) {
 	dateStr := c.Param("date")
 	date, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "日期格式錯誤", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "日期格式錯誤", nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
 	if err := h.svc.DeleteHoliday(c.Request.Context(), date, actorID, actorRole); err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "刪除假日失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "刪除假日失敗", nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{"deleted": true}, nil)
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"deleted": true}, nil)
 }

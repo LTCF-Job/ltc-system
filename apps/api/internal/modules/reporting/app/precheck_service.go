@@ -1,16 +1,14 @@
-package service
+package app
 
 import (
 	"context"
 	"fmt"
-
-	"ltc-system/apps/api/internal/repository"
 )
 
 // PrecheckRepositoryPort 定義前置檢核資料查詢介面。
 type PrecheckRepositoryPort interface {
-	FindIncompleteActiveCases(ctx context.Context, region string) ([]repository.IncompleteCaseEntity, error)
-	FindUnresolvedConflicts(ctx context.Context, region string) ([]repository.UnresolvedConflictEntity, error)
+	FindIncompleteActiveCases(ctx context.Context, region string) ([]IncompleteCase, error)
+	FindUnresolvedConflicts(ctx context.Context, region string) ([]UnresolvedConflict, error)
 }
 
 // PrecheckSeverity 代表檢核結果等級。

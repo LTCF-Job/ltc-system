@@ -24,11 +24,10 @@ const internalRoot = ".."
 //	"domain"                  shared business kernel
 //	"platform/<name>"         shared technical kernel
 //	"mod/<module>/<segment>"  transport, app or infra of one capability module
-//	"legacy/<package>"        the flat layer-first packages being retired
 type zone string
 
-// kind is the zone's architectural role: domain, platform, transport, app,
-// infra or legacy.
+// kind is the zone's architectural role: domain, platform, transport, app or
+// infra.
 func (z zone) kind() string {
 	parts := strings.Split(string(z), "/")
 	if parts[0] == "mod" {
@@ -59,28 +58,13 @@ func allowedInternal(from, to zone) bool {
 		return from.kind() != "domain"
 	}
 
+	// A module segment may only reach its own use cases; cross-module traffic
+	// goes through a port that cmd/server injects.
 	switch from.kind() {
-	case "transport", "app":
+	case "transport", "app", "infra":
 		return to.kind() == "app" && to.module() == from.module()
-	case "infra":
-		// Its own use cases, to implement their ports.
-		return to.kind() == "app" && to.module() == from.module()
-	case "legacy":
-		return contains(legacyAllowed[from], to)
 	}
 	return false
-}
-
-// legacyAllowed keeps the dependency direction of the flat packages until each
-// capability moves into a module.
-var legacyAllowed = map[zone][]zone{
-	"legacy/handler":    {"legacy/service", "legacy/export", "legacy/middleware", "legacy/config"},
-	"legacy/service":    {"legacy/export", "legacy/config"},
-	"legacy/repository": {"legacy/config"},
-	"legacy/adapter":    {"legacy/service", "legacy/config"},
-	"legacy/export":     {"legacy/config"},
-	"legacy/middleware": {"legacy/config"},
-	"legacy/config":     {},
 }
 
 // externalConfinement lists third-party prefixes and the zones that may import
@@ -90,57 +74,38 @@ var externalConfinement = []struct {
 	allow  func(z zone) bool
 }{
 	{"github.com/gin-gonic/gin", func(z zone) bool {
-		return z.kind() == "transport" || z == "legacy/handler" || z == "legacy/middleware" ||
+		return z.kind() == "transport" ||
 			z == "platform/httpx" || z == "platform/auth" || z == "platform/logging"
 	}},
 	{"github.com/jackc/pgx", func(z zone) bool {
-		return z.kind() == "infra" || z == "legacy/repository" || z == "platform/pgxdb"
+		return z.kind() == "infra" || z == "platform/pgxdb"
 	}},
 	{"github.com/xuri/excelize", func(z zone) bool {
-		return (z.kind() == "infra" && z.module() == "reporting") || z == "legacy/export"
+		// The spreadsheet SDK stays in the infra boundary that renders or decodes files.
+		return z.kind() == "infra" && excelModules[z.module()]
 	}},
 	{"google.golang.org/api", func(z zone) bool {
-		return (z.kind() == "infra" && z.module() == "formsync") || z == "legacy/adapter"
+		return z.kind() == "infra" && z.module() == "formsync"
 	}},
+}
+
+// excelModules own a capability whose deliverable is a spreadsheet file.
+var excelModules = map[string]bool{
+	"reporting":  true,
+	"caseimport": true,
+	"ops":        true,
+	"casemgmt":   true,
 }
 
 // domainAllowedExternal are the only non-stdlib imports internal/domain may use.
 // Both are value types rather than infrastructure clients.
 var domainAllowedExternal = []string{"golang.org/x/text", "github.com/google/uuid"}
 
-// baseline freezes the violations that existed when these rules were
-// introduced. Keys are "<path under internal/>|<violated import>"; values name
-// the phase that retires them. The map may only shrink: an entry that no longer
-// occurs fails the test, so the fixing commit also deletes its entry.
-var baseline = map[string]string{
-	// Handlers reaching past the application boundary, retired with the
-	// module that owns each capability.
-
-	// Use cases holding a concrete repository instead of a port. Each is
-	// retired when its capability gains ports.go.
-	"service/attendance_service.go|legacy/repository":   "module migration",
-	"service/driver_service.go|legacy/repository":       "module migration",
-	"service/site_service.go|legacy/repository":         "module migration",
-	"service/vehicle_service.go|legacy/repository":      "module migration",
-	"service/audit_service.go|legacy/repository":        "module migration",
-	"service/dashboard_service.go|legacy/repository":    "module migration",
-	"service/form_service.go|legacy/repository":         "module migration",
-	"service/fuel_service.go|legacy/repository":         "module migration",
-	"service/holiday_service.go|legacy/repository":      "module migration",
-	"service/import_service.go|legacy/repository":       "module migration",
-	"service/maintenance_service.go|legacy/repository":  "module migration",
-	"service/master_service.go|legacy/repository":       "module migration",
-	"service/notification_service.go|legacy/repository": "module migration",
-	"service/precheck_service.go|legacy/repository":     "module migration",
-	"service/region_service.go|legacy/repository":       "module migration",
-	"service/report_service.go|legacy/repository":       "module migration",
-	"service/ride_service.go|legacy/repository":         "module migration",
-	"service/task_service.go|legacy/repository":         "module migration",
-	"service/form_service.go|legacy/adapter":            "phase 5 (formsync)",
-
-	// Excel rendering outside the reporting boundary.
-	"service/import_service.go|github.com/xuri/excelize": "phase 4",
-}
+// baseline froze the violations that existed when these rules were introduced.
+// The migration into internal/modules/ retired every one of them, so it is now
+// empty and must stay empty: a new violation is a defect to fix, not an entry to
+// add. Keys are "<path under internal/>|<violated import>".
+var baseline = map[string]string{}
 
 func TestImportMatrix(t *testing.T) {
 	seen := map[string]bool{}
@@ -196,7 +161,7 @@ func TestBindingTagsStayInTransport(t *testing.T) {
 	seen := map[string]bool{}
 
 	forEachSourceFile(t, func(rel string, z zone, f *ast.File) {
-		if z.kind() == "transport" || z == "legacy/handler" {
+		if z.kind() == "transport" {
 			return
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
@@ -227,7 +192,7 @@ func TestRequestBodiesUseTransportDTOs(t *testing.T) {
 	seen := map[string]bool{}
 
 	forEachSourceFile(t, func(rel string, z zone, f *ast.File) {
-		if z.kind() != "transport" && z != "legacy/handler" {
+		if z.kind() != "transport" {
 			return
 		}
 
@@ -302,7 +267,7 @@ func reportRetired(t *testing.T, name string, frozen map[string]string, seen map
 }
 
 func isPersistencePackage(name string) bool {
-	return name == "repository" || strings.HasSuffix(name, "infra")
+	return strings.HasSuffix(name, "infra")
 }
 
 // zoneOf maps a path under internal/ to its zone, or "" for paths the rules do
@@ -325,7 +290,7 @@ func zoneOf(relPath string) zone {
 		}
 		return zone("mod/" + parts[1] + "/" + parts[2])
 	default:
-		return zone("legacy/" + parts[0])
+		return ""
 	}
 }
 
@@ -374,15 +339,6 @@ func isStdlib(importPath string) bool {
 func hasAnyPrefix(s string, prefixes []string) bool {
 	for _, p := range prefixes {
 		if strings.HasPrefix(s, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func contains(zs []zone, z zone) bool {
-	for _, v := range zs {
-		if v == z {
 			return true
 		}
 	}

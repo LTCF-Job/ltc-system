@@ -1,4 +1,4 @@
-package repository
+package infra
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/notification/app"
 )
 
 // NotificationRepository 提供 notification_recipients 與 notification_log 資料表之存取操作。
@@ -19,9 +20,9 @@ func NewNotificationRepository(db *pgxpool.Pool) *NotificationRepository {
 }
 
 // ListRecipients 依通知主題取得收件人清單。
-func (r *NotificationRepository) ListRecipients(ctx context.Context, topic string, activeOnly bool) ([]NotificationRecipientEntity, error) {
+func (r *NotificationRepository) ListRecipients(ctx context.Context, topic string, activeOnly bool) ([]app.Recipient, error) {
 	if r.db == nil {
-		return []NotificationRecipientEntity{}, nil
+		return []app.Recipient{}, nil
 	}
 
 	query := `
@@ -37,9 +38,9 @@ func (r *NotificationRepository) ListRecipients(ctx context.Context, topic strin
 	}
 	defer rows.Close()
 
-	var recipients []NotificationRecipientEntity
+	var recipients []app.Recipient
 	for rows.Next() {
-		var item NotificationRecipientEntity
+		var item app.Recipient
 		if err := rows.Scan(&item.ID, &item.Topic, &item.Email, &item.DisplayName, &item.Active, &item.CreatedBy, &item.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -49,7 +50,7 @@ func (r *NotificationRepository) ListRecipients(ctx context.Context, topic strin
 }
 
 // GetRecipientByID 依 ID 取得單一收件人。
-func (r *NotificationRepository) GetRecipientByID(ctx context.Context, id int64) (*NotificationRecipientEntity, error) {
+func (r *NotificationRepository) GetRecipientByID(ctx context.Context, id int64) (*app.Recipient, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("database unavailable")
 	}
@@ -58,7 +59,7 @@ func (r *NotificationRepository) GetRecipientByID(ctx context.Context, id int64)
 		SELECT id, topic, email, display_name, active, created_by, created_at
 		FROM notification_recipients WHERE id = $1
 	`
-	var item NotificationRecipientEntity
+	var item app.Recipient
 	err := r.db.QueryRow(ctx, query, id).Scan(&item.ID, &item.Topic, &item.Email, &item.DisplayName, &item.Active, &item.CreatedBy, &item.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -67,7 +68,7 @@ func (r *NotificationRepository) GetRecipientByID(ctx context.Context, id int64)
 }
 
 // CreateRecipient 新增通知收件人。
-func (r *NotificationRepository) CreateRecipient(ctx context.Context, item *NotificationRecipientEntity) error {
+func (r *NotificationRepository) CreateRecipient(ctx context.Context, item *app.Recipient) error {
 	if r.db == nil {
 		return nil
 	}
@@ -82,7 +83,7 @@ func (r *NotificationRepository) CreateRecipient(ctx context.Context, item *Noti
 }
 
 // UpdateRecipient 修改通知收件人設定。
-func (r *NotificationRepository) UpdateRecipient(ctx context.Context, id int64, email string, displayName *string, active bool) (*NotificationRecipientEntity, error) {
+func (r *NotificationRepository) UpdateRecipient(ctx context.Context, id int64, email string, displayName *string, active bool) (*app.Recipient, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("database unavailable")
 	}
@@ -93,7 +94,7 @@ func (r *NotificationRepository) UpdateRecipient(ctx context.Context, id int64, 
 		WHERE id = $1
 		RETURNING id, topic, email, display_name, active, created_by, created_at
 	`
-	var item NotificationRecipientEntity
+	var item app.Recipient
 	err := r.db.QueryRow(ctx, query, id, email, displayName, active).
 		Scan(&item.ID, &item.Topic, &item.Email, &item.DisplayName, &item.Active, &item.CreatedBy, &item.CreatedAt)
 	if err != nil {
@@ -114,7 +115,7 @@ func (r *NotificationRepository) DeleteRecipient(ctx context.Context, id int64) 
 }
 
 // InsertLog 寫入通知發送日誌留痕。
-func (r *NotificationRepository) InsertLog(ctx context.Context, log *NotificationLogEntity) error {
+func (r *NotificationRepository) InsertLog(ctx context.Context, log *app.Log) error {
 	if r.db == nil {
 		return nil
 	}
@@ -134,9 +135,9 @@ func (r *NotificationRepository) InsertLog(ctx context.Context, log *Notificatio
 }
 
 // ListLogs 取得通知日誌清單（支援主題篩選與分頁）。
-func (r *NotificationRepository) ListLogs(ctx context.Context, topic string, page, pageSize int) ([]NotificationLogEntity, int64, error) {
+func (r *NotificationRepository) ListLogs(ctx context.Context, topic string, page, pageSize int) ([]app.Log, int64, error) {
 	if r.db == nil {
-		return []NotificationLogEntity{}, 0, nil
+		return []app.Log{}, 0, nil
 	}
 
 	offset := (page - 1) * pageSize
@@ -153,9 +154,9 @@ func (r *NotificationRepository) ListLogs(ctx context.Context, topic string, pag
 	}
 	defer rows.Close()
 
-	var logs []NotificationLogEntity
+	var logs []app.Log
 	for rows.Next() {
-		var l NotificationLogEntity
+		var l app.Log
 		if err := rows.Scan(
 			&l.ID, &l.Topic, &l.Channel, &l.RecipientEmails, &l.Subject, &l.ContentSummary,
 			&l.Status, &l.ErrorMessage, &l.TriggeredBy, &l.TriggeredByName, &l.SentAt,

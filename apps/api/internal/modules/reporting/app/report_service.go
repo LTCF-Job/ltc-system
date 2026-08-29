@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -7,14 +7,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/export"
-	"ltc-system/apps/api/internal/repository"
+	"ltc-system/apps/api/internal/domain/govform"
 )
 
 // ReportRepositoryPort 定義報表資料存取介面。
 type ReportRepositoryPort interface {
-	QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, region *string, vehicleID *uuid.UUID) ([]repository.ReportVehicleTripSummary, error)
-	QueryHsinchuScheduleData(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID) ([]repository.ReportHsinchuScheduleRow, error)
+	QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, region *string, vehicleID *uuid.UUID) ([]ReportVehicleTripSummary, error)
+	QueryHsinchuScheduleData(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID) ([]ReportHsinchuScheduleRow, error)
 }
 
 // TripSummaryCaseRow 代表單一個案之趟數統計。
@@ -76,12 +75,13 @@ type HsinchuScheduleReport struct {
 
 // ReportService 提供報表資料彙總與 Excel 檔案產生服務。
 type ReportService struct {
-	repo ReportRepositoryPort
+	repo     ReportRepositoryPort
+	renderer Renderer
 }
 
 // NewReportService 建立 ReportService 實例。
-func NewReportService(repo ReportRepositoryPort) *ReportService {
-	return &ReportService{repo: repo}
+func NewReportService(repo ReportRepositoryPort, renderer Renderer) *ReportService {
+	return &ReportService{repo: repo, renderer: renderer}
 }
 
 // GetTripSummary 查詢車輛趟數表結構化資料。
@@ -143,29 +143,7 @@ func (s *ReportService) GenerateTripSummaryExcel(ctx context.Context, periodYm s
 		return nil, err
 	}
 
-	var exportVehicles []export.TripSummaryExportVehicle
-	for _, v := range report.Vehicles {
-		var rows []export.TripSummaryExportCaseRow
-		for _, r := range v.Rows {
-			rows = append(rows, export.TripSummaryExportCaseRow{
-				CaseCode:      r.CaseCode,
-				CaseName:      r.CaseName,
-				OutboundCount: r.OutboundCount,
-				InboundCount:  r.InboundCount,
-				TotalCount:    r.TotalCount,
-			})
-		}
-		exportVehicles = append(exportVehicles, export.TripSummaryExportVehicle{
-			VehicleName:      v.VehicleName,
-			PlateNo:          v.PlateNo,
-			Rows:             rows,
-			SubtotalOutbound: v.SubtotalOutbound,
-			SubtotalInbound:  v.SubtotalInbound,
-			SubtotalTotal:    v.SubtotalTotal,
-		})
-	}
-
-	return export.GenerateTripSummaryExcel(report.PeriodYM, exportVehicles)
+	return s.renderer.RenderTripSummary(report.PeriodYM, report.Vehicles)
 }
 
 // GetHsinchuSchedule 查詢新竹接送時刻表排班結構。
@@ -226,27 +204,7 @@ func (s *ReportService) GenerateHsinchuScheduleExcel(ctx context.Context, siteID
 		return nil, err
 	}
 
-	toExportItems := func(items []HsinchuScheduleItem) []export.HsinchuScheduleExportItem {
-		var res []export.HsinchuScheduleExportItem
-		for _, it := range items {
-			res = append(res, export.HsinchuScheduleExportItem{
-				Direction:   it.Direction,
-				RunNo:       it.RunNo,
-				CaseCode:    it.CaseCode,
-				CaseName:    it.CaseName,
-				Note:        it.Note,
-				DepartTime:  it.DepartTime,
-				Origin:      it.Origin,
-				ArriveTime:  it.ArriveTime,
-				Destination: it.Destination,
-				VehicleName: it.VehicleName,
-				SiteName:    it.SiteName,
-			})
-		}
-		return res
-	}
-
-	return export.GenerateHsinchuScheduleExcel(toExportItems(report.Outbound), toExportItems(report.Inbound))
+	return s.renderer.RenderHsinchuSchedule(report.Outbound, report.Inbound)
 }
 
 func parsePeriodDates(periodYm string) (time.Time, time.Time) {
@@ -276,4 +234,9 @@ func parsePeriodDates(periodYm string) (time.Time, time.Time) {
 		endDate = startDate.AddDate(0, 1, 0)
 	}
 	return startDate, endDate
+}
+
+// GenerateGovClaimExcel 產生政府申報 Excel 檔案。
+func (s *ReportService) GenerateGovClaimExcel(rows []govform.ClaimRow) ([]byte, error) {
+	return s.renderer.RenderGovClaim(rows)
 }

@@ -1,18 +1,12 @@
-package repository
+package infra
 
 import (
 	"context"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/reporting/app"
 )
-
-// VehicleTripTrendData 代表車輛趟數趨勢資料。
-type VehicleTripTrendData struct {
-	VehicleName string
-	PlateNo     string
-	TripCount   int
-}
 
 // DashboardRepository 提供儀表板相關資料庫查詢。
 type DashboardRepository struct {
@@ -80,9 +74,9 @@ func (r *DashboardRepository) GetPendingFormColumnsCount(ctx context.Context) (i
 }
 
 // GetVehicleTripTrends 查詢各車輛於指定區間之趟數趨勢。
-func (r *DashboardRepository) GetVehicleTripTrends(ctx context.Context, start, end time.Time) ([]VehicleTripTrendData, error) {
+func (r *DashboardRepository) GetVehicleTripTrends(ctx context.Context, start, end time.Time) ([]app.VehicleTripTrend, error) {
 	if r.db == nil {
-		return []VehicleTripTrendData{}, nil
+		return []app.VehicleTripTrend{}, nil
 	}
 	query := `
 		SELECT v.display_name, v.plate_no, COUNT(r.id) as trips
@@ -99,9 +93,9 @@ func (r *DashboardRepository) GetVehicleTripTrends(ctx context.Context, start, e
 	}
 	defer rows.Close()
 
-	var trends []VehicleTripTrendData
+	var trends []app.VehicleTripTrend
 	for rows.Next() {
-		var item VehicleTripTrendData
+		var item app.VehicleTripTrend
 		if err := rows.Scan(&item.VehicleName, &item.PlateNo, &item.TripCount); err == nil {
 			trends = append(trends, item)
 		}

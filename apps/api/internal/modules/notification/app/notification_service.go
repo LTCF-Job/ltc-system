@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/repository"
 )
 
 // EmailSender 定義電子郵件發送介面。
@@ -25,13 +24,13 @@ func (s *LogEmailSender) SendEmail(ctx context.Context, to, subject, body string
 
 // NotificationService 負責系統告警與通知派送及收件人管理。
 type NotificationService struct {
-	repo      *repository.NotificationRepository
-	auditRepo *repository.AuditRepository
+	repo      Store
+	auditRepo AuditWriter
 	sender    EmailSender
 }
 
 // NewNotificationService 建立 NotificationService 實例。
-func NewNotificationService(repo *repository.NotificationRepository, auditRepo *repository.AuditRepository, sender EmailSender) *NotificationService {
+func NewNotificationService(repo Store, auditRepo AuditWriter, sender EmailSender) *NotificationService {
 	if sender == nil {
 		sender = &LogEmailSender{}
 	}
@@ -52,7 +51,7 @@ func (s *NotificationService) SendNotification(ctx context.Context, topic, subje
 	// 規格書 §8.4：收件人為空時不寄送，改寫入失敗留痕
 	if len(recipients) == 0 {
 		errMsg := "無設定收件人"
-		logItem := &repository.NotificationLogEntity{
+		logItem := &Log{
 			Topic:           topic,
 			Channel:         "email",
 			RecipientEmails: []string{},
@@ -79,7 +78,7 @@ func (s *NotificationService) SendNotification(ctx context.Context, topic, subje
 			msg := sendErr.Error()
 			errStr = &msg
 		}
-		logItem := &repository.NotificationLogEntity{
+		logItem := &Log{
 			Topic:           topic,
 			Channel:         "email",
 			RecipientEmails: []string{r.Email},
@@ -96,13 +95,13 @@ func (s *NotificationService) SendNotification(ctx context.Context, topic, subje
 }
 
 // ListRecipients 取得收件人清單。
-func (s *NotificationService) ListRecipients(ctx context.Context, topic string) ([]repository.NotificationRecipientEntity, error) {
+func (s *NotificationService) ListRecipients(ctx context.Context, topic string) ([]Recipient, error) {
 	return s.repo.ListRecipients(ctx, topic, false)
 }
 
 // CreateRecipient 新增收件人並留存稽核紀錄。
-func (s *NotificationService) CreateRecipient(ctx context.Context, topic, email string, displayName *string, actorID uuid.UUID, actorRole string) (*repository.NotificationRecipientEntity, error) {
-	item := &repository.NotificationRecipientEntity{
+func (s *NotificationService) CreateRecipient(ctx context.Context, topic, email string, displayName *string, actorID uuid.UUID, actorRole string) (*Recipient, error) {
+	item := &Recipient{
 		Topic:       topic,
 		Email:       email,
 		DisplayName: displayName,
@@ -116,7 +115,7 @@ func (s *NotificationService) CreateRecipient(ctx context.Context, topic, email 
 
 	// 留存 setting_change 稽核紀錄
 	if s.auditRepo != nil {
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "setting_change",
@@ -130,7 +129,7 @@ func (s *NotificationService) CreateRecipient(ctx context.Context, topic, email 
 }
 
 // UpdateRecipient 修改收件人設定。
-func (s *NotificationService) UpdateRecipient(ctx context.Context, id int64, email string, displayName *string, active bool, actorID uuid.UUID, actorRole string) (*repository.NotificationRecipientEntity, error) {
+func (s *NotificationService) UpdateRecipient(ctx context.Context, id int64, email string, displayName *string, active bool, actorID uuid.UUID, actorRole string) (*Recipient, error) {
 	before, _ := s.repo.GetRecipientByID(ctx, id)
 
 	item, err := s.repo.UpdateRecipient(ctx, id, email, displayName, active)
@@ -138,9 +137,8 @@ func (s *NotificationService) UpdateRecipient(ctx context.Context, id int64, ema
 		return nil, err
 	}
 
-
 	if s.auditRepo != nil {
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "setting_change",
@@ -167,7 +165,7 @@ func (s *NotificationService) DeleteRecipient(ctx context.Context, id int64, act
 		if before != nil {
 			entityID = before.Email
 		}
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "setting_change",
@@ -181,6 +179,6 @@ func (s *NotificationService) DeleteRecipient(ctx context.Context, id int64, act
 }
 
 // ListLogs 取得通知發送歷史。
-func (s *NotificationService) ListLogs(ctx context.Context, topic string, page, pageSize int) ([]repository.NotificationLogEntity, int64, error) {
+func (s *NotificationService) ListLogs(ctx context.Context, topic string, page, pageSize int) ([]Log, int64, error) {
 	return s.repo.ListLogs(ctx, topic, page, pageSize)
 }

@@ -1,21 +1,22 @@
-package handler
+package transport
 
 import (
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/notification/app"
+	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 // NotificationHandler 處理通知收件人與日誌之 HTTP 請求。
 type NotificationHandler struct {
-	svc *service.NotificationService
+	svc *app.NotificationService
 }
 
 // NewNotificationHandler 建立 NotificationHandler 實例。
-func NewNotificationHandler(svc *service.NotificationService) *NotificationHandler {
+func NewNotificationHandler(svc *app.NotificationService) *NotificationHandler {
 	return &NotificationHandler{svc: svc}
 }
 
@@ -38,30 +39,30 @@ func (h *NotificationHandler) ListRecipients(c *gin.Context) {
 	topic := c.Query("topic")
 	recipients, err := h.svc.ListRecipients(c.Request.Context(), topic)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "查詢收件人失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢收件人失敗", nil)
 		return
 	}
-	middleware.RespondSuccess(c, http.StatusOK, recipients, nil)
+	httpx.RespondSuccess(c, http.StatusOK, recipients, nil)
 }
 
 // CreateRecipient 新增通知收件人（admin 專屬）。
 func (h *NotificationHandler) CreateRecipient(c *gin.Context) {
 	var req CreateRecipientRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
 	item, err := h.svc.CreateRecipient(c.Request.Context(), req.Topic, req.Email, req.DisplayName, actorID, actorRole)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusCreated, item, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, item, nil)
 }
 
 // UpdateRecipient 修改通知收件人。
@@ -69,26 +70,26 @@ func (h *NotificationHandler) UpdateRecipient(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的收件人 ID", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的收件人 ID", nil)
 		return
 	}
 
 	var req UpdateRecipientRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
 	item, err := h.svc.UpdateRecipient(c.Request.Context(), id, req.Email, req.DisplayName, req.Active, actorID, actorRole)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, item, nil)
+	httpx.RespondSuccess(c, http.StatusOK, item, nil)
 }
 
 // DeleteRecipient 刪除通知收件人。
@@ -96,19 +97,19 @@ func (h *NotificationHandler) DeleteRecipient(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的收件人 ID", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的收件人 ID", nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
 	if err := h.svc.DeleteRecipient(c.Request.Context(), id, actorID, actorRole); err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "刪除收件人失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "刪除收件人失敗", nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{"deleted": true}, nil)
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"deleted": true}, nil)
 }
 
 // ListLogs 取得通知發送紀錄歷史。
@@ -122,7 +123,7 @@ func (h *NotificationHandler) ListLogs(c *gin.Context) {
 
 	logs, total, err := h.svc.ListLogs(c.Request.Context(), topic, page, pageSize)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "查詢通知日誌失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢通知日誌失敗", nil)
 		return
 	}
 
@@ -131,7 +132,7 @@ func (h *NotificationHandler) ListLogs(c *gin.Context) {
 		totalPages++
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, logs, middleware.PaginationMeta{
+	httpx.RespondSuccess(c, http.StatusOK, logs, httpx.PaginationMeta{
 		Page:       page,
 		PageSize:   pageSize,
 		Total:      total,

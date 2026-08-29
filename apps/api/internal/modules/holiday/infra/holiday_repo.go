@@ -1,4 +1,4 @@
-package repository
+package infra
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/holiday/app"
 )
 
 // HolidayRepository 提供 holidays 資料表之存取操作。
@@ -19,9 +20,9 @@ func NewHolidayRepository(db *pgxpool.Pool) *HolidayRepository {
 }
 
 // List 依據日期區間與地區取得國定假日清單。
-func (r *HolidayRepository) List(ctx context.Context, startDate, endDate time.Time, region string) ([]HolidayEntity, error) {
+func (r *HolidayRepository) List(ctx context.Context, startDate, endDate time.Time, region string) ([]app.Holiday, error) {
 	if r.db == nil {
-		return []HolidayEntity{}, nil
+		return []app.Holiday{}, nil
 	}
 
 	query := `
@@ -37,9 +38,9 @@ func (r *HolidayRepository) List(ctx context.Context, startDate, endDate time.Ti
 	}
 	defer rows.Close()
 
-	var holidays []HolidayEntity
+	var holidays []app.Holiday
 	for rows.Next() {
-		var h HolidayEntity
+		var h app.Holiday
 		if err := rows.Scan(&h.HolidayDate, &h.Name, &h.Region, &h.Source, &h.IsDayOff, &h.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -72,7 +73,7 @@ func (r *HolidayRepository) GetHolidayMap(ctx context.Context, year, month int, 
 }
 
 // Upsert 新增或更新單筆假日。
-func (r *HolidayRepository) Upsert(ctx context.Context, h *HolidayEntity) error {
+func (r *HolidayRepository) Upsert(ctx context.Context, h *app.Holiday) error {
 	if r.db == nil {
 		return nil
 	}
@@ -88,7 +89,7 @@ func (r *HolidayRepository) Upsert(ctx context.Context, h *HolidayEntity) error 
 }
 
 // BatchUpsert 批次匯入國定假日。
-func (r *HolidayRepository) BatchUpsert(ctx context.Context, holidays []HolidayEntity) error {
+func (r *HolidayRepository) BatchUpsert(ctx context.Context, holidays []app.Holiday) error {
 	if r.db == nil || len(holidays) == 0 {
 		return nil
 	}

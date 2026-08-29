@@ -1,27 +1,14 @@
-package repository
+package infra
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/audit/app"
 	"ltc-system/apps/api/internal/platform/pgxdb"
 )
-
-// AuditFilter 定義稽核日誌查詢過濾條件。
-type AuditFilter struct {
-	ActorID    *uuid.UUID
-	Action     string
-	EntityType string
-	EntityID   string
-	StartDate  *time.Time
-	EndDate    *time.Time
-	Q          string
-	Page       int
-	PageSize   int
-}
 
 // AuditRepository 提供 audit_log 資料表之存取操作。
 type AuditRepository struct {
@@ -34,7 +21,7 @@ func NewAuditRepository(db *pgxpool.Pool) *AuditRepository {
 }
 
 // Insert 寫入一筆不可變之稽核日誌。
-func (r *AuditRepository) Insert(ctx context.Context, item *AuditLogEntity) error {
+func (r *AuditRepository) Insert(ctx context.Context, e app.Entry) error {
 	if r.db == nil {
 		return nil
 	}
@@ -44,15 +31,17 @@ func (r *AuditRepository) Insert(ctx context.Context, item *AuditLogEntity) erro
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at
 	`
+	var id int64
+	var createdAt time.Time
 	db := pgxdb.FromContext(ctx, r.db)
-	return db.QueryRow(ctx, query, item.ActorID, item.ActorRole, item.Action, item.EntityType, item.EntityID, item.BeforeData, item.AfterData, item.IPAddress, item.UserAgent).
-		Scan(&item.ID, &item.CreatedAt)
+	return db.QueryRow(ctx, query, e.ActorID, e.ActorRole, e.Action, e.EntityType, e.EntityID, e.BeforeData, e.AfterData, e.IPAddress, e.UserAgent).
+		Scan(&id, &createdAt)
 }
 
 // List 依據多條件篩選並分頁查詢稽核紀錄。
-func (r *AuditRepository) List(ctx context.Context, f AuditFilter) ([]AuditLogEntity, int64, error) {
+func (r *AuditRepository) List(ctx context.Context, f app.Filter) ([]app.Record, int64, error) {
 	if r.db == nil {
-		return []AuditLogEntity{}, 0, nil
+		return []app.Record{}, 0, nil
 	}
 
 	if f.Page <= 0 {
@@ -83,9 +72,9 @@ func (r *AuditRepository) List(ctx context.Context, f AuditFilter) ([]AuditLogEn
 	}
 	defer rows.Close()
 
-	var logs []AuditLogEntity
+	var logs []app.Record
 	for rows.Next() {
-		var l AuditLogEntity
+		var l app.Record
 		if err := rows.Scan(&l.ID, &l.ActorID, &l.ActorRole, &l.Action, &l.EntityType, &l.EntityID, &l.BeforeData, &l.AfterData, &l.IPAddress, &l.UserAgent, &l.CreatedAt); err != nil {
 			return nil, 0, err
 		}

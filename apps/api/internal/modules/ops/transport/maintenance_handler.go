@@ -1,4 +1,4 @@
-package handler
+package transport
 
 import (
 	"fmt"
@@ -8,17 +8,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/ops/app"
+	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 // MaintenanceHandler 處理車輛維修保養 API 請求。
 type MaintenanceHandler struct {
-	maintenanceSvc *service.MaintenanceService
+	maintenanceSvc *app.MaintenanceService
 }
 
 // NewMaintenanceHandler 建立 MaintenanceHandler 實例。
-func NewMaintenanceHandler(maintenanceSvc *service.MaintenanceService) *MaintenanceHandler {
+func NewMaintenanceHandler(maintenanceSvc *app.MaintenanceService) *MaintenanceHandler {
 	return &MaintenanceHandler{maintenanceSvc: maintenanceSvc}
 }
 
@@ -50,12 +51,12 @@ func (h *MaintenanceHandler) List(c *gin.Context) {
 
 	list, total, err := h.maintenanceSvc.List(c.Request.Context(), page, pageSize, vehicleID, startDate, endDate, q)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
-	middleware.RespondSuccess(c, http.StatusOK, list, &middleware.PaginationMeta{
+	httpx.RespondSuccess(c, http.StatusOK, list, &httpx.PaginationMeta{
 		Page:       page,
 		PageSize:   pageSize,
 		Total:      int64(total),
@@ -77,20 +78,20 @@ func (h *MaintenanceHandler) Create(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	svcDate, err := time.Parse("2006-01-02", req.ServiceDate)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "保養日期格式必須為 YYYY-MM-DD", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "保養日期格式必須為 YYYY-MM-DD", nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
-	item, err := h.maintenanceSvc.Create(c.Request.Context(), service.MaintenanceLogInput{
+	item, err := h.maintenanceSvc.Create(c.Request.Context(), app.MaintenanceLogInput{
 		VehicleID:   req.VehicleID,
 		ServiceDate: svcDate,
 		Mileage:     req.Mileage,
@@ -102,11 +103,11 @@ func (h *MaintenanceHandler) Create(c *gin.Context) {
 		CreatedBy:   actorID,
 	}, &actorID, &actorRole)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusCreated, item, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, item, nil)
 }
 
 // Update 修改維修保養紀錄。
@@ -114,7 +115,7 @@ func (h *MaintenanceHandler) Update(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的紀錄 ID", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的紀錄 ID", nil)
 		return
 	}
 
@@ -130,20 +131,20 @@ func (h *MaintenanceHandler) Update(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	svcDate, err := time.Parse("2006-01-02", req.ServiceDate)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "保養日期格式必須為 YYYY-MM-DD", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "保養日期格式必須為 YYYY-MM-DD", nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 
-	item, err := h.maintenanceSvc.Update(c.Request.Context(), id, service.MaintenanceLogInput{
+	item, err := h.maintenanceSvc.Update(c.Request.Context(), id, app.MaintenanceLogInput{
 		VehicleID:   req.VehicleID,
 		ServiceDate: svcDate,
 		Mileage:     req.Mileage,
@@ -154,11 +155,11 @@ func (h *MaintenanceHandler) Update(c *gin.Context) {
 		Note:        req.Note,
 	}, &actorID, &actorRole)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, item, nil)
+	httpx.RespondSuccess(c, http.StatusOK, item, nil)
 }
 
 // Delete 刪除維修保養紀錄。
@@ -166,25 +167,25 @@ func (h *MaintenanceHandler) Delete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "無效的紀錄 ID", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的紀錄 ID", nil)
 		return
 	}
 
-	actorID := middleware.GetActorID(c)
-	actorRole := middleware.GetActorRole(c)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
 	if err := h.maintenanceSvc.Delete(c.Request.Context(), id, &actorID, &actorRole); err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
 }
 
 // DownloadBlankTemplate 下載 15 車空白維修保養檢查表格 Excel。
 func (h *MaintenanceHandler) DownloadBlankTemplate(c *gin.Context) {
 	excelBytes, err := h.maintenanceSvc.GenerateBlankMaintenanceExcel(c.Request.Context())
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 

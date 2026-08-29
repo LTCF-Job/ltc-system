@@ -1,4 +1,4 @@
-package middleware
+package auth
 
 import (
 	"crypto/rand"
@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"ltc-system/apps/api/internal/config"
+	"ltc-system/apps/api/internal/platform/config"
 )
 
 func performAuthRequest(t *testing.T, h gin.HandlerFunc, authHeader string) (*httptest.ResponseRecorder, *gin.Context) {
@@ -34,13 +34,13 @@ func performAuthRequest(t *testing.T, h gin.HandlerFunc, authHeader string) (*ht
 
 func TestAuthMiddleware_MissingHeader(t *testing.T) {
 	cfg := &config.Config{AppEnv: "production"}
-	w, _ := performAuthRequest(t, AuthMiddleware(cfg), "")
+	w, _ := performAuthRequest(t, Middleware(cfg), "")
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestAuthMiddleware_MalformedHeader(t *testing.T) {
 	cfg := &config.Config{AppEnv: "production"}
-	w, _ := performAuthRequest(t, AuthMiddleware(cfg), "Token abc")
+	w, _ := performAuthRequest(t, Middleware(cfg), "Token abc")
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
@@ -53,7 +53,7 @@ func TestAuthMiddleware_LocalMockHeaderBypassesJWT(t *testing.T) {
 	req.Header.Set("X-Mock-Role", "admin")
 	c.Request = req
 
-	AuthMiddleware(cfg)(c)
+	Middleware(cfg)(c)
 
 	assert.False(t, c.IsAborted())
 	assert.Equal(t, "admin", c.GetString(ContextKeyActorRole))
@@ -61,7 +61,7 @@ func TestAuthMiddleware_LocalMockHeaderBypassesJWT(t *testing.T) {
 
 func TestAuthMiddleware_LocalMockJWTPrefix(t *testing.T) {
 	cfg := &config.Config{AppEnv: "local"}
-	w, c := performAuthRequest(t, AuthMiddleware(cfg), "Bearer mock_jwt_admin_token")
+	w, c := performAuthRequest(t, Middleware(cfg), "Bearer mock_jwt_admin_token")
 	assert.False(t, w.Code == http.StatusUnauthorized)
 	assert.Equal(t, "admin", c.GetString(ContextKeyActorRole))
 }
@@ -70,7 +70,7 @@ func TestAuthMiddleware_LocalMockJWTPrefix(t *testing.T) {
 func TestAuthMiddleware_ProductionWithoutJWKS_Rejects(t *testing.T) {
 	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: ""}
 	forged := forgeUnsignedToken(t, "admin")
-	w, _ := performAuthRequest(t, AuthMiddleware(cfg), "Bearer "+forged)
+	w, _ := performAuthRequest(t, Middleware(cfg), "Bearer "+forged)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
@@ -81,7 +81,7 @@ func TestAuthMiddleware_RejectsForgedTokenWhenJWKSConfigured(t *testing.T) {
 
 	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL}
 	forged := forgeUnsignedToken(t, "admin")
-	w, _ := performAuthRequest(t, AuthMiddleware(cfg), "Bearer "+forged)
+	w, _ := performAuthRequest(t, Middleware(cfg), "Bearer "+forged)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
@@ -93,7 +93,7 @@ func TestAuthMiddleware_AcceptsValidSignedToken(t *testing.T) {
 	actorID := uuid.New()
 	signed := signTestToken(t, key, "test-kid", actorID.String(), "staff")
 
-	w, c := performAuthRequest(t, AuthMiddleware(cfg), "Bearer "+signed)
+	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.False(t, c.IsAborted())
 	assert.Equal(t, "staff", c.GetString(ContextKeyActorRole))

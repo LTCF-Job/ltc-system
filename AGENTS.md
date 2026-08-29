@@ -26,7 +26,7 @@
 
 本專案採前後端分離的 modular monolith：
 
-- Go API 逐步朝 `HTTP adapter → application use case → port interface ← infrastructure adapter` 遷移。
+- Go API 已完成模組化：每個業務能力是 `internal/modules/<capability>/{transport,app,infra}`，模組之間只透過 `cmd/server` 注入的 port 協作。邊界由 `internal/arch/arch_test.go` 強制，其 baseline 為空。
 - Vue 3 SPA 逐步朝 `app / features / shared / mocks` 的 feature-oriented 結構遷移。
 - 前端時間顯示規格：時間一律只顯示到秒數（`YYYY-MM-DD HH:mm:ss`，純時間 `HH:mm:ss`），統一透過 `@/utils/formatters` 格式化，嚴禁直接輸出 raw ISO 8601、毫秒或時區字尾。
 - API DTO、domain model、persistence model 與 mock fixture 保持不同責任。

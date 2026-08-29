@@ -1,43 +1,20 @@
-package service
+package app
 
 import (
-	"bytes"
 	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/xuri/excelize/v2"
-	"ltc-system/apps/api/internal/repository"
 )
 
-func TestMaintenanceService_GenerateBlankMaintenanceExcel(t *testing.T) {
-	maintenanceRepo := repository.NewMaintenanceRepository(nil)
-	vehicleRepo := repository.NewVehicleRepository(nil)
-	auditRepo := repository.NewAuditRepository(nil)
-
-	svc := NewMaintenanceService(maintenanceRepo, vehicleRepo, auditRepo)
-
-	ctx := context.Background()
-	excelBytes, err := svc.GenerateBlankMaintenanceExcel(ctx)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, excelBytes)
-
-	f, err := excelize.OpenReader(bytes.NewReader(excelBytes))
-	assert.NoError(t, err)
-	defer f.Close()
-
-	sheetList := f.GetSheetList()
-	assert.NotEmpty(t, sheetList)
-}
-
 func TestMaintenanceService_CRUD(t *testing.T) {
-	maintenanceRepo := repository.NewMaintenanceRepository(nil)
-	vehicleRepo := repository.NewVehicleRepository(nil)
-	auditRepo := repository.NewAuditRepository(nil)
+	maintenanceRepo := stubMaintenanceStore{}
+	vehicleRepo := emptyVehicleLister{}
+	auditRepo := discardAuditWriter{}
 
-	svc := NewMaintenanceService(maintenanceRepo, vehicleRepo, auditRepo)
+	svc := NewMaintenanceService(maintenanceRepo, vehicleRepo, auditRepo, stubTemplateRenderer{})
 	ctx := context.Background()
 
 	in := MaintenanceLogInput{

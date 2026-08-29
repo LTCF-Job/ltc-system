@@ -1,9 +1,10 @@
-package export
+package infra
 
 import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"ltc-system/apps/api/internal/modules/reporting/app"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,7 @@ func TestExcelGenerators_ValidOpenXML(t *testing.T) {
 				Cells: cells,
 			},
 		}
-		data, err := GenerateGovClaimExcel(rows)
+		data, err := NewExcelRenderer().RenderGovClaim(rows)
 		require.NoError(t, err)
 		require.NotEmpty(t, data)
 
@@ -36,14 +37,14 @@ func TestExcelGenerators_ValidOpenXML(t *testing.T) {
 	})
 
 	t.Run("TripSummaryExcel", func(t *testing.T) {
-		vehicles := []TripSummaryExportVehicle{
+		vehicles := []app.TripSummaryVehicle{
 			{
 				VehicleName:      "長照1號車",
 				PlateNo:          "ABC-1234",
 				SubtotalOutbound: 10,
 				SubtotalInbound:  10,
 				SubtotalTotal:    20,
-				Rows: []TripSummaryExportCaseRow{
+				Rows: []app.TripSummaryCaseRow{
 					{
 						CaseCode:      "C001",
 						CaseName:      "王大明",
@@ -54,7 +55,7 @@ func TestExcelGenerators_ValidOpenXML(t *testing.T) {
 				},
 			},
 		}
-		data, err := GenerateTripSummaryExcel("115-07", vehicles)
+		data, err := NewExcelRenderer().RenderTripSummary("115-07", vehicles)
 		require.NoError(t, err)
 		require.NotEmpty(t, data)
 
@@ -68,7 +69,7 @@ func TestExcelGenerators_ValidOpenXML(t *testing.T) {
 	})
 
 	t.Run("HsinchuScheduleExcel", func(t *testing.T) {
-		outbound := []HsinchuScheduleExportItem{
+		outbound := []app.HsinchuScheduleItem{
 			{
 				Direction:   "outbound",
 				RunNo:       1,
@@ -81,7 +82,7 @@ func TestExcelGenerators_ValidOpenXML(t *testing.T) {
 				SiteName:    "竹北日照",
 			},
 		}
-		data, err := GenerateHsinchuScheduleExcel(outbound, nil)
+		data, err := NewExcelRenderer().RenderHsinchuSchedule(outbound, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, data)
 

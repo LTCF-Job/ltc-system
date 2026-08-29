@@ -1,4 +1,4 @@
-package handler
+package transport
 
 import (
 	"fmt"
@@ -7,17 +7,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"ltc-system/apps/api/internal/domain/rocdate"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/task/app"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 // TaskHandler 處理排程與後台任務相關之 HTTP 請求。
 type TaskHandler struct {
-	svc *service.TaskService
+	svc *app.TaskService
 }
 
 // NewTaskHandler 建立 TaskHandler 實例。
-func NewTaskHandler(svc *service.TaskService) *TaskHandler {
+func NewTaskHandler(svc *app.TaskService) *TaskHandler {
 	return &TaskHandler{svc: svc}
 }
 
@@ -28,17 +28,17 @@ func (h *TaskHandler) CheckMissingReports(c *gin.Context) {
 
 	targetDate, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "日期格式錯誤，請使用 YYYY-MM-DD", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "日期格式錯誤，請使用 YYYY-MM-DD", nil)
 		return
 	}
 
 	missingList, err := h.svc.CheckMissingReports(c.Request.Context(), targetDate, region)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{
 		"date":           dateStr,
 		"triggeredCount": len(missingList),
 		"missingCount":   len(missingList),
@@ -54,17 +54,17 @@ func (h *TaskHandler) GetMissingReports(c *gin.Context) {
 
 	targetDate, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "日期格式錯誤，請使用 YYYY-MM-DD", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "日期格式錯誤，請使用 YYYY-MM-DD", nil)
 		return
 	}
 
 	missingList, err := h.svc.CheckMissingReports(c.Request.Context(), targetDate, region)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeInternalError, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, missingList, nil)
+	httpx.RespondSuccess(c, http.StatusOK, missingList, nil)
 }
 
 // MonthEndReminder 觸發每月 26 日申報提醒檢查與發信通知。
@@ -73,15 +73,15 @@ func (h *TaskHandler) MonthEndReminder(c *gin.Context) {
 
 	year, month, err := rocdate.ParseROCYearMonth(monthStr)
 	if err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "月份格式錯誤，請使用 RRR-MM（如 115-07）", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "月份格式錯誤，請使用 RRR-MM（如 115-07）", nil)
 		return
 	}
 
 	summary, err := h.svc.MonthEndReminder(c.Request.Context(), year, month)
 	if err != nil {
-		middleware.RespondError(c, http.StatusInternalServerError, middleware.CodeInternalError, "執行月底提醒任務失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "執行月底提醒任務失敗", nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, summary, nil)
+	httpx.RespondSuccess(c, http.StatusOK, summary, nil)
 }

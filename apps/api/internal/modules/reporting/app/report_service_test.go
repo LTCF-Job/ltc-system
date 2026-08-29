@@ -1,4 +1,4 @@
-package service
+package app_test
 
 import (
 	"bytes"
@@ -7,10 +7,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/xuri/excelize/v2"
+	"ltc-system/apps/api/internal/modules/reporting/app"
+	"ltc-system/apps/api/internal/modules/reporting/infra"
 )
 
 func TestReportService_GenerateTripSummaryExcel(t *testing.T) {
-	svc := NewReportService(nil)
+	svc := app.NewReportService(infra.NewReportRepository(nil), infra.NewExcelRenderer())
 
 	ctx := context.Background()
 	excelBytes, err := svc.GenerateTripSummaryExcel(ctx, "115-07", nil, nil)
@@ -27,7 +29,7 @@ func TestReportService_GenerateTripSummaryExcel(t *testing.T) {
 }
 
 func TestReportService_GenerateHsinchuScheduleExcel(t *testing.T) {
-	svc := NewReportService(nil)
+	svc := app.NewReportService(infra.NewReportRepository(nil), infra.NewExcelRenderer())
 
 	ctx := context.Background()
 	excelBytes, err := svc.GenerateHsinchuScheduleExcel(ctx, nil, nil)

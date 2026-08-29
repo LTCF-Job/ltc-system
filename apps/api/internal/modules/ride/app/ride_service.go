@@ -1,4 +1,4 @@
-package service
+package app
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/merge"
 	"ltc-system/apps/api/internal/domain/namenorm"
-	"ltc-system/apps/api/internal/repository"
 )
 
 // ErrInvalidIngestToken 代表 Webhook 呼叫端提供的 ingest token 無效或不存在。
@@ -19,27 +18,24 @@ var ErrInvalidIngestToken = errors.New("invalid ingest token")
 
 // RideService 封裝 Google 表單回報解析、正規化、混車合併、衝突裁決與更正。
 type RideService struct {
-	formRepo    *repository.FormRepository
-	driverRepo  *repository.DriverRepository
-	caseRepo    *repository.CaseRepository
-	vehicleRepo *repository.VehicleRepository
-	auditRepo   *repository.AuditRepository
+	formRepo   RideRecordStore
+	driverRepo DriverResolver
+	caseRepo   ScheduleReader
+	auditRepo  AuditWriter
 }
 
 // NewRideService 建立 RideService 實例。
 func NewRideService(
-	formRepo *repository.FormRepository,
-	driverRepo *repository.DriverRepository,
-	caseRepo *repository.CaseRepository,
-	vehicleRepo *repository.VehicleRepository,
-	auditRepo *repository.AuditRepository,
+	formRepo RideRecordStore,
+	driverRepo DriverResolver,
+	caseRepo ScheduleReader,
+	auditRepo AuditWriter,
 ) *RideService {
 	return &RideService{
-		formRepo:    formRepo,
-		driverRepo:  driverRepo,
-		caseRepo:    caseRepo,
-		vehicleRepo: vehicleRepo,
-		auditRepo:   auditRepo,
+		formRepo:   formRepo,
+		driverRepo: driverRepo,
+		caseRepo:   caseRepo,
+		auditRepo:  auditRepo,
 	}
 }
 
@@ -223,7 +219,7 @@ func (s *RideService) recalculateRideRecord(
 
 	result := merge.MergeRideSources(sources, existingState, defaultVehicleID, defaultDriverID)
 
-	rec := repository.RideRecordEntity{
+	rec := RideRecord{
 		CaseID:          caseID,
 		ServiceDate:     serviceDate,
 		LegSeq:          legSeq,
@@ -290,7 +286,7 @@ func (s *RideService) CorrectRideRecord(
 
 	if s.auditRepo != nil {
 		entityIDStr := rideID.String()
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "correct",
@@ -311,7 +307,7 @@ func (s *RideService) ManualReportRide(
 	req ManualReportRideRequest,
 	actorID uuid.UUID,
 	actorRole, ip, ua string,
-) (*repository.RideRecordEntity, error) {
+) (*RideRecord, error) {
 	if req.EffectiveStatus != "boarded" && req.EffectiveStatus != "absent" {
 		return nil, fmt.Errorf("無效的搭乘狀態：%s", req.EffectiveStatus)
 	}
@@ -340,7 +336,7 @@ func (s *RideService) ManualReportRide(
 	existingRec, _ := s.formRepo.GetRideRecordForSlot(ctx, req.CaseID, serviceDate, req.LegSeq)
 	now := time.Now().UTC()
 
-	rec := repository.RideRecordEntity{
+	rec := RideRecord{
 		CaseID:              req.CaseID,
 		ServiceDate:         serviceDate,
 		LegSeq:              req.LegSeq,
@@ -371,7 +367,7 @@ func (s *RideService) ManualReportRide(
 
 	if s.auditRepo != nil {
 		entityIDStr := rec.ID.String()
-		_ = s.auditRepo.Insert(ctx, &repository.AuditLogEntity{
+		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "manual_report",

@@ -1,25 +1,11 @@
-package repository
+package infra
 
 import (
 	"context"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/reporting/app"
 )
-
-// IncompleteCaseEntity 代表資料不完整之個案。
-type IncompleteCaseEntity struct {
-	ID   uuid.UUID
-	Name string
-}
-
-// UnresolvedConflictEntity 代表未裁決衝突之搭乘紀錄。
-type UnresolvedConflictEntity struct {
-	RideID      uuid.UUID
-	CaseName    string
-	ServiceDate time.Time
-}
 
 // PrecheckRepository 提供申報前置檢核所需之資料查詢。
 type PrecheckRepository struct {
@@ -32,9 +18,9 @@ func NewPrecheckRepository(db *pgxpool.Pool) *PrecheckRepository {
 }
 
 // FindIncompleteActiveCases 查詢缺少必填資料（身分證、地址或服務類型）的有效個案。
-func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, region string) ([]IncompleteCaseEntity, error) {
+func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, region string) ([]app.IncompleteCase, error) {
 	if r.db == nil {
-		return []IncompleteCaseEntity{}, nil
+		return []app.IncompleteCase{}, nil
 	}
 
 	query := `
@@ -49,9 +35,9 @@ func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, regi
 	}
 	defer rows.Close()
 
-	var result []IncompleteCaseEntity
+	var result []app.IncompleteCase
 	for rows.Next() {
-		var item IncompleteCaseEntity
+		var item app.IncompleteCase
 		if err := rows.Scan(&item.ID, &item.Name); err == nil {
 			result = append(result, item)
 		}
@@ -60,9 +46,9 @@ func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, regi
 }
 
 // FindUnresolvedConflicts 查詢指定區域中存在未裁決衝突的搭乘紀錄。
-func (r *PrecheckRepository) FindUnresolvedConflicts(ctx context.Context, region string) ([]UnresolvedConflictEntity, error) {
+func (r *PrecheckRepository) FindUnresolvedConflicts(ctx context.Context, region string) ([]app.UnresolvedConflict, error) {
 	if r.db == nil {
-		return []UnresolvedConflictEntity{}, nil
+		return []app.UnresolvedConflict{}, nil
 	}
 
 	query := `
@@ -77,9 +63,9 @@ func (r *PrecheckRepository) FindUnresolvedConflicts(ctx context.Context, region
 	}
 	defer rows.Close()
 
-	var result []UnresolvedConflictEntity
+	var result []app.UnresolvedConflict
 	for rows.Next() {
-		var item UnresolvedConflictEntity
+		var item app.UnresolvedConflict
 		if err := rows.Scan(&item.RideID, &item.CaseName, &item.ServiceDate); err == nil {
 			result = append(result, item)
 		}

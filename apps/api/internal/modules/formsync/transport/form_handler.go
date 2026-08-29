@@ -1,26 +1,26 @@
-package handler
+package transport
 
 import (
 	"context"
 	"net/http"
 
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/service"
+	"ltc-system/apps/api/internal/modules/formsync/app"
+	"ltc-system/apps/api/internal/platform/httpx"
 
 	"github.com/gin-gonic/gin"
 )
 
 // FormServiceInterface 定義 FormHandler 所需的業務服務介面。
 type FormServiceInterface interface {
-	ListForms(ctx context.Context) ([]service.FormListItemDTO, error)
-	ListGoogleDriveFiles(ctx context.Context) ([]service.GoogleDriveFileDTO, error)
-	InspectGoogleSheet(ctx context.Context, inputURLOrID string, accessToken string) (*service.InspectSheetDTO, error)
-	CreateFormAssociation(ctx context.Context, req service.CreateFormAssociationRequest) (*service.FormListItemDTO, error)
+	ListForms(ctx context.Context) ([]app.FormListItemDTO, error)
+	ListGoogleDriveFiles(ctx context.Context) ([]app.GoogleDriveFileDTO, error)
+	InspectGoogleSheet(ctx context.Context, inputURLOrID string, accessToken string) (*app.InspectSheetDTO, error)
+	CreateFormAssociation(ctx context.Context, req app.CreateFormAssociationRequest) (*app.FormListItemDTO, error)
 	DeleteFormAssociation(ctx context.Context, formID string) error
-	SyncForm(ctx context.Context, formID string, opts *service.SyncFormOptions) (map[string]interface{}, error)
-	ListColumns(ctx context.Context, mappingStatus string) ([]service.FormColumnDTO, error)
+	SyncForm(ctx context.Context, formID string, opts *app.SyncFormOptions) (map[string]interface{}, error)
+	ListColumns(ctx context.Context, mappingStatus string) ([]app.FormColumnDTO, error)
 	UpdateColumnMapping(ctx context.Context, colID string, status string, caseID *string, legSeq *int16) error
-	BatchMapping(ctx context.Context, mappings []service.ColumnMappingUpdate) (int, error)
+	BatchMapping(ctx context.Context, mappings []app.ColumnMappingUpdate) (int, error)
 }
 
 // FormHandler 處理 Google 表單同步與欄位對應之 HTTP 請求。
@@ -37,10 +37,10 @@ func NewFormHandler(svc FormServiceInterface) *FormHandler {
 func (h *FormHandler) ListGoogleDriveFiles(c *gin.Context) {
 	files, err := h.svc.ListGoogleDriveFiles(c.Request.Context())
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormSourceFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormSourceFailed, err, nil)
 		return
 	}
-	middleware.RespondSuccess(c, http.StatusOK, files, nil)
+	httpx.RespondSuccess(c, http.StatusOK, files, nil)
 }
 
 // InspectGoogleSheet 解析特定試算表的分頁與欄位結構。
@@ -51,7 +51,7 @@ func (h *FormHandler) InspectGoogleSheet(c *gin.Context) {
 		AccessToken   string `json:"accessToken"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondError(c, http.StatusBadRequest, middleware.CodeValidationFailed, "請提供有效之試算表連結或 ID", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "請提供有效之試算表連結或 ID", nil)
 		return
 	}
 
@@ -62,60 +62,60 @@ func (h *FormHandler) InspectGoogleSheet(c *gin.Context) {
 
 	result, err := h.svc.InspectGoogleSheet(c.Request.Context(), target, req.AccessToken)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeFormSourceFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeFormSourceFailed, err, nil)
 		return
 	}
-	middleware.RespondSuccess(c, http.StatusOK, result, nil)
+	httpx.RespondSuccess(c, http.StatusOK, result, nil)
 }
 
 // CreateFormAssociation 建立表單與 Google 試算表關聯。
 func (h *FormHandler) CreateFormAssociation(c *gin.Context) {
-	var req service.CreateFormAssociationRequest
+	var req app.CreateFormAssociationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	form, err := h.svc.CreateFormAssociation(c.Request.Context(), req)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeFormMappingFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeFormMappingFailed, err, nil)
 		return
 	}
-	middleware.RespondSuccess(c, http.StatusCreated, form, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, form, nil)
 }
 
 // DeleteFormAssociation 解除表單關聯。
 func (h *FormHandler) DeleteFormAssociation(c *gin.Context) {
 	formID := c.Param("id")
 	if err := h.svc.DeleteFormAssociation(c.Request.Context(), formID); err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormMappingFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
 		return
 	}
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
 }
 
 // ListForms 取得 Google 表單清單。
 func (h *FormHandler) ListForms(c *gin.Context) {
 	forms, err := h.svc.ListForms(c.Request.Context())
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormSyncFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormSyncFailed, err, nil)
 		return
 	}
-	middleware.RespondSuccess(c, http.StatusOK, forms, nil)
+	httpx.RespondSuccess(c, http.StatusOK, forms, nil)
 }
 
 // SyncForm 手動觸發表單同步。
 func (h *FormHandler) SyncForm(c *gin.Context) {
 	formID := c.Param("id")
-	var opts service.SyncFormOptions
+	var opts app.SyncFormOptions
 	_ = c.ShouldBindJSON(&opts) // 選填
 
 	res, err := h.svc.SyncForm(c.Request.Context(), formID, &opts)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormSyncFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormSyncFailed, err, nil)
 		return
 	}
-	middleware.RespondSuccess(c, http.StatusOK, res, nil)
+	httpx.RespondSuccess(c, http.StatusOK, res, nil)
 }
 
 // ListColumns 取得表單欄位對應清單。
@@ -123,10 +123,10 @@ func (h *FormHandler) ListColumns(c *gin.Context) {
 	status := c.Query("mappingStatus")
 	cols, err := h.svc.ListColumns(c.Request.Context(), status)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormSyncFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormSyncFailed, err, nil)
 		return
 	}
-	middleware.RespondSuccess(c, http.StatusOK, cols, nil)
+	httpx.RespondSuccess(c, http.StatusOK, cols, nil)
 }
 
 // UpdateColumnMapping 綁定或略過欄位對應。
@@ -138,16 +138,16 @@ func (h *FormHandler) UpdateColumnMapping(c *gin.Context) {
 		LegSeq        *int16  `json:"legSeq"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	if err := h.svc.UpdateColumnMapping(c.Request.Context(), colID, req.MappingStatus, req.CaseID, req.LegSeq); err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormMappingFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{
 		"id":            colID,
 		"mappingStatus": req.MappingStatus,
 		"caseId":        req.CaseID,
@@ -158,20 +158,20 @@ func (h *FormHandler) UpdateColumnMapping(c *gin.Context) {
 // BatchMapping 批次對應多個欄位。
 func (h *FormHandler) BatchMapping(c *gin.Context) {
 	var req struct {
-		Mappings []service.ColumnMappingUpdate `json:"mappings"`
+		Mappings []app.ColumnMappingUpdate `json:"mappings"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		middleware.RespondErrorCode(c, http.StatusBadRequest, middleware.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	updatedCount, err := h.svc.BatchMapping(c.Request.Context(), req.Mappings)
 	if err != nil {
-		middleware.RespondErrorCode(c, http.StatusInternalServerError, middleware.CodeFormMappingFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
 		return
 	}
 
-	middleware.RespondSuccess(c, http.StatusOK, gin.H{
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{
 		"updatedCount": updatedCount,
 	}, nil)
 }

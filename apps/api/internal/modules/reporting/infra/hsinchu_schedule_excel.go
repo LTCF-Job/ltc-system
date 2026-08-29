@@ -1,29 +1,15 @@
-package export
+package infra
 
 import (
 	"bytes"
 	"fmt"
 
 	"github.com/xuri/excelize/v2"
+	"ltc-system/apps/api/internal/modules/reporting/app"
 )
 
-// HsinchuScheduleExportItem 代表新竹時刻表匯出單筆資料。
-type HsinchuScheduleExportItem struct {
-	Direction   string
-	RunNo       int16
-	CaseCode    string
-	CaseName    string
-	Note        *string
-	DepartTime  string
-	Origin      string
-	ArriveTime  *string
-	Destination string
-	VehicleName string
-	SiteName    string
-}
-
-// GenerateHsinchuScheduleExcel 產生符合規格書 §8.2 的新竹接送時刻表 Excel 檔案。
-func GenerateHsinchuScheduleExcel(outbound, inbound []HsinchuScheduleExportItem) ([]byte, error) {
+// RenderHsinchuSchedule 產生符合規格書 §8.2 的新竹接送時刻表 Excel 檔案。
+func (ExcelRenderer) RenderHsinchuSchedule(outbound, inbound []app.HsinchuScheduleItem) ([]byte, error) {
 	f := excelize.NewFile()
 	defer f.Close()
 
@@ -66,7 +52,7 @@ func GenerateHsinchuScheduleExcel(outbound, inbound []HsinchuScheduleExportItem)
 
 	currentRow := 3
 
-	writeSection := func(directionTitle string, items []HsinchuScheduleExportItem) {
+	writeSection := func(directionTitle string, items []app.HsinchuScheduleItem) {
 		if len(items) == 0 {
 			return
 		}

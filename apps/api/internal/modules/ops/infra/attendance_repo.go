@@ -1,4 +1,4 @@
-package repository
+package infra
 
 import (
 	"context"
@@ -7,19 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/modules/ops/app"
 )
-
-// AttendanceRecordEntity 代表 attendance_records 資料表實體。
-type AttendanceRecordEntity struct {
-	ID         uuid.UUID `json:"id"`
-	DriverID   uuid.UUID `json:"driverId"`
-	DriverName string    `json:"driverName,omitempty"`
-	RecordDate time.Time `json:"recordDate"`
-	Status     string    `json:"status"` // work, leave, sick, off
-	Note       *string   `json:"note,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
-}
 
 // AttendanceRepository 提供司機出勤與請假紀錄之資料存取。
 type AttendanceRepository struct {
@@ -32,9 +21,9 @@ func NewAttendanceRepository(db *pgxpool.Pool) *AttendanceRepository {
 }
 
 // GetMonthRecords 查詢特定月份內所有司機或指定司機之出勤紀錄。
-func (r *AttendanceRepository) GetMonthRecords(ctx context.Context, startDate, endDate time.Time, driverID *uuid.UUID) ([]AttendanceRecordEntity, error) {
+func (r *AttendanceRepository) GetMonthRecords(ctx context.Context, startDate, endDate time.Time, driverID *uuid.UUID) ([]app.AttendanceRecord, error) {
 	if r.db == nil {
-		return []AttendanceRecordEntity{}, nil
+		return []app.AttendanceRecord{}, nil
 	}
 
 	whereClause := "WHERE a.record_date >= $1 AND a.record_date < $2"
@@ -60,9 +49,9 @@ func (r *AttendanceRepository) GetMonthRecords(ctx context.Context, startDate, e
 	}
 	defer rows.Close()
 
-	list := []AttendanceRecordEntity{}
+	list := []app.AttendanceRecord{}
 	for rows.Next() {
-		var item AttendanceRecordEntity
+		var item app.AttendanceRecord
 		if err := rows.Scan(
 			&item.ID, &item.DriverID, &item.DriverName, &item.RecordDate,
 			&item.Status, &item.Note, &item.CreatedAt, &item.UpdatedAt,
@@ -76,9 +65,9 @@ func (r *AttendanceRepository) GetMonthRecords(ctx context.Context, startDate, e
 }
 
 // Upsert 寫入或更新司機單日出勤紀錄（依 driver_id 與 record_date 唯一鍵）。
-func (r *AttendanceRepository) Upsert(ctx context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string) (*AttendanceRecordEntity, error) {
+func (r *AttendanceRepository) Upsert(ctx context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string) (*app.AttendanceRecord, error) {
 	if r.db == nil {
-		return &AttendanceRecordEntity{
+		return &app.AttendanceRecord{
 			ID:         uuid.New(),
 			DriverID:   driverID,
 			RecordDate: recordDate,
@@ -96,7 +85,7 @@ func (r *AttendanceRepository) Upsert(ctx context.Context, driverID uuid.UUID, r
 		DO UPDATE SET status = EXCLUDED.status, note = EXCLUDED.note, updated_at = now()
 		RETURNING id, created_at, updated_at
 	`
-	var item AttendanceRecordEntity
+	var item app.AttendanceRecord
 	item.DriverID = driverID
 	item.RecordDate = recordDate
 	item.Status = status
