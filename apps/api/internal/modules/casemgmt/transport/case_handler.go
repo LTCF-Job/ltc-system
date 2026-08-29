@@ -51,7 +51,7 @@ func (h *CaseHandler) List(c *gin.Context) {
 		totalPages++
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, cases, httpx.PaginationMeta{
+	httpx.RespondSuccess(c, http.StatusOK, newCaseResponses(cases), httpx.PaginationMeta{
 		Page:       page,
 		PageSize:   pageSize,
 		Total:      total,
@@ -78,7 +78,7 @@ func (h *CaseHandler) Create(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, entity, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, newCaseResponse(*entity), nil)
 }
 
 // Reveal 解密個案身分證號。
@@ -118,7 +118,7 @@ func (h *CaseHandler) CreateSchedule(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, sched, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, newCaseScheduleResponse(*sched), nil)
 }
 
 // ExportProfileWorkbook 下載與個案彙整表相同格式的主檔資料。
@@ -148,7 +148,7 @@ func (h *CaseHandler) Get(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, entity, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
 }
 
 // Update 更新個案資料。
@@ -210,7 +210,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, entity, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
 }
 
 // UpdateTransportPreference 更新個案的交通偏好（所屬據點與去回程車輛）。
@@ -244,7 +244,7 @@ func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, entity, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
 }
 
 // GetSchedule 取得個案現行排班。
@@ -269,7 +269,7 @@ func (h *CaseHandler) GetSchedule(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, sched, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newCaseScheduleResponse(*sched), nil)
 }
 
 // SaveSchedule 儲存/更新個案排班。
@@ -286,5 +286,5 @@ func (h *CaseHandler) SaveSchedule(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, sched, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newCaseScheduleResponse(*sched), nil)
 }

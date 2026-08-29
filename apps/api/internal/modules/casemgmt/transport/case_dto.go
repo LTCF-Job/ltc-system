@@ -103,3 +103,155 @@ func (r CreateScheduleRequest) ToService() app.CreateScheduleRequest {
 		Legs:               legs,
 	}
 }
+
+// CaseResponse 代表回傳給前端的個案主檔資料。身分證密文與 HMAC 索引不對外輸出。
+type CaseResponse struct {
+	ID                uuid.UUID  `json:"id"`
+	Code              string     `json:"code"`
+	Name              string     `json:"name"`
+	NameNormalized    string     `json:"nameNormalized"`
+	NationalIDMasked  string     `json:"nationalIdMasked"`
+	HouseholdType     *string    `json:"householdType"`
+	Gender            *string    `json:"gender"`
+	BirthDate         *time.Time `json:"birthDate"`
+	CareContactRole   *string    `json:"careContactRole"`
+	CareContactName   *string    `json:"careContactName"`
+	RegisteredAddress *string    `json:"registeredAddress"`
+	SiteID            *uuid.UUID `json:"siteId"`
+	SiteName          string     `json:"siteName"`
+	OutboundVehicleID *uuid.UUID `json:"outboundVehicleId"`
+	OutboundVehicle   string     `json:"outboundVehicle"`
+	InboundVehicleID  *uuid.UUID `json:"inboundVehicleId"`
+	InboundVehicle    string     `json:"inboundVehicle"`
+	HomeAddress       *string    `json:"homeAddress"`
+	Region            *string    `json:"region"`
+	LTCLevel          *string    `json:"ltcLevel"`
+	ServiceCategory   int        `json:"serviceCategory"`
+	ServiceUsageType  int        `json:"serviceUsageType"`
+	ClaimStartDate    *time.Time `json:"claimStartDate"`
+	ClaimEndDate      *time.Time `json:"claimEndDate"`
+	Status            string     `json:"status"`
+	Remarks           *string    `json:"remarks"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
+}
+
+func newCaseResponse(c app.Case) CaseResponse {
+	return CaseResponse{
+		ID:                c.ID,
+		Code:              c.Code,
+		Name:              c.Name,
+		NameNormalized:    c.NameNormalized,
+		NationalIDMasked:  c.NationalIDMasked,
+		HouseholdType:     c.HouseholdType,
+		Gender:            c.Gender,
+		BirthDate:         c.BirthDate,
+		CareContactRole:   c.CareContactRole,
+		CareContactName:   c.CareContactName,
+		RegisteredAddress: c.RegisteredAddress,
+		SiteID:            c.SiteID,
+		SiteName:          c.SiteName,
+		OutboundVehicleID: c.OutboundVehicleID,
+		OutboundVehicle:   c.OutboundVehicle,
+		InboundVehicleID:  c.InboundVehicleID,
+		InboundVehicle:    c.InboundVehicle,
+		HomeAddress:       c.HomeAddress,
+		Region:            c.Region,
+		LTCLevel:          c.LTCLevel,
+		ServiceCategory:   c.ServiceCategory,
+		ServiceUsageType:  c.ServiceUsageType,
+		ClaimStartDate:    c.ClaimStartDate,
+		ClaimEndDate:      c.ClaimEndDate,
+		Status:            c.Status,
+		Remarks:           c.Remarks,
+		CreatedAt:         c.CreatedAt,
+		UpdatedAt:         c.UpdatedAt,
+	}
+}
+
+func newCaseResponses(list []app.Case) []CaseResponse {
+	if list == nil {
+		return nil
+	}
+	out := make([]CaseResponse, 0, len(list))
+	for _, c := range list {
+		out = append(out, newCaseResponse(c))
+	}
+	return out
+}
+
+// ScheduleLegResponse 代表回傳給前端的排班單趟資料。
+type ScheduleLegResponse struct {
+	ID          uuid.UUID  `json:"id"`
+	ScheduleID  uuid.UUID  `json:"scheduleId"`
+	LegSeq      int16      `json:"legSeq"`
+	Direction   string     `json:"direction"`
+	Period      string     `json:"period"`
+	DepartTime  string     `json:"departTime"`
+	ArriveTime  *string    `json:"arriveTime"`
+	RunNo       int16      `json:"runNo"`
+	VehicleID   *uuid.UUID `json:"vehicleId"`
+	VehicleName string     `json:"vehicleName"`
+	CreatedAt   time.Time  `json:"createdAt"`
+}
+
+func newScheduleLegResponse(l app.ScheduleLeg) ScheduleLegResponse {
+	return ScheduleLegResponse{
+		ID:          l.ID,
+		ScheduleID:  l.ScheduleID,
+		LegSeq:      l.LegSeq,
+		Direction:   l.Direction,
+		Period:      l.Period,
+		DepartTime:  l.DepartTime,
+		ArriveTime:  l.ArriveTime,
+		RunNo:       l.RunNo,
+		VehicleID:   l.VehicleID,
+		VehicleName: l.VehicleName,
+		CreatedAt:   l.CreatedAt,
+	}
+}
+
+// CaseScheduleResponse 代表回傳給前端的個案排班資料。
+type CaseScheduleResponse struct {
+	ID                 uuid.UUID             `json:"id"`
+	CaseID             uuid.UUID             `json:"caseId"`
+	SiteID             uuid.UUID             `json:"siteId"`
+	SiteName           string                `json:"siteName"`
+	EffectiveFrom      time.Time             `json:"effectiveFrom"`
+	EffectiveTo        *time.Time            `json:"effectiveTo"`
+	Weekdays           []int16               `json:"weekdays"`
+	TripPattern        int16                 `json:"tripPattern"`
+	UnitPrice          float64               `json:"unitPrice"`
+	DistanceKM         float64               `json:"distanceKm"`
+	ServiceDurationMin int16                 `json:"serviceDurationMin"`
+	ServiceCode        string                `json:"serviceCode"`
+	Note               *string               `json:"note"`
+	Legs               []ScheduleLegResponse `json:"legs"`
+	CreatedAt          time.Time             `json:"createdAt"`
+	UpdatedAt          time.Time             `json:"updatedAt"`
+}
+
+func newCaseScheduleResponse(s app.CaseSchedule) CaseScheduleResponse {
+	legs := make([]ScheduleLegResponse, 0, len(s.Legs))
+	for _, l := range s.Legs {
+		legs = append(legs, newScheduleLegResponse(l))
+	}
+	return CaseScheduleResponse{
+		ID:                 s.ID,
+		CaseID:             s.CaseID,
+		SiteID:             s.SiteID,
+		SiteName:           s.SiteName,
+		EffectiveFrom:      s.EffectiveFrom,
+		EffectiveTo:        s.EffectiveTo,
+		Weekdays:           s.Weekdays,
+		TripPattern:        s.TripPattern,
+		UnitPrice:          s.UnitPrice,
+		DistanceKM:         s.DistanceKM,
+		ServiceDurationMin: s.ServiceDurationMin,
+		ServiceCode:        s.ServiceCode,
+		Note:               s.Note,
+		Legs:               legs,
+		CreatedAt:          s.CreatedAt,
+		UpdatedAt:          s.UpdatedAt,
+	}
+}
