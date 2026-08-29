@@ -35,6 +35,20 @@ func (stubAttendanceStore) Upsert(_ context.Context, driverID uuid.UUID, recordD
 	return &AttendanceRecord{ID: uuid.New(), DriverID: driverID, RecordDate: recordDate, Status: status, Note: note}, nil
 }
 
+type stubHolidayReader struct{}
+
+func (stubHolidayReader) GetHolidayMap(context.Context, int, int, string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+type fixedHolidayReader struct {
+	dates map[string]bool
+}
+
+func (f fixedHolidayReader) GetHolidayMap(context.Context, int, int, string) (map[string]bool, error) {
+	return f.dates, nil
+}
+
 type stubMaintenanceStore struct{}
 
 func (stubMaintenanceStore) List(context.Context, int, int, *uuid.UUID, *time.Time, *time.Time, string) ([]MaintenanceLog, int, error) {

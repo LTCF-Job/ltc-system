@@ -146,7 +146,7 @@ func main() {
 	reportSvc := reportapp.NewReportService(reportRepo, excelRenderer)
 	opsAudit := opsAuditWriter{svc: auditSvc}
 	maintenanceSvc := opsapp.NewMaintenanceService(maintenanceRepo, opsVehicleLister{repo: mdVehicleRepo}, opsAudit, opsinfra.NewExcelRenderer())
-	attendanceSvc := opsapp.NewAttendanceService(attendanceRepo, opsDriverLister{repo: mdDriverRepo}, opsAudit)
+	attendanceSvc := opsapp.NewAttendanceService(attendanceRepo, opsDriverLister{repo: mdDriverRepo}, opsAudit, holidayRepo)
 	fuelSvc := opsapp.NewFuelService(fuelRepo, opsAudit)
 	dashboardSvc := reportapp.NewDashboardService(dashboardRepo)
 	taskSvc := taskapp.NewTaskService(taskRepo, taskScheduleReader{repo: caseRepo}, holidayRepo, notificationSvc)

@@ -99,6 +99,11 @@ type AttendanceStore interface {
 	Upsert(ctx context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string) (*AttendanceRecord, error)
 }
 
+// HolidayReader 提供出勤月曆判斷休假日所需之最小介面。
+type HolidayReader interface {
+	GetHolidayMap(ctx context.Context, year, month int, region string) (map[string]bool, error)
+}
+
 // FuelStore 定義油資紀錄的讀寫邊界。
 type FuelStore interface {
 	List(ctx context.Context, page, pageSize int, vehicleID, driverID *uuid.UUID, startDate, endDate *time.Time, q string) ([]FuelLog, int, error)

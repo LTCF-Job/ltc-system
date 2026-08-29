@@ -27,6 +27,7 @@ type DriverMonthAttendanceDTO struct {
 	LeaveDays  int                               `json:"leaveDays"`
 	SickDays   int                               `json:"sickDays"`
 	OffDays    int                               `json:"offDays"`
+	AbsentDays int                               `json:"absentDays"`
 }
 
 // MonthAttendanceReportDTO 代表全體司機月度出勤矩陣。
@@ -49,6 +50,7 @@ type AttendanceService struct {
 	attendanceRepo AttendanceStore
 	driverRepo     DriverLister
 	auditRepo      AuditWriter
+	holidayRepo    HolidayReader
 }
 
 // NewAttendanceService 建立 AttendanceService 實例。
@@ -56,11 +58,13 @@ func NewAttendanceService(
 	attendanceRepo AttendanceStore,
 	driverRepo DriverLister,
 	auditRepo AuditWriter,
+	holidayRepo HolidayReader,
 ) *AttendanceService {
 	return &AttendanceService{
 		attendanceRepo: attendanceRepo,
 		driverRepo:     driverRepo,
 		auditRepo:      auditRepo,
+		holidayRepo:    holidayRepo,
 	}
 }
 
@@ -85,6 +89,15 @@ func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm str
 	if err != nil {
 		return nil, fmt.Errorf("failed to get month attendance records: %w", err)
 	}
+
+	holidayMap := map[string]bool{}
+	if s.holidayRepo != nil {
+		if hm, err := s.holidayRepo.GetHolidayMap(ctx, startDate.Year(), int(startDate.Month()), ""); err == nil {
+			holidayMap = hm
+		}
+	}
+	today := time.Now().UTC()
+	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
 
 	recordMap := make(map[string]map[string]AttendanceRecord)
 	for _, rec := range records {
@@ -137,20 +150,31 @@ func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm str
 					dDTO.OffDays++
 				}
 			} else {
-				// 預設平日為出勤 (work)，週末為休假 (off)
+				// 週末或國定假日視為休假 (off)；平日無紀錄時，已過去的日期視為
+				// 應出勤卻漏報 (absent)，尚未到來的日期維持預定出勤 (work)。
 				isWeekend := dayDate.Weekday() == time.Saturday || dayDate.Weekday() == time.Sunday
-				defaultStatus := "work"
-				if isWeekend {
+				isRestDay := isWeekend || holidayMap[dateKey]
+
+				var defaultStatus string
+				switch {
+				case isRestDay:
 					defaultStatus = "off"
+				case dayDate.After(today):
+					defaultStatus = "work"
+				default:
+					defaultStatus = "absent"
 				}
 
 				dDTO.Days[dateKey] = DriverDayAttendanceDTO{
 					Date:   dateKey,
 					Status: defaultStatus,
 				}
-				if defaultStatus == "work" {
+				switch defaultStatus {
+				case "work":
 					dDTO.WorkDays++
-				} else {
+				case "absent":
+					dDTO.AbsentDays++
+				default:
 					dDTO.OffDays++
 				}
 			}
