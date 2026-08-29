@@ -308,7 +308,11 @@ async function fetchDetail() {
   try {
     const [rawCase, rawSchedule] = await Promise.all([
       getCase(caseId.value) as Promise<any>,
-      getCaseSchedule(caseId.value).catch(() => null) as Promise<any>
+      // 404／查無排班是合法的「尚未排班」狀態；其餘錯誤（如伺服器錯誤）需往外拋出，不得一併當成無排班
+      getCaseSchedule(caseId.value).catch((err: any) => {
+        if (err?.response?.status === 404) return null
+        throw err
+      }) as Promise<any>
     ])
     const res: any = rawCase?.data ?? rawCase
     const sched: any = rawSchedule?.data ?? rawSchedule

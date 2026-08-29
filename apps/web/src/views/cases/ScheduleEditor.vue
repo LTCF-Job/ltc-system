@@ -818,15 +818,16 @@ watch(
       formData.siteId = s.siteId
       formData.effectiveFrom = s.effectiveFrom || new Date().toISOString().split('T')[0]
       formData.tripPattern = s.tripPattern || 2
-      formData.weekdays = s.weekdays && s.weekdays.length > 0 ? [...s.weekdays] : [1, 2, 3, 4, 5]
-      formData.unitPrice = s.unitPrice ?? 115
-      formData.distanceKm = s.distanceKm ?? 5
-      formData.serviceDurationMin = s.serviceDurationMin ?? 10
+      // 既有排班從 API 載入，欄位缺漏時保持未填，不得用猜測值頂替申報單價、里程與時長
+      formData.weekdays = s.weekdays ? [...s.weekdays] : []
+      formData.unitPrice = s.unitPrice
+      formData.distanceKm = s.distanceKm
+      formData.serviceDurationMin = s.serviceDurationMin
       if (s.legs && s.legs.length > 0) {
         formData.legs = s.legs.map((leg) => ({
           legSeq: leg.legSeq,
           direction: leg.direction,
-          departTime: leg.departTime || '09:00',
+          departTime: leg.departTime || '',
           arriveTime: leg.arriveTime || '',
           runNo: leg.runNo || 1,
           vehicleId: leg.vehicleId
@@ -850,8 +851,8 @@ watch(
         weekdayConfigs.forEach((cfg) => {
           if (activeSet.has(cfg.weekday)) {
             cfg.tripCount = formData.tripPattern || 2
-            cfg.departTime = formData.legs[0]?.departTime || '09:00'
-            cfg.returnTime = formData.legs[1]?.departTime || '16:00'
+            cfg.departTime = formData.legs[0]?.departTime || ''
+            cfg.returnTime = formData.legs[1]?.departTime || ''
             cfg.vehicleId = defaultVehicle
           } else {
             cfg.tripCount = 0

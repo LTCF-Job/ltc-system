@@ -78,8 +78,9 @@
         <el-table-column label="試算表分頁" min-width="240">
           <template #default="{ row }">
             <div class="sheet-tabs-wrap">
+              <span v-if="!row.sheetTabs || row.sheetTabs.length === 0" class="text-secondary">尚未取得分頁資訊</span>
               <el-tooltip
-                v-for="tab in (row.sheetTabs || ['回覆一'])"
+                v-for="tab in row.sheetTabs"
                 :key="tab"
                 :content="`分頁：${tab}（${getSheetTabStatus(row, tab).statusText}）`"
                 placement="top"
@@ -248,7 +249,12 @@
         </div>
 
         <div v-loading="loadingFiles" class="files-container">
-          <div v-if="filteredFiles.length === 0 && !loadingFiles" class="empty-box">
+          <div v-if="driveFilesError && !loadingFiles" class="empty-box">
+            <el-empty description="讀取雲端硬碟試算表清單失敗，請重試">
+              <el-button @click="fetchDriveFilesWithToken">重試</el-button>
+            </el-empty>
+          </div>
+          <div v-else-if="filteredFiles.length === 0 && !loadingFiles" class="empty-box">
             <el-empty description="未在此 Google 帳號中找到試算表" />
           </div>
 
@@ -407,9 +413,14 @@
           </el-form-item>
 
           <el-form-item label="指定試算表分頁">
-            <el-select v-model="syncTab" placeholder="選擇分頁" style="width: 100%">
+            <el-select
+              v-model="syncTab"
+              :placeholder="targetForm.sheetTabs && targetForm.sheetTabs.length > 0 ? '選擇分頁' : '尚未取得分頁資訊'"
+              :disabled="!targetForm.sheetTabs || targetForm.sheetTabs.length === 0"
+              style="width: 100%"
+            >
               <el-option
-                v-for="t in (targetForm.sheetTabs || ['工作表1'])"
+                v-for="t in targetForm.sheetTabs"
                 :key="t"
                 :label="t"
                 :value="t"
@@ -489,6 +500,7 @@ const step = ref(1)
 const currentAccessToken = ref('')
 const driveFiles = ref<GoogleDriveSheetDTO[]>([])
 const loadingFiles = ref(false)
+const driveFilesError = ref(false)
 const fileSearchQuery = ref('')
 const inspectingFileId = ref('')
 const manualSheetUrl = ref('')
@@ -556,10 +568,13 @@ async function startGoogleLogin() {
 
 async function fetchDriveFilesWithToken() {
   loadingFiles.value = true
+  driveFilesError.value = false
   try {
     driveFiles.value = await listGoogleDriveSheets()
-  } catch {
+  } catch (err: any) {
     driveFiles.value = []
+    driveFilesError.value = true
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '讀取雲端硬碟試算表清單失敗'))
   } finally {
     loadingFiles.value = false
   }
@@ -582,9 +597,11 @@ async function selectDriveFile(file: GoogleDriveSheetDTO) {
     if (res.sheetTabs && res.sheetTabs.length > 0) {
       availableTabs.value = res.sheetTabs
       associateForm.activeTab = res.sheetTabs[0]
+      ElMessage.success(`已載入【${file.name}】之 ${availableTabs.value.length} 個工作表分頁`)
     } else {
-      availableTabs.value = ['工作表1']
-      associateForm.activeTab = '工作表1'
+      availableTabs.value = []
+      associateForm.activeTab = ''
+      ElMessage.warning(`【${file.name}】未偵測到任何工作表分頁，請確認試算表內容`)
     }
 
     if (res.previewHeaders) {
@@ -592,7 +609,6 @@ async function selectDriveFile(file: GoogleDriveSheetDTO) {
     }
 
     step.value = 2
-    ElMessage.success(`已載入【${file.name}】之 ${availableTabs.value.length} 個工作表分頁`)
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '讀取試算表分頁失敗'))
   } finally {
@@ -615,9 +631,11 @@ async function handlePickedFile(picked: any) {
     if (res.sheetTabs && res.sheetTabs.length > 0) {
       availableTabs.value = res.sheetTabs
       associateForm.activeTab = res.sheetTabs[0]
+      ElMessage.success(`已自動載入【${picked.name}】之 ${availableTabs.value.length} 個工作表分頁`)
     } else {
-      availableTabs.value = ['工作表1']
-      associateForm.activeTab = '工作表1'
+      availableTabs.value = []
+      associateForm.activeTab = ''
+      ElMessage.warning(`【${picked.name}】未偵測到任何工作表分頁，請確認試算表內容`)
     }
 
     if (res.previewHeaders) {
@@ -625,7 +643,6 @@ async function handlePickedFile(picked: any) {
     }
 
     step.value = 2
-    ElMessage.success(`已自動載入【${picked.name}】之 ${availableTabs.value.length} 個工作表分頁`)
   } catch (err: any) {
     ElMessage.warning('無法自動讀取分頁，請手動確認')
     step.value = 2
@@ -652,9 +669,11 @@ async function handleManualInspect() {
     if (res.sheetTabs && res.sheetTabs.length > 0) {
       availableTabs.value = res.sheetTabs
       associateForm.activeTab = res.sheetTabs[0]
+      ElMessage.success(`已成功解析 ${availableTabs.value.length} 個分頁`)
     } else {
-      availableTabs.value = ['工作表1']
-      associateForm.activeTab = '工作表1'
+      availableTabs.value = []
+      associateForm.activeTab = ''
+      ElMessage.warning('未偵測到任何工作表分頁，請確認試算表內容')
     }
 
     if (res.previewHeaders) {
@@ -662,7 +681,6 @@ async function handleManualInspect() {
     }
 
     step.value = 2
-    ElMessage.success(`已成功解析 ${availableTabs.value.length} 個分頁`)
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '解析試算表失敗，請確認連結與權限'))
   } finally {

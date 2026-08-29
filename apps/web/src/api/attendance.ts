@@ -26,9 +26,11 @@ export async function listFuelLogs(params?: {
   q?: string
 }): Promise<Paged<FuelLogDTO>> {
   const res = await apiClient.get<FuelLogDTO[]>('/fuel-logs', { params })
+  const data = (res as any).data || (res as any)
+  // 後端未回傳分頁 meta 時，以實際筆數推算，避免顯示與清單內容矛盾的假總數
   return {
-    data: (res as any).data || (res as any),
-    meta: (res as any).meta || { page: 1, pageSize: 20, total: 0, totalPages: 1 }
+    data,
+    meta: (res as any).meta || { page: params?.page || 1, pageSize: params?.pageSize || 20, total: data.length, totalPages: 1 }
   }
 }
 

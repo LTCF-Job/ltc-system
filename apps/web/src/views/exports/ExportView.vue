@@ -307,8 +307,11 @@ function startPolling(jobId: string) {
         if (pollTimer) clearInterval(pollTimer)
         fetchHistory()
       }
-    } catch {
+    } catch (err: any) {
       if (pollTimer) clearInterval(pollTimer)
+      // 輪詢請求本身失敗（非匯出工作失敗），需明確呈現，避免進度條永遠停在「進行中」
+      if (currentJob.value) currentJob.value.status = 'failed'
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢匯出進度失敗'))
     }
   }, 2000)
 }

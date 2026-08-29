@@ -48,6 +48,19 @@
           </el-radio-group>
         </el-form-item>
 
+        <el-alert
+          v-if="masterDataError"
+          type="error"
+          show-icon
+          :closable="false"
+          title="車輛與司機主檔載入失敗，下方清單可能不完整"
+          style="margin-bottom: 12px"
+        >
+          <template #default>
+            <el-button size="small" @click="fetchMasterData">重試</el-button>
+          </template>
+        </el-alert>
+
         <el-form-item label="實際承載車輛">
           <el-select
             v-model="form.vehicleId"
@@ -229,6 +242,7 @@ const legOptions = computed(() => {
 
 const vehicles = ref<VehicleDTO[]>([])
 const drivers = ref<DriverDTO[]>([])
+const masterDataError = ref(false)
 
 watch(
   () => form.effectiveStatus,
@@ -253,6 +267,7 @@ watch(
 
 async function fetchMasterData() {
   if (vehicles.value.length === 0 || drivers.value.length === 0) {
+    masterDataError.value = false
     try {
       const [vRes, dRes] = await Promise.all([
         listVehicles({ active: true, pageSize: 100 }),
@@ -261,7 +276,8 @@ async function fetchMasterData() {
       vehicles.value = vRes.data
       drivers.value = dRes.data
     } catch {
-      // handled by interceptor
+      // 全域攔截器已彈出錯誤訊息；這裡另外標記狀態，讓下拉選單旁能顯示可重試的空清單原因
+      masterDataError.value = true
     }
   }
 }

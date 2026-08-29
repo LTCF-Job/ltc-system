@@ -291,7 +291,6 @@ import type { UserDTO, RoleDTO } from '@/types/api'
 import {
   ROLE_LABELS,
   SYSTEM_MODULES,
-  DEFAULT_ROLE_PERMISSIONS,
   type UserRole,
   type SystemPermissions
 } from '@/types/domain'
@@ -356,12 +355,16 @@ function getRoleDisplayName(roleKey?: string): string {
   return (ROLE_LABELS as any)[roleKey] || roleKey
 }
 
+const rolesLoadError = ref(false)
+
 async function fetchRoles() {
+  rolesLoadError.value = false
   try {
     const list = await listRoles()
     roleList.value = list
   } catch {
-    // 若載入失敗維持空清單
+    rolesLoadError.value = true
+    ElMessage.error('載入角色清單失敗，個人自訂權限暫時無法設定，請重試')
   }
 }
 
@@ -451,13 +454,15 @@ async function handleSubmit() {
 }
 
 async function handleToggleStatus(user: UserDTO) {
+  const previousStatus = user.status === 'active' ? 'inactive' : 'active'
   try {
     await updateUser(user.id, {
       status: user.status
     })
     ElMessage.success(`已將「${user.displayName}」帳號設定為 ${user.status === 'active' ? '啟用' : '停用'}`)
   } catch {
-    user.status = user.status === 'active' ? 'inactive' : 'active'
+    user.status = previousStatus
+    ElMessage.error(`更新「${user.displayName}」帳號狀態失敗，請重試`)
   }
 }
 
@@ -480,21 +485,21 @@ async function handleDelete(user: UserDTO) {
   }
 }
 
-// 權限設定邏輯
-function getRoleDefaultPermissions(roleKey: string): SystemPermissions {
+// 權限設定邏輯：角色預設權限一律以後端 /roles 回傳為準，找不到時視為資料不足，不得用前端猜測值頂替
+function getRoleDefaultPermissions(roleKey: string): SystemPermissions | null {
   const role = roleList.value.find((r) => r.key === roleKey)
-  if (role && role.permissions) {
-    return role.permissions
-  }
-  return DEFAULT_ROLE_PERMISSIONS[roleKey as UserRole] || DEFAULT_ROLE_PERMISSIONS.viewer
+  return role?.permissions || null
 }
 
 function openPermissionDrawer(user: UserDTO) {
+  const roleDefault = getRoleDefaultPermissions(user.role)
+  if (!roleDefault) {
+    ElMessage.error('無法取得該角色的預設權限，請重新載入角色清單後再試')
+    return
+  }
+
   selectedUser.value = user
   const initialPerms: SystemPermissions = {}
-
-  // 取得角色預設
-  const roleDefault = getRoleDefaultPermissions(user.role)
   const custom = user.customPermissions || {}
 
   for (const m of SYSTEM_MODULES) {
@@ -520,6 +525,10 @@ function onViewPermChange(modId: string) {
 function handleResetToRoleDefault() {
   if (!selectedUser.value) return
   const roleDefault = getRoleDefaultPermissions(selectedUser.value.role)
+  if (!roleDefault) {
+    ElMessage.error('無法取得該角色的預設權限，請重新載入角色清單後再試')
+    return
+  }
   const resetPerms: SystemPermissions = {}
   for (const m of SYSTEM_MODULES) {
     const base = roleDefault[m.id] || { view: false, edit: false }

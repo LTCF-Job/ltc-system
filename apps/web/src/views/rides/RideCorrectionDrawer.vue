@@ -71,6 +71,19 @@
             </el-radio-group>
           </el-form-item>
 
+          <el-alert
+            v-if="masterDataError"
+            type="error"
+            show-icon
+            :closable="false"
+            title="車輛與司機主檔載入失敗，下方清單可能不完整"
+            style="margin-bottom: 12px"
+          >
+            <template #default>
+              <el-button size="small" @click="loadMasterData">重試</el-button>
+            </template>
+          </el-alert>
+
           <el-form-item label="實際承載車輛">
             <el-select
               v-model="form.vehicleId"
@@ -210,6 +223,22 @@ const submitting = ref(false)
 const record = ref<RideRecordDTO | null>(null)
 const vehicles = ref<VehicleDTO[]>([])
 const drivers = ref<DriverDTO[]>([])
+const masterDataError = ref(false)
+
+async function loadMasterData() {
+  masterDataError.value = false
+  try {
+    const [vRes, dRes] = await Promise.all([
+      listVehicles({ active: true, pageSize: 100 }),
+      listDrivers({ active: true, pageSize: 100 })
+    ])
+    vehicles.value = (vRes as any)?.data || vRes || []
+    drivers.value = (dRes as any)?.data || dRes || []
+  } catch {
+    // 全域攔截器已彈出錯誤訊息；這裡另外標記狀態，讓下拉選單旁能顯示可重試的空清單原因
+    masterDataError.value = true
+  }
+}
 
 const canEdit = computed(() => {
   return authStore.can('staff') || !authStore.isAuthenticated
@@ -269,16 +298,7 @@ async function open(rideRecord: RideRecordDTO) {
   visible.value = true
 
   if (vehicles.value.length === 0) {
-    try {
-      const [vRes, dRes] = await Promise.all([
-        listVehicles({ active: true, pageSize: 100 }),
-        listDrivers({ active: true, pageSize: 100 })
-      ])
-      vehicles.value = (vRes as any)?.data || vRes || []
-      drivers.value = (dRes as any)?.data || dRes || []
-    } catch {
-      // ignore
-    }
+    await loadMasterData()
   }
 }
 
