@@ -126,6 +126,7 @@ func main() {
 	excelAdapter := importinfra.NewExcelAdapter()
 	importSvc := importapp.NewImportService(
 		caseRegistrar{svc: caseSvc},
+		caseDuplicateFinder{svc: caseSvc},
 		importSiteLookup{repo: mdSiteRepo},
 		importVehicleLookup{repo: mdVehicleRepo},
 		caseRepo,

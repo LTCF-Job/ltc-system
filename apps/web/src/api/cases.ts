@@ -7,7 +7,8 @@ import type {
   UpdateCaseTransportPreferenceRequest,
   CaseScheduleDTO,
   CreateScheduleRequest,
-  DryRunImportResultDTO
+  DryRunImportResultDTO,
+  CaseImportCommitResult
 } from '@/types/api'
 
 export async function listCases(params?: {
@@ -16,6 +17,7 @@ export async function listCases(params?: {
   region?: string
   status?: string
   q?: string
+  unresolvedLink?: boolean
 }): Promise<Paged<CaseDTO>> {
   const res: any = await apiClient.get('/cases', { params })
   const rawData = res?.data ?? res
@@ -100,9 +102,10 @@ export async function dryRunImportCases(file: File): Promise<DryRunImportResultD
   })
 }
 
-export async function commitImportCases(file: File): Promise<{ importedCount: number; skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }> }> {
+export async function commitImportCases(file: File, includeDuplicateRows: number[] = []): Promise<CaseImportCommitResult> {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('includeDuplicateRows', JSON.stringify(includeDuplicateRows))
   return apiClient.post('/cases/import?dryRun=false', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })

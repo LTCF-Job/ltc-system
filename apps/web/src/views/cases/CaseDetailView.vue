@@ -180,6 +180,14 @@
             </el-col>
           </el-row>
 
+          <el-row :gutter="20">
+            <el-col :span="24">
+              <el-form-item label="備註" prop="remarks">
+                <el-input v-model="editForm.remarks" type="textarea" :rows="2" placeholder="選填" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
           <div v-if="authStore.can('staff')" class="form-actions">
             <el-button type="primary" :loading="saving" @click="handleUpdateCase">
               儲存基本資料
@@ -242,7 +250,7 @@
         <ScheduleEditor
           v-if="caseData"
           :case-id="caseData.id"
-          :region="caseData.region"
+          :region="caseData.region || 'miaoli'"
           :schedule="caseData.activeSchedule"
           @saved="handleScheduleSaved"
         />
@@ -293,7 +301,8 @@ const editForm = reactive<UpdateCaseRequest>({
   birthDate: '',
   careContactRole: '',
   careContactName: '',
-  registeredAddress: ''
+  registeredAddress: '',
+  remarks: ''
 })
 
 const transportForm = reactive<UpdateCaseTransportPreferenceRequest>({
@@ -340,6 +349,7 @@ async function fetchDetail() {
     editForm.careContactRole = res.careContactRole || ''
     editForm.careContactName = res.careContactName || ''
     editForm.registeredAddress = res.registeredAddress || ''
+    editForm.remarks = res.remarks || ''
     transportForm.siteId = res.siteId || ''
     transportForm.outboundVehicleId = res.outboundVehicleId || ''
     transportForm.inboundVehicleId = res.inboundVehicleId || ''
@@ -373,7 +383,12 @@ async function handleUpdateCase() {
 async function handleUpdateTransportPreference() {
   savingTransportPreference.value = true
   try {
-    await updateCaseTransportPreference(caseId.value, transportForm)
+    // 三個欄位皆選填：只送出有值的欄位，避免把使用者未異動、原本為空的欄位當成「明確清空」送出
+    const payload: UpdateCaseTransportPreferenceRequest = {}
+    if (transportForm.siteId) payload.siteId = transportForm.siteId
+    if (transportForm.outboundVehicleId) payload.outboundVehicleId = transportForm.outboundVehicleId
+    if (transportForm.inboundVehicleId) payload.inboundVehicleId = transportForm.inboundVehicleId
+    await updateCaseTransportPreference(caseId.value, payload)
     ElMessage.success('交通偏好已更新')
   } finally {
     savingTransportPreference.value = false

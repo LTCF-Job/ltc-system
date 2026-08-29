@@ -109,7 +109,11 @@
         :row-class-name="getRowClassName"
       >
         <el-table-column type="index" label="#" width="50" />
-        <slot name="columns" />
+        <slot
+          name="columns"
+          :checked-duplicate-rows="checkedDuplicateRows"
+          :toggle-duplicate-row="toggleDuplicateRow"
+        />
       </el-table>
 
       <!-- 錯誤明細展開清單 -->
@@ -141,6 +145,11 @@
             第 {{ row.rowIndex }} 列（{{ row.caseName }}）：{{ row.reasons.join('；') }}
           </li>
         </ul>
+        <ul v-if="commitResult.warnings && commitResult.warnings.length">
+          <li v-for="(w, idx) in commitResult.warnings" :key="`warning-${idx}`">
+            第 {{ w.rowIndex }} 列{{ w.caseName ? `（${w.caseName}）` : '' }}：{{ w.message }}
+          </li>
+        </ul>
       </div>
     </div>
   </el-dialog>
@@ -155,12 +164,13 @@ import type { DryRunImportResultDTO } from '@/types/api'
 interface ImportCommitResult {
   importedCount: number
   skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
+  warnings?: Array<{ rowIndex: number; caseName?: string; field?: string; message: string }>
 }
 
 const props = defineProps<{
   title: string
   onDryRun: (file: File) => Promise<DryRunImportResultDTO>
-  onCommit: (file: File) => Promise<ImportCommitResult>
+  onCommit: (file: File, includeDuplicateRows: number[]) => Promise<ImportCommitResult>
   onDownloadTemplate?: () => Promise<void> | void
 }>()
 
@@ -175,6 +185,16 @@ const submitting = ref(false)
 const downloadingTemplate = ref(false)
 const dryRunResult = ref<DryRunImportResultDTO | null>(null)
 const commitResult = ref<ImportCommitResult | null>(null)
+// 疑似重複列預設不勾選（略過），使用者需主動勾選才會一併匯入
+const checkedDuplicateRows = ref<Set<number>>(new Set())
+
+function toggleDuplicateRow(rowIndex: number, checked: boolean) {
+  if (checked) {
+    checkedDuplicateRows.value.add(rowIndex)
+  } else {
+    checkedDuplicateRows.value.delete(rowIndex)
+  }
+}
 
 async function handleDownloadTemplate() {
   if (!props.onDownloadTemplate) return
@@ -190,6 +210,7 @@ function open() {
   selectedFile.value = null
   dryRunResult.value = null
   commitResult.value = null
+  checkedDuplicateRows.value = new Set()
   visible.value = true
 }
 
@@ -221,6 +242,7 @@ function resetToUpload() {
   dryRunResult.value = null
   commitResult.value = null
   selectedFile.value = null
+  checkedDuplicateRows.value = new Set()
 }
 
 function getRowClassName({ row }: { row: any }) {
@@ -233,7 +255,7 @@ async function confirmImport() {
   if (!selectedFile.value) return
   submitting.value = true
   try {
-    const result = await props.onCommit(selectedFile.value)
+    const result = await props.onCommit(selectedFile.value, Array.from(checkedDuplicateRows.value))
     commitResult.value = result
     ElMessage.success(`已匯入 ${result.importedCount} 筆有效資料`)
     emit('success')

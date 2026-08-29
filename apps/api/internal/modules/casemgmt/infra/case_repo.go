@@ -22,15 +22,16 @@ func NewCaseRepository(db *pgxpool.Pool) *CaseRepository {
 	return &CaseRepository{db: db}
 }
 
-// List 取得個案清單（預設回傳遮罩身分證）。
-func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int) ([]app.Case, int64, error) {
+// List 取得個案清單（預設回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳據點／去回程車輛
+// 任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案。
+func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink bool) ([]app.Case, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT c.id, c.code, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
 		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
 		       p.site_id, COALESCE(st.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.inbound_vehicle_id, COALESCE(vi.display_name, ''),
 		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_start_date, c.claim_end_date,
-		       c.status, c.created_at, c.updated_at
+		       c.status, c.remarks, c.created_at, c.updated_at
 		FROM cases c
 		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
 		LEFT JOIN sites st ON st.id = p.site_id
@@ -39,10 +40,15 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		WHERE ($1 = '' OR c.region = $1)
 		  AND ($2 = '' OR c.status = $2)
 		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.code ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
+		  AND ($6 = false OR (
+		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
+		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
+		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
+		      ))
 		ORDER BY c.code ASC
 		LIMIT $4 OFFSET $5
 	`
-	rows, err := r.db.Query(ctx, query, region, status, q, pageSize, offset)
+	rows, err := r.db.Query(ctx, query, region, status, q, pageSize, offset, unresolvedLink)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query cases: %w", err)
 	}
@@ -56,7 +62,7 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
 			&c.SiteID, &c.SiteName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.InboundVehicleID, &c.InboundVehicle,
 			&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimStartDate, &c.ClaimEndDate,
-			&c.Status, &c.CreatedAt, &c.UpdatedAt,
+			&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -65,22 +71,47 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 
 	var total int64
 	countQuery := `
-		SELECT COUNT(*) FROM cases
-		WHERE ($1 = '' OR region = $1)
-		  AND ($2 = '' OR status = $2)
-		  AND ($3 = '' OR name ILIKE '%' || $3 || '%' OR code ILIKE '%' || $3 || '%' OR home_address ILIKE '%' || $3 || '%')
+		SELECT COUNT(*) FROM cases c
+		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
+		WHERE ($1 = '' OR c.region = $1)
+		  AND ($2 = '' OR c.status = $2)
+		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.code ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
+		  AND ($4 = false OR (
+		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
+		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
+		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
+		      ))
 	`
-	_ = r.db.QueryRow(ctx, countQuery, region, status, q).Scan(&total)
+	_ = r.db.QueryRow(ctx, countQuery, region, status, q, unresolvedLink).Scan(&total)
 
 	return list, total, nil
 }
 
-func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID, siteID, outboundVehicleID, inboundVehicleID uuid.UUID) error {
+// UpsertTransportPreference 寫入個案的據點與去回程車輛偏好。nil 的 ID 以 COALESCE 保留
+// 既有值（避免部分更新把未提供的欄位覆寫為 null）；raw name 隨對應 ID 一併寫入或清空。
+func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
 	db := pgxdb.FromContext(ctx, r.db)
-	_, err := db.Exec(ctx, `INSERT INTO case_transport_preferences (case_id, site_id, outbound_vehicle_id, inbound_vehicle_id)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (case_id) DO UPDATE SET site_id = EXCLUDED.site_id, outbound_vehicle_id = EXCLUDED.outbound_vehicle_id, inbound_vehicle_id = EXCLUDED.inbound_vehicle_id, updated_at = now()`, caseID, siteID, outboundVehicleID, inboundVehicleID)
+	_, err := db.Exec(ctx, `INSERT INTO case_transport_preferences (case_id, site_id, outbound_vehicle_id, inbound_vehicle_id, site_name_raw, outbound_vehicle_name_raw, inbound_vehicle_name_raw)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (case_id) DO UPDATE SET
+			site_id = COALESCE(EXCLUDED.site_id, case_transport_preferences.site_id),
+			outbound_vehicle_id = COALESCE(EXCLUDED.outbound_vehicle_id, case_transport_preferences.outbound_vehicle_id),
+			inbound_vehicle_id = COALESCE(EXCLUDED.inbound_vehicle_id, case_transport_preferences.inbound_vehicle_id),
+			site_name_raw = CASE WHEN EXCLUDED.site_id IS NOT NULL THEN NULL WHEN EXCLUDED.site_name_raw IS NOT NULL THEN EXCLUDED.site_name_raw ELSE case_transport_preferences.site_name_raw END,
+			outbound_vehicle_name_raw = CASE WHEN EXCLUDED.outbound_vehicle_id IS NOT NULL THEN NULL WHEN EXCLUDED.outbound_vehicle_name_raw IS NOT NULL THEN EXCLUDED.outbound_vehicle_name_raw ELSE case_transport_preferences.outbound_vehicle_name_raw END,
+			inbound_vehicle_name_raw = CASE WHEN EXCLUDED.inbound_vehicle_id IS NOT NULL THEN NULL WHEN EXCLUDED.inbound_vehicle_name_raw IS NOT NULL THEN EXCLUDED.inbound_vehicle_name_raw ELSE case_transport_preferences.inbound_vehicle_name_raw END,
+			updated_at = now()`,
+		caseID, siteID, outboundVehicleID, inboundVehicleID,
+		nullIfEmpty(siteNameRaw), nullIfEmpty(outboundVehicleNameRaw), nullIfEmpty(inboundVehicleNameRaw))
 	return err
+}
+
+// nullIfEmpty 將空字串轉為 nil，讓 SQL 端可用 IS NOT NULL 判斷是否有提供 raw name。
+func nullIfEmpty(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
 }
 
 // GetByID 依 UUID 取得個案。
@@ -90,7 +121,7 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
 		       p.site_id, COALESCE(st.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.inbound_vehicle_id, COALESCE(vi.display_name, ''),
 		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_start_date, c.claim_end_date,
-		       c.status, c.created_at, c.updated_at
+		       c.status, c.remarks, c.created_at, c.updated_at
 		FROM cases c
 		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
 		LEFT JOIN sites st ON st.id = p.site_id
@@ -105,7 +136,7 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 		&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
 		&c.SiteID, &c.SiteName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.InboundVehicleID, &c.InboundVehicle,
 		&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimStartDate, &c.ClaimEndDate,
-		&c.Status, &c.CreatedAt, &c.UpdatedAt,
+		&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -169,8 +200,8 @@ func (r *CaseRepository) Create(ctx context.Context, c *app.Case) error {
 		INSERT INTO cases (
 			id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 			household_type, gender, birth_date, care_contact_role, care_contact_name, registered_address,
-			home_address, region, ltc_level, service_category, service_usage_type, claim_start_date, claim_end_date, status
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+			home_address, region, ltc_level, service_category, service_usage_type, claim_start_date, claim_end_date, status, remarks
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		RETURNING created_at, updated_at
 	`
 	if c.ID == uuid.Nil {
@@ -180,7 +211,7 @@ func (r *CaseRepository) Create(ctx context.Context, c *app.Case) error {
 	return db.QueryRow(ctx, query,
 		c.ID, c.Code, c.Name, c.NameNormalized, c.NationalIDCipher, c.NationalIDHMAC, c.NationalIDMasked,
 		c.HouseholdType, c.Gender, c.BirthDate, c.CareContactRole, c.CareContactName, c.RegisteredAddress,
-		c.HomeAddress, c.Region, c.LTCLevel, c.ServiceCategory, c.ServiceUsageType, c.ClaimStartDate, c.ClaimEndDate, c.Status,
+		c.HomeAddress, c.Region, c.LTCLevel, c.ServiceCategory, c.ServiceUsageType, c.ClaimStartDate, c.ClaimEndDate, c.Status, c.Remarks,
 	).Scan(&c.CreatedAt, &c.UpdatedAt)
 }
 
@@ -191,14 +222,14 @@ func (r *CaseRepository) Update(ctx context.Context, c *app.Case) error {
 		SET name = $2, name_normalized = $3, home_address = $4, region = $5, ltc_level = $6,
 		    service_category = $7, service_usage_type = $8, claim_start_date = $9, claim_end_date = $10,
 		    status = $11, household_type = $12, gender = $13, birth_date = $14,
-		    care_contact_role = $15, care_contact_name = $16, registered_address = $17, updated_at = now()
+		    care_contact_role = $15, care_contact_name = $16, registered_address = $17, remarks = $18, updated_at = now()
 		WHERE id = $1
 		RETURNING updated_at
 	`
 	return r.db.QueryRow(ctx, query,
 		c.ID, c.Name, c.NameNormalized, c.HomeAddress, c.Region, c.LTCLevel,
 		c.ServiceCategory, c.ServiceUsageType, c.ClaimStartDate, c.ClaimEndDate, c.Status,
-		c.HouseholdType, c.Gender, c.BirthDate, c.CareContactRole, c.CareContactName, c.RegisteredAddress,
+		c.HouseholdType, c.Gender, c.BirthDate, c.CareContactRole, c.CareContactName, c.RegisteredAddress, c.Remarks,
 	).Scan(&c.UpdatedAt)
 }
 
@@ -340,7 +371,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 	lastDay := firstDay.AddDate(0, 1, -1)
 
 	query := `
-		SELECT c.id, c.code, c.name, c.region, c.claim_start_date, c.claim_end_date,
+		SELECT c.id, c.code, c.name, COALESCE(c.region, ''), COALESCE(c.claim_start_date, c.created_at::date), c.claim_end_date,
 		       s.id as schedule_id, s.site_id, st.open_days,
 		       lower(s.effective_range) as eff_from,
 		       CASE WHEN upper_inf(s.effective_range) THEN NULL ELSE to_char(upper(s.effective_range), 'YYYY-MM-DD') END as eff_to_str,

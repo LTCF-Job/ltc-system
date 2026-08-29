@@ -8,15 +8,19 @@ export const casesHandlers = [
     const q = url.searchParams.get('q')?.toLowerCase()
     const region = url.searchParams.get('region')
     const status = url.searchParams.get('status')
+    const unresolvedLink = url.searchParams.get('unresolvedLink') === 'true'
 
     let filtered = [...mockCases]
+    if (unresolvedLink) {
+      filtered = filtered.filter((c) => c.siteNameRaw || c.outboundVehicleNameRaw || c.inboundVehicleNameRaw)
+    }
     if (q) {
       const keyword = q.trim().toLowerCase()
       filtered = filtered.filter(
         (c) =>
           c.name.toLowerCase().includes(keyword) ||
           c.code.toLowerCase().includes(keyword) ||
-          c.nationalId.toLowerCase().includes(keyword) ||
+          (c.nationalId ?? '').toLowerCase().includes(keyword) ||
           (c.phone && (
             c.phone.toLowerCase().includes(keyword) ||
             c.phone.replace(/[-\s]/g, '').includes(keyword.replace(/[-\s]/g, ''))
@@ -98,6 +102,7 @@ export const casesHandlers = [
       serviceUsageType: body.serviceUsageType,
       claimStartDate: body.claimStartDate,
       status: body.status || 'active',
+      remarks: body.remarks,
       createdAt: new Date().toISOString().split('T')[0],
       updatedAt: new Date().toISOString().split('T')[0]
     }
@@ -113,13 +118,23 @@ export const casesHandlers = [
     return HttpResponse.json(c)
   }),
 
+  // 三欄位皆選填：僅覆寫請求中實際帶入的欄位，並清空對應的 *_name_raw（比對到主檔後不再是待補建關聯狀態）
   http.put('/api/v1/cases/:id/transport-preference', async ({ params, request }) => {
     const c = mockCases.find((item) => item.id === params.id)
     if (!c) return new HttpResponse(null, { status: 404 })
     const body = (await request.json()) as any
-    c.siteId = body.siteId
-    c.outboundVehicleId = body.outboundVehicleId
-    c.inboundVehicleId = body.inboundVehicleId
+    if (body.siteId) {
+      c.siteId = body.siteId
+      c.siteNameRaw = undefined
+    }
+    if (body.outboundVehicleId) {
+      c.outboundVehicleId = body.outboundVehicleId
+      c.outboundVehicleNameRaw = undefined
+    }
+    if (body.inboundVehicleId) {
+      c.inboundVehicleId = body.inboundVehicleId
+      c.inboundVehicleNameRaw = undefined
+    }
     c.updatedAt = new Date().toISOString().split('T')[0]
     return HttpResponse.json(c)
   }),
@@ -164,24 +179,32 @@ export const casesHandlers = [
 
     if (isDryRun) {
       return HttpResponse.json({
-        totalRows: 15,
-        validRows: 14,
-        errorRows: 1,
+        totalRows: 3,
+        validRows: 3,
+        errorRows: 0,
         warningRows: 2,
         previewRows: [
-          { rowIndex: 2, name: '張曾阿妹', region: '苗栗', claimStartDate: '2026-07-01', siteName: '竹南日照據點', weekdays: '週一至週五', departTime: '09:00', returnTime: '16:00', tripPattern: 2, householdType: '與子女同住', gender: '女', careContactRole: '個管', registeredAddress: '苗栗縣竹南鎮大營路123號' },
-          { rowIndex: 3, name: '李國盛', region: '新竹', claimStartDate: '2026-07-01', siteName: '竹北日照中心', weekdays: '週二、週四', departTime: '09:30', returnTime: '15:30', tripPattern: 2, householdType: '獨居', gender: '男', careContactRole: '照專', registeredAddress: '新竹縣竹北市文興路一段200號', __hasWarning: true },
-          { rowIndex: 4, name: '何阿財', region: '苗栗', claimStartDate: '2026-07-01', siteName: '未知據點', weekdays: '週一至週五', departTime: '09:00', returnTime: '16:00', tripPattern: 2, householdType: '與家人同住', gender: '男', careContactRole: '個管', registeredAddress: '苗栗縣苗栗市中正路1號', __hasError: true }
+          { rowIndex: 2, name: '張曾阿妹', householdType: '與子女同住', nationalId: 'A2****9750', gender: '女', birthDate: '1948-03-12', siteName: '竹南日照據點', outboundVehicle: '竹南2車', inboundVehicle: '竹南2車', careContactRole: '個管', careContactName: '蔡怡君', registeredAddress: '苗栗縣竹南鎮大營路123號', homeAddress: '苗栗縣竹南鎮大營路123號', remarks: '' },
+          { rowIndex: 3, name: '李國盛', householdType: '獨居', nationalId: 'J1****8899', gender: '男', birthDate: '1952-01-05', siteName: '竹北日照中心', outboundVehicle: '竹北一車', inboundVehicle: '竹北一車', careContactRole: '照專', careContactName: '林小華', registeredAddress: '新竹縣竹北市文興路一段200號', homeAddress: '新竹縣竹北市文興路一段200號', remarks: '', __hasWarning: true, isDuplicate: true, duplicateOf: { code: 'C0005', name: '李國盛' } },
+          { rowIndex: 4, name: '邱美玲', householdType: '獨居', nationalId: 'K2****7654', gender: '女', birthDate: '1950-05-20', siteName: '', outboundVehicle: '', inboundVehicle: '', careContactRole: '個管', careContactName: '邱志明', registeredAddress: '苗栗縣頭份市中華路50號', homeAddress: '苗栗縣頭份市中華路50號', remarks: '需輪椅接送', __hasWarning: true, siteNameRaw: '頭份日照中心（新）', outboundVehicleNameRaw: '頭份1號車' }
         ],
-        errors: [
-          { rowIndex: 4, caseName: '何阿財', field: '據點', message: '據點「未知據點」不存在於系統主檔中' }
-        ],
+        errors: [],
         warnings: [
-          { rowIndex: 3, caseName: '李國盛', field: '單價與里程', message: '單價使用預設值 115 元、時長預設 10 分鐘，請確認' }
+          { rowIndex: 3, caseName: '李國盛', field: '身分證字號', message: '疑似與既有個案「李國盛」(C0005) 重複，預設略過，請勾選後確認匯入' },
+          { rowIndex: 4, caseName: '邱美玲', field: '據點/接送車輛', message: '據點「頭份日照中心（新）」、去程車輛「頭份1號車」未於主檔中找到，將保留原始名稱待人工關聯' }
         ]
       })
     }
 
-    return HttpResponse.json({ count: 14 })
+    return HttpResponse.json({
+      importedCount: 2,
+      skippedRows: [
+        { rowIndex: 3, caseName: '李國盛', reasons: ['偵測為重複個案，未勾選匯入'] }
+      ],
+      warnings: [
+        { rowIndex: 4, caseName: '邱美玲', field: '據點', message: '據點「頭份日照中心（新）」未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯' },
+        { rowIndex: 4, caseName: '邱美玲', field: '接送車輛(去)', message: '去程車輛「頭份1號車」未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯' }
+      ]
+    })
   })
 ]

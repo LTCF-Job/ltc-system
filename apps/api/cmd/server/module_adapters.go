@@ -154,7 +154,7 @@ func (a importVehicleLookup) GetByDisplayName(ctx context.Context, displayName s
 	return &importapp.VehicleRef{ID: v.ID}, nil
 }
 
-// caseRegistrar 讓 caseimport 透過 casemgmt 寫入個案主檔與排班。
+// caseRegistrar 讓 caseimport 透過 casemgmt 寫入個案主檔。
 type caseRegistrar struct{ svc *caseapp.CaseService }
 
 func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, actor importapp.Actor) (uuid.UUID, error) {
@@ -164,7 +164,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
 		ClaimStartDate: in.ClaimStartDate, ServiceCategory: in.ServiceCategory,
-		ServiceUsageType: in.ServiceUsageType, Status: in.Status,
+		ServiceUsageType: in.ServiceUsageType, Status: in.Status, Remarks: in.Remarks,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {
 		return uuid.Nil, err
@@ -172,21 +172,19 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 	return entity.ID, nil
 }
 
-func (a caseRegistrar) CreateSchedule(ctx context.Context, in importapp.NewSchedule, actor importapp.Actor) error {
-	legs := make([]caseapp.CreateScheduleLegItemRequest, 0, len(in.Legs))
-	for _, l := range in.Legs {
-		legs = append(legs, caseapp.CreateScheduleLegItemRequest{LegSeq: l.LegSeq, Direction: l.Direction, DepartTime: l.DepartTime})
-	}
-	_, err := a.svc.CreateCaseSchedule(ctx, caseapp.CreateScheduleRequest{
-		CaseID: in.CaseID, SiteID: in.SiteID, EffectiveFrom: in.EffectiveFrom, Weekdays: in.Weekdays,
-		TripPattern: in.TripPattern, UnitPrice: in.UnitPrice, DistanceKM: in.DistanceKM,
-		ServiceDurationMin: in.ServiceDurationMin, ServiceCode: in.ServiceCode, Note: in.Note, Legs: legs,
-	})
-	return err
-}
-
 func (a caseRegistrar) RecordSkipped(ctx context.Context, row importapp.CaseImportSkippedRow, actor importapp.Actor) {
 	a.svc.RecordSkippedCaseImport(ctx, caseapp.CaseImportSkippedRow{
 		RowIndex: row.RowIndex, CaseName: row.CaseName, Reasons: row.Reasons, RawValues: row.RawValues,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
+}
+
+// caseDuplicateFinder 讓 caseimport 於 dry-run 階段透過 casemgmt 查重。
+type caseDuplicateFinder struct{ svc *caseapp.CaseService }
+
+func (a caseDuplicateFinder) FindDuplicate(ctx context.Context, nationalID, name string) (*importapp.DuplicateRef, error) {
+	found, err := a.svc.FindPossibleDuplicate(ctx, nationalID, name)
+	if err != nil || found == nil {
+		return nil, err
+	}
+	return &importapp.DuplicateRef{CaseID: found.ID, CaseCode: found.Code, CaseName: found.Name}, nil
 }

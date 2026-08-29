@@ -5,7 +5,6 @@ export const API_ERROR_MESSAGES: Record<string, string> = {
   UNAUTHENTICATED: '請重新登入',
   FORBIDDEN: '權限不足，無法執行此操作',
   NOT_FOUND: '查無資料',
-  DUPLICATE_NATIONAL_ID: '身分證字號已存在，請確認個案資料',
   ASSIGNMENT_OVERLAP: '該時段已有其他排班，請調整後再試',
   EXPORT_IN_PROGRESS: '匯出作業進行中，請稍後再試',
   PRECHECK_FAILED: '資料檢核未通過，請確認後再試',

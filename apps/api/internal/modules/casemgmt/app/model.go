@@ -27,14 +27,15 @@ type Case struct {
 	OutboundVehicle   string
 	InboundVehicleID  *uuid.UUID
 	InboundVehicle    string
-	HomeAddress       string
-	Region            string
+	HomeAddress       *string
+	Region            *string
 	LTCLevel          *string
 	ServiceCategory   int
 	ServiceUsageType  int
-	ClaimStartDate    time.Time
+	ClaimStartDate    *time.Time
 	ClaimEndDate      *time.Time
 	Status            string
+	Remarks           *string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }

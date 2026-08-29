@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	ErrDuplicateNationalID = errors.New("national ID already registered")
-	ErrSiteRegionMismatch  = errors.New("site region does not match case region")
-	ErrInvalidTripPattern  = errors.New("trip pattern must match schedule legs count")
-	ErrLegTimesNotOrdered  = errors.New("schedule leg departure times must be strictly increasing")
+	ErrSiteRegionMismatch = errors.New("site region does not match case region")
+	ErrCaseRegionUnset    = errors.New("個案尚未設定所屬區域，無法建立排班")
+	ErrInvalidTripPattern = errors.New("trip pattern must match schedule legs count")
+	ErrLegTimesNotOrdered = errors.New("schedule leg departure times must be strictly increasing")
 )
 
 // CaseService 封裝個案、據點、車輛、司機與排班之業務邏輯。
@@ -57,37 +57,40 @@ type CreateCaseRequest struct {
 	CareContactRole   *string
 	CareContactName   *string
 	RegisteredAddress *string
-	HomeAddress       string
-	Region            string
+	HomeAddress       *string
+	Region            *string
 	LTCLevel          *string
 	ServiceCategory   int
 	ServiceUsageType  int
-	ClaimStartDate    time.Time
+	ClaimStartDate    *time.Time
 	ClaimEndDate      *time.Time
 	Status            string
+	Remarks           *string
 }
 
-// CreateCase 建立個案主檔，執行身分證查重、加密與雜湊產生。
+// CreateCase 建立個案主檔；僅姓名為必要輸入，身分證字號提供時仍需通過格式檢查與加密雜湊產生，
+// 不再檢查唯一性（個案身分證字號與姓名皆允許重複）。
 func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, actorID uuid.UUID, actorRole, ip, ua string) (*Case, error) {
 	req.NationalID = strings.TrimSpace(strings.ToUpper(req.NationalID))
-	if !crypto.ValidateNationalID(req.NationalID) {
-		return nil, errors.New("invalid national ID format")
+
+	var cipherText, hmacIdx []byte
+	var maskedID string
+	if req.NationalID != "" {
+		if !crypto.ValidateNationalID(req.NationalID) {
+			return nil, errors.New("invalid national ID format")
+		}
+
+		hmacIdx = crypto.Index(req.NationalID, s.cfg.HMACKey)
+
+		var err error
+		cipherText, err = crypto.Encrypt(req.NationalID, s.cfg.EncryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt national id: %w", err)
+		}
+		maskedID = crypto.Mask(req.NationalID)
 	}
 
 	normName := namenorm.Normalize(req.Name)
-	hmacIdx := crypto.Index(req.NationalID, s.cfg.HMACKey)
-
-	existing, _ := s.caseRepo.GetByHMAC(ctx, hmacIdx)
-	if existing != nil {
-		return nil, ErrDuplicateNationalID
-	}
-
-	cipherText, err := crypto.Encrypt(req.NationalID, s.cfg.EncryptionKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt national id: %w", err)
-	}
-
-	maskedID := crypto.Mask(req.NationalID)
 	if req.Status == "" {
 		req.Status = "active"
 	}
@@ -119,6 +122,7 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 		ClaimStartDate:    req.ClaimStartDate,
 		ClaimEndDate:      req.ClaimEndDate,
 		Status:            req.Status,
+		Remarks:           req.Remarks,
 	}
 
 	if err := s.caseRepo.Create(ctx, &entity); err != nil {
@@ -142,9 +146,10 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 	return &entity, nil
 }
 
-// ListCases 查詢個案清單（回傳遮罩身分證）。
-func (s *CaseService) ListCases(ctx context.Context, region, status, q string, page, pageSize int) ([]Case, int64, error) {
-	return s.caseRepo.List(ctx, region, status, q, page, pageSize)
+// ListCases 查詢個案清單（回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳
+// 據點／去回程車輛任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案。
+func (s *CaseService) ListCases(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink bool) ([]Case, int64, error) {
+	return s.caseRepo.List(ctx, region, status, q, page, pageSize, unresolvedLink)
 }
 
 // GetCaseByID 取得單筆個案主檔明細。
@@ -167,6 +172,7 @@ type UpdateCaseInput struct {
 	CareContactRole   *string
 	CareContactName   *string
 	RegisteredAddress *string
+	Remarks           *string
 }
 
 // UpdateCase 更新個案主檔資料，僅套用有提供的欄位。
@@ -180,10 +186,10 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 		entity.Name = *in.Name
 	}
 	if in.HomeAddress != nil {
-		entity.HomeAddress = *in.HomeAddress
+		entity.HomeAddress = in.HomeAddress
 	}
 	if in.Region != nil {
-		entity.Region = *in.Region
+		entity.Region = in.Region
 	}
 	if in.LTCLevel != nil {
 		entity.LTCLevel = in.LTCLevel
@@ -215,6 +221,9 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 	if in.RegisteredAddress != nil {
 		entity.RegisteredAddress = in.RegisteredAddress
 	}
+	if in.Remarks != nil {
+		entity.Remarks = in.Remarks
+	}
 
 	if err := s.caseRepo.Update(ctx, entity); err != nil {
 		return nil, err
@@ -223,11 +232,32 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 }
 
 // UpdateCaseTransportPreference 更新個案的交通偏好（所屬據點與去回程車輛），回傳更新後的個案主檔。
-func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID, siteID, outboundVehicleID, inboundVehicleID uuid.UUID) (*Case, error) {
-	if err := s.caseRepo.UpsertTransportPreference(ctx, caseID, siteID, outboundVehicleID, inboundVehicleID); err != nil {
+// 三個 ID 皆為 nil 表示維持現況，僅提供的欄位會被寫入；raw name 字串只在對應 ID
+// 為 nil 且需要保留原始名稱待人工關聯時才有意義。
+func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) (*Case, error) {
+	if err := s.caseRepo.UpsertTransportPreference(ctx, caseID, siteID, outboundVehicleID, inboundVehicleID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw); err != nil {
 		return nil, err
 	}
 	return s.caseRepo.GetByID(ctx, caseID)
+}
+
+// FindPossibleDuplicate 依身分證字號（非空時）或正規化姓名比對既有個案，供批次匯入
+// 於 dry-run 階段查重使用；找不到相符個案時回傳 nil、nil。
+func (s *CaseService) FindPossibleDuplicate(ctx context.Context, nationalID, name string) (*Case, error) {
+	nationalID = strings.TrimSpace(strings.ToUpper(nationalID))
+	if nationalID != "" {
+		hmacIdx := crypto.Index(nationalID, s.cfg.HMACKey)
+		return s.caseRepo.GetByHMAC(ctx, hmacIdx)
+	}
+
+	matches, err := s.caseRepo.GetByNameNormalized(ctx, namenorm.Normalize(name))
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return nil, nil
+	}
+	return &matches[0], nil
 }
 
 // GetActiveScheduleForCaseOnDate 取得個案於指定日期生效之排班；查無資料時回傳 nil、nil，
@@ -325,7 +355,10 @@ func (s *CaseService) CreateCaseSchedule(ctx context.Context, req CreateSchedule
 		return nil, fmt.Errorf("site not found: %w", err)
 	}
 
-	if caseObj.Region != siteObj.Region {
+	if caseObj.Region == nil {
+		return nil, ErrCaseRegionUnset
+	}
+	if *caseObj.Region != siteObj.Region {
 		return nil, ErrSiteRegionMismatch
 	}
 

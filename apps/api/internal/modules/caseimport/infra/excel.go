@@ -48,17 +48,8 @@ func (r ExcelAdapter) RenderCaseImportTemplate() ([]byte, error) {
 	f.SetSheetName("Sheet1", sheetName)
 
 	headers := []string{
-		"個案姓名*", "身分證字號*", "申報地區*(苗栗/新竹)", "聯絡電話", "住家地址*",
-		"開始申報日*(YYYY-MM-DD)", "服務類別*(1:補助/2:自費)", "服務使用類型*(1:社區長照/2:社區據點/3:輔具中心/4:身障日照)", "所屬據點*",
-		"單趟里程(公里)*", "申報單價(元)", "服務時長(分鐘)",
-		"週一趟數(0:不搭/1:單去/2:來回/4:四趟)", "週一去程時間(HH:mm)", "週一回程時間(HH:mm)",
-		"週二趟數(0:不搭/1:單去/2:來回/4:四趟)", "週二去程時間(HH:mm)", "週二回程時間(HH:mm)",
-		"週三趟數(0:不搭/1:單去/2:來回/4:四趟)", "週三去程時間(HH:mm)", "週三回程時間(HH:mm)",
-		"週四趟數(0:不搭/1:單去/2:來回/4:四趟)", "週四去程時間(HH:mm)", "週四回程時間(HH:mm)",
-		"週五趟數(0:不搭/1:單去/2:來回/4:四趟)", "週五去程時間(HH:mm)", "週五回程時間(HH:mm)",
-		"週六趟數(0:不搭/1:單去/2:來回/4:四趟)", "週六去程時間(HH:mm)", "週六回程時間(HH:mm)",
-		"週日趟數(0:不搭/1:單去/2:來回/4:四趟)", "週日去程時間(HH:mm)", "週日回程時間(HH:mm)",
-		"備註",
+		"姓名*", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)",
+		"個管or照專", "姓名(個管/照專)", "戶籍", "居住地", "REMARK",
 	}
 
 	headerStyle, _ := f.NewStyle(&excelize.Style{
@@ -72,12 +63,12 @@ func (r ExcelAdapter) RenderCaseImportTemplate() ([]byte, error) {
 		_ = f.SetCellValue(sheetName, cell, h)
 	}
 	_ = f.SetRowHeight(sheetName, 1, 32)
-	_ = f.SetCellStyle(sheetName, "A1", "AH1", headerStyle)
+	lastCol, _ := excelize.CoordinatesToCellName(len(headers), 1)
+	_ = f.SetCellStyle(sheetName, "A1", lastCol, headerStyle)
 
 	sampleRows := [][]interface{}{
-		{"張曾阿妹", "A202559750", "苗栗", "0912345678", "苗栗縣竹南鎮大營路123號", "2026-07-01", 1, 2, "竹南日照據點", 5.0, 115, 10, 2, "09:00", "16:00", 2, "09:00", "16:00", 2, "09:00", "16:00", 2, "09:00", "16:00", 2, "09:00", "16:00", 0, "", "", 0, "", "", "週一至週五固定來回"},
-		{"李國盛", "J123458899", "新竹", "0922334455", "新竹縣竹北市文興路一段200號", "2026-07-01", 2, 1, "竹北日照中心", 8.0, 200, 20, 2, "09:30", "15:30", 1, "09:30", "", 2, "09:30", "15:30", 0, "", "", 2, "09:30", "15:30", 0, "", "", 0, "", "", "週二僅早上去程"},
-		{"王大同", "K123456780", "苗栗", "0933445566", "苗栗市中正路50號", "2026-07-01", 1, 4, "苗栗復健據點", 6.5, 115, 15, 0, "", "", 0, "", "", 0, "", "", 4, "08:30", "16:30", 0, "", "", 0, "", "", 0, "", "", "週四四趟個案"},
+		{"張曾阿妹", "一般戶", "A202559750", "女", "1945/06/15", "竹南日照據點", "竹南1車", "竹南2車", "個管", "陳小華", "苗栗縣竹南鎮戶籍地址", "苗栗縣竹南鎮大營路123號", "行動不便需輪椅"},
+		{"李國盛", "低收入戶", "G121806465", "男", "1950/02/20", "竹北日照中心", "竹北1車", "竹北2車", "照專", "王小明", "新竹縣竹北市戶籍地址", "新竹縣竹北市文興路一段200號", ""},
 	}
 
 	for rIdx, rData := range sampleRows {
@@ -87,7 +78,8 @@ func (r ExcelAdapter) RenderCaseImportTemplate() ([]byte, error) {
 			_ = f.SetCellValue(sheetName, cell, val)
 		}
 	}
-	_ = f.SetSheetDimension(sheetName, fmt.Sprintf("A1:AH%d", len(sampleRows)+1))
+	lastRowCell, _ := excelize.CoordinatesToCellName(len(headers), len(sampleRows)+1)
+	_ = f.SetSheetDimension(sheetName, fmt.Sprintf("A1:%s", lastRowCell))
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {

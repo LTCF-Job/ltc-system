@@ -8,39 +8,37 @@ import (
 
 // 系統統一錯誤碼定義（符合規格書 2.3）
 const (
-	CodeValidationFailed    = "VALIDATION_FAILED"
-	CodeUnauthenticated     = "UNAUTHENTICATED"
-	CodeForbidden           = "FORBIDDEN"
-	CodeNotFound            = "NOT_FOUND"
-	CodeDuplicateNationalID = "DUPLICATE_NATIONAL_ID"
-	CodeAssignmentOverlap   = "ASSIGNMENT_OVERLAP"
-	CodeExportInProgress    = "EXPORT_IN_PROGRESS"
-	CodePrecheckFailed      = "PRECHECK_FAILED"
-	CodeMappingRequired     = "MAPPING_REQUIRED"
-	CodeIngestTokenInvalid  = "INGEST_TOKEN_INVALID"
-	CodeFormSourceFailed    = "FORM_SOURCE_FAILED"
-	CodeFormSyncFailed      = "FORM_SYNC_FAILED"
-	CodeFormMappingFailed   = "FORM_MAPPING_FAILED"
-	CodeInternalError       = "INTERNAL_ERROR"
+	CodeValidationFailed   = "VALIDATION_FAILED"
+	CodeUnauthenticated    = "UNAUTHENTICATED"
+	CodeForbidden          = "FORBIDDEN"
+	CodeNotFound           = "NOT_FOUND"
+	CodeAssignmentOverlap  = "ASSIGNMENT_OVERLAP"
+	CodeExportInProgress   = "EXPORT_IN_PROGRESS"
+	CodePrecheckFailed     = "PRECHECK_FAILED"
+	CodeMappingRequired    = "MAPPING_REQUIRED"
+	CodeIngestTokenInvalid = "INGEST_TOKEN_INVALID"
+	CodeFormSourceFailed   = "FORM_SOURCE_FAILED"
+	CodeFormSyncFailed     = "FORM_SYNC_FAILED"
+	CodeFormMappingFailed  = "FORM_MAPPING_FAILED"
+	CodeInternalError      = "INTERNAL_ERROR"
 )
 
 // codeMessages 為每個錯誤碼提供固定、非技術性的預設訊息，是前端顯示文字的單一事實來源。
 // 任何底層（Go、SQL、第三方 SDK）錯誤訊息一律不得回傳給前端，只透過 slog 記錄於伺服器端。
 var codeMessages = map[string]string{
-	CodeValidationFailed:    "輸入資料不符合規則，請確認後再試",
-	CodeUnauthenticated:     "請重新登入",
-	CodeForbidden:           "權限不足，無法執行此操作",
-	CodeNotFound:            "查無資料",
-	CodeDuplicateNationalID: "身分證字號已存在，請確認個案資料",
-	CodeAssignmentOverlap:   "該時段已有其他排班，請調整後再試",
-	CodeExportInProgress:    "匯出作業進行中，請稍後再試",
-	CodePrecheckFailed:      "資料檢核未通過，請確認後再試",
-	CodeMappingRequired:     "尚未完成欄位對應設定",
-	CodeIngestTokenInvalid:  "匯入權杖無效或已過期",
-	CodeFormSourceFailed:    "無法存取雲端試算表，請確認連結或權限設定",
-	CodeFormSyncFailed:      "同步表單資料失敗，請稍後再試",
-	CodeFormMappingFailed:   "更新欄位對應設定失敗，請稍後再試",
-	CodeInternalError:       "系統發生錯誤，請稍後再試",
+	CodeValidationFailed:   "輸入資料不符合規則，請確認後再試",
+	CodeUnauthenticated:    "請重新登入",
+	CodeForbidden:          "權限不足，無法執行此操作",
+	CodeNotFound:           "查無資料",
+	CodeAssignmentOverlap:  "該時段已有其他排班，請調整後再試",
+	CodeExportInProgress:   "匯出作業進行中，請稍後再試",
+	CodePrecheckFailed:     "資料檢核未通過，請確認後再試",
+	CodeMappingRequired:    "尚未完成欄位對應設定",
+	CodeIngestTokenInvalid: "匯入權杖無效或已過期",
+	CodeFormSourceFailed:   "無法存取雲端試算表，請確認連結或權限設定",
+	CodeFormSyncFailed:     "同步表單資料失敗，請稍後再試",
+	CodeFormMappingFailed:  "更新欄位對應設定失敗，請稍後再試",
+	CodeInternalError:      "系統發生錯誤，請稍後再試",
 }
 
 // APIResponse 代表成功回應之統一封裝結構。

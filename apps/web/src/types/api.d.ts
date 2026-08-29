@@ -177,14 +177,14 @@ export interface CaseDTO {
   code: string
   name: string
   nameNormalized?: string
-  nationalId: string
+  nationalId?: string
   phone?: string
-  homeAddress: string
-  region: Region
+  homeAddress?: string
+  region?: Region
   ltcLevel?: string
   serviceCategory: ServiceCategory
   serviceUsageType: ServiceUsageType
-  claimStartDate: string
+  claimStartDate?: string
   claimEndDate?: string
   status: CaseStatus
   householdType?: string
@@ -193,12 +193,16 @@ export interface CaseDTO {
   careContactRole?: string
   careContactName?: string
   registeredAddress?: string
+  remarks?: string
   siteId?: string
   siteName?: string
+  siteNameRaw?: string
   outboundVehicleId?: string
   outboundVehicle?: string
+  outboundVehicleNameRaw?: string
   inboundVehicleId?: string
   inboundVehicle?: string
+  inboundVehicleNameRaw?: string
   createdAt: string
   updatedAt: string
   activeSchedule?: CaseScheduleDTO
@@ -206,14 +210,14 @@ export interface CaseDTO {
 
 export interface CreateCaseRequest {
   name: string
-  nationalId: string
+  nationalId?: string
   phone?: string
-  homeAddress: string
-  region: Region
+  homeAddress?: string
+  region?: Region
   ltcLevel?: string
   serviceCategory: ServiceCategory
   serviceUsageType: ServiceUsageType
-  claimStartDate: string
+  claimStartDate?: string
   claimEndDate?: string
   status?: CaseStatus
   householdType?: string
@@ -222,12 +226,14 @@ export interface CreateCaseRequest {
   careContactRole?: string
   careContactName?: string
   registeredAddress?: string
+  remarks?: string
 }
 
+// 三欄位皆選填：未帶入的欄位維持既有關聯不變，僅更新有帶值的那一項
 export interface UpdateCaseTransportPreferenceRequest {
-  siteId: string
-  outboundVehicleId: string
-  inboundVehicleId: string
+  siteId?: string
+  outboundVehicleId?: string
+  inboundVehicleId?: string
 }
 
 export interface UpdateCaseRequest extends Partial<CreateCaseRequest> { }
@@ -641,6 +647,24 @@ export interface DryRunImportResultDTO {
   previewRows: Array<Record<string, any>>
   errors: ImportRowErrorDTO[]
   warnings: ImportRowWarningDTO[]
+}
+
+// 個案匯入預覽列疑似重複所指向的既有個案（欄位型別未確認前對呼叫端一律視為選填）
+export interface CaseImportDuplicateOfDTO {
+  code?: string
+  name?: string
+}
+
+// 個案匯入預覽列：isDuplicate/duplicateOf 之外的欄位沿用 DryRunImportResultDTO.previewRows 的動態結構
+export interface CaseImportPreviewRowDTO extends Record<string, any> {
+  isDuplicate?: boolean
+  duplicateOf?: CaseImportDuplicateOfDTO
+}
+
+export interface CaseImportCommitResult {
+  importedCount: number
+  skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
+  warnings?: Array<{ rowIndex: number; caseName?: string; field?: string; message: string }>
 }
 
 // 7. 系統稽核紀錄 (Audit Log)

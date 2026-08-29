@@ -27,7 +27,7 @@ func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, regi
 		SELECT id, name
 		FROM cases
 		WHERE region = $1 AND status = 'active'
-		  AND (home_address = '' OR service_usage_type IS NULL OR national_id_masked = '')
+		  AND (COALESCE(home_address, '') = '' OR service_usage_type IS NULL OR COALESCE(national_id_masked, '') = '')
 	`
 	rows, err := r.db.Query(ctx, query, region)
 	if err != nil {

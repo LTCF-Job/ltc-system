@@ -3,6 +3,7 @@ package app
 // ImportService 負責批次 Excel／CSV 個案資料之解析、預覽與匯入。
 type ImportService struct {
 	cases       CaseRegistrar
+	duplicates  CaseDuplicateFinder
 	siteRepo    SiteLookup
 	vehicleRepo VehicleLookup
 	prefRepo    TransportPreferenceWriter
@@ -14,6 +15,7 @@ type ImportService struct {
 // NewImportService 建立 ImportService 實例。
 func NewImportService(
 	cases CaseRegistrar,
+	duplicates CaseDuplicateFinder,
 	siteRepo SiteLookup,
 	vehicleRepo VehicleLookup,
 	prefRepo TransportPreferenceWriter,
@@ -23,6 +25,7 @@ func NewImportService(
 ) *ImportService {
 	return &ImportService{
 		cases:       cases,
+		duplicates:  duplicates,
 		siteRepo:    siteRepo,
 		vehicleRepo: vehicleRepo,
 		prefRepo:    prefRepo,

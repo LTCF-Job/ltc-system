@@ -66,6 +66,7 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	excel := importinfra.NewExcelAdapter()
 	importSvc := importapp.NewImportService(
 		caseRegistrar{caseSvc},
+		caseDuplicateFinder{caseSvc},
 		siteAdapter{siteRepo},
 		vehicleAdapter{vehicleRepo},
 		caseRepo,
@@ -99,64 +100,43 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 
 	// Row A：正常成功列。
 	rowA := importapp.CaseImportRowResult{
-		RowIndex:           1,
-		Name:               "受測個案A",
-		NationalID:         "A202559750",
-		HomeAddress:        "苗栗縣測試路1號",
-		Region:             region,
-		ClaimStartDate:     claimStart,
-		SiteName:           site.Name,
-		Weekdays:           []int16{1, 2, 3},
-		OutboundTime:       "09:00",
-		InboundTime:        "16:00",
-		TripPattern:        2,
-		DistanceKM:         5,
-		UnitPrice:          115,
-		ServiceDurationMin: 10,
+		RowIndex:       1,
+		Name:           "受測個案A",
+		NationalID:     "A202559750",
+		HomeAddress:    "苗栗縣測試路1號",
+		Region:         region,
+		ClaimStartDate: claimStart,
+		SiteName:       site.Name,
 	}
 
-	// Row B：個案主檔會先成功寫入，但排班設定因去回程時間未遞增而失敗（ErrLegTimesNotOrdered），
-	// 用來驗證同一列內兩個 repository 寫入是否共用同一事務並正確回滾。
+	// Row B：身分證字號檢查碼故意錯誤，觸發 CreateCase 失敗，用來驗證批次不會因
+	// 單列失敗而中止其餘列的處理。
 	rowB := importapp.CaseImportRowResult{
-		RowIndex:           2,
-		Name:               "受測個案B",
-		NationalID:         "K120098177",
-		HomeAddress:        "苗栗縣測試路2號",
-		Region:             region,
-		ClaimStartDate:     claimStart,
-		SiteName:           site.Name,
-		Weekdays:           []int16{1, 2, 3},
-		OutboundTime:       "16:00", // 刻意早於回程時間，觸發 ErrLegTimesNotOrdered
-		InboundTime:        "09:00",
-		TripPattern:        2,
-		DistanceKM:         5,
-		UnitPrice:          115,
-		ServiceDurationMin: 10,
+		RowIndex:       2,
+		Name:           "受測個案B",
+		NationalID:     "A100000000",
+		HomeAddress:    "苗栗縣測試路2號",
+		Region:         region,
+		ClaimStartDate: claimStart,
+		SiteName:       site.Name,
 	}
 
 	// Row C：緊接失敗列之後的正常列，用來驗證批次不會因單列失敗而提早中止。
 	rowC := importapp.CaseImportRowResult{
-		RowIndex:           3,
-		Name:               "受測個案C",
-		NationalID:         "G121806465",
-		HomeAddress:        "苗栗縣測試路3號",
-		Region:             region,
-		ClaimStartDate:     claimStart,
-		SiteName:           site.Name,
-		Weekdays:           []int16{1, 2, 3},
-		OutboundTime:       "09:00",
-		InboundTime:        "16:00",
-		TripPattern:        2,
-		DistanceKM:         5,
-		UnitPrice:          115,
-		ServiceDurationMin: 10,
+		RowIndex:       3,
+		Name:           "受測個案C",
+		NationalID:     "G121806465",
+		HomeAddress:    "苗栗縣測試路3號",
+		Region:         region,
+		ClaimStartDate: claimStart,
+		SiteName:       site.Name,
 	}
 
 	preview := &importapp.CaseImportPreviewResult{
 		Rows: []importapp.CaseImportRowResult{rowA, rowB, rowC},
 	}
 
-	result, err := importSvc.CommitCases(ctx, preview, importapp.Actor{
+	result, err := importSvc.CommitCases(ctx, preview, nil, importapp.Actor{
 		ActorID: uuid.New(), ActorRole: "admin", IPAddress: "127.0.0.1", UserAgent: "test-agent",
 	})
 	require.NoError(t, err)
@@ -165,13 +145,13 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	}
 
 	require.Equal(t, 2, result.ImportedCount, "Row A 與 Row C 應成功匯入")
-	require.Len(t, result.SkippedRows, 1, "Row B 應因排班設定失敗而被記為略過")
+	require.Len(t, result.SkippedRows, 1, "Row B 應因身分證字號檢查碼錯誤而被記為略過")
 	require.Equal(t, 2, result.SkippedRows[0].RowIndex)
 
-	// 驗證 Row B 沒有殘留孤兒個案：CreateCaseSchedule 失敗必須回滾同一列的 CreateCase。
+	// 驗證 Row B 沒有殘留孤兒個案。
 	hmacIdx := crypto.Index(rowB.NationalID, cfg.HMACKey)
 	orphan, err := caseRepo.GetByHMAC(ctx, hmacIdx)
-	require.ErrorIs(t, err, pgx.ErrNoRows, "Row B 的個案主檔必須已隨事務回滾，不應留下孤兒資料")
+	require.ErrorIs(t, err, pgx.ErrNoRows, "Row B 的個案主檔必須未寫入")
 	require.Nil(t, orphan)
 
 	// 驗證 Row A／Row C 確實成功落地。
@@ -255,21 +235,18 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 	return entity.ID, nil
 }
 
-func (a caseRegistrar) CreateSchedule(ctx context.Context, in importapp.NewSchedule, actor importapp.Actor) error {
-	legs := make([]caseapp.CreateScheduleLegItemRequest, 0, len(in.Legs))
-	for _, l := range in.Legs {
-		legs = append(legs, caseapp.CreateScheduleLegItemRequest{LegSeq: l.LegSeq, Direction: l.Direction, DepartTime: l.DepartTime})
-	}
-	_, err := a.svc.CreateCaseSchedule(ctx, caseapp.CreateScheduleRequest{
-		CaseID: in.CaseID, SiteID: in.SiteID, EffectiveFrom: in.EffectiveFrom, Weekdays: in.Weekdays,
-		TripPattern: in.TripPattern, UnitPrice: in.UnitPrice, DistanceKM: in.DistanceKM,
-		ServiceDurationMin: in.ServiceDurationMin, ServiceCode: in.ServiceCode, Note: in.Note, Legs: legs,
-	})
-	return err
-}
-
 func (a caseRegistrar) RecordSkipped(ctx context.Context, row importapp.CaseImportSkippedRow, actor importapp.Actor) {
 	a.svc.RecordSkippedCaseImport(ctx, caseapp.CaseImportSkippedRow{
 		RowIndex: row.RowIndex, CaseName: row.CaseName, Reasons: row.Reasons, RawValues: row.RawValues,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
+}
+
+type caseDuplicateFinder struct{ svc *caseapp.CaseService }
+
+func (a caseDuplicateFinder) FindDuplicate(ctx context.Context, nationalID, name string) (*importapp.DuplicateRef, error) {
+	found, err := a.svc.FindPossibleDuplicate(ctx, nationalID, name)
+	if err != nil || found == nil {
+		return nil, err
+	}
+	return &importapp.DuplicateRef{CaseID: found.ID, CaseCode: found.Code}, nil
 }

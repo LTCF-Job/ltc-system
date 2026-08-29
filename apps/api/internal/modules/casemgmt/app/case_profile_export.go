@@ -10,16 +10,19 @@ import (
 
 // GenerateCaseProfileWorkbook 匯出與來源工作簿一致的個案彙整欄位。
 func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context) ([]byte, error) {
-	cases, _, err := s.caseRepo.List(ctx, "", "", "", 1, 10000)
+	cases, _, err := s.caseRepo.List(ctx, "", "", "", 1, 10000, false)
 	if err != nil {
 		return nil, fmt.Errorf("list case profiles: %w", err)
 	}
 
 	rows := make([]CaseProfileRow, 0, len(cases))
 	for _, item := range cases {
-		id, err := crypto.Decrypt(item.NationalIDCipher, s.cfg.EncryptionKey)
-		if err != nil {
-			return nil, fmt.Errorf("decrypt case %s: %w", item.ID, err)
+		id := ""
+		if len(item.NationalIDCipher) > 0 {
+			id, err = crypto.Decrypt(item.NationalIDCipher, s.cfg.EncryptionKey)
+			if err != nil {
+				return nil, fmt.Errorf("decrypt case %s: %w", item.ID, err)
+			}
 		}
 		birthday, age := "", ""
 		if item.BirthDate != nil {
@@ -45,7 +48,7 @@ func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context) ([]byte, 
 			CareContactRole:   value(item.CareContactRole),
 			CareContactName:   value(item.CareContactName),
 			RegisteredAddress: value(item.RegisteredAddress),
-			HomeAddress:       item.HomeAddress,
+			HomeAddress:       value(item.HomeAddress),
 		})
 	}
 

@@ -18,7 +18,7 @@ import (
 func TestDownloadTemplate_TableDriven(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	excel := importinfra.NewExcelAdapter()
-	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, excel, excel, nil))
+	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, excel, excel, nil))
 
 	tests := []struct {
 		name                string
@@ -61,10 +61,9 @@ func TestDownloadTemplate_TableDriven(t *testing.T) {
 			expectedFilename:    "case_template.csv",
 			checkBody: func(t *testing.T, body *bytes.Buffer) {
 				str := body.String()
-				assert.True(t, strings.HasPrefix(str, "\uFEFF個案姓名*"), "CSV 開頭必須包含 UTF-8 BOM 與標題欄")
-				assert.Contains(t, str, "週一趟數")
-				assert.Contains(t, str, "週二趟數")
-				assert.Contains(t, str, "單趟里程")
+				assert.True(t, strings.HasPrefix(str, "\uFEFF姓名*"), "CSV 開頭必須包含 UTF-8 BOM 與標題欄")
+				assert.Contains(t, str, "身分證字號")
+				assert.Contains(t, str, "REMARK")
 			},
 		},
 		{
@@ -74,7 +73,7 @@ func TestDownloadTemplate_TableDriven(t *testing.T) {
 			expectedFilename:    "case_template.csv",
 			checkBody: func(t *testing.T, body *bytes.Buffer) {
 				str := body.String()
-				assert.True(t, strings.HasPrefix(str, "\uFEFF個案姓名*"))
+				assert.True(t, strings.HasPrefix(str, "\uFEFF姓名*"))
 			},
 		},
 		{

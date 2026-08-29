@@ -624,6 +624,30 @@ export const mockCases: CaseDTO[] = [
         { id: 'leg_10_2', legSeq: 2, direction: 'inbound', departTime: '15:50', arriveTime: '16:05', runNo: 1, vehicleId: 'veh_4', vehicleName: '竹南2車' }
       ]
     }
+  },
+  // 11. 苗栗 / 匯入資料中據點與去程車輛比對不到主檔，示範「待補建關聯」頁籤
+  {
+    id: 'case_11',
+    code: 'C0011',
+    name: '邱美玲',
+    nationalId: 'K220987654',
+    homeAddress: '苗栗縣頭份市中華路50號',
+    region: 'miaoli',
+    serviceCategory: 1,
+    serviceUsageType: 2,
+    claimStartDate: '2026-08-01',
+    status: 'active',
+    householdType: '獨居',
+    gender: '女',
+    birthDate: '1950-05-20',
+    careContactRole: '個管',
+    careContactName: '邱志明',
+    registeredAddress: '苗栗縣頭份市中華路50號',
+    remarks: '需輪椅接送，行動不便',
+    siteNameRaw: '頭份日照中心（新）',
+    outboundVehicleNameRaw: '頭份1號車',
+    createdAt: '2026-08-01',
+    updatedAt: '2026-08-01'
   }
 ]
 

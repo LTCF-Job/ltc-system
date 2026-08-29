@@ -1,10 +1,6 @@
 package app
 
 import (
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/google/uuid"
 )
 
@@ -24,51 +20,36 @@ type CaseImportWarningItem struct {
 	Message  string `json:"message"`
 }
 
-// WeekdayScheduleDetail 代表個案在單一星期的排班趟數與時段。
-type WeekdayScheduleDetail struct {
-	Weekday    int16  `json:"weekday"`
-	TripCount  int16  `json:"tripCount"`
-	DepartTime string `json:"departTime,omitempty"`
-	ReturnTime string `json:"returnTime,omitempty"`
-}
-
 // CaseImportRowResult 代表個案批次匯入單列解析結果。
 type CaseImportRowResult struct {
-	RowIndex           int                     `json:"rowIndex"`
-	SheetName          string                  `json:"sheetName"`
-	Name               string                  `json:"name"`
-	NationalID         string                  `json:"nationalId,omitempty"`
-	Phone              string                  `json:"phone,omitempty"`
-	HouseholdType      string                  `json:"householdType,omitempty"`
-	Gender             string                  `json:"gender,omitempty"`
-	BirthDate          string                  `json:"birthDate,omitempty"`
-	CareContactRole    string                  `json:"careContactRole,omitempty"`
-	CareContactName    string                  `json:"careContactName,omitempty"`
-	RegisteredAddress  string                  `json:"registeredAddress,omitempty"`
-	HomeAddress        string                  `json:"homeAddress,omitempty"`
-	Region             string                  `json:"region"`
-	ClaimStartDate     string                  `json:"claimStartDate"`
-	ServiceCategory    int                     `json:"serviceCategory"`
-	ServiceUsageType   int                     `json:"serviceUsageType"`
-	SiteName           string                  `json:"siteName"`
-	SiteID             *uuid.UUID              `json:"siteId,omitempty"`
-	Weekdays           []int16                 `json:"weekdays"`
-	WeekdaysText       string                  `json:"weekdaysText,omitempty"`
-	WeekdaySchedules   []WeekdayScheduleDetail `json:"weekdaySchedules,omitempty"`
-	OutboundTime       string                  `json:"outboundTime,omitempty"`
-	InboundTime        string                  `json:"inboundTime,omitempty"`
-	OutboundVehicle    string                  `json:"outboundVehicle,omitempty"`
-	InboundVehicle     string                  `json:"inboundVehicle,omitempty"`
-	TripPattern        int16                   `json:"tripPattern"`
-	DistanceKM         float64                 `json:"distanceKm"`
-	UnitPrice          float64                 `json:"unitPrice"`
-	ServiceDurationMin int16                   `json:"serviceDurationMin"`
-	Note               string                  `json:"note,omitempty"`
-	IsProfileWorkbook  bool                    `json:"isProfileWorkbook"`
-	IsDraft            bool                    `json:"isDraft"`
-	WarningMessage     string                  `json:"warningMessage,omitempty"`
-	ErrorMessage       string                  `json:"errorMessage,omitempty"`
-	RawValues          map[string]string       `json:"rawValues,omitempty"`
+	RowIndex          int               `json:"rowIndex"`
+	SheetName         string            `json:"sheetName"`
+	Name              string            `json:"name"`
+	NationalID        string            `json:"nationalId,omitempty"`
+	Phone             string            `json:"phone,omitempty"`
+	HouseholdType     string            `json:"householdType,omitempty"`
+	Gender            string            `json:"gender,omitempty"`
+	BirthDate         string            `json:"birthDate,omitempty"`
+	CareContactRole   string            `json:"careContactRole,omitempty"`
+	CareContactName   string            `json:"careContactName,omitempty"`
+	RegisteredAddress string            `json:"registeredAddress,omitempty"`
+	HomeAddress       string            `json:"homeAddress,omitempty"`
+	Region            string            `json:"region"`
+	ClaimStartDate    string            `json:"claimStartDate"`
+	ServiceCategory   int               `json:"serviceCategory"`
+	ServiceUsageType  int               `json:"serviceUsageType"`
+	SiteName          string            `json:"siteName"`
+	SiteID            *uuid.UUID        `json:"siteId,omitempty"`
+	OutboundVehicle   string            `json:"outboundVehicle,omitempty"`
+	InboundVehicle    string            `json:"inboundVehicle,omitempty"`
+	Remarks           string            `json:"remarks,omitempty"`
+	IsDuplicate       bool              `json:"isDuplicate"`
+	DuplicateCaseCode string            `json:"duplicateCaseCode,omitempty"`
+	DuplicateCaseName string            `json:"duplicateCaseName,omitempty"`
+	DuplicateCaseID   *uuid.UUID        `json:"duplicateCaseId,omitempty"`
+	WarningMessage    string            `json:"warningMessage,omitempty"`
+	ErrorMessage      string            `json:"errorMessage,omitempty"`
+	RawValues         map[string]string `json:"rawValues,omitempty"`
 }
 
 // CaseImportSkippedRow 保留未寫入資料庫的來源列與欄位錯誤。
@@ -80,37 +61,11 @@ type CaseImportSkippedRow struct {
 }
 
 // CaseImportCommitResult 回傳正式匯入成功與略過的列，供操作人員補正來源資料。
+// Warnings 承載已建立個案但仍需人工處理的提示（如據點/車輛未比對到）。
 type CaseImportCommitResult struct {
-	ImportedCount int                    `json:"importedCount"`
-	SkippedRows   []CaseImportSkippedRow `json:"skippedRows"`
-}
-
-func parseProfileBirthDate(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	if parsed, err := time.Parse("2006-01-02", value); err == nil {
-		return parsed.Format("2006-01-02")
-	}
-	parts := strings.FieldsFunc(value, func(r rune) bool { return r == '/' || r == '-' || r == '.' })
-	if len(parts) != 3 {
-		return ""
-	}
-	year, yearErr := strconv.Atoi(parts[0])
-	month, monthErr := strconv.Atoi(parts[1])
-	day, dayErr := strconv.Atoi(parts[2])
-	if yearErr != nil || monthErr != nil || dayErr != nil {
-		return ""
-	}
-	if year < 1911 {
-		year += 1911
-	}
-	parsed := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
-	if parsed.Year() != year || int(parsed.Month()) != month || parsed.Day() != day {
-		return ""
-	}
-	return parsed.Format("2006-01-02")
+	ImportedCount int                     `json:"importedCount"`
+	SkippedRows   []CaseImportSkippedRow  `json:"skippedRows"`
+	Warnings      []CaseImportWarningItem `json:"warnings,omitempty"`
 }
 
 // CaseImportPreviewResult 批次匯入預覽與統計結構體。

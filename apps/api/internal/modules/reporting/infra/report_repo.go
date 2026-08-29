@@ -108,7 +108,7 @@ func (r *ReportRepository) QueryHsinchuScheduleData(ctx context.Context, siteID 
 			l.direction, l.run_no, c.code, c.name, cs.note,
 			to_char(l.depart_time, 'HH24:MI') as depart_time,
 			to_char(l.arrive_time, 'HH24:MI') as arrive_time,
-			c.home_address, s.address as site_address,
+			COALESCE(c.home_address, ''), s.address as site_address,
 			COALESCE(v.display_name, '') as vehicle_name,
 			s.name as site_name
 		FROM schedule_legs l

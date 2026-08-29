@@ -7,25 +7,26 @@ import (
 	"ltc-system/apps/api/internal/modules/casemgmt/app"
 )
 
-// CreateCaseRequest 代表新增個案主檔請求。
+// CreateCaseRequest 代表新增個案主檔請求。僅姓名為必要欄位；其餘欄位皆選填。
 type CreateCaseRequest struct {
 	Code              string     `json:"code"`
 	Name              string     `json:"name" binding:"required"`
-	NationalID        string     `json:"nationalId" binding:"required"`
+	NationalID        string     `json:"nationalId"`
 	HouseholdType     *string    `json:"householdType"`
 	Gender            *string    `json:"gender"`
 	BirthDate         *time.Time `json:"birthDate"`
 	CareContactRole   *string    `json:"careContactRole"`
 	CareContactName   *string    `json:"careContactName"`
 	RegisteredAddress *string    `json:"registeredAddress"`
-	HomeAddress       string     `json:"homeAddress" binding:"required"`
-	Region            string     `json:"region" binding:"required"`
+	HomeAddress       *string    `json:"homeAddress"`
+	Region            *string    `json:"region"`
 	LTCLevel          *string    `json:"ltcLevel"`
 	ServiceCategory   int        `json:"serviceCategory"`
 	ServiceUsageType  int        `json:"serviceUsageType"`
-	ClaimStartDate    time.Time  `json:"claimStartDate" binding:"required"`
+	ClaimStartDate    *time.Time `json:"claimStartDate"`
 	ClaimEndDate      *time.Time `json:"claimEndDate"`
 	Status            string     `json:"status"`
+	Remarks           *string    `json:"remarks"`
 }
 
 // ToService 轉換為 service 層的建立個案輸入。
@@ -48,6 +49,7 @@ func (r CreateCaseRequest) ToService() app.CreateCaseRequest {
 		ClaimStartDate:    r.ClaimStartDate,
 		ClaimEndDate:      r.ClaimEndDate,
 		Status:            r.Status,
+		Remarks:           r.Remarks,
 	}
 }
 

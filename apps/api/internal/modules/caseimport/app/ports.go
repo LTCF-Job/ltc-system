@@ -29,12 +29,13 @@ type VehicleLookup interface {
 	GetByDisplayName(ctx context.Context, displayName string) (*VehicleRef, error)
 }
 
-// TransportPreferenceWriter 寫入個案的據點與去回程車輛偏好。
+// TransportPreferenceWriter 寫入個案的據點與去回程車輛偏好。nil 的 ID 表示該欄位
+// 維持現況，raw name 於對應 ID 為 nil 時保留原始名稱待人工關聯。
 type TransportPreferenceWriter interface {
-	UpsertTransportPreference(ctx context.Context, caseID, siteID, outboundVehicleID, inboundVehicleID uuid.UUID) error
+	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 }
 
-// NewCase 是建立個案所需的輸入，欄位對應個案主檔的必要與選填資料。
+// NewCase 是建立個案所需的輸入，僅 Name 為必要欄位。
 type NewCase struct {
 	Code              string
 	Name              string
@@ -45,34 +46,13 @@ type NewCase struct {
 	CareContactRole   *string
 	CareContactName   *string
 	RegisteredAddress *string
-	HomeAddress       string
-	Region            string
-	ClaimStartDate    time.Time
+	HomeAddress       *string
+	Region            *string
+	ClaimStartDate    *time.Time
 	ServiceCategory   int
 	ServiceUsageType  int
 	Status            string
-}
-
-// NewScheduleLeg 是單一趟次的排班設定。
-type NewScheduleLeg struct {
-	LegSeq     int16
-	Direction  string
-	DepartTime string
-}
-
-// NewSchedule 是建立個案排班所需的輸入。
-type NewSchedule struct {
-	CaseID             uuid.UUID
-	SiteID             uuid.UUID
-	EffectiveFrom      time.Time
-	Weekdays           []int16
-	TripPattern        int16
-	UnitPrice          float64
-	DistanceKM         float64
-	ServiceDurationMin int16
-	ServiceCode        string
-	Note               *string
-	Legs               []NewScheduleLeg
+	Remarks           *string
 }
 
 // Actor 代表發動匯入的操作者與來源資訊，供稽核留痕使用。
@@ -83,10 +63,21 @@ type Actor struct {
 	UserAgent string
 }
 
-// CaseRegistrar 是匯入寫入個案主檔與排班的邊界，由擁有個案能力的模組實作。
+// DuplicateRef 是查重比對到的既有個案基本資訊，供匯入預覽提示使用。
+type DuplicateRef struct {
+	CaseID   uuid.UUID
+	CaseCode string
+	CaseName string
+}
+
+// CaseDuplicateFinder 是匯入 dry-run 階段查重的邊界，由擁有個案能力的模組實作。
+type CaseDuplicateFinder interface {
+	FindDuplicate(ctx context.Context, nationalID, name string) (*DuplicateRef, error)
+}
+
+// CaseRegistrar 是匯入寫入個案主檔的邊界，由擁有個案能力的模組實作。
 type CaseRegistrar interface {
 	CreateCase(ctx context.Context, in NewCase, actor Actor) (uuid.UUID, error)
-	CreateSchedule(ctx context.Context, in NewSchedule, actor Actor) error
 	RecordSkipped(ctx context.Context, row CaseImportSkippedRow, actor Actor)
 }
 

@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -39,8 +38,9 @@ func (h *CaseHandler) List(c *gin.Context) {
 	region := c.Query("region")
 	status := c.Query("status")
 	q := c.Query("q")
+	unresolvedLink := c.Query("unresolvedLink") == "true"
 
-	cases, total, err := h.masterService.ListCases(c.Request.Context(), region, status, q, page, pageSize)
+	cases, total, err := h.masterService.ListCases(c.Request.Context(), region, status, q, page, pageSize, unresolvedLink)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢個案失敗", nil)
 		return
@@ -74,10 +74,6 @@ func (h *CaseHandler) Create(c *gin.Context) {
 		c.Request.Context(), req.ToService(), actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
 	)
 	if err != nil {
-		if errors.Is(err, app.ErrDuplicateNationalID) {
-			httpx.RespondError(c, http.StatusConflict, httpx.CodeDuplicateNationalID, "身分證字號重複", nil)
-			return
-		}
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -180,6 +176,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		CareContactRole   *string `json:"careContactRole"`
 		CareContactName   *string `json:"careContactName"`
 		RegisteredAddress *string `json:"registeredAddress"`
+		Remarks           *string `json:"remarks"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
@@ -199,6 +196,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		CareContactRole:   req.CareContactRole,
 		CareContactName:   req.CareContactName,
 		RegisteredAddress: req.RegisteredAddress,
+		Remarks:           req.Remarks,
 	}
 	if req.BirthDate != nil {
 		if t, err := time.Parse("2006-01-02", *req.BirthDate); err == nil {
@@ -225,16 +223,22 @@ func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 	}
 
 	var req struct {
-		SiteID            uuid.UUID `json:"siteId" binding:"required"`
-		OutboundVehicleID uuid.UUID `json:"outboundVehicleId" binding:"required"`
-		InboundVehicleID  uuid.UUID `json:"inboundVehicleId" binding:"required"`
+		SiteID                 *uuid.UUID `json:"siteId"`
+		OutboundVehicleID      *uuid.UUID `json:"outboundVehicleId"`
+		InboundVehicleID       *uuid.UUID `json:"inboundVehicleId"`
+		SiteNameRaw            string     `json:"siteNameRaw"`
+		OutboundVehicleNameRaw string     `json:"outboundVehicleNameRaw"`
+		InboundVehicleNameRaw  string     `json:"inboundVehicleNameRaw"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	entity, err := h.masterService.UpdateCaseTransportPreference(c.Request.Context(), id, req.SiteID, req.OutboundVehicleID, req.InboundVehicleID)
+	entity, err := h.masterService.UpdateCaseTransportPreference(
+		c.Request.Context(), id, req.SiteID, req.OutboundVehicleID, req.InboundVehicleID,
+		req.SiteNameRaw, req.OutboundVehicleNameRaw, req.InboundVehicleNameRaw,
+	)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "更新交通偏好失敗", nil)
 		return

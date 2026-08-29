@@ -1,5 +1,7 @@
 <template>
   <div class="case-list-view">
+    <el-tabs v-model="activeTab" type="border-card" class="case-tabs" @tab-change="handleTabChange">
+    <el-tab-pane label="個案清單" name="list">
     <DataTablePage
       v-model:page="page"
       v-model:pageSize="pageSize"
@@ -181,6 +183,11 @@
             </template>
           </el-table-column>
           <el-table-column prop="homeAddress" label="住家地址" min-width="190" show-overflow-tooltip />
+          <el-table-column prop="remarks" label="備註" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.remarks || '-' }}</span>
+            </template>
+          </el-table-column>
 
           <el-table-column label="操作" width="140" fixed="right" align="center">
             <template #default="{ row }">
@@ -207,6 +214,96 @@
         </el-table>
       </template>
     </DataTablePage>
+    </el-tab-pane>
+
+    <!-- 待補建關聯：據點/去程車/回程車比對不到主檔資料的個案，供事後關聯或新增主檔 -->
+    <el-tab-pane label="待補建關聯" name="unresolved">
+      <div v-loading="unresolvedLoading" class="unresolved-panel">
+        <el-empty v-if="!unresolvedLoading && unresolvedCases.length === 0" description="目前沒有待補建關聯的個案" />
+        <el-table v-else :data="unresolvedCases" border stripe style="width: 100%">
+          <el-table-column prop="code" label="個案編號" width="95" align="center" />
+          <el-table-column prop="name" label="姓名" width="110" />
+          <el-table-column label="據點" min-width="220">
+            <template #default="{ row }">
+              <div v-if="row.siteNameRaw" class="unresolved-slot">
+                <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
+                <el-select
+                  filterable
+                  placeholder="選擇既有據點"
+                  style="width: 160px"
+                  @change="(val: string) => handleLinkSlot(row as CaseDTO, 'site', val)"
+                >
+                  <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
+                </el-select>
+                <el-button link type="primary" size="small" @click="openQuickCreate('site', row as CaseDTO)">新增據點</el-button>
+              </div>
+              <span v-else class="empty-value">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="去程車輛" min-width="220">
+            <template #default="{ row }">
+              <div v-if="row.outboundVehicleNameRaw" class="unresolved-slot">
+                <span class="unresolved-raw-name">原始名稱：{{ row.outboundVehicleNameRaw }}</span>
+                <el-select
+                  filterable
+                  placeholder="選擇既有車輛"
+                  style="width: 160px"
+                  @change="(val: string) => handleLinkSlot(row as CaseDTO, 'outboundVehicle', val)"
+                >
+                  <el-option v-for="vehicle in availableVehicles" :key="vehicle.id" :value="vehicle.id" :label="vehicle.displayName" />
+                </el-select>
+                <el-button link type="primary" size="small" @click="openQuickCreate('vehicle', row as CaseDTO, 'outboundVehicle')">新增車輛</el-button>
+              </div>
+              <span v-else class="empty-value">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="回程車輛" min-width="220">
+            <template #default="{ row }">
+              <div v-if="row.inboundVehicleNameRaw" class="unresolved-slot">
+                <span class="unresolved-raw-name">原始名稱：{{ row.inboundVehicleNameRaw }}</span>
+                <el-select
+                  filterable
+                  placeholder="選擇既有車輛"
+                  style="width: 160px"
+                  @change="(val: string) => handleLinkSlot(row as CaseDTO, 'inboundVehicle', val)"
+                >
+                  <el-option v-for="vehicle in availableVehicles" :key="vehicle.id" :value="vehicle.id" :label="vehicle.displayName" />
+                </el-select>
+                <el-button link type="primary" size="small" @click="openQuickCreate('vehicle', row as CaseDTO, 'inboundVehicle')">新增車輛</el-button>
+              </div>
+              <span v-else class="empty-value">-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-tab-pane>
+    </el-tabs>
+
+    <!-- 新增據點/車輛快速建立彈窗 -->
+    <el-dialog v-model="quickCreateVisible" :title="quickCreateKind === 'site' ? '新增據點' : '新增車輛'" width="480px">
+      <el-form v-if="quickCreateKind === 'site'" label-width="90px">
+        <el-form-item label="據點名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
+        <el-form-item label="區域">
+          <el-select v-model="quickCreateSiteForm.region" style="width: 100%">
+            <el-option v-for="(label, key) in REGION_LABELS" :key="key" :value="key" :label="label" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
+      </el-form>
+      <el-form v-else label-width="90px">
+        <el-form-item label="車牌號碼"><el-input v-model="quickCreateVehicleForm.plateNo" /></el-form-item>
+        <el-form-item label="顯示名稱"><el-input v-model="quickCreateVehicleForm.displayName" /></el-form-item>
+        <el-form-item label="區域">
+          <el-select v-model="quickCreateVehicleForm.region" style="width: 100%">
+            <el-option v-for="(label, key) in REGION_LABELS" :key="key" :value="key" :label="label" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="quickCreateVisible = false">取消</el-button>
+        <el-button type="primary" :loading="quickCreateSaving" @click="handleQuickCreateAndLink">建立並關聯</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 批次匯入彈窗 -->
     <ImportPreviewDialog
@@ -217,19 +314,37 @@
       :on-download-template="handleDownloadTemplate"
       @success="executeFetch"
     >
-      <template #columns>
-        <el-table-column prop="name" label="姓名" width="120" />
-        <el-table-column prop="region" label="申報地區" width="90" />
-        <el-table-column prop="claimStartDate" label="開始申報日" width="120" />
-        <el-table-column prop="siteName" label="據點" width="120" />
-        <el-table-column prop="weekdays" label="開放時間" width="130" />
-        <el-table-column prop="departTime" label="去程時間" width="100" />
-        <el-table-column prop="returnTime" label="回程時間" width="100" />
-        <el-table-column prop="tripPattern" label="趟數" width="80" />
-        <el-table-column prop="householdType" label="戶別" width="100" />
-        <el-table-column prop="gender" label="性別" width="70" />
-        <el-table-column prop="careContactRole" label="個管/照專" width="100" />
-        <el-table-column prop="registeredAddress" label="戶籍" min-width="160" show-overflow-tooltip />
+      <template #columns="{ checkedDuplicateRows, toggleDuplicateRow }">
+        <el-table-column prop="name" label="姓名" width="100" />
+        <el-table-column prop="householdType" label="戶別" width="90" />
+        <el-table-column prop="nationalId" label="身分證字號" width="120" />
+        <el-table-column prop="gender" label="性別" width="60" />
+        <el-table-column prop="birthDate" label="生日" width="100" />
+        <el-table-column prop="siteName" label="據點" width="110" />
+        <el-table-column prop="outboundVehicle" label="去程車" width="100" />
+        <el-table-column prop="inboundVehicle" label="回程車" width="100" />
+        <el-table-column prop="careContactRole" label="個管or照專" width="100" />
+        <el-table-column prop="careContactName" label="個管姓名" width="100" />
+        <el-table-column prop="registeredAddress" label="戶籍" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="homeAddress" label="居住地" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip />
+        <el-table-column label="重複個案" width="150" align="center">
+          <template #default="{ row, $index }">
+            <template v-if="row.isDuplicate">
+              <el-tooltip
+                :content="`與既有個案「${row.duplicateOf?.name ?? '未知'}」(${row.duplicateOf?.code ?? '未知'}) 疑似重複`"
+                placement="top"
+              >
+                <el-checkbox
+                  :model-value="checkedDuplicateRows.has(row.rowIndex ?? $index)"
+                  label="仍要匯入"
+                  @change="(val: string | number | boolean) => toggleDuplicateRow(row.rowIndex ?? $index, !!val)"
+                />
+              </el-tooltip>
+            </template>
+            <span v-else class="empty-value">-</span>
+          </template>
+        </el-table-column>
       </template>
     </ImportPreviewDialog>
 
@@ -285,6 +400,9 @@
             <el-option :value="4" label="4. 身障日間照顧服務" />
           </el-select>
         </el-form-item>
+        <el-form-item label="備註" prop="remarks">
+          <el-input v-model="createForm.remarks" type="textarea" :rows="2" placeholder="選填" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
@@ -309,8 +427,10 @@ import {
   downloadCaseImportTemplate,
   exportCaseProfileWorkbook,
   dryRunImportCases,
-  commitImportCases
+  commitImportCases,
+  updateCaseTransportPreference
 } from '@/api/cases'
+import { listSites, listVehicles, createSite, createVehicle } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
@@ -322,9 +442,10 @@ import {
   type CaseStatus,
   type TripPattern
 } from '@/types/domain'
-import type { CaseDTO, CreateCaseRequest } from '@/types/api'
+import type { CaseDTO, CreateCaseRequest, SiteDTO, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
+const activeTab = ref<'list' | 'unresolved'>('list')
 const cases = ref<CaseDTO[]>([])
 const importDialogRef = ref<InstanceType<typeof ImportPreviewDialog>>()
 
@@ -431,8 +552,8 @@ function openImportDialog() {
   importDialogRef.value?.open()
 }
 
-async function handleCommitImport(file: File) {
-  return commitImportCases(file)
+async function handleCommitImport(file: File, includeDuplicateRows: number[]) {
+  return commitImportCases(file, includeDuplicateRows)
 }
 
 // 新增個案表單
@@ -448,15 +569,13 @@ const createForm = reactive<CreateCaseRequest>({
   claimStartDate: new Date().toISOString().split('T')[0],
   serviceCategory: 1,
   serviceUsageType: 2,
-  status: 'active'
+  status: 'active',
+  remarks: ''
 })
 
+// 除姓名外全部欄位選填：身分證字號、居住地、區域、起聘申報日不再是硬性阻擋條件
 const createRules = {
-  name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }],
-  nationalId: [{ required: true, message: '請輸入身分證字號', trigger: 'blur' }],
-  region: [{ required: true, message: '請選擇區域', trigger: 'change' }],
-  homeAddress: [{ required: true, message: '請輸入住家地址', trigger: 'blur' }],
-  claimStartDate: [{ required: true, message: '請選擇開始申報日', trigger: 'change' }]
+  name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }]
 }
 
 function openCreateDialog() {
@@ -466,6 +585,7 @@ function openCreateDialog() {
   createForm.homeAddress = ''
   createForm.region = 'miaoli'
   createForm.claimStartDate = new Date().toISOString().split('T')[0]
+  createForm.remarks = ''
   createDialogVisible.value = true
 }
 
@@ -485,6 +605,113 @@ async function handleCreateCase() {
   })
 }
 
+// 待補建關聯頁籤
+const unresolvedLoading = ref(false)
+const unresolvedCases = ref<CaseDTO[]>([])
+const availableSites = ref<SiteDTO[]>([])
+const availableVehicles = ref<VehicleDTO[]>([])
+
+async function fetchUnresolvedCases() {
+  unresolvedLoading.value = true
+  try {
+    const res = await listCases({ unresolvedLink: true, pageSize: 100 })
+    unresolvedCases.value = res.data
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入待補建關聯清單失敗'))
+  } finally {
+    unresolvedLoading.value = false
+  }
+}
+
+async function loadSitesAndVehicles() {
+  const [sitesRes, vehiclesRes] = await Promise.all([
+    listSites({ pageSize: 100 }),
+    listVehicles({ active: true, pageSize: 100 })
+  ])
+  availableSites.value = sitesRes.data
+  availableVehicles.value = vehiclesRes.data
+}
+
+type UnresolvedSlot = 'site' | 'outboundVehicle' | 'inboundVehicle'
+
+const SLOT_ID_FIELD: Record<UnresolvedSlot, 'siteId' | 'outboundVehicleId' | 'inboundVehicleId'> = {
+  site: 'siteId',
+  outboundVehicle: 'outboundVehicleId',
+  inboundVehicle: 'inboundVehicleId'
+}
+const SLOT_RAW_FIELD: Record<UnresolvedSlot, 'siteNameRaw' | 'outboundVehicleNameRaw' | 'inboundVehicleNameRaw'> = {
+  site: 'siteNameRaw',
+  outboundVehicle: 'outboundVehicleNameRaw',
+  inboundVehicle: 'inboundVehicleNameRaw'
+}
+
+// 只送出被關聯的那一個欄位 ID，其餘欄位省略以維持既有關聯不變（後端契約：未帶入=不變更）
+async function handleLinkSlot(row: CaseDTO, slot: UnresolvedSlot, entityId: string) {
+  if (!entityId) return
+  try {
+    await updateCaseTransportPreference(row.id, { [SLOT_ID_FIELD[slot]]: entityId })
+    ;(row as any)[SLOT_RAW_FIELD[slot]] = undefined
+    if (!row.siteNameRaw && !row.outboundVehicleNameRaw && !row.inboundVehicleNameRaw) {
+      unresolvedCases.value = unresolvedCases.value.filter((c) => c.id !== row.id)
+    }
+    ElMessage.success(`個案「${row.name}」已完成關聯`)
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新關聯失敗'))
+  }
+}
+
+// 新增據點/車輛快速建立彈窗
+const quickCreateVisible = ref(false)
+const quickCreateKind = ref<'site' | 'vehicle'>('site')
+const quickCreateSaving = ref(false)
+const quickCreateTargetCase = ref<CaseDTO | null>(null)
+const quickCreateSlot = ref<UnresolvedSlot>('site')
+const quickCreateSiteForm = reactive({ name: '', region: 'miaoli' as Region, address: '', openDays: [1, 2, 3, 4, 5] })
+const quickCreateVehicleForm = reactive({ plateNo: '', displayName: '', region: 'miaoli' as Region })
+
+function openQuickCreate(kind: 'site' | 'vehicle', row: CaseDTO, slot: UnresolvedSlot = 'site') {
+  quickCreateKind.value = kind
+  quickCreateTargetCase.value = row
+  quickCreateSlot.value = kind === 'site' ? 'site' : slot
+  quickCreateSiteForm.name = ''
+  quickCreateSiteForm.region = 'miaoli'
+  quickCreateSiteForm.address = ''
+  quickCreateVehicleForm.plateNo = ''
+  quickCreateVehicleForm.displayName = ''
+  quickCreateVehicleForm.region = 'miaoli'
+  quickCreateVisible.value = true
+}
+
+async function handleQuickCreateAndLink() {
+  if (!quickCreateTargetCase.value) return
+  quickCreateSaving.value = true
+  try {
+    if (quickCreateKind.value === 'site') {
+      const site = await createSite(quickCreateSiteForm)
+      availableSites.value.push(site)
+      await handleLinkSlot(quickCreateTargetCase.value, 'site', site.id)
+    } else {
+      const vehicle = await createVehicle(quickCreateVehicleForm)
+      availableVehicles.value.push(vehicle)
+      await handleLinkSlot(quickCreateTargetCase.value, quickCreateSlot.value, vehicle.id)
+    }
+    quickCreateVisible.value = false
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '新增並關聯失敗'))
+  } finally {
+    quickCreateSaving.value = false
+  }
+}
+
+// 待補建關聯頁籤首次切入時才拉取清單，避免一般個案清單頁多打一次 API
+let unresolvedLoaded = false
+async function handleTabChange(name: string | number) {
+  if (name === 'unresolved' && !unresolvedLoaded) {
+    unresolvedLoaded = true
+    await Promise.all([fetchUnresolvedCases(), loadSitesAndVehicles()])
+  }
+}
+
 // 初始載入
 executeFetch()
 </script>
@@ -493,6 +720,26 @@ executeFetch()
 .case-list-view {
   display: flex;
   flex-direction: column;
+}
+
+.case-tabs {
+  border-radius: 8px;
+}
+
+.unresolved-panel {
+  min-height: 120px;
+}
+
+.unresolved-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.unresolved-raw-name {
+  color: var(--el-color-warning);
+  font-size: 13px;
 }
 
 .inline-value,
