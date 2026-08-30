@@ -171,9 +171,9 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			careContactName := getIdxVal(careContactNameIdx)
 			registeredAddress := getVal("戶籍")
 			homeAddress := getVal("居住地")
-			remarks := getVal("REMARK")
+			remarks := getVal("備註")
 			if remarks == "" {
-				remarks = getVal("備註")
+				remarks = getVal("REMARK")
 			}
 
 			rowRes := CaseImportRowResult{

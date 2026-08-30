@@ -305,7 +305,7 @@
         <el-table-column prop="householdType" label="戶別" width="90" />
         <el-table-column prop="nationalId" label="身分證字號" width="120" />
         <el-table-column prop="gender" label="性別" width="60" />
-        <el-table-column prop="birthDate" label="生日" width="100" />
+        <el-table-column prop="birthDate" label="生日" width="100" :formatter="(row: any) => formatRocBirthDate(row.birthDate)" />
         <el-table-column prop="siteName" label="據點" width="110" />
         <el-table-column prop="outboundVehicle" label="去程車" width="100" />
         <el-table-column prop="inboundVehicle" label="回程車" width="100" />
@@ -469,6 +469,15 @@ import {
   type ServiceUsageType
 } from '@/types/domain'
 import type { CaseDTO, CreateCaseRequest, SiteDTO, VehicleDTO } from '@/types/api'
+
+// 匯入預覽的生日僅供人工核對，改用民國年顯示；後端仍以西元 ISO 日期解析與儲存
+function formatRocBirthDate(birthDate?: string): string {
+  if (!birthDate) return ''
+  const d = new Date(birthDate)
+  if (Number.isNaN(d.getTime())) return birthDate
+  const rocYear = d.getFullYear() - 1911
+  return `${String(rocYear).padStart(3, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+}
 
 const authStore = useAuthStore()
 const activeTab = ref<'list' | 'unresolved'>('list')

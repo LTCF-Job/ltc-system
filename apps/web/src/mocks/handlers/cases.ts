@@ -233,7 +233,7 @@ export const casesHandlers = [
         const careContactName = getIdxVal(row, careContactNameIdx)
         const registeredAddress = getVal(row, '戶籍')
         const homeAddress = getVal(row, '居住地')
-        const remarks = getVal(row, 'REMARK') || getVal(row, '備註')
+        const remarks = getVal(row, '備註') || getVal(row, 'REMARK')
 
         const rowErrors: string[] = []
         if (rawBirth && !birthDate) {
