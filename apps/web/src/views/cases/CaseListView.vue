@@ -56,23 +56,10 @@
 
       <!-- 操作按鈕列 -->
       <template #actions>
-        <el-dropdown
-          v-if="authStore.can('staff')"
-          trigger="click"
-          @command="(val: 'xlsx' | 'csv') => handleDownloadTemplate(val)"
-        >
-          <el-button type="info" plain>
-            <el-icon><Download /></el-icon>
-            下載匯入範本
-            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="xlsx">標準 Excel 範本 (.xlsx)</el-dropdown-item>
-              <el-dropdown-item command="csv">標準 CSV 範本 (.csv)</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <el-button v-if="authStore.can('staff')" type="info" plain @click="handleDownloadTemplate">
+          <el-icon><Download /></el-icon>
+          下載匯入範本
+        </el-button>
 
         <el-button
           v-if="authStore.can('staff')"
@@ -313,11 +300,11 @@
     <!-- 批次匯入彈窗 -->
     <ImportPreviewDialog
       ref="importDialogRef"
-      title="批次匯入個案 (個案新增資料.xlsx / .csv)"
+      title="批次匯入個案 (個案新增資料.xlsx)"
       :on-dry-run="dryRunImportCases"
       :on-commit="handleCommitImport"
       :on-download-template="handleDownloadTemplate"
-      @success="executeFetch"
+      @success="handleImportSuccess"
     >
       <template #columns="{ checkedDuplicateRows, toggleDuplicateRow }">
         <el-table-column prop="name" label="姓名" width="100" />
@@ -534,12 +521,11 @@ async function handleDeleteCase(row: CaseDTO) {
 }
 
 // 下載匯入範本
-async function handleDownloadTemplate(format: any = 'xlsx') {
+async function handleDownloadTemplate() {
   try {
-    const safeFormat: 'xlsx' | 'csv' = typeof format === 'string' && format.toLowerCase() === 'csv' ? 'csv' : 'xlsx'
-    const blob = await downloadCaseImportTemplate(safeFormat)
-    downloadBlob(blob, `個案批次匯入範本.${safeFormat}`)
-    ElMessage.success(`個案匯入範本 (.${safeFormat}) 下載成功`)
+    const blob = await downloadCaseImportTemplate()
+    downloadBlob(blob, '個案批次匯入範本.xlsx')
+    ElMessage.success('個案匯入範本 (.xlsx) 下載成功')
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載範本失敗'))
   }
@@ -561,6 +547,27 @@ function openImportDialog() {
 
 async function handleCommitImport(file: File, includeDuplicateRows: number[]) {
   return commitImportCases(file, includeDuplicateRows)
+}
+
+// 匯入完成後，若有據點/車輛待補建關聯，導引使用者前往「待補建關聯」頁籤處理；
+// 無論點選哪個按鈕都視為使用者已確認匯入結果，一併關閉匯入視窗
+function handleImportSuccess() {
+  executeFetch()
+  ElMessageBox.confirm(
+    '本次匯入若有據點或去回程車輛未比對到既有主檔，已建立資料並列入「待補建關聯」頁籤，是否立即前往查看？',
+    '匯入完成',
+    { confirmButtonText: '前往待補建關聯', cancelButtonText: '稍後再說', type: 'info' }
+  )
+    .then(() => {
+      activeTab.value = 'unresolved'
+      unresolvedLoaded = true
+      fetchUnresolvedCases()
+      loadSitesAndVehicles()
+    })
+    .catch(() => {})
+    .finally(() => {
+      importDialogRef.value?.close()
+    })
 }
 
 // 新增個案表單
@@ -676,15 +683,16 @@ const quickCreateSlot = ref<UnresolvedSlot>('site')
 const quickCreateSiteForm = reactive({ name: '', region: 'miaoli' as Region, address: '', openDays: [1, 2, 3, 4, 5] })
 const quickCreateVehicleForm = reactive({ plateNo: '', displayName: '', region: 'miaoli' as Region })
 
+// 據點/車輛名稱預先帶入匯入時的原始名稱，使用者只需確認其餘欄位即可送出，不必重打一次名稱
 function openQuickCreate(kind: 'site' | 'vehicle', row: CaseDTO, slot: UnresolvedSlot = 'site') {
   quickCreateKind.value = kind
   quickCreateTargetCase.value = row
   quickCreateSlot.value = kind === 'site' ? 'site' : slot
-  quickCreateSiteForm.name = ''
+  quickCreateSiteForm.name = kind === 'site' ? row.siteNameRaw || '' : ''
   quickCreateSiteForm.region = 'miaoli'
   quickCreateSiteForm.address = ''
   quickCreateVehicleForm.plateNo = ''
-  quickCreateVehicleForm.displayName = ''
+  quickCreateVehicleForm.displayName = kind === 'vehicle' ? row[SLOT_RAW_FIELD[slot]] || '' : ''
   quickCreateVehicleForm.region = 'miaoli'
   quickCreateVisible.value = true
 }

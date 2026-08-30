@@ -44,9 +44,13 @@ export async function dryRunImportCaregivers(file: File): Promise<DryRunImportRe
   })
 }
 
-export async function commitImportCaregivers(file: File): Promise<CaregiverImportCommitResult> {
+export async function commitImportCaregivers(
+  file: File,
+  includeDuplicateRows: number[] = []
+): Promise<CaregiverImportCommitResult> {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('includeDuplicateRows', JSON.stringify(includeDuplicateRows))
   return apiClient.post('/caregivers/import?dryRun=false', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })

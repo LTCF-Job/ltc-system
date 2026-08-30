@@ -40,16 +40,16 @@
         :auto-upload="false"
         :limit="1"
         :on-change="handleFileChange"
-        accept=".xlsx,.xls,.csv"
+        accept=".xlsx,.xls"
         style="width: 100%; margin-top: 16px;"
       >
         <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
         <div class="el-upload__text">
-          拖曳 Excel / CSV 檔案至此，或 <em>點選上傳</em>
+          拖曳 Excel 檔案至此，或 <em>點選上傳</em>
         </div>
         <template #tip>
           <div class="el-upload__tip">
-            支援 .xlsx、.xls 與 .csv 格式之批次匯入檔案
+            僅支援 .xlsx、.xls 格式之批次匯入檔案
           </div>
         </template>
       </el-upload>
@@ -134,7 +134,7 @@
           :loading="submitting"
           @click="confirmImport"
         >
-          匯入有效資料 ({{ dryRunResult.validRows }} 筆)
+          匯入 ({{ dryRunResult.validRows }} 筆)
         </el-button>
       </div>
 
@@ -269,8 +269,15 @@ function handleClose(done: () => void) {
   done()
 }
 
+// 供外部在「匯入完成」提示視窗完成互動後一併關閉本匯入視窗
+function close() {
+  resetToUpload()
+  visible.value = false
+}
+
 defineExpose({
-  open
+  open,
+  close
 })
 </script>
 

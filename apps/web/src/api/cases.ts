@@ -68,11 +68,8 @@ export async function updateCaseTransportPreference(
   return res?.data ?? res
 }
 
-export async function downloadCaseImportTemplate(format: 'xlsx' | 'csv' = 'xlsx'): Promise<Blob> {
-  return apiClient.get('/cases/template', {
-    params: { format },
-    responseType: 'blob'
-  })
+export async function downloadCaseImportTemplate(): Promise<Blob> {
+  return apiClient.get('/cases/template', { responseType: 'blob' })
 }
 
 export async function exportCaseProfileWorkbook(): Promise<Blob> {

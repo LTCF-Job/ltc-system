@@ -166,18 +166,32 @@
     <!-- 批次匯入彈窗 -->
     <ImportPreviewDialog
       ref="importDialogRef"
-      title="批次匯入照護人員 (單位/姓名/聯絡方式/備註.xlsx / .csv)"
+      title="批次匯入照護人員 (類型/單位/姓名/聯絡方式/備註.xlsx)"
       :on-dry-run="handleDryRun"
       :on-commit="handleCommitImport"
       :on-download-template="handleDownloadTemplate"
       @success="handleImportSuccess"
     >
-      <template #columns>
+      <template #columns="{ checkedDuplicateRows, toggleDuplicateRow }">
         <el-table-column prop="type" label="類型" width="80" />
         <el-table-column prop="siteName" label="單位" width="140" />
         <el-table-column prop="name" label="姓名" width="110" />
         <el-table-column prop="contact" label="聯絡方式" width="140" />
         <el-table-column prop="notes" label="備註" min-width="160" show-overflow-tooltip />
+        <el-table-column label="重複人員" width="150" align="center">
+          <template #default="{ row, $index }">
+            <template v-if="row.isDuplicate">
+              <el-tooltip :content="`與既有照護人員「${row.duplicateOf?.name ?? '未知'}」疑似重複`" placement="top">
+                <el-checkbox
+                  :model-value="checkedDuplicateRows.has(row.rowIndex ?? $index)"
+                  label="仍要匯入"
+                  @change="(val: string | number | boolean) => toggleDuplicateRow(row.rowIndex ?? $index, !!val)"
+                />
+              </el-tooltip>
+            </template>
+            <span v-else class="empty-value">-</span>
+          </template>
+        </el-table-column>
       </template>
     </ImportPreviewDialog>
 
@@ -306,8 +320,8 @@ async function handleDryRun(file: File): Promise<any> {
   }
 }
 
-async function handleCommitImport(file: File): Promise<any> {
-  const result: any = await commitImportCaregivers(file)
+async function handleCommitImport(file: File, includeDuplicateRows: number[]): Promise<any> {
+  const result: any = await commitImportCaregivers(file, includeDuplicateRows)
   return {
     importedCount: result.importedCount,
     skippedRows: (result.skippedRows || []).map((row: any) => ({ rowIndex: row.rowIndex, caseName: row.name, reasons: row.reasons })),
@@ -315,7 +329,8 @@ async function handleCommitImport(file: File): Promise<any> {
   }
 }
 
-// 匯入完成後，若有單位待關聯或資料待補齊的提示，導引使用者前往「待維護」頁籤處理
+// 匯入完成後，若有單位待關聯或資料待補齊的提示，導引使用者前往「待維護」頁籤處理；
+// 無論點選哪個按鈕都視為使用者已確認匯入結果，一併關閉匯入視窗
 function handleImportSuccess() {
   executeFetch()
   ElMessageBox.confirm(
@@ -329,6 +344,9 @@ function handleImportSuccess() {
       fetchPending()
     })
     .catch(() => {})
+    .finally(() => {
+      importDialogRef.value?.close()
+    })
 }
 
 // 依 siteId／contact／notes 是否有值，列出該筆照護人員缺少的欄位
@@ -470,9 +488,10 @@ const quickCreateSiteSaving = ref(false)
 const quickCreateTarget = ref<CaregiverDTO | null>(null)
 const quickCreateSiteForm = reactive({ name: '', region: 'miaoli' as Region, address: '', openDays: [1, 2, 3, 4, 5] })
 
+// 據點名稱預先帶入匯入時的原始名稱，使用者只需確認區域與地址即可送出，不必重打一次名稱
 function openQuickCreateSite(row: CaregiverDTO) {
   quickCreateTarget.value = row
-  quickCreateSiteForm.name = ''
+  quickCreateSiteForm.name = row.siteNameRaw || ''
   quickCreateSiteForm.region = 'miaoli'
   quickCreateSiteForm.address = ''
   quickCreateSiteVisible.value = true
