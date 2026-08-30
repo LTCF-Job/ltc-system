@@ -54,11 +54,6 @@
               </el-form-item>
             </el-col>
             <el-col :xs="24" :sm="12" :lg="6">
-              <el-form-item label="聯絡電話" prop="phone">
-                <el-input v-model="editForm.phone" placeholder="如：0912345678" />
-              </el-form-item>
-            </el-col>
-            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="申報地區" prop="region">
                 <el-select v-model="editForm.region" filterable style="width: 100%">
                   <el-option
@@ -111,16 +106,6 @@
           </el-row>
 
           <el-row :gutter="20">
-            <el-col :xs="24" :lg="12">
-              <el-form-item label="開始申報日" prop="claimStartDate">
-                <el-date-picker
-                  v-model="editForm.claimStartDate"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
             <el-col :xs="24" :lg="12">
               <el-form-item label="結束申報日">
                 <el-date-picker
@@ -288,12 +273,10 @@ const availableVehicles = ref<VehicleDTO[]>([])
 
 const editForm = reactive<UpdateCaseRequest>({
   name: '',
-  phone: '',
   region: 'miaoli',
   homeAddress: '',
   serviceCategory: 1,
   serviceUsageType: 2,
-  claimStartDate: '',
   claimEndDate: '',
   status: 'active',
   householdType: '',
@@ -335,12 +318,10 @@ async function fetchDetail() {
 
     caseData.value = res
     editForm.name = res.name || ''
-    editForm.phone = res.phone || ''
     editForm.region = res.region || 'miaoli'
     editForm.homeAddress = res.homeAddress || ''
     editForm.serviceCategory = res.serviceCategory || 1
     editForm.serviceUsageType = res.serviceUsageType || 2
-    editForm.claimStartDate = res.claimStartDate ? String(res.claimStartDate).slice(0, 10) : ''
     editForm.claimEndDate = res.claimEndDate ? String(res.claimEndDate).slice(0, 10) : ''
     editForm.status = res.status || 'active'
     editForm.householdType = res.householdType || ''

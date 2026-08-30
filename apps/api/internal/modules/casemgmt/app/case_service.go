@@ -62,7 +62,6 @@ type CreateCaseRequest struct {
 	LTCLevel          *string
 	ServiceCategory   int
 	ServiceUsageType  int
-	ClaimStartDate    *time.Time
 	ClaimEndDate      *time.Time
 	Status            string
 	Remarks           *string
@@ -119,7 +118,6 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 		LTCLevel:          req.LTCLevel,
 		ServiceCategory:   req.ServiceCategory,
 		ServiceUsageType:  req.ServiceUsageType,
-		ClaimStartDate:    req.ClaimStartDate,
 		ClaimEndDate:      req.ClaimEndDate,
 		Status:            req.Status,
 		Remarks:           req.Remarks,

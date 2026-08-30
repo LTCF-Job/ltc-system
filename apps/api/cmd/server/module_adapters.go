@@ -79,7 +79,7 @@ func (a taskScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year
 		}
 		out = append(out, taskapp.ActiveSchedule{
 			CaseID: s.CaseID, CaseCode: s.CaseCode, CaseName: s.CaseName, Region: s.Region,
-			ClaimStartDate: s.ClaimStartDate, ClaimEndDate: s.ClaimEndDate, SiteID: s.SiteID,
+			ClaimEndDate: s.ClaimEndDate, SiteID: s.SiteID,
 			SiteOpenDays: s.SiteOpenDays, EffectiveFrom: s.EffectiveFrom, EffectiveTo: s.EffectiveTo,
 			Weekdays: s.Weekdays, TripPattern: s.TripPattern, Legs: legs,
 		})
@@ -164,7 +164,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
-		ClaimStartDate: in.ClaimStartDate, ServiceCategory: in.ServiceCategory,
+		ServiceCategory: in.ServiceCategory,
 		ServiceUsageType: in.ServiceUsageType, Status: in.Status, Remarks: in.Remarks,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {

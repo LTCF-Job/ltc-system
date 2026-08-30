@@ -24,10 +24,6 @@ export const casesHandlers = [
           c.name.toLowerCase().includes(keyword) ||
           c.code.toLowerCase().includes(keyword) ||
           (c.nationalId ?? '').toLowerCase().includes(keyword) ||
-          (c.phone && (
-            c.phone.toLowerCase().includes(keyword) ||
-            c.phone.replace(/[-\s]/g, '').includes(keyword.replace(/[-\s]/g, ''))
-          )) ||
           (c.homeAddress && c.homeAddress.toLowerCase().includes(keyword))
       )
     }
@@ -86,7 +82,6 @@ export const casesHandlers = [
       region: body.region,
       serviceCategory: body.serviceCategory,
       serviceUsageType: body.serviceUsageType,
-      claimStartDate: body.claimStartDate,
       status: body.status || 'active',
       remarks: body.remarks,
       createdAt: new Date().toISOString().split('T')[0],

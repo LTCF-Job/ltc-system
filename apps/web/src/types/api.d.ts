@@ -179,13 +179,11 @@ export interface CaseDTO {
   name: string
   nameNormalized?: string
   nationalId?: string
-  phone?: string
   homeAddress?: string
   region?: Region
   ltcLevel?: string
   serviceCategory: ServiceCategory
   serviceUsageType: ServiceUsageType
-  claimStartDate?: string
   claimEndDate?: string
   status: CaseStatus
   householdType?: string
@@ -212,13 +210,11 @@ export interface CaseDTO {
 export interface CreateCaseRequest {
   name: string
   nationalId?: string
-  phone?: string
   homeAddress?: string
   region?: Region
   ltcLevel?: string
   serviceCategory: ServiceCategory
   serviceUsageType: ServiceUsageType
-  claimStartDate?: string
   claimEndDate?: string
   status?: CaseStatus
   householdType?: string

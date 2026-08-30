@@ -32,7 +32,6 @@ type Case struct {
 	LTCLevel          *string
 	ServiceCategory   int
 	ServiceUsageType  int
-	ClaimStartDate    *time.Time
 	ClaimEndDate      *time.Time
 	Status            string
 	Remarks           *string
@@ -81,7 +80,6 @@ type ActiveCaseScheduleInfo struct {
 	CaseCode       string
 	CaseName       string
 	Region         string
-	ClaimStartDate time.Time
 	ClaimEndDate   *time.Time
 	SiteID         uuid.UUID
 	SiteOpenDays   []int16

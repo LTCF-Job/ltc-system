@@ -167,7 +167,6 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		LTCLevel          *string `json:"ltcLevel"`
 		ServiceCategory   *int    `json:"serviceCategory"`
 		ServiceUsageType  *int    `json:"serviceUsageType"`
-		ClaimStartDate    *string `json:"claimStartDate"`
 		ClaimEndDate      *string `json:"claimEndDate"`
 		Status            *string `json:"status"`
 		HouseholdType     *string `json:"householdType"`

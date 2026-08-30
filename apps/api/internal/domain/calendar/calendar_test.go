@@ -11,11 +11,10 @@ import (
 func TestCalculateExpectedRides(t *testing.T) {
 	caseID := uuid.New()
 	input := CaseScheduleCalendarInput{
-		CaseID:         caseID,
-		ClaimStartDate: time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC), // 7/10 開始申報 (R8)
-		EffectiveFrom:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-		Weekdays:       []int16{1, 2, 3, 4, 5},
-		SiteOpenDays:   []int16{1, 2, 3, 4, 5},
+		CaseID:        caseID,
+		EffectiveFrom: time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC), // 7/10 排班生效
+		Weekdays:      []int16{1, 2, 3, 4, 5},
+		SiteOpenDays:  []int16{1, 2, 3, 4, 5},
 		Holidays: map[string]bool{
 			"2026-07-15": true, // 假設 7/15 停駛
 		},
@@ -30,7 +29,7 @@ func TestCalculateExpectedRides(t *testing.T) {
 
 	for _, r := range rides {
 		// 必須 >= 2026-07-10
-		assert.False(t, r.ServiceDate.Before(input.ClaimStartDate))
+		assert.False(t, r.ServiceDate.Before(input.EffectiveFrom))
 		// 不應包含 7/15
 		assert.NotEqual(t, "2026-07-15", r.ServiceDate.Format("2006-01-02"))
 	}
@@ -47,7 +46,6 @@ func TestCalculateExpectedRides_PriorityOrder(t *testing.T) {
 
 	input := CaseScheduleCalendarInput{
 		CaseID:         caseID,
-		ClaimStartDate: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		EffectiveFrom:  time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		Weekdays:       []int16{1, 2, 3, 4, 5},
 		SiteOpenDays:   []int16{1, 2, 3, 4, 5},

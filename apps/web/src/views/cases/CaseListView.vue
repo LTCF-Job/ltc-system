@@ -96,11 +96,6 @@
               <span class="font-mono">{{ row.nationalId || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="phone" label="聯絡電話" width="130" align="center">
-            <template #default="{ row }">
-              <span>{{ row.phone || '-' }}</span>
-            </template>
-          </el-table-column>
           <el-table-column prop="region" label="區域" width="115" align="center">
             <template #default="{ row }">
               <el-dropdown
@@ -159,7 +154,6 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="claimStartDate" label="起聘申報日" width="115" align="center" />
           <el-table-column prop="serviceUsageType" label="服務使用類型" width="170" align="center">
             <template #default="{ row }">
               <span>{{ SERVICE_USAGE_TYPE_LABELS[row.serviceUsageType as ServiceUsageType] || '-' }}</span>
@@ -349,9 +343,6 @@
         <el-form-item label="身分證字號" prop="nationalId">
           <el-input v-model="createForm.nationalId" placeholder="1 碼英文字母 + 9 碼數字" />
         </el-form-item>
-        <el-form-item label="聯絡電話" prop="phone">
-          <el-input v-model="createForm.phone" placeholder="如：0912345678" />
-        </el-form-item>
         <el-form-item label="申報區域" prop="region">
           <el-select
             v-model="createForm.region"
@@ -369,14 +360,6 @@
         </el-form-item>
         <el-form-item label="住家地址" prop="homeAddress">
           <el-input v-model="createForm.homeAddress" placeholder="請輸入住家地址" />
-        </el-form-item>
-        <el-form-item label="開始申報日" prop="claimStartDate">
-          <el-date-picker
-            v-model="createForm.claimStartDate"
-            type="date"
-            placeholder="選擇申報日期"
-            value-format="YYYY-MM-DD"
-          />
         </el-form-item>
         <el-form-item label="服務類別" prop="serviceCategory">
           <el-radio-group v-model="createForm.serviceCategory">
@@ -577,17 +560,15 @@ const createFormRef = ref<FormInstance>()
 const createForm = reactive<CreateCaseRequest>({
   name: '',
   nationalId: '',
-  phone: '',
   region: 'miaoli',
   homeAddress: '',
-  claimStartDate: new Date().toISOString().split('T')[0],
   serviceCategory: 1,
   serviceUsageType: 2,
   status: 'active',
   remarks: ''
 })
 
-// 除姓名外全部欄位選填：身分證字號、居住地、區域、起聘申報日不再是硬性阻擋條件
+// 除姓名外全部欄位選填：身分證字號、居住地、區域不再是硬性阻擋條件
 const createRules = {
   name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }]
 }
@@ -595,10 +576,8 @@ const createRules = {
 function openCreateDialog() {
   createForm.name = ''
   createForm.nationalId = ''
-  createForm.phone = ''
   createForm.homeAddress = ''
   createForm.region = 'miaoli'
-  createForm.claimStartDate = new Date().toISOString().split('T')[0]
   createForm.remarks = ''
   createDialogVisible.value = true
 }

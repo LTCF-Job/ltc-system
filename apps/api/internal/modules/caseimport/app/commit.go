@@ -80,12 +80,6 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 				caseReq.BirthDate = &birthDate
 			}
 		}
-		if row.ClaimStartDate != "" {
-			if claimStart, err := time.Parse("2006-01-02", row.ClaimStartDate); err == nil {
-				caseReq.ClaimStartDate = &claimStart
-			}
-		}
-
 		// 據點／去回程車輛各自獨立比對：比對到則寫入 ID，比對不到但有填名稱則保留
 		// 原始名稱待人工關聯，兩種情況都不影響個案主檔本身的建立。
 		siteID, siteNameRaw, siteWarning := s.resolveSite(ctx, row.SiteName)
