@@ -22,15 +22,23 @@ type Site struct {
 	UpdatedAt time.Time
 }
 
-// Vehicle 代表一輛接送車輛。
+// Vehicle 代表一輛接送車輛。Drivers 是該車目前生效的司機，同一台車可以有多位。
 type Vehicle struct {
 	ID          uuid.UUID
 	PlateNo     string
 	DisplayName string
 	Region      string
 	Status      string
+	Drivers     []VehicleDriver
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+// VehicleDriver 是掛在車輛上的司機摘要，只帶識別用欄位。
+type VehicleDriver struct {
+	ID   uuid.UUID
+	Code string
+	Name string
 }
 
 // Driver 代表一位司機。NationalIDCipher 是身分證密文，只在 Reveal 用例中解密，
@@ -50,7 +58,8 @@ type Driver struct {
 	UpdatedAt        time.Time
 }
 
-// DriverAssignment 代表司機與車輛在一段期間內的指派關係。
+// DriverAssignment 代表司機與車輛在一段期間內的指派關係。一位司機同期只會有一台車，
+// 因此不再區分主要與備援車輛。
 type DriverAssignment struct {
 	ID             uuid.UUID
 	DriverID       uuid.UUID
@@ -58,7 +67,6 @@ type DriverAssignment struct {
 	VehicleID      uuid.UUID
 	VehicleName    string
 	VehiclePlateNo string
-	IsPrimary      bool
 	EffectiveFrom  time.Time
 	EffectiveTo    *time.Time
 	CreatedAt      time.Time

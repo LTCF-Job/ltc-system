@@ -1,6 +1,13 @@
 import { http, HttpResponse } from 'msw'
 import { mockRegions, mockSites, mockVehicles, mockDrivers } from '../data/mockData'
 
+// 車輛的司機由 driver_assignments 反查，與後端 GET /vehicles 帶出 drivers 的契約一致
+function driversOfVehicle(vehicleId: string) {
+  return mockDrivers
+    .filter((d) => (d.assignments || []).some((a) => a.vehicleId === vehicleId))
+    .map((d) => ({ id: d.id, code: d.code, name: d.name }))
+}
+
 export const mastersHandlers = [
   // 區域主檔
   http.get('/api/v1/regions', ({ request }) => {
@@ -141,7 +148,40 @@ export const mastersHandlers = [
       filtered = filtered.filter((v) => v.active === active)
     }
 
-    return HttpResponse.json({ data: filtered, meta: { total: filtered.length } })
+    const withDrivers = filtered.map((v) => ({ ...v, drivers: driversOfVehicle(v.id) }))
+    return HttpResponse.json({ data: withDrivers, meta: { total: withDrivers.length } })
+  }),
+
+  http.put('/api/v1/vehicles/:id/drivers', async ({ params, request }) => {
+    const vehicleId = params.id as string
+    const vehicle = mockVehicles.find((v) => v.id === vehicleId)
+    if (!vehicle) return new HttpResponse(null, { status: 404 })
+
+    const body = (await request.json()) as { driverIds?: string[]; effectiveFrom?: string }
+    const driverIds = body.driverIds || []
+    const startDate = body.effectiveFrom || new Date().toISOString().split('T')[0]
+
+    mockDrivers.forEach((d) => {
+      const keptElsewhere = (d.assignments || []).filter((a) => a.vehicleId !== vehicleId)
+      if (driverIds.includes(d.id)) {
+        // 一位司機同期只有一台車：掛到本車時，其他車的指派一併收掉
+        d.assignments = [
+          {
+            id: `asgn_${vehicleId}_${d.id}`,
+            driverId: d.id,
+            vehicleId,
+            vehicleName: vehicle.displayName,
+            vehiclePlateNo: vehicle.plateNo,
+            plateNo: vehicle.plateNo,
+            startDate
+          }
+        ]
+      } else {
+        d.assignments = keptElsewhere
+      }
+    })
+
+    return HttpResponse.json({ vehicleId, driverIds })
   }),
 
   http.post('/api/v1/vehicles', async ({ request }) => {
@@ -225,6 +265,7 @@ export const mastersHandlers = [
     if (!d) return new HttpResponse(null, { status: 404 })
     const body = (await request.json()) as any
     const veh = mockVehicles.find((v) => v.id === body.vehicleId)
+    // 一位司機同期只有一台車，指派新車即取代原本的指派
     d.assignments = [
       {
         id: `asgn_${Date.now()}`,
@@ -234,8 +275,7 @@ export const mastersHandlers = [
         vehiclePlateNo: veh?.plateNo,
         plateNo: veh?.plateNo,
         startDate: body.startDate,
-        endDate: body.endDate,
-        isPrimary: body.isPrimary
+        endDate: body.endDate
       }
     ]
     return HttpResponse.json({ success: true })

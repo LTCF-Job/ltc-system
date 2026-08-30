@@ -123,7 +123,7 @@ func main() {
 	mdAudit := masterdataAuditWriter{svc: auditSvc}
 	regionSvc := masterapp.NewRegionService(mdRegionRepo, mdAudit)
 	siteSvc := masterapp.NewSiteService(mdSiteRepo)
-	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo)
+	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo)
 	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg)
 	txRunner := pgxdb.NewTxRunner(pool)
 	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer())

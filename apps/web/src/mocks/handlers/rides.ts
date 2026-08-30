@@ -1,6 +1,11 @@
 import { http, HttpResponse } from 'msw'
 import { mockCases, mockMissingRides, mockIssueRides, mockVehicles, mockDrivers, mockAuditLogs } from '../data/mockData'
 
+// 車輛目前的司機由 driver_assignments 反查，一台車可能有多位
+function driversOfVehicle(vehicleId: string) {
+  return mockDrivers.filter((d) => (d.assignments || []).some((a) => a.vehicleId === vehicleId))
+}
+
 // 記憶體內儲存更正或補登後的搭乘紀錄狀態
 export interface RideOverride {
   id?: string
@@ -271,17 +276,13 @@ export const ridesHandlers = [
               const rideId = `ride_${c.id}_${dateKey}_${leg.legSeq}`
               const override = findRideOverride(c.id, dateKey, leg.legSeq, rideId)
 
-              const defaultDriverName = leg.vehicleName?.includes('竹北一')
-                ? '郭澤威'
-                : (leg.vehicleName?.includes('竹北二')
-                  ? '林志豪'
-                  : (leg.vehicleName?.includes('竹南1')
-                    ? '曾建宏'
-                    : (leg.vehicleName?.includes('苗栗')
-                      ? '吳秀珠'
-                      : '陳國華')))
-              const defaultDriver = mockDrivers.find((d) => d.name === defaultDriverName)
-              const defaultDriverId = defaultDriver ? defaultDriver.id : undefined
+              // 一台車可能有多位司機，展示資料以日期輪替呈現輪班，實際承載司機仍以回報或人工更正為準
+              const vehicleDrivers = leg.vehicleId ? driversOfVehicle(leg.vehicleId) : []
+              const defaultDriver = vehicleDrivers.length > 0
+                ? vehicleDrivers[day % vehicleDrivers.length]
+                : undefined
+              const defaultDriverName = defaultDriver?.name
+              const defaultDriverId = defaultDriver?.id
 
               const effectiveStatus = override?.effectiveStatus ?? baseEffectiveStatus
               const hasConflict = override?.hasConflict ?? legConflict

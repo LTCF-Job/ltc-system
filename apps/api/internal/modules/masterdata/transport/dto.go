@@ -71,22 +71,35 @@ type UpdateSiteRequest struct {
 
 // VehicleResponse 代表回傳給前端的車輛資料。
 type VehicleResponse struct {
-	ID          uuid.UUID `json:"id"`
-	PlateNo     string    `json:"plateNo"`
-	DisplayName string    `json:"displayName"`
-	Region      string    `json:"region"`
-	Status      string    `json:"status"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID          uuid.UUID            `json:"id"`
+	PlateNo     string               `json:"plateNo"`
+	DisplayName string               `json:"displayName"`
+	Region      string               `json:"region"`
+	Status      string               `json:"status"`
+	Drivers     []VehicleDriverBrief `json:"drivers"`
+	CreatedAt   time.Time            `json:"createdAt"`
+	UpdatedAt   time.Time            `json:"updatedAt"`
+}
+
+// VehicleDriverBrief 代表掛在車輛上的司機摘要。
+type VehicleDriverBrief struct {
+	ID   uuid.UUID `json:"id"`
+	Code string    `json:"code"`
+	Name string    `json:"name"`
 }
 
 func newVehicleResponse(v app.Vehicle) VehicleResponse {
+	drivers := make([]VehicleDriverBrief, 0, len(v.Drivers))
+	for _, d := range v.Drivers {
+		drivers = append(drivers, VehicleDriverBrief{ID: d.ID, Code: d.Code, Name: d.Name})
+	}
 	return VehicleResponse{
 		ID:          v.ID,
 		PlateNo:     v.PlateNo,
 		DisplayName: v.DisplayName,
 		Region:      v.Region,
 		Status:      v.Status,
+		Drivers:     drivers,
 		CreatedAt:   v.CreatedAt,
 		UpdatedAt:   v.UpdatedAt,
 	}
@@ -167,7 +180,6 @@ type DriverAssignmentResponse struct {
 	VehicleID      uuid.UUID  `json:"vehicleId"`
 	VehicleName    string     `json:"vehicleName,omitempty"`
 	VehiclePlateNo string     `json:"vehiclePlateNo,omitempty"`
-	IsPrimary      bool       `json:"isPrimary"`
 	EffectiveFrom  time.Time  `json:"effectiveFrom"`
 	EffectiveTo    *time.Time `json:"effectiveTo,omitempty"`
 	CreatedAt      time.Time  `json:"createdAt"`
@@ -181,7 +193,6 @@ func newDriverAssignmentResponse(a app.DriverAssignment) DriverAssignmentRespons
 		VehicleID:      a.VehicleID,
 		VehicleName:    a.VehicleName,
 		VehiclePlateNo: a.VehiclePlateNo,
-		IsPrimary:      a.IsPrimary,
 		EffectiveFrom:  a.EffectiveFrom,
 		EffectiveTo:    a.EffectiveTo,
 		CreatedAt:      a.CreatedAt,
@@ -208,9 +219,14 @@ type UpdateDriverRequest struct {
 // AssignVehicleRequest 代表指派司機車輛請求。
 type AssignVehicleRequest struct {
 	VehicleID     uuid.UUID  `json:"vehicleId" binding:"required"`
-	IsPrimary     bool       `json:"isPrimary"`
 	EffectiveFrom time.Time  `json:"effectiveFrom" binding:"required"`
 	EffectiveTo   *time.Time `json:"effectiveTo"`
+}
+
+// SetVehicleDriversRequest 代表整批設定車輛司機的請求。DriverIDs 為空代表清空該車司機。
+type SetVehicleDriversRequest struct {
+	DriverIDs     []uuid.UUID `json:"driverIds"`
+	EffectiveFrom *time.Time  `json:"effectiveFrom"`
 }
 
 // RegionResponse 代表回傳給前端的區域資料。

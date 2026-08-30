@@ -135,7 +135,6 @@ func (h *DriverHandler) AssignVehicle(c *gin.Context) {
 
 	assignment, err := h.svc.AssignVehicle(c.Request.Context(), driverID, app.AssignVehicleInput{
 		VehicleID:     req.VehicleID,
-		IsPrimary:     req.IsPrimary,
 		EffectiveFrom: req.EffectiveFrom,
 		EffectiveTo:   req.EffectiveTo,
 	})

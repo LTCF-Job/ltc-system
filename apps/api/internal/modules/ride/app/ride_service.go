@@ -193,14 +193,15 @@ func (s *RideService) recalculateRideRecord(
 		}
 	}
 
-	// 查詢當日排班設定預設車輛與主要司機
+	// 查詢當日排班設定預設車輛與司機
 	sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, serviceDate)
 	if sched != nil {
 		for _, l := range sched.Legs {
 			if l.LegSeq == legSeq && l.VehicleID != nil {
 				defaultVehicleID = *l.VehicleID
-				if primaryDriver, _ := s.driverRepo.GetPrimaryDriverForVehicleOnDate(ctx, defaultVehicleID, serviceDate); primaryDriver != nil {
-					defaultDriverID = &primaryDriver.ID
+				// 一台車當日可能有多位司機，無從判斷是誰出車時留空由人工指定
+				if drivers, _ := s.driverRepo.ListDriversForVehicleOnDate(ctx, defaultVehicleID, serviceDate); len(drivers) == 1 {
+					defaultDriverID = &drivers[0].ID
 				}
 				break
 			}

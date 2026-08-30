@@ -120,6 +120,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 		apiV1.GET("/vehicles", auth.RequireRoles("viewer", "staff", "admin"), h.vehicle.List)
 		apiV1.POST("/vehicles", auth.RequireRoles("staff", "admin"), h.vehicle.Create)
 		apiV1.PATCH("/vehicles/:id", auth.RequireRoles("staff", "admin"), h.vehicle.Update)
+		apiV1.PUT("/vehicles/:id/drivers", auth.RequireRoles("staff", "admin"), h.vehicle.SetDrivers)
 
 		// 4. 司機主檔
 		apiV1.GET("/drivers", auth.RequireRoles("viewer", "staff", "admin"), h.driver.List)

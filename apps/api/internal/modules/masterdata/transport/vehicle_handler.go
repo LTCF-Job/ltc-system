@@ -3,6 +3,7 @@ package transport
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -86,4 +87,32 @@ func (h *VehicleHandler) Update(c *gin.Context) {
 	}
 
 	httpx.RespondSuccess(c, http.StatusOK, newVehicleResponse(*v), nil)
+}
+
+// SetDrivers 整批設定車輛目前的司機。一位司機同期只會有一台車，被指派到本車時
+// 其他車上尚未結束的指派會一併收掉。
+func (h *VehicleHandler) SetDrivers(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		respondInvalidID(c, "無效的車輛 ID")
+		return
+	}
+
+	var req SetVehicleDriversRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	effectiveFrom := time.Now()
+	if req.EffectiveFrom != nil {
+		effectiveFrom = *req.EffectiveFrom
+	}
+
+	if err := h.svc.SetDrivers(c.Request.Context(), id, req.DriverIDs, effectiveFrom); err != nil {
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"vehicleId": id, "driverIds": req.DriverIDs}, nil)
 }

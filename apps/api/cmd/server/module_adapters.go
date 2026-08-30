@@ -40,12 +40,16 @@ func (a rideDriverResolver) GetByNameNormalized(ctx context.Context, nameNorm st
 	return &rideapp.DriverRef{ID: d.ID, Name: d.Name}, nil
 }
 
-func (a rideDriverResolver) GetPrimaryDriverForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) (*rideapp.DriverRef, error) {
-	d, err := a.repo.GetPrimaryDriverForVehicleOnDate(ctx, vehicleID, serviceDate)
+func (a rideDriverResolver) ListDriversForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) ([]rideapp.DriverRef, error) {
+	list, err := a.repo.ListDriversForVehicleOnDate(ctx, vehicleID, serviceDate)
 	if err != nil {
 		return nil, err
 	}
-	return &rideapp.DriverRef{ID: d.ID, Name: d.Name}, nil
+	refs := make([]rideapp.DriverRef, 0, len(list))
+	for _, d := range list {
+		refs = append(refs, rideapp.DriverRef{ID: d.ID, Name: d.Name})
+	}
+	return refs, nil
 }
 
 // rideScheduleReader 讓 ride 取得比對回報所需的當日排班。

@@ -310,6 +310,14 @@ export interface VehicleDTO {
   region: Region
   active: boolean
   createdAt: string
+  drivers?: VehicleDriverDTO[]
+}
+
+// 掛在車輛上的司機摘要。一台車可以有多位司機，一位司機同期只會有一台車。
+export interface VehicleDriverDTO {
+  id: string
+  code?: string
+  name: string
 }
 
 export interface CreateVehicleRequest {
@@ -330,7 +338,6 @@ export interface DriverAssignmentDTO {
   plateNo?: string
   startDate: string
   endDate?: string
-  isPrimary: boolean
 }
 
 export interface DriverDTO {

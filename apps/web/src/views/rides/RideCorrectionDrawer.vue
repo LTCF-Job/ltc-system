@@ -110,7 +110,7 @@
               clearable
             >
               <el-option
-                v-for="d in drivers"
+                v-for="d in driverOptions"
                 :key="d.id"
                 :label="d.name"
                 :value="d.id"
@@ -252,6 +252,21 @@ const form = reactive<PatchRideRequest>({
   durationMinOverride: null,
   notClaimedAa09: false,
   reason: ''
+})
+
+// 一台車可能有多位司機：選定車輛後只列該車的司機，並保留紀錄上原本的司機以免被藏起來
+const driverOptions = computed(() => {
+  const vehicle = vehicles.value.find((v) => v.id === form.vehicleId)
+  const assignedIds = (vehicle?.drivers || []).map((d) => d.id)
+  if (assignedIds.length === 0) return drivers.value
+  return drivers.value.filter((d) => assignedIds.includes(d.id) || d.id === record.value?.driverId)
+})
+
+watch(() => form.vehicleId, (vehicleId) => {
+  const switchedAway = vehicleId !== record.value?.vehicleId
+  if (switchedAway && form.driverId && !driverOptions.value.some((d) => d.id === form.driverId)) {
+    form.driverId = ''
+  }
 })
 
 const isAbsent = computed(() => form.effectiveStatus === 'absent')

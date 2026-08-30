@@ -4,7 +4,7 @@ import { mockRideOverrides } from '../handlers/rides'
 
 const STORAGE_KEY = 'ltc_demo_data'
 // mockData.ts 內容有結構性變動（新增/調整資料集鍵值、資料形狀）時遞增，讓舊版持久化快照失效，避免蓋掉新版展示資料
-const DEMO_DATA_VERSION = 3
+const DEMO_DATA_VERSION = 4
 
 // mockData.ts 匯出的資料集（陣列與物件皆有）＋ handler 內獨立維護的展示狀態，共同構成展示模式的可持久化資料
 const MOCK_DATA_KEYS = Object.keys(mockData) as (keyof typeof mockData)[]

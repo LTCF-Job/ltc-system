@@ -73,7 +73,7 @@ export const mockVehicles: VehicleDTO[] = [
   { id: 'veh_6', plateNo: 'MNO-7890', displayName: '苗栗市1車', region: 'miaoli', active: true, createdAt: '2026-03-01' }
 ]
 
-// 司機主檔展示資料：涵蓋主責車輛指派、支援調度指派、在職與留職停薪狀態
+// 司機主檔展示資料：一位司機同期只掛一台車，竹北一車由兩位司機共同駕駛，另涵蓋尚未指派車輛的離職司機
 export const mockDrivers: DriverDTO[] = [
   {
     id: 'drv_1',
@@ -84,7 +84,7 @@ export const mockDrivers: DriverDTO[] = [
     active: true,
     createdAt: '2026-01-01',
     assignments: [
-      { id: 'asgn_1', driverId: 'drv_1', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-01-01', isPrimary: true }
+      { id: 'asgn_1', driverId: 'drv_1', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-01-01' }
     ]
   },
   {
@@ -96,8 +96,7 @@ export const mockDrivers: DriverDTO[] = [
     active: true,
     createdAt: '2026-01-01',
     assignments: [
-      { id: 'asgn_2', driverId: 'drv_2', vehicleId: 'veh_2', vehicleName: '竹北二車', vehiclePlateNo: 'ABC-1234', plateNo: 'ABC-1234', startDate: '2026-01-01', isPrimary: true },
-      { id: 'asgn_2_sub', driverId: 'drv_2', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-07-01', isPrimary: false }
+      { id: 'asgn_2', driverId: 'drv_2', vehicleId: 'veh_2', vehicleName: '竹北二車', vehiclePlateNo: 'ABC-1234', plateNo: 'ABC-1234', startDate: '2026-01-01' }
     ]
   },
   {
@@ -109,7 +108,7 @@ export const mockDrivers: DriverDTO[] = [
     active: true,
     createdAt: '2026-01-01',
     assignments: [
-      { id: 'asgn_3', driverId: 'drv_3', vehicleId: 'veh_4', vehicleName: '竹南2車', vehiclePlateNo: 'GHI-9012', plateNo: 'GHI-9012', startDate: '2026-01-01', isPrimary: true }
+      { id: 'asgn_3', driverId: 'drv_3', vehicleId: 'veh_4', vehicleName: '竹南2車', vehiclePlateNo: 'GHI-9012', plateNo: 'GHI-9012', startDate: '2026-01-01' }
     ]
   },
   {
@@ -121,7 +120,7 @@ export const mockDrivers: DriverDTO[] = [
     active: true,
     createdAt: '2026-02-01',
     assignments: [
-      { id: 'asgn_4', driverId: 'drv_4', vehicleId: 'veh_3', vehicleName: '竹南1車', vehiclePlateNo: 'DEF-5678', plateNo: 'DEF-5678', startDate: '2026-02-01', isPrimary: true }
+      { id: 'asgn_4', driverId: 'drv_4', vehicleId: 'veh_3', vehicleName: '竹南1車', vehiclePlateNo: 'DEF-5678', plateNo: 'DEF-5678', startDate: '2026-02-01' }
     ]
   },
   {
@@ -133,7 +132,7 @@ export const mockDrivers: DriverDTO[] = [
     active: true,
     createdAt: '2026-03-01',
     assignments: [
-      { id: 'asgn_5', driverId: 'drv_5', vehicleId: 'veh_6', vehicleName: '苗栗市1車', vehiclePlateNo: 'MNO-7890', plateNo: 'MNO-7890', startDate: '2026-03-01', isPrimary: true }
+      { id: 'asgn_5', driverId: 'drv_5', vehicleId: 'veh_6', vehicleName: '苗栗市1車', vehiclePlateNo: 'MNO-7890', plateNo: 'MNO-7890', startDate: '2026-03-01' }
     ]
   },
   {
@@ -145,6 +144,18 @@ export const mockDrivers: DriverDTO[] = [
     active: false,
     createdAt: '2026-01-15',
     assignments: []
+  },
+  {
+    id: 'drv_7',
+    name: '張美惠',
+    nationalId: 'A223456712',
+    phone: '0988222333',
+    email: 'driver7@ltc.example.com',
+    active: true,
+    createdAt: '2026-07-01',
+    assignments: [
+      { id: 'asgn_7', driverId: 'drv_7', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-07-01' }
+    ]
   }
 ]
 

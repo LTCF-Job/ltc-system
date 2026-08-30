@@ -116,7 +116,6 @@ func (s *DriverService) Reveal(ctx context.Context, id uuid.UUID) (string, error
 // AssignVehicleInput 代表指派司機車輛所需之輸入。
 type AssignVehicleInput struct {
 	VehicleID     uuid.UUID
-	IsPrimary     bool
 	EffectiveFrom time.Time
 	EffectiveTo   *time.Time
 }
@@ -126,7 +125,6 @@ func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, i
 	assignment := &DriverAssignment{
 		DriverID:      driverID,
 		VehicleID:     in.VehicleID,
-		IsPrimary:     in.IsPrimary,
 		EffectiveFrom: in.EffectiveFrom,
 		EffectiveTo:   in.EffectiveTo,
 	}

@@ -119,9 +119,16 @@ export async function assignDriverVehicle(driverId: string, data: {
   vehicleId: string
   startDate: string
   endDate?: string
-  isPrimary: boolean
 }): Promise<void> {
   return apiClient.post(`/drivers/${driverId}/assignments`, data)
+}
+
+// 整批設定車輛司機；被指派到本車的司機，其他車上尚未結束的指派會一併收掉
+export async function setVehicleDrivers(vehicleId: string, data: {
+  driverIds: string[]
+  effectiveFrom?: string
+}): Promise<void> {
+  return apiClient.put(`/vehicles/${vehicleId}/drivers`, data)
 }
 
 // 班表/主檔批次匯入

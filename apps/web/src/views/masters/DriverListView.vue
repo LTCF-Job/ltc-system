@@ -65,12 +65,12 @@
           <el-table-column prop="email" label="電子信箱" min-width="200">
             <template #default="{ row }"><span class="driver-data">{{ row.email || '-' }}</span></template>
           </el-table-column>
-          <el-table-column label="目前指派主要車輛" min-width="180">
+          <el-table-column label="目前指派車輛" min-width="180">
             <template #default="{ row }">
-              <div v-if="getPrimaryVehicleDisplay(row)" class="assigned-vehicle-info">
-                <span class="vehicle-name">{{ getPrimaryVehicleDisplay(row)?.name }}</span>
-                <span v-if="getPrimaryVehicleDisplay(row)?.plateNo" class="vehicle-plate font-mono">
-                  ({{ getPrimaryVehicleDisplay(row)?.plateNo }})
+              <div v-if="getAssignedVehicleDisplay(row)" class="assigned-vehicle-info">
+                <span class="vehicle-name">{{ getAssignedVehicleDisplay(row)?.name }}</span>
+                <span v-if="getAssignedVehicleDisplay(row)?.plateNo" class="vehicle-plate font-mono">
+                  ({{ getAssignedVehicleDisplay(row)?.plateNo }})
                 </span>
               </div>
               <span v-else class="assignment-empty">尚未指派</span>
@@ -174,7 +174,7 @@
     </el-dialog>
 
     <!-- 車輛期間指派彈窗 -->
-    <el-dialog v-model="assignDialogVisible" title="指派主要駕駛車輛" width="500px">
+    <el-dialog v-model="assignDialogVisible" title="指派駕駛車輛" width="500px">
       <el-form ref="assignFormRef" :model="assignForm" :rules="assignRules" label-width="120px">
         <el-form-item label="選擇車輛" prop="vehicleId">
           <el-select v-model="assignForm.vehicleId" placeholder="請選擇車輛" style="width: 100%">
@@ -247,8 +247,7 @@ const assignFormRef = ref<FormInstance>()
 const assignForm = reactive({
   vehicleId: '',
   startDate: new Date().toISOString().split('T')[0],
-  endDate: '',
-  isPrimary: true
+  endDate: ''
 })
 
 const assignRules = {
@@ -327,13 +326,14 @@ function openEditDialog(row: any) {
   dialogVisible.value = true
 }
 
-function getPrimaryVehicleDisplay(row: any): { name: string; plateNo: string } | null {
+// 一位司機同一期間只會有一台車，取目前生效的那筆指派即可
+function getAssignedVehicleDisplay(row: any): { name: string; plateNo: string } | null {
   if (!row.assignments || row.assignments.length === 0) return null
-  const primary = row.assignments.find((a: any) => a.isPrimary) || row.assignments[0]
-  const veh = allVehicles.value.find((v) => v.id === primary.vehicleId)
+  const assignment = row.assignments[row.assignments.length - 1]
+  const veh = allVehicles.value.find((v) => v.id === assignment.vehicleId)
 
-  const name = veh?.displayName || primary.vehicleName || ''
-  const plateNo = veh?.plateNo || primary.vehiclePlateNo || primary.plateNo || ''
+  const name = veh?.displayName || assignment.vehicleName || ''
+  const plateNo = veh?.plateNo || assignment.vehiclePlateNo || assignment.plateNo || ''
 
   if (name && plateNo) {
     return { name, plateNo }
@@ -349,8 +349,8 @@ function getPrimaryVehicleDisplay(row: any): { name: string; plateNo: string } |
 
 function openAssignDialog(row: any) {
   selectedDriverId.value = row.id
-  const primary = row.assignments?.find((a: any) => a.isPrimary) || row.assignments?.[0]
-  assignForm.vehicleId = primary?.vehicleId || ''
+  const assignment = row.assignments?.[row.assignments.length - 1]
+  assignForm.vehicleId = assignment?.vehicleId || ''
   assignForm.startDate = new Date().toISOString().split('T')[0]
   assignForm.endDate = ''
   assignDialogVisible.value = true
