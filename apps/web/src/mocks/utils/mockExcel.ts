@@ -413,13 +413,13 @@ function toRocBirthdayAndAge(birthDate?: string): [string, string] {
  */
 export function createCaseProfileExcelBlob(cases: CaseProfileExportRow[]): Blob {
   const headers = [
-    '序號', '', '姓名', '戶別', '身分證字號', '性別', '生日', '歲數',
-    '據點', '接送車輛(去)', '接送車輛(回)', '個管or照專', '姓名', '戶籍', '居住地', 'REMARK'
+    '姓名', '戶別', '身分證字號', '性別', '生日', '歲數',
+    '據點', '接送車輛(去)', '接送車輛(回)', '個管or照專', '姓名', '戶籍', '居住地', '備註'
   ]
-  const rows = cases.map((item, i) => {
+  const rows = cases.map((item) => {
     const [birthday, age] = toRocBirthdayAndAge(item.birthDate)
     return [
-      i + 1, i + 1, item.name, item.householdType || '', item.nationalId || '', item.gender || '',
+      item.name, item.householdType || '', item.nationalId || '', item.gender || '',
       birthday, age, item.siteName || '', item.outboundVehicle || '', item.inboundVehicle || '',
       item.careContactRole || '', item.careContactName || '', item.registeredAddress || '',
       item.homeAddress || '', ''
