@@ -1,5 +1,3 @@
-import * as XLSX from 'xlsx'
-
 /**
  * 建立標準合法之 Excel (.xlsx) 二進位 Blob，確保在 MSW Mock 開發環境下
  * 下載的所有 Excel 檔案（趟數表、時刻表、範本、申報表、保養表）在 Microsoft Excel 中皆能正常開啟不損毀。

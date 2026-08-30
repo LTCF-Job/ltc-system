@@ -49,7 +49,7 @@ func (r *RideRepository) ListCalendarCases(
 	region, keyword string,
 ) ([]app.CalendarCase, error) {
 	query := `
-		SELECT c.id, c.code, c.name, c.region, c.claim_start_date, c.claim_end_date,
+		SELECT c.id, c.code, c.name, c.region, c.claim_end_date,
 		       cs.id, cs.trip_pattern, cs.weekdays, s.open_days,
 		       lower(cs.effective_range), upper(cs.effective_range)
 		FROM cases c
@@ -73,7 +73,7 @@ func (r *RideRepository) ListCalendarCases(
 		var scheduleID uuid.UUID
 		var effectiveTo *time.Time
 		if err := rows.Scan(
-			&c.ID, &c.Code, &c.Name, &c.Region, &c.ClaimStartDate, &c.ClaimEndDate,
+			&c.ID, &c.Code, &c.Name, &c.Region, &c.ClaimEndDate,
 			&scheduleID, &c.TripPattern, &c.Weekdays, &c.SiteOpenDays,
 			&c.EffectiveFrom, &effectiveTo,
 		); err != nil {

@@ -96,7 +96,7 @@ func (fakeDriverResolver) GetByNameNormalized(context.Context, string) (*DriverR
 	return nil, nil
 }
 
-func (fakeDriverResolver) GetPrimaryDriverForVehicleOnDate(context.Context, uuid.UUID, time.Time) (*DriverRef, error) {
+func (fakeDriverResolver) ListDriversForVehicleOnDate(context.Context, uuid.UUID, time.Time) ([]DriverRef, error) {
 	return nil, nil
 }
 

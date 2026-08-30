@@ -109,14 +109,13 @@ func (s *RideService) GetCalendar(ctx context.Context, year, month int, region, 
 		}
 
 		days := calendar.CalculateScheduleDays(year, month, calendar.CaseScheduleCalendarInput{
-			CaseID:         c.ID,
-			ClaimStartDate: c.ClaimStartDate,
-			ClaimEndDate:   c.ClaimEndDate,
-			EffectiveFrom:  c.EffectiveFrom,
-			EffectiveTo:    c.EffectiveTo,
-			Weekdays:       c.Weekdays,
-			SiteOpenDays:   c.SiteOpenDays,
-			Legs:           legs,
+			CaseID:        c.ID,
+			ClaimEndDate:  c.ClaimEndDate,
+			EffectiveFrom: c.EffectiveFrom,
+			EffectiveTo:   c.EffectiveTo,
+			Weekdays:      c.Weekdays,
+			SiteOpenDays:  c.SiteOpenDays,
+			Legs:          legs,
 		})
 
 		for _, day := range days {

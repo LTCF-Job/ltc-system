@@ -78,18 +78,17 @@ type CalendarLeg struct {
 
 // CalendarCase 是月曆表一列所需的個案與其當期排班。
 type CalendarCase struct {
-	ID             uuid.UUID
-	Code           string
-	Name           string
-	Region         string
-	TripPattern    int16
-	Weekdays       []int16
-	SiteOpenDays   []int16
-	ClaimStartDate time.Time
-	ClaimEndDate   *time.Time
-	EffectiveFrom  time.Time
-	EffectiveTo    *time.Time
-	Legs           []CalendarLeg
+	ID            uuid.UUID
+	Code          string
+	Name          string
+	Region        string
+	TripPattern   int16
+	Weekdays      []int16
+	SiteOpenDays  []int16
+	ClaimEndDate  *time.Time
+	EffectiveFrom time.Time
+	EffectiveTo   *time.Time
+	Legs          []CalendarLeg
 }
 
 // RideRecordStore 定義表單提交、來源列與搭乘紀錄的讀寫邊界。
