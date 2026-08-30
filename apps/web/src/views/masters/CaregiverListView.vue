@@ -46,10 +46,21 @@
                   <span>{{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="單位" min-width="160">
+              <el-table-column label="單位" min-width="220">
                 <template #default="{ row }">
                   <span v-if="row.siteName">{{ row.siteName }}</span>
-                  <span v-else-if="row.siteNameRaw" class="unresolved-raw-name">{{ row.siteNameRaw }}（待關聯）</span>
+                  <div v-else-if="row.siteNameRaw" class="unresolved-slot">
+                    <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
+                    <el-select
+                      filterable
+                      placeholder="選擇既有據點"
+                      style="width: 150px"
+                      @change="(val: string) => handleLinkSite(row as CaregiverDTO, val)"
+                    >
+                      <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
+                    </el-select>
+                    <el-button link type="primary" size="small" @click="openQuickCreateSite(row as CaregiverDTO)">新增據點</el-button>
+                  </div>
                   <span v-else class="empty-value">-</span>
                 </template>
               </el-table-column>
@@ -86,45 +97,43 @@
         </DataTablePage>
       </el-tab-pane>
 
-      <!-- 待維護：單位比對不到既有據點、或聯絡方式／備註缺漏的照護人員資料 -->
+      <!-- 待維護：單位比對不到既有據點、或聯絡方式／備註缺漏的照護人員資料，統一用「缺少欄位」欄提示，不再分組 -->
       <el-tab-pane label="待維護" name="pending">
         <div v-loading="pendingLoading" class="pending-panel">
-          <h4>單位待關聯</h4>
-          <el-empty v-if="!pendingLoading && unresolvedSiteCaregivers.length === 0" description="目前沒有單位待關聯的照護人員" />
-          <el-table v-else :data="unresolvedSiteCaregivers" border stripe style="width: 100%; margin-bottom: 24px;">
+          <el-empty v-if="!pendingLoading && pendingCaregivers.length === 0" description="目前沒有待維護的照護人員" />
+          <el-table v-else :data="pendingCaregivers" border stripe style="width: 100%">
             <el-table-column prop="name" label="姓名" width="120" />
-            <el-table-column label="單位" min-width="260">
+            <el-table-column label="單位" min-width="220">
               <template #default="{ row }">
-                <div class="unresolved-slot">
+                <span v-if="row.siteName">{{ row.siteName }}</span>
+                <div v-else-if="row.siteNameRaw" class="unresolved-slot">
                   <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
                   <el-select
                     filterable
                     placeholder="選擇既有據點"
-                    style="width: 160px"
+                    style="width: 150px"
                     @change="(val: string) => handleLinkSite(row as CaregiverDTO, val)"
                   >
                     <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
                   </el-select>
                   <el-button link type="primary" size="small" @click="openQuickCreateSite(row as CaregiverDTO)">新增據點</el-button>
                 </div>
+                <span v-else class="empty-value">-</span>
               </template>
             </el-table-column>
-          </el-table>
-
-          <h4>資料待補齊</h4>
-          <el-empty v-if="!pendingLoading && incompleteCaregivers.length === 0" description="目前沒有資料待補齊的照護人員" />
-          <el-table v-else :data="incompleteCaregivers" border stripe style="width: 100%">
-            <el-table-column prop="name" label="姓名" width="120" />
             <el-table-column label="聯絡方式" min-width="140">
               <template #default="{ row }">
-                <span v-if="row.contact">{{ row.contact }}</span>
-                <span v-else class="unresolved-raw-name">未填寫</span>
+                <span>{{ row.contact || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="備註" min-width="180">
+            <el-table-column label="備註" min-width="180" show-overflow-tooltip>
               <template #default="{ row }">
-                <span v-if="row.notes">{{ row.notes }}</span>
-                <span v-else class="unresolved-raw-name">未填寫</span>
+                <span>{{ row.notes || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="缺少欄位" min-width="160">
+              <template #default="{ row }">
+                <span class="missing-fields">缺少：{{ missingFields(row as CaregiverDTO).join('、') }}</span>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="100" align="center">
@@ -322,6 +331,15 @@ function handleImportSuccess() {
     .catch(() => {})
 }
 
+// 依 siteId／contact／notes 是否有值，列出該筆照護人員缺少的欄位
+function missingFields(row: CaregiverDTO): string[] {
+  const missing: string[] = []
+  if (!row.siteId) missing.push('單位')
+  if (!row.contact) missing.push('聯絡方式')
+  if (!row.notes) missing.push('備註')
+  return missing
+}
+
 // 新增/編輯彈窗
 const dialogVisible = ref(false)
 const saving = ref(false)
@@ -409,10 +427,9 @@ async function handleDelete(row: any) {
   }
 }
 
-// 待維護頁籤
+// 待維護頁籤：單位未比對到既有據點與資料缺漏的照護人員合併為單一清單，用「缺少欄位」呈現而非分組
 const pendingLoading = ref(false)
-const unresolvedSiteCaregivers = ref<CaregiverDTO[]>([])
-const incompleteCaregivers = ref<CaregiverDTO[]>([])
+const pendingCaregivers = ref<CaregiverDTO[]>([])
 
 async function fetchPending() {
   pendingLoading.value = true
@@ -421,8 +438,11 @@ async function fetchPending() {
       listCaregivers({ unresolvedLink: true, pageSize: 100 }),
       listCaregivers({ incomplete: true, pageSize: 100 })
     ])
-    unresolvedSiteCaregivers.value = unresolvedRes.data
-    incompleteCaregivers.value = incompleteRes.data
+    const merged = new Map<string, CaregiverDTO>()
+    for (const row of [...unresolvedRes.data, ...incompleteRes.data]) {
+      merged.set(row.id, row)
+    }
+    pendingCaregivers.value = Array.from(merged.values())
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入待維護清單失敗'))
   } finally {
@@ -434,9 +454,11 @@ async function handleLinkSite(row: CaregiverDTO, siteId: string) {
   if (!siteId) return
   try {
     await linkCaregiverSite(row.id, siteId)
-    unresolvedSiteCaregivers.value = unresolvedSiteCaregivers.value.filter((c) => c.id !== row.id)
     ElMessage.success(`照護人員「${row.name}」已完成單位關聯`)
     executeFetch()
+    if (activeTab.value === 'pending') {
+      await fetchPending()
+    }
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新單位關聯失敗'))
   }
@@ -499,10 +521,6 @@ executeFetch()
   min-height: 120px;
 }
 
-.pending-panel h4 {
-  margin: 0 0 12px;
-}
-
 .unresolved-slot {
   display: flex;
   align-items: center;
@@ -512,6 +530,11 @@ executeFetch()
 
 .unresolved-raw-name {
   color: var(--el-color-warning);
+  font-size: 13px;
+}
+
+.missing-fields {
+  color: var(--el-color-danger);
   font-size: 13px;
 }
 
