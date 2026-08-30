@@ -5,7 +5,7 @@
         <el-col :xs="24" :lg="18" class="filter-inputs">
           <el-select
             v-model="selectedFormId"
-            placeholder="選擇表單"
+            placeholder="選擇匯報表"
             style="width: 260px"
             @change="fetchColumns"
           >
@@ -41,19 +41,19 @@
     <!-- 欄位對應雙欄對照表 -->
     <el-card shadow="never" class="table-card">
       <el-table :data="columns" border stripe v-loading="loading">
-        <el-table-column prop="columnSeq" label="#" width="60" align="center" />
-        
+        <el-table-column prop="columnIndex" label="#" width="60" align="center" />
+
         <!-- 左側：原始欄位與推薦 -->
         <el-table-column label="原始表單欄位名稱 (左側)" min-width="260">
           <template #default="{ row }">
             <div class="raw-column-box">
-              <span class="raw-name">{{ row.columnName }}</span>
+              <span class="raw-name">{{ row.columnHeader }}</span>
               <div class="tags-row">
                 <el-tag size="small" :type="getKindTagType(row.kind)">
                   {{ COLUMN_KIND_LABELS[row.kind as ColumnKind] }}
                 </el-tag>
                 <el-tag
-                  v-if="row.suggestionScore !== undefined"
+                  v-if="row.suggestionScore"
                   size="small"
                   :type="row.suggestionScore >= 0.8 ? 'success' : 'warning'"
                 >
@@ -91,10 +91,12 @@
                 style="width: 130px"
                 :disabled="!authStore.can('staff')"
               >
-                <el-option :value="1" label="第 1 趟 (去程)" />
-                <el-option :value="2" label="第 2 趟 (回程)" />
-                <el-option :value="3" label="第 3 趟 (去程)" />
-                <el-option :value="4" label="第 4 趟 (回程)" />
+                <el-option
+                  v-for="leg in LEG_SEQ_OPTIONS"
+                  :key="leg.value"
+                  :value="leg.value"
+                  :label="leg.label"
+                />
               </el-select>
             </div>
           </template>
@@ -154,29 +156,32 @@ import { useRoute } from 'vue-router'
 import { Check, Close } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
-  listForms,
-  listFormColumns,
+  listDriverReportForms,
+  listDriverReportColumns,
   updateColumnMapping,
   batchUpdateColumnMappings
-} from '@/api/forms'
+} from '@/api/driverReports'
 import { listCases } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
+import { LEG_SEQ_OPTIONS } from './legOptions'
 import {
   COLUMN_KIND_LABELS,
   MAPPING_STATUS_LABELS,
   type ColumnKind,
   type MappingStatus
 } from '@/types/domain'
-import type { FormDTO, FormColumnDTO, CaseDTO } from '@/types/api'
+import type { DriverReportFormDTO, DriverReportColumnDTO, CaseDTO } from '@/types/api'
+
+type EditableColumn = DriverReportColumnDTO & { editCaseId?: string; editLegSeq?: number }
 
 const route = useRoute()
 const authStore = useAuthStore()
 
-const forms = ref<FormDTO[]>([])
+const forms = ref<DriverReportFormDTO[]>([])
 const cases = ref<CaseDTO[]>([])
 const selectedFormId = ref<string>('')
 const statusFilter = ref<string>('pending')
-const columns = ref<(FormColumnDTO & { editCaseId?: string; editLegSeq?: number })[]>([])
+const columns = ref<EditableColumn[]>([])
 const loading = ref(false)
 
 const pendingHighConfidenceCount = computed(() => {
@@ -202,14 +207,14 @@ async function fetchColumns() {
   if (!selectedFormId.value) return
   loading.value = true
   try {
-    const res = await listFormColumns({
+    const res = await listDriverReportColumns({
       formId: selectedFormId.value,
       mappingStatus: statusFilter.value || undefined
     })
     columns.value = res.map((c) => ({
       ...c,
-      editCaseId: c.mappedCaseId || c.suggestedCaseId || '',
-      editLegSeq: c.mappedLegSeq || c.suggestedLegSeq || 1
+      editCaseId: c.caseId || c.suggestedCaseId || '',
+      editLegSeq: c.legSeq || c.suggestedLegSeq || 1
     }))
   } finally {
     loading.value = false
@@ -222,7 +227,7 @@ async function handleSaveMapping(row: any) {
     legSeq: row.editLegSeq,
     mappingStatus: 'mapped'
   })
-  ElMessage.success(`已將「${row.columnName}」成功綁定`)
+  ElMessage.success(`已將「${row.columnHeader}」成功綁定`)
   fetchColumns()
 }
 
@@ -230,7 +235,7 @@ async function handleIgnoreMapping(row: any) {
   await updateColumnMapping(row.id, {
     mappingStatus: 'ignored'
   })
-  ElMessage.info(`已略過「${row.columnName}」`)
+  ElMessage.info(`已略過「${row.columnHeader}」`)
   fetchColumns()
 }
 
@@ -242,7 +247,7 @@ async function handleBatchConfirmHighConfidence() {
   await batchUpdateColumnMappings({
     mappings: highConfidenceList.map((c) => ({
       columnId: c.id,
-      caseId: c.suggestedCaseId,
+      caseId: c.suggestedCaseId || undefined,
       legSeq: c.suggestedLegSeq || 1,
       mappingStatus: 'mapped'
     }))
@@ -254,7 +259,7 @@ async function handleBatchConfirmHighConfidence() {
 
 onMounted(async () => {
   const [fRes, cRes] = await Promise.all([
-    listForms(),
+    listDriverReportForms(),
     listCases({ pageSize: 100 })
   ])
   forms.value = fRes

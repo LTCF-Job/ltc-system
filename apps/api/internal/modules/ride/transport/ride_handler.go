@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"errors"
 	"net/http"
 	"time"
 
@@ -22,32 +21,6 @@ type RideHandler struct {
 // NewRideHandler 建立 RideHandler 實例。
 func NewRideHandler(rideService *app.RideService) *RideHandler {
 	return &RideHandler{rideService: rideService}
-}
-
-// IngestWebhook 接收 Google Form 提交。
-func (h *RideHandler) IngestWebhook(c *gin.Context) {
-	secret := c.GetHeader("X-Ingest-Token")
-	if secret == "" {
-		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeIngestTokenInvalid, "未提供 X-Ingest-Token", nil)
-		return
-	}
-
-	var req app.ProcessFormWebhookRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
-		return
-	}
-
-	if err := h.rideService.IngestWebhook(c.Request.Context(), secret, req); err != nil {
-		if errors.Is(err, app.ErrInvalidIngestToken) {
-			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeIngestTokenInvalid, "無效的 Ingest Token", nil)
-			return
-		}
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
-		return
-	}
-
-	httpx.RespondSuccess(c, http.StatusOK, gin.H{"received": true}, nil)
 }
 
 // CorrectDTO 用於寬容接收搭乘更正請求。
@@ -198,30 +171,19 @@ func (h *RideHandler) GetRecord(c *gin.Context) {
 	httpx.RespondError(c, http.StatusNotImplemented, httpx.CodeNotFound, "搭乘紀錄查詢尚未串接資料來源", nil)
 }
 
-// GetCalendar 取得搭乘月曆矩陣資料。
-//
-// TODO: 尚無 RideService 依月份／區域／關鍵字彙整月曆矩陣的方法（需結合
-// domain/calendar 與 case_schedules、ride_records），待補上真實查詢後串接；
-// 目前誠實回傳空清單，避免回傳假造個案姓名與紀錄。
+// GetCalendar 取得搭乘月曆矩陣資料。月份接受民國（115-07）與西元（2026-07）兩種寫法。
 func (h *RideHandler) GetCalendar(c *gin.Context) {
-	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(int(time.Now().Year()-1911), int(time.Now().Month())))
-	region := c.Query("region")
-	q := c.Query("q")
-	_ = region
-	_ = q
+	now := time.Now()
+	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(now.Year(), int(now.Month())))
 
-	daysInMonth := 30
-	if rocYear, month, err := rocdate.ParseROCYearMonth(monthStr); err == nil {
-		gregorianYear := rocYear + 1911
-		daysInMonth = time.Date(gregorianYear, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	start, _, _ := rocdate.MonthRange(monthStr)
+	matrix, err := h.rideService.GetCalendar(c.Request.Context(), start.Year(), int(start.Month()), c.Query("region"), c.Query("q"))
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, gin.H{
-		"month":       monthStr,
-		"totalCases":  0,
-		"daysInMonth": daysInMonth,
-		"cases":       []gin.H{},
-	}, nil)
+	httpx.RespondSuccess(c, http.StatusOK, matrix, nil)
 }
 
 // ListIssues 取得異常集中處理清單。

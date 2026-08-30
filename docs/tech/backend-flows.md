@@ -2,25 +2,44 @@
 
 這份文件拆解幾條橫跨多個 handler／service／domain 套件的完整流程，比單看某一個檔案更容易看懂系統在幹嘛。分層架構背景見 [backend-framework.md](backend-framework.md)，逐支端點清單見 [backend-api-reference.md](backend-api-reference.md)。
 
-## 1. Google 表單回報 → 搭乘紀錄（`RideService.IngestWebhook`）
+## 1. 司機接送匯報匯入 → 搭乘紀錄（`DriverReportService.CommitDriverReport` → `RideService.IngestSubmission`）
 
-這是整個系統最核心的資料流，一次表單提交會走過：
+這是整個系統最核心的資料流。一份匯報表對應一台車，操作人員上傳司機填好的 `.xlsx`：
 
-1. Google Apps Script（不在本 repo）在表單提交時打 `POST /api/v1/ingest/google-form`，帶 `X-Ingest-Token` 跟整列答案（`answers` 是欄位 index/表頭 → 值的 map）。
-2. 依 token 找出對應的 `forms` 記錄跟預設車輛，把這次提交原封不動存一筆 `form_submissions`（raw payload，方便日後追查原始回報內容）。
-3. 用 `domain/namenorm.Normalize` 正規化司機姓名，比對司機主檔抓 `driver_id`（配不到就先留空，之後可以在「表單同步管理」頁手動對應）。
-4. 逐一走過這個表單已設定好對應（`mapping_status = mapped`）的欄位，判斷每欄值是「有坐」還是「沒坐」，其他文字視為非明確標記直接跳過。
-5. 若個案排班是四趟制，表單上的「第 1 趟」「第 2 趟」要展開成資料庫的四趟（1→1,3；2→2,4），這是四趟展開規則的實作位置。
-6. 每個展開後的趟次都會 `InsertRideSource` 存一筆來源紀錄，然後呼叫 `recalculateRideRecord` 重新跑 `domain/merge` 演算法，用「同車取最新、跨車 OR」規則重算 `ride_records` 的最終狀態——已經被人工更正過的紀錄不會被自動覆蓋。
+1. `POST /api/v1/driver-reports/:id/import?dryRun=true` 先解析不寫入：`ParseDriverReport` 認表頭
+   （民國日期、駕駛人、各個案趟次欄、備註），把每個個案欄位與既有 `form_columns` 對照，
+   沒對應過的欄位附上以姓名相似度算出的推薦個案與由 `[去程]／[回程]` 推得的推薦趟次。
+2. 使用者在預覽畫面就地確認欄位對應後，改打 `?dryRun=false`，並以 form field `columnDecisions`
+   帶回確認結果。`CommitDriverReport` 先把欄位對應寫回 `form_columns`（以表頭文字為鍵，
+   個案增減造成的欄號位移不會錯配），再逐列交給 ride 模組。
+3. `RideService.IngestSubmission` 把該列原封不動存一筆 `form_submissions`（`source = 'import'`，
+   raw payload 方便日後追查），並用 `domain/namenorm.Normalize` 正規化司機姓名比對司機主檔抓
+   `driver_id`（配不到就先留空，並在預覽階段以警告提示）。
+4. 逐一走過已設定對應（`mapping_status = mapped`）的欄位，用 `domain/merge.ParseReportedValue`
+   判斷每欄值是「有坐」還是「沒坐」，其他文字（含空白）視為未回報直接跳過。
+5. 若個案排班是四趟制，匯報表上的「第 1 趟」「第 2 趟」要展開成資料庫的四趟（1→1,3；2→2,4），
+   這是四趟展開規則的實作位置（`expandLegSeqs`）。
+6. 每個展開後的趟次都會 `InsertRideSource` 存一筆來源紀錄，然後呼叫 `recalculateRideRecord`
+   讀回該 slot 的全部來源列跑 `domain/merge` 演算法，用「同車取最新、跨車 OR」規則重算
+   `ride_records` 的最終狀態——已經被人工更正過的紀錄不會被自動覆蓋。
+
+單列日期無法解析時只略過該列並回報原因，其餘日期照常寫入，不會讓一整個月的匯報因為
+一列打錯而全部匯不進來。
 
 ```
-Google 表單提交
+使用者上傳匯報表 .xlsx
    │
    ▼
-POST /api/v1/ingest/google-form (X-Ingest-Token)
+POST /driver-reports/:id/import?dryRun=true → 欄位對應與每日匯報預覽
+   │
+   ▼（就地確認未對應欄位）
+POST /driver-reports/:id/import?dryRun=false + columnDecisions
    │
    ▼
-存 form_submissions（原始 payload）
+寫回 form_columns（以表頭文字為鍵）
+   │
+   ▼
+存 form_submissions（原始 payload，source = import）
    │
    ▼
 namenorm.Normalize(driverRaw) → 配對司機主檔
@@ -81,9 +100,12 @@ GET /exports/:id 輪詢狀態拿下載連結
 
 `SendNotification` 依 topic（例如未回報告警、月底提醒）撈出啟用中的收件人清單逐一寄信，寄送介面是 `EmailSender`，正式環境用 Resend（`RESEND_API_KEY`），本機沒設定時退化成 `LogEmailSender`（只印 log，不真的寄信）。收件人管理走 `settings/notification-recipients` 系列端點。
 
-## 7. 表單來源設定（Google Drive 檔案列表與 Sheet 欄名預覽）
+## 7. 匯報表範本下載
 
-串新表單前，`GET /forms/google-drive-files` 列出 Google Drive 上的候選試算表，`POST /forms/inspect-sheet` 預覽指定 Sheet 的欄名，兩支都呼叫 `FormService` 底層的 Google API client（`internal/modules/formsync/app/form_service.go`）。**沒有設定 Google 服務帳號憑證（`GOOGLE_SA_JSON`）時，這兩支會直接回 `FORM_SOURCE_FAILED` 錯誤，不會回傳假資料**——這是刻意修正過的行為，避免本機或測試環境誤以為串接成功。
+`GET /driver-reports/:id/template` 依該車目前已對應的個案趟次欄產生空白 `.xlsx`：
+表頭為「民國日期、駕駛人、各個案趟次欄、備註」，**刻意不放示範資料列**——匯入是逐列
+讀到檔案結尾，任何非空的示範列都會被當成真實匯報寫進搭乘紀錄。填寫說明改掛在表頭
+儲存格的註解上。
 
 ## 8. 稽核留痕（`middleware.RecordAuditLog`）
 

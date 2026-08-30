@@ -47,7 +47,7 @@ make test-e2e         # tests/e2e 的瀏覽器測試
 - Auth 交給 Supabase：前端用 Supabase JS SDK 登入拿 JWT，後端只負責驗簽（打 Supabase 的 JWKS endpoint）跟看 JWT 裡帶的角色 claim 做授權，自己不存密碼。
 - 資料庫 schema 是自己手刻 SQL migration（`apps/api/migrations/`，`cmd/migrate` 執行），沒有用 Supabase CLI 那一套 migration 機制，兩者不要混用。
 
-想搞懂整個系統在幹嘛，先看這條核心資料流：司機在 Google 表單回報「今天有沒有載到某個案」→ Webhook 打進後端 → 姓名正規化配對司機、依排班規則展開成完整趟次、多來源回報用「同車取最新、跨車 OR」規則合併 → 存成搭乘紀錄 → 定期跟「應搭日曆」比對抓出未回報 → 月底跑前置檢核、通過才產出政府申報用的 Excel。這條流程橫跨了後端大部分模組，細節在 [`docs/tech/backend-flows.md`](docs/tech/backend-flows.md)。
+想搞懂整個系統在幹嘛，先看這條核心資料流：司機在接送匯報表上填「今天有沒有載到某個案」→ 操作人員把匯報 .xlsx 匯入後端 → 姓名正規化配對司機、依排班規則展開成完整趟次、多來源回報用「同車取最新、跨車 OR」規則合併 → 存成搭乘紀錄 → 定期跟「應搭日曆」比對抓出未回報 → 月底跑前置檢核、通過才產出政府申報用的 Excel。這條流程橫跨了後端大部分模組，細節在 [`docs/tech/backend-flows.md`](docs/tech/backend-flows.md)。
 
 ## 技術文件
 

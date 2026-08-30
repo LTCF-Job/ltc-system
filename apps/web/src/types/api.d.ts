@@ -384,78 +384,107 @@ export interface CreateCaregiverRequest {
 
 export interface UpdateCaregiverRequest extends Partial<CreateCaregiverRequest> { }
 
-// Google 表單與欄位對應
-export interface FormDTO {
+// 司機接送匯報表與欄位對應
+export interface DriverReportFormDTO {
   id: string
-  formId: string
+  vehicleId: string
+  vehicleName: string
   title: string
-  sheetUrl?: string
-  vehicleId?: string
-  vehicleName?: string
   region?: Region
-  sheetTabs?: string[]
-  activeTab?: string
-  syncedMonths?: string[]
-  lastSyncedAt?: string
+  lastImportedAt?: string | null
   totalColumns: number
+  mappedColumns: number
   pendingColumns: number
-  hasSyncAlert?: boolean
+  submissionCount: number
+  status: string
 }
 
-export interface CreateFormAssociationRequest {
+export interface CreateDriverReportFormRequest {
+  vehicleId: string
   title: string
-  sheetUrl: string
-  vehicleId?: string
-  vehicleName?: string
-  region?: Region
-  sheetTabs?: string[]
-  activeTab?: string
-  accessToken?: string
 }
 
-export interface InspectSheetRequest {
-  sheetUrl?: string
-  spreadsheetId?: string
-  accessToken?: string
-}
-
-export interface GoogleDriveSheetDTO {
-  id: string
-  name: string
-  mimeType?: string
-  modifiedTime?: string
-}
-
-export interface InspectSheetResultDTO {
-  spreadsheetId: string
-  title: string
-  sheetTabs: string[]
-  previewHeaders?: string[]
-}
-
-export interface SyncFormOptions {
-  month?: string
-  sheetTab?: string
-  force?: boolean
-  spreadsheetId?: string
-  accessToken?: string
-}
-
-export interface FormColumnDTO {
+export interface DriverReportColumnDTO {
   id: string
   formId: string
-  columnName: string
-  columnSeq: number
+  formTitle: string
+  vehicleName: string
+  columnIndex: number
+  columnHeader: string
+  cleanedName: string
   kind: ColumnKind
   mappingStatus: MappingStatus
+  caseId?: string | null
+  caseName?: string | null
+  legSeq?: number | null
+  suggestedCaseId?: string | null
+  suggestedCaseName?: string | null
+  suggestedLegSeq?: number | null
+  suggestionScore: number
+}
+
+// 匯入預覽的欄位段：每個未對應欄位在此就地確認個案與趟次
+export interface DriverReportPreviewColumn {
+  columnId?: string
+  columnIndex: number
+  columnHeader: string
+  cleanedName: string
+  direction?: Direction
+  mappingStatus: MappingStatus
+  caseId?: string
+  caseName?: string
+  legSeq?: number
   suggestedCaseId?: string
   suggestedCaseName?: string
   suggestedLegSeq?: number
-  suggestionScore?: number
-  mappedCaseId?: string
-  mappedCaseName?: string
-  mappedLegSeq?: number
-  updatedAt: string
+  suggestionScore: number
+  boardedCount: number
+  absentCount: number
+}
+
+// 匯入預覽的資料段：一列一天
+export interface DriverReportPreviewRow {
+  rowIndex: number
+  reportDate: string
+  serviceDate: string
+  driverRaw: string
+  driverId?: string
+  driverName?: string
+  remark?: string
+  boardedCount: number
+  absentCount: number
+  errorMessage?: string
+  warningMessage?: string
+}
+
+export interface DriverReportPreviewDTO {
+  formId: string
+  vehicleId: string
+  vehicleName: string
+  totalRows: number
+  validRows: number
+  errorRows: number
+  warningRows: number
+  unmappedColumns: number
+  columns: DriverReportPreviewColumn[]
+  previewRows: DriverReportPreviewRow[]
+  errors: Array<{ rowIndex: number; field?: string; message: string }>
+  warnings: Array<{ rowIndex: number; field?: string; message: string }>
+}
+
+export interface DriverReportColumnDecision {
+  columnHeader: string
+  mappingStatus: MappingStatus
+  caseId?: string | null
+  legSeq?: number | null
+}
+
+export interface DriverReportCommitResultDTO {
+  importedRows: number
+  rideRecordRows: number
+  mappedColumns: number
+  skippedRows: Array<{ rowIndex: number; reportDate: string; reasons: string[] }>
+  warnings?: Array<{ rowIndex: number; field?: string; message: string }>
 }
 
 export interface UpdateColumnMappingRequest {

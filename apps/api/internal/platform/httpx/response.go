@@ -16,9 +16,7 @@ const (
 	CodeExportInProgress   = "EXPORT_IN_PROGRESS"
 	CodePrecheckFailed     = "PRECHECK_FAILED"
 	CodeMappingRequired    = "MAPPING_REQUIRED"
-	CodeIngestTokenInvalid = "INGEST_TOKEN_INVALID"
-	CodeFormSourceFailed   = "FORM_SOURCE_FAILED"
-	CodeFormSyncFailed     = "FORM_SYNC_FAILED"
+	CodeReportImportFailed = "DRIVER_REPORT_IMPORT_FAILED"
 	CodeFormMappingFailed  = "FORM_MAPPING_FAILED"
 	CodeInternalError      = "INTERNAL_ERROR"
 )
@@ -34,9 +32,7 @@ var codeMessages = map[string]string{
 	CodeExportInProgress:   "匯出作業進行中，請稍後再試",
 	CodePrecheckFailed:     "資料檢核未通過，請確認後再試",
 	CodeMappingRequired:    "尚未完成欄位對應設定",
-	CodeIngestTokenInvalid: "匯入權杖無效或已過期",
-	CodeFormSourceFailed:   "無法存取雲端試算表，請確認連結或權限設定",
-	CodeFormSyncFailed:     "同步表單資料失敗，請稍後再試",
+	CodeReportImportFailed: "匯入司機接送匯報失敗，請確認檔案格式後再試",
 	CodeFormMappingFailed:  "更新欄位對應設定失敗，請稍後再試",
 	CodeInternalError:      "系統發生錯誤，請稍後再試",
 }

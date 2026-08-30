@@ -33,7 +33,7 @@ view 元件呼叫 src/api/*.ts
       - 其他錯誤：ElMessage 顯示 error.message；若有 error.details（欄位級錯誤陣列）逐欄列出
 ```
 
-Google 表單回填不走這條路徑，是獨立的 `POST /api/v1/ingest/google-form`，用 `X-Ingest-Token` 驗證，見 [backend-flows.md](backend-flows.md) 的表單 ingestion 流程。
+司機接送匯報是檔案上傳（`multipart/form-data`）而非 JSON，見 [backend-flows.md](backend-flows.md) 的匯報匯入流程；回應仍走同一套成功／錯誤封裝。
 
 ## Failure modes
 

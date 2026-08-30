@@ -26,8 +26,8 @@ Each module owns one business capability. Put new work in the module that alread
 | `caregiver` | Caregiver master data and its batch Excel/CSV import |
 | `casemgmt` | Case master data, schedules, transport preference, case profile workbook |
 | `caseimport` | Batch Excel/CSV parsing, preview, and commit of cases |
-| `ride` | Google-form ingestion, ride-record merge, manual correction, conflict resolution |
-| `formsync` | Google form registration and column mapping |
+| `ride` | Driver-report ingestion, ride-record merge, ride calendar, manual correction, conflict resolution |
+| `driverreport` | Driver pickup-report form registration, `.xlsx` import, and column mapping |
 | `reporting` | Trip summary, Hsinchu schedule, dashboard, precheck, government claim export |
 | `ops` | Driver attendance, fuel logs, vehicle maintenance |
 | `notification` | Notification recipients and delivery log |
@@ -58,8 +58,7 @@ Third-party confinement:
 | --- | --- |
 | `github.com/gin-gonic/gin` | `*/transport`, `platform/{auth,httpx,logging}` |
 | `github.com/jackc/pgx` | `*/infra`, `platform/pgxdb` |
-| `github.com/xuri/excelize` | the `infra` of a module whose deliverable is a spreadsheet: `reporting`, `caseimport`, `ops`, `casemgmt` |
-| `google.golang.org/api` | `formsync/infra` |
+| `github.com/xuri/excelize` | the `infra` of a module whose deliverable is a spreadsheet: `reporting`, `caseimport`, `ops`, `casemgmt`, `caregiver`, `driverreport` |
 | anything outside stdlib and `golang.org/x/text` | rejected in `internal/domain/**` |
 
 ## 4. Cross-module collaboration

@@ -89,16 +89,16 @@
             </el-menu-item>
           </el-sub-menu>
 
-          <el-sub-menu v-if="authStore.hasPermission('forms_sync') || authStore.hasPermission('forms_mappings')" index="forms">
+          <el-sub-menu v-if="authStore.hasPermission('driver_reports') || authStore.hasPermission('driver_report_mappings')" index="driver-reports">
             <template #title>
               <el-icon><DocumentCopy /></el-icon>
-              <span>表單管理</span>
+              <span>司機接送匯報</span>
             </template>
-            <el-menu-item v-if="authStore.hasPermission('forms_sync')" index="/forms">
-              <el-icon><Refresh /></el-icon>
-              <template #title>表單同步狀態</template>
+            <el-menu-item v-if="authStore.hasPermission('driver_reports')" index="/driver-reports">
+              <el-icon><Upload /></el-icon>
+              <template #title>匯報表管理</template>
             </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('forms_mappings')" index="/forms/mappings">
+            <el-menu-item v-if="authStore.hasPermission('driver_report_mappings')" index="/driver-reports/mappings">
               <el-icon><Connection /></el-icon>
               <template #title>欄位對應設定</template>
             </el-menu-item>
@@ -234,7 +234,7 @@ import {
   Location,
   Avatar,
   DocumentCopy,
-  Refresh,
+  Upload,
   Connection,
   Calendar,
   Grid,
@@ -278,8 +278,8 @@ const menuLabels = [
   '據點管理',
   '車輛管理',
   '司機管理',
-  '表單管理',
-  '表單同步狀態',
+  '司機接送匯報',
+  '匯報表管理',
   '欄位對應設定',
   '報表管理',
   '車輛趟數表',

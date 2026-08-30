@@ -4,7 +4,7 @@
 
 ## 搭乘月曆與人工補登
 
-`RideCalendarView` 打 `GET /rides/calendar` 拿一整月的矩陣資料（個案 × 日期 × 趟次）。點空白格會開 `RideManualEntryDialog`，送出時打 `POST /rides/manual-report`，成功後重新整理該日資料（不整月重抓）。這個流程對應後端 `RideService.ManualReportRide`，繞過 Google 表單直接寫入回報。
+`RideCalendarView` 打 `GET /rides/calendar` 拿一整月的矩陣資料（個案 × 日期 × 趟次）。點空白格會開 `RideManualEntryDialog`，送出時打 `POST /rides/manual-report`，成功後重新整理該日資料（不整月重抓）。這個流程對應後端 `RideService.ManualReportRide`，繞過匯報檔匯入直接寫入回報。
 
 ## 異常集中處理
 
@@ -17,19 +17,26 @@
 
 ## 未回報清單
 
-`MissingRidesView` 打 `GET /rides/missing`，資料來源是後端「未回報偵測」批次（拿應搭日曆跟實際回報比對），純唯讀清單，處理方式是回到搭乘月曆手動補登，或去確認司機是否忘記填表單。
+`MissingRidesView` 打 `GET /rides/missing`，資料來源是後端「未回報偵測」批次（拿應搭日曆跟實際回報比對），純唯讀清單，處理方式是回到搭乘月曆手動補登，或去確認司機是否漏填當日匯報。
 
-## 表單同步與欄位對應
+## 司機接送匯報與欄位對應
 
-新串一份 Google 表單時的操作順序：
+一台車一份匯報表，匯入流程是兩階段的：
 
-1. `FormListView` 建立表單設定。
-2. 打 `POST /forms/:id/sync` 讓後端重新抓一次 Google Sheet 的欄名。
-3. 到 `FieldMappingView` 把每個欄位對應到「哪個個案的哪一趟」（`PATCH /forms/columns/:id/mapping` 單筆，或 `POST /forms/columns/batch-mapping` 批次）。
+1. `DriverReportListView` 為一台車建立匯報表（`POST /driver-reports`）。
+2. 該列點「匯入」開 `DriverReportImportDialog`，可先下載該車空白範本
+   （`GET /driver-reports/:id/template`），填好後上傳。
+3. 上傳先走 `?dryRun=true` 取得預覽：**欄位對應**與**每日匯報**兩個分頁。未對應的欄位
+   直接在預覽裡選個案與趟次（就地確認），系統已依姓名相似度與 `[去程]／[回程]` 帶好推薦值。
+4. 按「匯入」改走 `?dryRun=false`，並把就地確認的結果以 `columnDecisions` 一併送出；
+   對應會被保存，下次匯入同一份匯報表自動沿用。
 
-沒設定對應（`mapping_status != mapped`）的欄位，Webhook 收到答案也不會處理成搭乘紀錄。
+`FieldMappingView`（`/driver-reports/mappings`）是長期維護對應的地方，可依匯報表與對應狀態
+篩選、單筆綁定（`PATCH /driver-reports/columns/:id/mapping`）、批次套用高信心度推薦
+（`POST /driver-reports/columns/batch-mapping`）或略過欄位。
 
-串新表單前，`FormListView` 可以先用 `GET /forms/google-drive-files` 選 Google Drive 上的候選檔案、`POST /forms/inspect-sheet` 預覽欄名（見 `apps/web/src/api/forms.ts`）。**後端沒有設定 Google 服務帳號憑證時，這兩支呼叫會回 `FORM_SOURCE_FAILED` 錯誤**，畫面要把這個錯誤原樣顯示給使用者（表示尚未完成 Google 串接設定），不要當成一般的「查無資料」處理。
+沒設定對應（`mapping_status != mapped`）的欄位，匯入時不會處理成搭乘紀錄。匯入失敗時，
+API client 會把後端 `details` 裡的具體原因（例如表頭不符）以通知條列出來，不要只顯示通用訊息。
 
 ## 政府申報匯出
 

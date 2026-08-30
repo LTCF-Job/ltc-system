@@ -64,16 +64,16 @@ const router = createRouter({
           meta: { title: '照護人員管理', module: 'masters_caregivers', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
         },
         {
-          path: 'forms',
-          name: 'FormList',
-          component: () => import('@/views/forms/FormListView.vue'),
-          meta: { title: '表單同步管理', module: 'forms_sync', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+          path: 'driver-reports',
+          name: 'DriverReportList',
+          component: () => import('@/views/driverReports/DriverReportListView.vue'),
+          meta: { title: '匯報表管理', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
         },
         {
-          path: 'forms/mappings',
+          path: 'driver-reports/mappings',
           name: 'FieldMapping',
-          component: () => import('@/views/forms/FieldMappingView.vue'),
-          meta: { title: '欄位對應設定', module: 'forms_mappings', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+          component: () => import('@/views/driverReports/FieldMappingView.vue'),
+          meta: { title: '欄位對應設定', module: 'driver_report_mappings', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
         },
         {
           path: 'rides',

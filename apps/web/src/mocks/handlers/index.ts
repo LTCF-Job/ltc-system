@@ -1,7 +1,7 @@
 import { casesHandlers } from './cases'
 import { mastersHandlers } from './masters'
 import { caregiversHandlers } from './caregivers'
-import { formsHandlers } from './forms'
+import { driverReportsHandlers } from './driverReports'
 import { ridesHandlers } from './rides'
 import { exportsHandlers } from './exports'
 import { reportsHandlers } from './reports'
@@ -13,7 +13,7 @@ export const handlers = [
   ...casesHandlers,
   ...mastersHandlers,
   ...caregiversHandlers,
-  ...formsHandlers,
+  ...driverReportsHandlers,
   ...ridesHandlers,
   ...exportsHandlers,
   ...reportsHandlers,

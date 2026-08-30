@@ -9,6 +9,7 @@ import (
 	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
 	caseinfra "ltc-system/apps/api/internal/modules/casemgmt/infra"
+	drapp "ltc-system/apps/api/internal/modules/driverreport/app"
 	masterinfra "ltc-system/apps/api/internal/modules/masterdata/infra"
 	opsapp "ltc-system/apps/api/internal/modules/ops/app"
 	rideapp "ltc-system/apps/api/internal/modules/ride/app"
@@ -188,6 +189,46 @@ func (a caregiverSiteLookup) GetByName(ctx context.Context, name string) (*careg
 		return nil, err
 	}
 	return &caregiverapp.SiteRef{ID: s.ID, Name: s.Name}, nil
+}
+
+// driverReportCaseLookup 讓 driverreport 以姓名相似度推薦欄位要對應的個案。
+type driverReportCaseLookup struct{ repo *caseinfra.CaseRepository }
+
+func (a driverReportCaseLookup) ListActiveCases(ctx context.Context) ([]drapp.CaseRef, error) {
+	list, err := a.repo.ListNameIndex(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]drapp.CaseRef, 0, len(list))
+	for _, c := range list {
+		out = append(out, drapp.CaseRef{ID: c.ID.String(), Name: c.Name, NameNormalized: c.NameNormalized})
+	}
+	return out, nil
+}
+
+// driverReportDriverResolver 讓 driverreport 由匯報表上的駕駛人姓名比對司機主檔。
+type driverReportDriverResolver struct{ repo *masterinfra.DriverRepository }
+
+func (a driverReportDriverResolver) GetByNameNormalized(ctx context.Context, nameNorm string) (*drapp.DriverRef, error) {
+	d, err := a.repo.GetByNameNormalized(ctx, nameNorm)
+	if err != nil || d == nil {
+		return nil, err
+	}
+	return &drapp.DriverRef{ID: d.ID, Name: d.Name}, nil
+}
+
+// driverReportRideIngestor 讓 driverreport 把每日匯報交給 ride 展開為搭乘紀錄。
+type driverReportRideIngestor struct{ svc *rideapp.RideService }
+
+func (a driverReportRideIngestor) IngestSubmission(ctx context.Context, formID, vehicleID uuid.UUID, s drapp.Submission) (int, error) {
+	return a.svc.IngestSubmission(ctx, formID, vehicleID, rideapp.ProcessSubmissionRequest{
+		ServiceDate: s.ServiceDate,
+		SubmittedAt: s.SubmittedAt,
+		DriverRaw:   s.DriverRaw,
+		DriverID:    s.DriverID,
+		Remark:      s.Remark,
+		Answers:     s.Answers,
+	})
 }
 
 // caseDuplicateFinder 讓 caseimport 於 dry-run 階段透過 casemgmt 查重。

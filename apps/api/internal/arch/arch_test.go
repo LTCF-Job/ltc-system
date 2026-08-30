@@ -84,18 +84,16 @@ var externalConfinement = []struct {
 		// The spreadsheet SDK stays in the infra boundary that renders or decodes files.
 		return z.kind() == "infra" && excelModules[z.module()]
 	}},
-	{"google.golang.org/api", func(z zone) bool {
-		return z.kind() == "infra" && z.module() == "formsync"
-	}},
 }
 
 // excelModules own a capability whose deliverable is a spreadsheet file.
 var excelModules = map[string]bool{
-	"reporting":  true,
-	"caseimport": true,
-	"ops":        true,
-	"casemgmt":   true,
-	"caregiver":  true,
+	"reporting":    true,
+	"caseimport":   true,
+	"ops":          true,
+	"casemgmt":     true,
+	"caregiver":    true,
+	"driverreport": true,
 }
 
 // domainAllowedExternal are the only non-stdlib imports internal/domain may use.

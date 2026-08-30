@@ -64,17 +64,25 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/drivers/:id/reveal` | staff, admin | 明文顯示司機個資 |
 | POST | `/drivers/:id/assignments` | staff, admin | 指派車輛給司機 |
 
-## 表單同步與欄位對應 `formH`
+## 司機接送匯報與欄位對應 `driverReportH`
+
+一台車一份匯報表；資料來源是使用者上傳的 `.xlsx`，沒有任何 Google 串接。
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/forms` | viewer, staff, admin | 已串接的 Google 表單清單 |
-| POST | `/forms/:id/sync` | staff, admin | 觸發表單欄位同步（重新讀取 Google Sheet 欄名） |
-| GET | `/forms/columns` | viewer, staff, admin | 表單欄位清單與對應狀態 |
-| PATCH | `/forms/columns/:id/mapping` | staff, admin | 設定單一欄位對應到哪個個案的哪一趟 |
-| POST | `/forms/columns/batch-mapping` | staff, admin | 批次設定欄位對應 |
-| GET | `/forms/google-drive-files` | staff, admin | 列出 Google Drive 可串接的表單檔案 |
-| POST | `/forms/inspect-sheet` | staff, admin | 讀取指定 Google Sheet 的欄名（串接前預覽） |
+| GET | `/driver-reports` | viewer, staff, admin | 各車匯報表清單與欄位對應進度 |
+| POST | `/driver-reports` | staff, admin | 為一台車建立匯報表 |
+| DELETE | `/driver-reports/:id` | staff, admin | 刪除匯報表（欄位對應與匯報紀錄一併移除） |
+| GET | `/driver-reports/:id/template` | staff, admin | 下載該車空白匯報範本（`.xlsx`，只有表頭） |
+| POST | `/driver-reports/:id/import?dryRun=` | staff, admin | 上傳匯報檔；`dryRun=true`（預設）回傳預覽，`dryRun=false` 正式寫入 |
+| GET | `/driver-reports/columns` | viewer, staff, admin | 欄位清單與對應狀態（可帶 `formId`、`mappingStatus`） |
+| PATCH | `/driver-reports/columns/:id/mapping` | staff, admin | 設定單一欄位對應到哪個個案的哪一趟 |
+| POST | `/driver-reports/columns/batch-mapping` | staff, admin | 批次設定欄位對應 |
+
+匯入檔的欄位順序固定為：民國日期、駕駛人、各個案趟次欄、備註。個案趟次欄只接受
+「有坐」「沒坐」，其餘（含空白）視為未回報不建立紀錄。`dryRun=false` 時可另外以
+form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSON 陣列，元素為
+`{columnHeader, mappingStatus, caseId, legSeq}`）。
 
 ## 搭乘月曆、異常與更正 `rideH` / `taskH`
 
@@ -87,7 +95,6 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | PATCH | `/rides/:id` | staff, admin | 人工更正搭乘紀錄（寫 audit log） |
 | POST | `/rides/manual-report` | staff, admin | 人工補登整筆回報（月曆空白格填寫） |
 | POST | `/rides/:id/resolve-conflict` | staff, admin | 裁決同車衝突回報 |
-| POST | `/api/v1/ingest/google-form` | 無（`X-Ingest-Token`） | Google 表單 Webhook 接收端點 |
 
 ## 匯出前置檢核與工作管理 `exportH`
 

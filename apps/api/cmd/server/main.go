@@ -20,10 +20,9 @@ import (
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
 	caseinfra "ltc-system/apps/api/internal/modules/casemgmt/infra"
 	casetransport "ltc-system/apps/api/internal/modules/casemgmt/transport"
-	formapp "ltc-system/apps/api/internal/modules/formsync/app"
-	forminfra "ltc-system/apps/api/internal/modules/formsync/infra"
-	"ltc-system/apps/api/internal/modules/formsync/infra/google"
-	formtransport "ltc-system/apps/api/internal/modules/formsync/transport"
+	drapp "ltc-system/apps/api/internal/modules/driverreport/app"
+	drinfra "ltc-system/apps/api/internal/modules/driverreport/infra"
+	drtransport "ltc-system/apps/api/internal/modules/driverreport/transport"
 	holidayapp "ltc-system/apps/api/internal/modules/holiday/app"
 	holidayinfra "ltc-system/apps/api/internal/modules/holiday/infra"
 	holidaytransport "ltc-system/apps/api/internal/modules/holiday/transport"
@@ -105,21 +104,6 @@ func main() {
 	caregiverRepo := caregiverinfra.NewCaregiverRepository(pool)
 
 	// 初始化 Services
-	googleCli, err := google.NewClient(ctx, cfg.GoogleSAJSON)
-	if err != nil {
-		slog.Warn("Failed to initialize Google API client (form sync features requiring Google credentials will be unavailable)", slog.String("error", err.Error()))
-	}
-	// 明確轉型為介面零值：nil 的具體型別指標直接指派給介面欄位會變成
-	// 「非 nil 介面、nil 內容」，導致下游 s.googleCli == nil 的判斷永遠不成立；
-	// NewGoogleClient 回傳的 *infra.GoogleClient 傳進 formapp.GoogleClient 介面參數時也有相同風險，故兩層都要做零值轉換
-	var googleAdapter google.Adapter
-	if googleCli != nil {
-		googleAdapter = googleCli
-	}
-	var formGoogleClient formapp.GoogleClient
-	if gc := forminfra.NewGoogleClient(googleAdapter); gc != nil {
-		formGoogleClient = gc
-	}
 	mdAudit := masterdataAuditWriter{svc: auditSvc}
 	regionSvc := masterapp.NewRegionService(mdRegionRepo, mdAudit)
 	siteSvc := masterapp.NewSiteService(mdSiteRepo)
@@ -139,7 +123,16 @@ func main() {
 		txRunner,
 	)
 	rideSvc := rideapp.NewRideService(rideRepo, rideDriverResolver{repo: mdDriverRepo}, rideScheduleReader{repo: caseRepo}, rideAuditWriter{svc: auditSvc})
-	formSvc := formapp.NewFormService(forminfra.NewFormRepository(pool), formGoogleClient)
+	driverReportExcel := drinfra.NewExcelAdapter()
+	driverReportSvc := drapp.NewDriverReportService(
+		drinfra.NewDriverReportRepository(pool),
+		driverReportExcel,
+		driverReportExcel,
+		driverReportCaseLookup{repo: caseRepo},
+		driverReportDriverResolver{repo: mdDriverRepo},
+		driverReportRideIngestor{svc: rideSvc},
+		driverReportAuditWriter{svc: auditSvc},
+	)
 	excelRenderer := reportinfra.NewExcelRenderer()
 	precheckSvc := reportapp.NewPrecheckService(precheckRepo)
 	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, nil)
@@ -177,7 +170,7 @@ func main() {
 		attendance:   opstransport.NewAttendanceHandler(attendanceSvc),
 		fuel:         opstransport.NewFuelHandler(fuelSvc),
 		dashboard:    reporttransport.NewDashboardHandler(dashboardSvc),
-		form:         formtransport.NewFormHandler(formSvc),
+		driverReport: drtransport.NewDriverReportHandler(driverReportSvc),
 		caregiver:    caregivertransport.NewCaregiverHandler(caregiverSvc),
 	}
 

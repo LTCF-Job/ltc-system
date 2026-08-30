@@ -22,14 +22,6 @@ func NewRideRepository(db *pgxpool.Pool) *RideRepository {
 	return &RideRepository{db: db}
 }
 
-// GetFormBySecret 依 Webhook Token 尋找註冊表單。
-func (r *RideRepository) GetFormBySecret(ctx context.Context, secret string) (uuid.UUID, uuid.UUID, error) {
-	query := `SELECT id, vehicle_id FROM google_forms WHERE ingest_secret_ref = $1 AND status = 'active' LIMIT 1`
-	var formID, vehicleID uuid.UUID
-	err := r.db.QueryRow(ctx, query, secret).Scan(&formID, &vehicleID)
-	return formID, vehicleID, err
-}
-
 // GetFormColumns 取得特定表單之所有欄位定義。
 func (r *RideRepository) GetFormColumns(ctx context.Context, formID uuid.UUID) ([]app.FormColumn, error) {
 	query := `

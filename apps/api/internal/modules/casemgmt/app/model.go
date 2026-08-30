@@ -6,6 +6,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// CaseNameRef 是個案的姓名索引，供跨模組以姓名比對個案時使用。
+type CaseNameRef struct {
+	ID             uuid.UUID
+	Code           string
+	Name           string
+	NameNormalized string
+}
+
 // Case 代表 cases 資料表實體。
 type Case struct {
 	ID                uuid.UUID

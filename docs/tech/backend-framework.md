@@ -40,8 +40,8 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 | `masterdata` | 據點、車輛、司機、區域主檔 |
 | `casemgmt` | 個案主檔、排班設定、交通偏好、個案彙整表匯出 |
 | `caseimport` | 個案批次 Excel／CSV 解析、預覽與匯入 |
-| `ride` | Google 表單回報、搭乘紀錄合併與人工更正 |
-| `formsync` | Google 表單登錄與欄位對應 |
+| `ride` | 司機接送匯報展開、搭乘紀錄合併與人工更正 |
+| `driverreport` | 車輛匯報表登錄、`.xlsx` 匯入與欄位對應 |
 | `reporting` | 趟數表、新竹時刻表、儀表板、前置檢核、政府申報匯出 |
 | `ops` | 司機出勤、油資、車輛維修 |
 | `notification` | 通知收件人與寄送留痕 |
@@ -64,8 +64,8 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 | 套件 | 做什麼 |
 |---|---|
 | `domain/calendar` | 依個案的排班規則（星期、起訖日、四趟制）算出某個月「應該搭乘」的完整日曆，是「未回報偵測」跟「異常比對」的比對基準 |
-| `domain/merge` | 混車合併演算法：多個 Google 表單來源回報同一趟時，「同一台車取最新回報、跨車用 OR」合併成單一 `ride_records` 狀態，同時保護已被人工裁決／更正過的紀錄不被自動覆蓋 |
-| `domain/namenorm` | 姓名／表單欄名正規化：NFKC 正規化、去空白、異體字轉標準字、Levenshtein 編輯距離比對，用來把司機在 Google 表單填的姓名（可能有錯字、簡繁混用）配對回司機主檔 |
+| `domain/merge` | 混車合併演算法：多個匯報來源回報同一趟時，「同一台車取最新回報、跨車用 OR」合併成單一 `ride_records` 狀態，同時保護已被人工裁決／更正過的紀錄不被自動覆蓋 |
+| `domain/namenorm` | 姓名／表單欄名正規化：NFKC 正規化、去空白、異體字轉標準字、Levenshtein 編輯距離比對，用來把司機在匯報表填的姓名（可能有錯字、簡繁混用）配對回司機主檔 |
 | `domain/rocdate` | 西元 ↔ 民國年（ROC）互轉，政府申報表格式要求 |
 | `domain/timeslot` | 依出發時間＋服務時長算結束時間，處理跨小時、防止跨日 |
 | `domain/crypto` | 身分證字號的檢查碼驗證、AES-256-GCM 加密／解密、HMAC 索引（用於唯一性比對又不明碼儲存）、遮罩顯示（`A20***9750`） |
@@ -82,7 +82,7 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 
 這兩種只在 `local` 生效，寫死在 `internal/platform/auth/auth.go`，改動時要非常小心不要讓它漏到 production 判斷分支裡。
 
-Google 表單回填走另一條路：`POST /api/v1/ingest/google-form`，不走 JWT，用 `X-Ingest-Token` header 驗證（token 存在 `forms.secret` 欄位，一個表單一組）。
+司機接送匯報沒有免驗證入口：資料一律由已登入的 staff／admin 透過 `POST /api/v1/driver-reports/:id/import` 上傳 `.xlsx` 進來，走一般的 JWT 驗證。
 
 ## Response 格式
 

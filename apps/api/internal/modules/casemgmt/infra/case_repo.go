@@ -448,3 +448,32 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 
 	return results, nil
 }
+
+// ListNameIndex 取得在案個案的姓名索引。只取比對姓名需要的欄位，避免為了推薦
+// 匯報欄位對應而把整份含密文的個案主檔載進記憶體。
+func (r *CaseRepository) ListNameIndex(ctx context.Context) ([]app.CaseNameRef, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT id, code, name, name_normalized
+		FROM cases
+		WHERE status = 'active'
+		ORDER BY code ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query case name index: %w", err)
+	}
+	defer rows.Close()
+
+	var list []app.CaseNameRef
+	for rows.Next() {
+		var c app.CaseNameRef
+		if err := rows.Scan(&c.ID, &c.Code, &c.Name, &c.NameNormalized); err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
+	return list, rows.Err()
+}

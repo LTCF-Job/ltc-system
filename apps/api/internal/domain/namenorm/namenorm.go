@@ -60,14 +60,15 @@ func ParseColumnHeader(header string) ParsedHeader {
 	orig := header
 	header = strings.TrimSpace(header)
 
-	// 系統欄判斷
-	if header == "時間戳記" || header == "今天日期" || header == "今日駕駛人" {
+	// 系統欄判斷；並存的舊寫法來自 Google 表單匯出檔，仍需辨識以便解析歷史檔案
+	switch header {
+	case "民國日期", "駕駛人", "時間戳記", "今天日期", "今日駕駛人":
 		return ParsedHeader{
 			Original: orig,
 			Kind:     "meta",
 		}
 	}
-	if strings.Contains(header, "問題回報") {
+	if strings.Contains(header, "問題回報") || header == "備註" {
 		return ParsedHeader{
 			Original: orig,
 			Kind:     "issue",

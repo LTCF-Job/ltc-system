@@ -37,7 +37,7 @@
 
 - 先檢查 `git status`，不覆寫、刪除或重設未被要求處理的修改。
 - application source code logic 變更前，讀取相關架構 skill，並依目前專案的 workflow／註解規則執行。
-- 前端修改完成後，一律執行對應的 E2E 測試或智慧改動偵測指令（`npm run test:e2e:changed`），確保修改未破壞既有功能。
+- 前端修改完成後，一律執行對應功能模組的 E2E 測試（改動範圍不明確時跑 `npm run test:e2e`），確保修改未破壞既有功能。
 - 任何 UI/UX 修改前，一律先讀取 `.agents/skills/ltc-dashboard-visual-language/SKILL.md`，並依其視覺、互動與資訊真實性規則執行。
 - 文件與 agent 規則修改應保持最小範圍；不因新增入口而複製完整 skill 內容。
 - 不自行 commit、push、rebase、merge 或執行破壞性 Git 操作。
@@ -49,19 +49,19 @@
 - Frontend Type Check & Build：在 `apps/web` 執行 `npm run type-check` 與 `npm run build`。
 - Frontend E2E Tests（Playwright + MSW）：
   - 跑全量 E2E 測試：`npm run test:e2e`（或根目錄 `make test-web-e2e`）。
-  - 跑改動對應 E2E 測試：`npm run test:e2e:changed`（或根目錄 `make test-web-e2e-changed`）。
   - 單獨跑特定功能模組 E2E 測試：
     - 認證與權限：`npm run test:e2e:auth`
     - 總覽儀表板：`npm run test:e2e:dashboard`
     - 個案與排班：`npm run test:e2e:cases`
     - 基礎主檔：`npm run test:e2e:masters`
-    - 表單與對應：`npm run test:e2e:forms`
+    - 司機接送匯報：`npm run test:e2e:driver-reports`
     - 搭乘月曆表：`npm run test:e2e:rides`
     - 異常集中處理：`npm run test:e2e:issues`
     - 營運報表：`npm run test:e2e:reports`
     - 車輛與出勤：`npm run test:e2e:operations`
     - 系統設定與稽核：`npm run test:e2e:settings`
     - 政府申報匯出：`npm run test:e2e:exports`
+    - 響應式版面：`npm run test:e2e:responsive`
 
 ## Language
 

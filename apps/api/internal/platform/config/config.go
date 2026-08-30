@@ -11,23 +11,22 @@ import (
 
 // Config 定義系統執行時之全部環境變數設定。
 type Config struct {
-	Port                string        `envconfig:"PORT" default:"8080"`
-	AppEnv              string        `envconfig:"APP_ENV" required:"true"`
-	DatabaseURL         string        `envconfig:"DATABASE_URL" default:"postgres://postgres:postgres@localhost:5432/ltc_system?sslmode=disable"`
-	DBMaxOpenConns      int           `envconfig:"DB_MAX_OPEN_CONNS" default:"5"`
-	DBMaxIdleConns      int           `envconfig:"DB_MAX_IDLE_CONNS" default:"2"`
-	EncryptionKeyB64    string        `envconfig:"ENCRYPTION_KEY" default:"MDEwMjAzMDQwNTA2MDcwODAxMDIwMzA0MDUwNjA3MDg="` // 32 bytes base64 for dev
-	HMACKeyB64          string        `envconfig:"HMAC_KEY" default:"MDkwODAwMDcwNjA1MDQwMzA5MDgwMDA3MDYwNTA0MDM="`       // 32 bytes base64 for dev
-	SupabaseJWKSURL     string        `envconfig:"SUPABASE_JWKS_URL"`
-	SupabaseProjectRef  string        `envconfig:"SUPABASE_PROJECT_REF"`
-	AllowedOrigins      string        `envconfig:"ALLOWED_ORIGINS"`
-	StorageBucket       string        `envconfig:"STORAGE_BUCKET" default:"ltc-exports"`
-	StorageSignedURLTTL time.Duration `envconfig:"STORAGE_SIGNED_URL_TTL" default:"24h"`
-	GoogleSAJSON        string        `envconfig:"GOOGLE_SA_JSON"`
-	ResendAPIKey        string        `envconfig:"RESEND_API_KEY"`
-	NotifyFrom          string        `envconfig:"NOTIFY_FROM" default:"noreply@ltc.example.com"`
-	SentryDSN           string        `envconfig:"SENTRY_DSN"`
-	LogLevel            string        `envconfig:"LOG_LEVEL" default:"info"`
+	Port                        string        `envconfig:"PORT" default:"8080"`
+	AppEnv                      string        `envconfig:"APP_ENV" required:"true"`
+	DatabaseURL                 string        `envconfig:"DATABASE_URL" default:"postgres://postgres:postgres@localhost:5432/ltc_system?sslmode=disable"`
+	DBMaxOpenConns              int           `envconfig:"DB_MAX_OPEN_CONNS" default:"5"`
+	DBMaxIdleConns              int           `envconfig:"DB_MAX_IDLE_CONNS" default:"2"`
+	EncryptionKeyB64            string        `envconfig:"ENCRYPTION_KEY" default:"MDEwMjAzMDQwNTA2MDcwODAxMDIwMzA0MDUwNjA3MDg="` // 32 bytes base64 for dev
+	HMACKeyB64                  string        `envconfig:"HMAC_KEY" default:"MDkwODAwMDcwNjA1MDQwMzA5MDgwMDA3MDYwNTA0MDM="`       // 32 bytes base64 for dev
+	SupabaseJWKSURL             string        `envconfig:"SUPABASE_JWKS_URL"`
+	SupabaseProjectRef          string        `envconfig:"SUPABASE_PROJECT_REF"`
+	AllowedOrigins              string        `envconfig:"ALLOWED_ORIGINS"`
+	StorageBucket               string        `envconfig:"STORAGE_BUCKET" default:"ltc-exports"`
+	StorageSignedURLTTL         time.Duration `envconfig:"STORAGE_SIGNED_URL_TTL" default:"24h"`
+	ResendAPIKey                string        `envconfig:"RESEND_API_KEY"`
+	NotifyFrom                  string        `envconfig:"NOTIFY_FROM" default:"noreply@ltc.example.com"`
+	SentryDSN                   string        `envconfig:"SENTRY_DSN"`
+	LogLevel                    string        `envconfig:"LOG_LEVEL" default:"info"`
 	GovernmentHolidayAPITimeout time.Duration `envconfig:"GOVERNMENT_HOLIDAY_API_TIMEOUT" default:"10s"`
 
 	// 解析後的金鑰 bytes

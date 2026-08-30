@@ -5,8 +5,8 @@ import type {
   VehicleDTO,
   DriverDTO,
   CaregiverDTO,
-  FormDTO,
-  FormColumnDTO,
+  DriverReportFormDTO,
+  DriverReportColumnDTO,
   ExportJobDTO,
   DashboardStatsDTO,
   PrecheckResultDTO,
@@ -688,71 +688,59 @@ export const mockCases: CaseDTO[] = [
   }
 ]
 
-// Google 表單展示資料：涵蓋正常同步與需要對帳警示狀態、多分頁與已同步月份
-export const mockForms: FormDTO[] = [
+// 司機接送匯報表展示資料：一台車一份匯報表，涵蓋已完成對應與仍有待對應欄位兩種狀態
+export const mockDriverReportForms: DriverReportFormDTO[] = [
   {
     id: 'form_1',
-    formId: 'zhubei_car_1',
-    title: '竹北一車每日接送回報表',
-    sheetUrl: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRmG1uY1b/edit',
     vehicleId: 'veh_1',
     vehicleName: '竹北一車',
+    title: '竹北一車接送匯報',
     region: 'hsinchu',
-    sheetTabs: ['8月回報', '7月回報', '工作表1'],
-    activeTab: '8月回報',
-    syncedMonths: ['2026-07', '2026-08'],
-    lastSyncedAt: '2026-08-25 14:00',
+    lastImportedAt: '2026-08-25 14:00:00',
     totalColumns: 56,
+    mappedColumns: 53,
     pendingColumns: 3,
-    hasSyncAlert: false
+    submissionCount: 42,
+    status: 'active'
   },
   {
     id: 'form_2',
-    formId: 'zhunan_car_2',
-    title: '竹南2車每日接送回報表',
-    sheetUrl: 'https://docs.google.com/spreadsheets/d/2BxiMVs0XRmG2uY2c/edit',
     vehicleId: 'veh_2',
     vehicleName: '竹南2車',
+    title: '竹南2車接送匯報',
     region: 'miaoli',
-    sheetTabs: ['8月回報', '7月回報'],
-    activeTab: '8月回報',
-    syncedMonths: ['2026-07'],
-    lastSyncedAt: '2026-08-25 14:05',
-    totalColumns: 62,
+    lastImportedAt: '2026-08-25 14:05:00',
+    totalColumns: 53,
+    mappedColumns: 53,
     pendingColumns: 0,
-    hasSyncAlert: false
+    submissionCount: 106,
+    status: 'active'
   },
   {
     id: 'form_3',
-    formId: 'zhubei_car_2',
-    title: '竹北二車每日接送回報表',
-    sheetUrl: 'https://docs.google.com/spreadsheets/d/3BxiMVs0XRmG3uY3d/edit',
     vehicleId: 'veh_3',
     vehicleName: '竹北二車',
+    title: '竹北二車接送匯報',
     region: 'hsinchu',
-    sheetTabs: ['8月回報', '去程回報', '回程回報'],
-    activeTab: '8月回報',
-    syncedMonths: ['2026-07'],
-    lastSyncedAt: '2026-08-22 09:00',
+    lastImportedAt: '2026-08-22 09:00:00',
     totalColumns: 48,
+    mappedColumns: 43,
     pendingColumns: 5,
-    hasSyncAlert: true
+    submissionCount: 30,
+    status: 'active'
   },
   {
     id: 'form_4',
-    formId: 'miaoli_car_1',
-    title: '苗栗市1車每日接送回報表',
-    sheetUrl: 'https://docs.google.com/spreadsheets/d/4BxiMVs0XRmG4uY4e/edit',
     vehicleId: 'veh_4',
     vehicleName: '苗栗市1車',
+    title: '苗栗市1車接送匯報',
     region: 'miaoli',
-    sheetTabs: ['8月回報', '7月回報'],
-    activeTab: '8月回報',
-    syncedMonths: ['2026-07', '2026-08'],
-    lastSyncedAt: '2026-08-25 15:30',
-    totalColumns: 36,
-    pendingColumns: 1,
-    hasSyncAlert: false
+    lastImportedAt: null,
+    totalColumns: 0,
+    mappedColumns: 0,
+    pendingColumns: 0,
+    submissionCount: 0,
+    status: 'active'
   }
 ]
 
@@ -824,7 +812,7 @@ export const mockRoles: RoleDTO[] = [
     id: 'role_dispatcher',
     key: 'dispatcher',
     name: '調度員',
-    description: '負責日常派車、個案管理、搭乘月曆排程、異常處理、表單同步與申報資料匯出。',
+    description: '負責日常派車、個案管理、搭乘月曆排程、異常處理、司機接送匯報與申報資料匯出。',
     tagType: 'primary',
     isSystem: true,
     permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS.dispatcher)),
@@ -878,8 +866,8 @@ export const mockRoles: RoleDTO[] = [
       masters_sites: { view: true, edit: false },
       masters_vehicles: { view: true, edit: false },
       masters_drivers: { view: true, edit: false },
-      forms_sync: { view: true, edit: false },
-      forms_mappings: { view: true, edit: false },
+      driver_reports: { view: true, edit: false },
+      driver_report_mappings: { view: true, edit: false },
       rides_calendar: { view: true, edit: false },
       rides_issues: { view: true, edit: false },
       rides_missing: { view: true, edit: false },
@@ -898,74 +886,97 @@ export const mockRoles: RoleDTO[] = [
   }
 ]
 
-// 智慧欄位對應展示資料：涵蓋 4 種欄位種類 (meta, ride, issue, unknown) 與 3 種對應狀態 (pending, mapped, ignored)
-export const mockFormColumns: FormColumnDTO[] = [
+// 匯報欄位對應展示資料：表頭沿用實際匯報檔的寫法，涵蓋 pending／mapped／ignored 三種狀態
+export const mockDriverReportColumns: DriverReportColumnDTO[] = [
   {
     id: 'col_1',
     formId: 'form_1',
-    columnName: '1. 張詹竹妹 [去程]',
-    columnSeq: 4,
+    formTitle: '竹北一車接送匯報',
+    vehicleName: '竹北一車',
+    columnIndex: 3,
+    columnHeader: '1.張詹竹妹 [去程]',
+    cleanedName: '張詹竹妹',
     kind: 'ride',
     mappingStatus: 'pending',
+    caseId: null,
+    caseName: null,
+    legSeq: null,
     suggestedCaseId: 'case_4',
     suggestedCaseName: '張詹竹妹',
     suggestedLegSeq: 1,
-    suggestionScore: 1.0,
-    updatedAt: '2026-08-25'
+    suggestionScore: 1.0
   },
   {
     id: 'col_2',
     formId: 'form_1',
-    columnName: '4. 葉秀珍 (4趟) [去程]',
-    columnSeq: 5,
+    formTitle: '竹北一車接送匯報',
+    vehicleName: '竹北一車',
+    columnIndex: 4,
+    columnHeader: '4.葉秀珍 (4趟) [去程]',
+    cleanedName: '葉秀珍',
     kind: 'ride',
     mappingStatus: 'pending',
+    caseId: null,
+    caseName: null,
+    legSeq: null,
     suggestedCaseId: 'case_2',
     suggestedCaseName: '葉秀珍',
     suggestedLegSeq: 1,
-    suggestionScore: 0.85,
-    updatedAt: '2026-08-25'
+    suggestionScore: 0.85
   },
   {
     id: 'col_3',
     formId: 'form_1',
-    columnName: '1. 吳𣵛桂(去程竹3) [去程]',
-    columnSeq: 6,
+    formTitle: '竹北一車接送匯報',
+    vehicleName: '竹北一車',
+    columnIndex: 5,
+    columnHeader: '1.吳𣵛桂(去程竹3) [去程]',
+    cleanedName: '吳𣵛桂',
     kind: 'ride',
-    mappingStatus: 'pending',
+    mappingStatus: 'mapped',
+    caseId: 'case_3',
+    caseName: '吳𣵛桂',
+    legSeq: 1,
     suggestedCaseId: 'case_3',
     suggestedCaseName: '吳𣵛桂',
     suggestedLegSeq: 1,
-    suggestionScore: 0.8,
-    updatedAt: '2026-08-25'
+    suggestionScore: 0.8
   },
   {
     id: 'col_4',
     formId: 'form_1',
-    columnName: '問題回報與備註說明',
-    columnSeq: 40,
-    kind: 'issue',
-    mappingStatus: 'ignored',
-    updatedAt: '2026-08-25'
+    formTitle: '竹北一車接送匯報',
+    vehicleName: '竹北一車',
+    columnIndex: 6,
+    columnHeader: '1.吳𣵛桂(去程竹3) [回程]',
+    cleanedName: '吳𣵛桂',
+    kind: 'ride',
+    mappingStatus: 'mapped',
+    caseId: 'case_3',
+    caseName: '吳𣵛桂',
+    legSeq: 2,
+    suggestedCaseId: 'case_3',
+    suggestedCaseName: '吳𣵛桂',
+    suggestedLegSeq: 2,
+    suggestionScore: 0.8
   },
   {
     id: 'col_5',
-    formId: 'form_1',
-    columnName: '時間戳記 (Timestamp)',
-    columnSeq: 1,
-    kind: 'meta',
-    mappingStatus: 'mapped',
-    updatedAt: '2026-08-01'
-  },
-  {
-    id: 'col_6',
     formId: 'form_3',
-    columnName: '新進未知個案-測試欄位',
-    columnSeq: 12,
+    formTitle: '竹北二車接送匯報',
+    vehicleName: '竹北二車',
+    columnIndex: 12,
+    columnHeader: '新進未知個案-測試欄位',
+    cleanedName: '新進未知個案-測試欄位',
     kind: 'unknown',
-    mappingStatus: 'pending',
-    suggestionScore: 0.3,
-    updatedAt: '2026-08-25'
+    mappingStatus: 'ignored',
+    caseId: null,
+    caseName: null,
+    legSeq: null,
+    suggestedCaseId: null,
+    suggestedCaseName: null,
+    suggestedLegSeq: null,
+    suggestionScore: 0.3
   }
 ]
 

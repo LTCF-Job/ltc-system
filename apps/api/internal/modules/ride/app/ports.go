@@ -59,10 +59,45 @@ type DriverResolver interface {
 	GetPrimaryDriverForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) (*DriverRef, error)
 }
 
+// RideSourceRow 是單一 slot 已寫入的一筆回報來源，混車合併以此為輸入。
+type RideSourceRow struct {
+	VehicleID   uuid.UUID
+	DriverID    *uuid.UUID
+	Reported    string
+	SubmittedAt time.Time
+}
+
+// CalendarLeg 是月曆表需要的排班趟次時段。
+type CalendarLeg struct {
+	LegSeq      int16
+	Direction   string
+	DepartTime  string
+	VehicleID   *uuid.UUID
+	VehicleName string
+}
+
+// CalendarCase 是月曆表一列所需的個案與其當期排班。
+type CalendarCase struct {
+	ID             uuid.UUID
+	Code           string
+	Name           string
+	Region         string
+	TripPattern    int16
+	Weekdays       []int16
+	SiteOpenDays   []int16
+	ClaimStartDate time.Time
+	ClaimEndDate   *time.Time
+	EffectiveFrom  time.Time
+	EffectiveTo    *time.Time
+	Legs           []CalendarLeg
+}
+
 // RideRecordStore 定義表單提交、來源列與搭乘紀錄的讀寫邊界。
 type RideRecordStore interface {
-	GetFormBySecret(ctx context.Context, secret string) (uuid.UUID, uuid.UUID, error)
 	GetFormColumns(ctx context.Context, formID uuid.UUID) ([]FormColumn, error)
+	ListRideSourcesForSlot(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) ([]RideSourceRow, error)
+	ListCalendarCases(ctx context.Context, start, end time.Time, region, keyword string) ([]CalendarCase, error)
+	ListRideRecordsInRange(ctx context.Context, start, end time.Time, region, keyword string) ([]RideRecord, error)
 	SaveFormSubmission(ctx context.Context, formID uuid.UUID, serviceDate, submittedAt time.Time, driverNameRaw string, driverID *uuid.UUID, source string, payload map[string]interface{}, issueText string) (uuid.UUID, error)
 	InsertRideSource(ctx context.Context, submissionID, caseID uuid.UUID, serviceDate time.Time, legSeq int16, vehicleID uuid.UUID, driverID *uuid.UUID, reported string, colIdx int) error
 	GetRideRecordForSlot(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) (*RideRecord, error)

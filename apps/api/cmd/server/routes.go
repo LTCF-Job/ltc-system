@@ -9,7 +9,7 @@ import (
 	caregivertransport "ltc-system/apps/api/internal/modules/caregiver/transport"
 	importtransport "ltc-system/apps/api/internal/modules/caseimport/transport"
 	casetransport "ltc-system/apps/api/internal/modules/casemgmt/transport"
-	formtransport "ltc-system/apps/api/internal/modules/formsync/transport"
+	drtransport "ltc-system/apps/api/internal/modules/driverreport/transport"
 	holidaytransport "ltc-system/apps/api/internal/modules/holiday/transport"
 	mastertransport "ltc-system/apps/api/internal/modules/masterdata/transport"
 	notifytransport "ltc-system/apps/api/internal/modules/notification/transport"
@@ -45,7 +45,7 @@ type handlers struct {
 	attendance   *opstransport.AttendanceHandler
 	fuel         *opstransport.FuelHandler
 	dashboard    *reporttransport.DashboardHandler
-	form         *formtransport.FormHandler
+	driverReport *drtransport.DriverReportHandler
 	caregiver    *caregivertransport.CaregiverHandler
 }
 
@@ -79,9 +79,6 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 			"time":     time.Now().UTC().Format(time.RFC3339),
 		})
 	})
-
-	// Webhook 端點 (X-Ingest-Token 驗證)
-	r.POST("/api/v1/ingest/google-form", h.ride.IngestWebhook)
 
 	// 需要 JWT 認證之 API 群組
 	apiV1 := r.Group("/api/v1")
@@ -128,16 +125,15 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 		apiV1.POST("/drivers/:id/reveal", auth.RequireRoles("staff", "admin"), h.driver.Reveal)
 		apiV1.POST("/drivers/:id/assignments", auth.RequireRoles("staff", "admin"), h.driver.AssignVehicle)
 
-		// 5. 表單管理與欄位對應
-		apiV1.GET("/forms", auth.RequireRoles("viewer", "staff", "admin"), h.form.ListForms)
-		apiV1.POST("/forms", auth.RequireRoles("staff", "admin"), h.form.CreateFormAssociation)
-		apiV1.DELETE("/forms/:id", auth.RequireRoles("staff", "admin"), h.form.DeleteFormAssociation)
-		apiV1.GET("/forms/google-drive-files", auth.RequireRoles("staff", "admin"), h.form.ListGoogleDriveFiles)
-		apiV1.POST("/forms/inspect-sheet", auth.RequireRoles("staff", "admin"), h.form.InspectGoogleSheet)
-		apiV1.POST("/forms/:id/sync", auth.RequireRoles("staff", "admin"), h.form.SyncForm)
-		apiV1.GET("/forms/columns", auth.RequireRoles("viewer", "staff", "admin"), h.form.ListColumns)
-		apiV1.PATCH("/forms/columns/:id/mapping", auth.RequireRoles("staff", "admin"), h.form.UpdateColumnMapping)
-		apiV1.POST("/forms/columns/batch-mapping", auth.RequireRoles("staff", "admin"), h.form.BatchMapping)
+		// 5. 司機接送匯報表與欄位對應
+		apiV1.GET("/driver-reports", auth.RequireRoles("viewer", "staff", "admin"), h.driverReport.ListForms)
+		apiV1.POST("/driver-reports", auth.RequireRoles("staff", "admin"), h.driverReport.CreateForm)
+		apiV1.GET("/driver-reports/columns", auth.RequireRoles("viewer", "staff", "admin"), h.driverReport.ListColumns)
+		apiV1.PATCH("/driver-reports/columns/:id/mapping", auth.RequireRoles("staff", "admin"), h.driverReport.UpdateColumnMapping)
+		apiV1.POST("/driver-reports/columns/batch-mapping", auth.RequireRoles("staff", "admin"), h.driverReport.BatchMapping)
+		apiV1.DELETE("/driver-reports/:id", auth.RequireRoles("staff", "admin"), h.driverReport.DeleteForm)
+		apiV1.GET("/driver-reports/:id/template", auth.RequireRoles("staff", "admin"), h.driverReport.DownloadTemplate)
+		apiV1.POST("/driver-reports/:id/import", auth.RequireRoles("staff", "admin"), h.driverReport.ImportExcel)
 
 		// 6. 搭乘月曆、搭乘紀錄更正、異常搭乘與未回報清單
 		apiV1.GET("/rides/calendar", auth.RequireRoles("viewer", "staff", "admin"), h.ride.GetCalendar)

@@ -1,3 +1,5 @@
+import * as XLSX from 'xlsx'
+
 /**
  * 建立標準合法之 Excel (.xlsx) 二進位 Blob，確保在 MSW Mock 開發環境下
  * 下載的所有 Excel 檔案（趟數表、時刻表、範本、申報表、保養表）在 Microsoft Excel 中皆能正常開啟不損毀。
@@ -384,4 +386,24 @@ export function createCaseImportTemplateExcelBlob(): Blob {
  */
 export function createCaregiverImportTemplateExcelBlob(): Blob {
   return base64ToBlob(CAREGIVER_IMPORT_TEMPLATE_EXCEL_BASE64)
+}
+
+/**
+ * 產生司機接送匯報範本 Blob。
+ *
+ * 此範本的欄位隨每台車已對應的個案而不同，無法像個案／照護人員範本那樣內嵌一份固定
+ * base64，因此改為依後端 `RenderDriverReportTemplate` 的同一條組欄規則即時產生：
+ * 民國日期、駕駛人、各個案趟次欄、備註，且只有表頭沒有示範資料列
+ * （示範列會在匯入時被當成真實匯報寫入搭乘紀錄）。
+ * 該規則由 apps/api 的 TestRenderDriverReportTemplate_RoundTrip 斷言。
+ */
+export function createDriverReportTemplateExcelBlob(caseColumns: string[]): Blob {
+  const header = ['民國日期', '駕駛人', ...caseColumns, '備註']
+  const sheet = XLSX.utils.aoa_to_sheet([header])
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, sheet, '司機接送匯報')
+  const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
+  return new Blob([bytes], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  })
 }

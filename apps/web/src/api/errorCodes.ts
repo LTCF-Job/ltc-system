@@ -1,4 +1,4 @@
-// 後端 API 統一錯誤碼對應之非技術性提示文字，需與 apps/api/internal/middleware/response.go 的錯誤碼常數保持一致。
+// 後端 API 統一錯誤碼對應之非技術性提示文字，需與 apps/api/internal/platform/httpx/response.go 的錯誤碼常數保持一致。
 // 前端一律依錯誤碼決定顯示文字，不直接信任後端回傳的 message（避免技術性錯誤外洩或未預期字串）。
 export const API_ERROR_MESSAGES: Record<string, string> = {
   VALIDATION_FAILED: '輸入資料不符合規則，請確認後再試',
@@ -9,9 +9,7 @@ export const API_ERROR_MESSAGES: Record<string, string> = {
   EXPORT_IN_PROGRESS: '匯出作業進行中，請稍後再試',
   PRECHECK_FAILED: '資料檢核未通過，請確認後再試',
   MAPPING_REQUIRED: '尚未完成欄位對應設定',
-  INGEST_TOKEN_INVALID: '匯入權杖無效或已過期',
-  FORM_SOURCE_FAILED: '無法存取雲端試算表，請確認連結或權限設定',
-  FORM_SYNC_FAILED: '同步表單資料失敗，請稍後再試',
+  DRIVER_REPORT_IMPORT_FAILED: '匯入司機接送匯報失敗，請確認檔案格式後再試',
   FORM_MAPPING_FAILED: '更新欄位對應設定失敗，請稍後再試',
   INTERNAL_ERROR: '系統發生錯誤，請稍後再試'
 }
