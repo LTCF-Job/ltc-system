@@ -13,6 +13,7 @@ description: Use when adding or changing an Excel/CSV import, template-download,
 2. **HTTP handler that serves those bytes** (`c.Data`, `c.Writer.Write`): run one `httptest` call through the real handler (and router if middleware sits in front of it) and feed `recorder.Body` back through `excelize.OpenReader`. This catches corruption from middleware or response-writing code between the render function and the wire, not just the render function itself.
 3. **MSW mock for the same endpoint** (`apps/web/src/mocks/handlers/*.ts`): if the endpoint is reachable in mock/demo mode, its response must be a real, parseable workbook — never a placeholder string wrapped in `Blob`. Use `apps/web/src/mocks/utils/mockExcel.ts`'s `createMockExcelBlob()` for a generic valid `.xlsx`, or add a `createXxxTemplateExcelBlob()` there (base64 of a real generated workbook) when the mock needs entity-specific headers. This is the same rule [[mock-and-demo-boundaries]] states generically ("mock responses aligned with the public API contract"); this skill exists because that general phrasing did not stop a hand-typed string from being used as fake `.xlsx` content.
 4. **Content-Type and filename extension** must match the actual byte format served — an `.xlsx` filename with `text/csv` bytes (or vice versa) opens as corrupted even when the bytes themselves are valid for their real format.
+5. **Template/export field coverage when the task doesn't name specific columns**: diff the import template's header row and the export's column list against the entity's current field set (DTO/model + any fields the same feature just added). A field missing from the template silently drops on import, and one missing from the export silently hides data that's otherwise visible in the API/UI — treat each as a gap to close, not an out-of-scope difference.
 
 ## Self-check before calling the feature done
 
@@ -20,3 +21,4 @@ description: Use when adding or changing an Excel/CSV import, template-download,
 - [ ] If an HTTP handler serves those bytes, the full handler (with middleware) was exercised once and its response body re-opened by a parser.
 - [ ] Every mock/demo handler for the same download endpoint returns a real parseable file, not a string literal.
 - [ ] Content-Type and the filename's extension agree with the actual byte format.
+- [ ] When no specific columns were requested, the template/export column list was diffed against the entity's current fields, including any just added by this feature.
