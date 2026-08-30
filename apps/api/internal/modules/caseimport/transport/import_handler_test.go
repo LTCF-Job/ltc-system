@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"unicode"
 
@@ -52,28 +51,6 @@ func TestDownloadTemplate_TableDriven(t *testing.T) {
 				require.Greater(t, len(data), 1000)
 				assert.Equal(t, byte('P'), data[0])
 				assert.Equal(t, byte('K'), data[1])
-			},
-		},
-		{
-			name:                "指定 format=csv 應產生含 UTF-8 BOM 之 CSV 範本",
-			url:                 "/api/v1/cases/template?format=csv",
-			expectedContentType: "text/csv; charset=utf-8",
-			expectedFilename:    "case_template.csv",
-			checkBody: func(t *testing.T, body *bytes.Buffer) {
-				str := body.String()
-				assert.True(t, strings.HasPrefix(str, "\uFEFF姓名*"), "CSV 開頭必須包含 UTF-8 BOM 與標題欄")
-				assert.Contains(t, str, "身分證字號")
-				assert.Contains(t, str, "REMARK")
-			},
-		},
-		{
-			name:                "不區分大小寫 format=CSV 應正常回傳 CSV 範本",
-			url:                 "/api/v1/cases/template?format=CSV",
-			expectedContentType: "text/csv; charset=utf-8",
-			expectedFilename:    "case_template.csv",
-			checkBody: func(t *testing.T, body *bytes.Buffer) {
-				str := body.String()
-				assert.True(t, strings.HasPrefix(str, "\uFEFF姓名*"))
 			},
 		},
 		{

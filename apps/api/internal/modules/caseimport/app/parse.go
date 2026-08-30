@@ -1,9 +1,7 @@
 package app
 
 import (
-	"bytes"
 	"context"
-	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
@@ -19,7 +17,7 @@ func (s *ImportService) ParseCasesFromExcel(ctx context.Context, r io.Reader) (*
 	return s.ParseCases(ctx, r, "upload.xlsx")
 }
 
-// ParseCases 支援解析 .xlsx, .xls 與 .csv 檔案，對齊「進系統個案個資」欄位格式。
+// ParseCases 僅支援解析 .xlsx／.xls 檔案，對齊「進系統個案個資」欄位格式。
 func (s *ImportService) ParseCases(ctx context.Context, r io.Reader, fileName string) (*CaseImportPreviewResult, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -28,35 +26,15 @@ func (s *ImportService) ParseCases(ctx context.Context, r io.Reader, fileName st
 
 	// 檢查是否為 Excel ZIP 格式 (Magic Number: PK\x03\x04)
 	isExcel := len(data) >= 4 && data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x03 && data[3] == 0x04
-	if isExcel || strings.HasSuffix(strings.ToLower(fileName), ".xlsx") || strings.HasSuffix(strings.ToLower(fileName), ".xls") {
-		tables, sheetNames, err := s.spreadsheet.ReadTables(data)
-		if err != nil {
-			return nil, err
-		}
-		return s.processRawTables(ctx, tables, sheetNames)
+	if !isExcel && !strings.HasSuffix(strings.ToLower(fileName), ".xlsx") && !strings.HasSuffix(strings.ToLower(fileName), ".xls") {
+		return nil, errors.New("僅支援 .xlsx 匯入格式")
 	}
 
-	return s.parseCSVBytes(ctx, data)
-}
-
-func (s *ImportService) parseCSVBytes(ctx context.Context, data []byte) (*CaseImportPreviewResult, error) {
-	// 移除 UTF-8 BOM
-	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
-
-	reader := csv.NewReader(bytes.NewReader(data))
-	reader.FieldsPerRecord = -1
-	reader.LazyQuotes = true
-
-	rows, err := reader.ReadAll()
+	tables, sheetNames, err := s.spreadsheet.ReadTables(data)
 	if err != nil {
-		return nil, fmt.Errorf("csv 解析失敗: %w", err)
+		return nil, err
 	}
-
-	if len(rows) == 0 {
-		return nil, errors.New("csv 檔案內容為空")
-	}
-
-	return s.processRawTables(ctx, [][][]string{rows}, []string{"CSV"})
+	return s.processRawTables(ctx, tables, sheetNames)
 }
 
 // headerColumn 是表頭欄位在來源列中的原始名稱與欄位索引。

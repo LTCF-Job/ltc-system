@@ -23,7 +23,7 @@ func NewImportHandler(svc *app.ImportService) *ImportHandler {
 	return &ImportHandler{svc: svc}
 }
 
-// ImportExcel 批次上傳解析個案新增資料 Excel 或 CSV 檔案。
+// ImportExcel 批次上傳解析個案新增資料 Excel 檔案。
 func (h *ImportHandler) ImportExcel(c *gin.Context) {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
@@ -69,14 +69,8 @@ func (h *ImportHandler) ImportExcel(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, preview, nil)
 }
 
-// DownloadTemplate 下載個案批次匯入範本 (支援 .xlsx 與 .csv)。
+// DownloadTemplate 下載個案批次匯入範本 (.xlsx)。
 func (h *ImportHandler) DownloadTemplate(c *gin.Context) {
-	if strings.ToLower(c.DefaultQuery("format", "xlsx")) == "csv" {
-		attachAs(c, "case_template.csv", "個案批次匯入範本.csv")
-		c.Data(http.StatusOK, "text/csv; charset=utf-8", []byte(app.GenerateCaseImportTemplateCSV()))
-		return
-	}
-
 	excelBytes, err := h.svc.CaseImportTemplateExcel()
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "產生 Excel 範本失敗", nil)

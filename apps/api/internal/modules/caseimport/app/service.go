@@ -1,6 +1,6 @@
 package app
 
-// ImportService 負責批次 Excel／CSV 個案資料之解析、預覽與匯入。
+// ImportService 負責批次 Excel 個案資料之解析、預覽與匯入。
 type ImportService struct {
 	cases       CaseRegistrar
 	duplicates  CaseDuplicateFinder

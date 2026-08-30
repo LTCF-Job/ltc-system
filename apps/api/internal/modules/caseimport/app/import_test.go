@@ -43,38 +43,6 @@ func TestGenerateCaseImportTemplateExcel_Structure(t *testing.T) {
 	assert.NotContains(t, headerRow, "週一趟數(0:不搭/1:單去/2:來回/4:四趟)")
 }
 
-func TestGenerateCaseImportTemplateCSV_Structure(t *testing.T) {
-	csvData := GenerateCaseImportTemplateCSV()
-	assert.True(t, strings.HasPrefix(csvData, string(rune(0xFEFF))+"姓名*"))
-	lines := strings.Split(strings.TrimSpace(csvData), "\r\n")
-	require.Equal(t, 3, len(lines), "CSV 範本應包含 1 列標題與 2 筆範例資料")
-	assert.Contains(t, lines[0], "REMARK")
-	assert.Contains(t, lines[1], "張曾阿妹")
-	assert.Contains(t, lines[2], "李國盛")
-}
-
-func TestParseCases_TemplateCSV(t *testing.T) {
-	csvData := GenerateCaseImportTemplateCSV()
-	svc := NewImportService(nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
-
-	preview, err := svc.ParseCases(context.Background(), strings.NewReader(csvData), "template.csv")
-	require.NoError(t, err)
-	require.NotNil(t, preview)
-
-	assert.Equal(t, 2, preview.TotalRows)
-	assert.Equal(t, 2, preview.ValidRows)
-	assert.Equal(t, 0, preview.ErrorRows)
-
-	row1 := preview.Rows[0]
-	assert.Equal(t, "張曾阿妹", row1.Name)
-	assert.Equal(t, "A202559750", row1.NationalID)
-	assert.Equal(t, "竹南日照據點", row1.SiteName)
-	assert.Equal(t, "竹南1車", row1.OutboundVehicle)
-	assert.Equal(t, "竹南2車", row1.InboundVehicle)
-	assert.Equal(t, "陳小華", row1.CareContactName)
-	assert.Equal(t, "行動不便需輪椅", row1.Remarks)
-}
-
 func TestParseCases_TemplateExcel(t *testing.T) {
 	excelBytes, err := importinfra.NewExcelAdapter().RenderCaseImportTemplate()
 	require.NoError(t, err)
@@ -158,6 +126,40 @@ func TestParseCases_OnlyNameRequired(t *testing.T) {
 	assert.Equal(t, 0, preview.ErrorRows)
 	assert.Equal(t, 1, preview.ValidRows)
 	assert.Empty(t, preview.Rows[0].ErrorMessage)
+}
+
+// TestParseCases_IgnoresFullyBlankRow 驗證全空白列（僅姓名以外欄位有值時仍視為空白）
+// 直接忽略，不計入總筆數也不歸入錯誤列。
+func TestParseCases_IgnoresFullyBlankRow(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	sheetName := "進系統個案個資"
+	f.SetSheetName("Sheet1", sheetName)
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點"}
+	for i, header := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		require.NoError(t, f.SetCellValue(sheetName, cell, header))
+	}
+	blankRow := []interface{}{"", "", "", "", "", ""}
+	for i, value := range blankRow {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
+		require.NoError(t, f.SetCellValue(sheetName, cell, value))
+	}
+	validRow := []interface{}{"馮玉英", "一般", "", "", "", "竹南日照"}
+	for i, value := range validRow {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 3)
+		require.NoError(t, f.SetCellValue(sheetName, cell, value))
+	}
+	buf, err := f.WriteToBuffer()
+	require.NoError(t, err)
+
+	preview, err := NewImportService(nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	require.NoError(t, err)
+	assert.Equal(t, 1, preview.TotalRows, "全空白列不應計入總筆數")
+	assert.Equal(t, 1, preview.ValidRows)
+	assert.Equal(t, 0, preview.ErrorRows, "全空白列應直接忽略，不應歸入錯誤列")
+	require.Len(t, preview.Rows, 1)
+	assert.Equal(t, "馮玉英", preview.Rows[0].Name)
 }
 
 // TestParseCases_ReportsBirthDateFormatError 驗證生日格式錯誤仍回報 warning/error，其餘欄位不擋。
@@ -252,9 +254,9 @@ func TestParseCases_FlagsDuplicateByNameWhenNationalIDBlank(t *testing.T) {
 func TestParseCases_EmptyAndCorruptedFiles(t *testing.T) {
 	svc := NewImportService(nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 
-	// 測試空白 CSV 應回傳錯誤
+	// 測試不支援的副檔名應回傳錯誤
 	_, err := svc.ParseCases(context.Background(), strings.NewReader(""), "empty.csv")
-	assert.Error(t, err, "空白 CSV 應回傳錯誤")
+	assert.Error(t, err, "非 .xlsx 副檔名應回傳錯誤")
 
 	// 測試損毀的 Excel 檔案
 	corrupted := []byte{0x50, 0x4B, 0x03, 0x04, 0x00, 0x00, 0x00}
