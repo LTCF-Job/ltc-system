@@ -51,15 +51,24 @@ type CaregiverImportWarningItem struct {
 
 // CaregiverImportRowResult 代表照護人員批次匯入單列解析結果。
 type CaregiverImportRowResult struct {
-	RowIndex       int               `json:"rowIndex"`
-	SiteName       string            `json:"siteName,omitempty"`
-	SiteID         *uuid.UUID        `json:"siteId,omitempty"`
-	Name           string            `json:"name"`
-	Type           string            `json:"type,omitempty"`
-	Contact        string            `json:"contact,omitempty"`
-	Notes          string            `json:"notes,omitempty"`
-	WarningMessage string            `json:"warningMessage,omitempty"`
-	RawValues      map[string]string `json:"rawValues,omitempty"`
+	RowIndex               int               `json:"rowIndex"`
+	SiteName               string            `json:"siteName,omitempty"`
+	SiteID                 *uuid.UUID        `json:"siteId,omitempty"`
+	Name                   string            `json:"name"`
+	Type                   string            `json:"type,omitempty"`
+	Contact                string            `json:"contact,omitempty"`
+	Notes                  string            `json:"notes,omitempty"`
+	WarningMessage         string            `json:"warningMessage,omitempty"`
+	RawValues              map[string]string `json:"rawValues,omitempty"`
+	IsDuplicate            bool              `json:"isDuplicate,omitempty"`
+	DuplicateCaregiverID   *uuid.UUID        `json:"duplicateCaregiverId,omitempty"`
+	DuplicateCaregiverName string            `json:"duplicateCaregiverName,omitempty"`
+}
+
+// CaregiverDuplicateRef 是查重比對到的既有照護人員基本資訊，供匯入預覽提示使用。
+type CaregiverDuplicateRef struct {
+	ID   uuid.UUID
+	Name string
 }
 
 // CaregiverImportSkippedRow 保留姓名缺漏、未寫入資料庫的來源列。

@@ -75,9 +75,12 @@ func (r ExcelAdapter) RenderCaregiverImportTemplate() ([]byte, error) {
 		}
 	}
 
-	noteRow := len(sampleRows) + 3
-	noteCell, _ := excelize.CoordinatesToCellName(1, noteRow)
-	_ = f.SetCellValue(sheetName, noteCell, "＊姓名與類型為必填，類型請填寫「個管」或「專護」；單位請填寫既有據點名稱，找不到相符據點時仍會建立資料，匯入後可於「待維護」頁籤補建關聯。")
+	// 說明文字以儲存格註解附加在標題列，而非寫在資料列下方，避免被解析器誤判為一筆資料
+	// （GetRows 會把任何非空白列都當成候選資料列，寫在表格下方的純文字列會被視為缺漏必填欄位的錯誤列）。
+	_ = f.AddComment(sheetName, excelize.Comment{
+		Cell: "A1",
+		Text: "＊姓名與類型為必填，類型請填寫「個管」或「專護」；單位請填寫既有據點名稱，找不到相符據點時仍會建立資料，匯入後可於「待維護」頁籤補建關聯。",
+	})
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {

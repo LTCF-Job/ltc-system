@@ -1,9 +1,11 @@
 package transport
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -132,7 +134,7 @@ func (h *CaregiverHandler) LinkSite(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, newCaregiverResponse(*caregiver), nil)
 }
 
-// ImportExcel 批次上傳解析照護人員新增資料 Excel 或 CSV 檔案。
+// ImportExcel 批次上傳解析照護人員新增資料 Excel 檔案。
 func (h *CaregiverHandler) ImportExcel(c *gin.Context) {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
@@ -154,7 +156,13 @@ func (h *CaregiverHandler) ImportExcel(c *gin.Context) {
 	}
 
 	if c.DefaultQuery("dryRun", "true") == "false" {
-		result, err := h.svc.CommitCaregivers(c.Request.Context(), preview)
+		includeDuplicateRows, err := parseIncludeDuplicateRows(c.PostForm("includeDuplicateRows"))
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "includeDuplicateRows 格式錯誤", nil)
+			return
+		}
+
+		result, err := h.svc.CommitCaregivers(c.Request.Context(), preview, includeDuplicateRows)
 		if err != nil {
 			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "匯入照護人員寫入失敗", nil)
 			return
@@ -164,6 +172,24 @@ func (h *CaregiverHandler) ImportExcel(c *gin.Context) {
 	}
 
 	httpx.RespondSuccess(c, http.StatusOK, preview, nil)
+}
+
+// parseIncludeDuplicateRows 解析使用者於預覽階段勾選「仍要匯入」的列號 JSON 陣列
+// （如 "[3,7]"）；空字串視為未勾選任何列。
+func parseIncludeDuplicateRows(raw string) (map[int]bool, error) {
+	set := map[int]bool{}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return set, nil
+	}
+	var rowIndexes []int
+	if err := json.Unmarshal([]byte(raw), &rowIndexes); err != nil {
+		return nil, err
+	}
+	for _, idx := range rowIndexes {
+		set[idx] = true
+	}
+	return set, nil
 }
 
 // DownloadTemplate 下載照護人員批次匯入範本。
