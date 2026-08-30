@@ -3,6 +3,8 @@
  * 下載的所有 Excel 檔案（趟數表、時刻表、範本、申報表、保養表）在 Microsoft Excel 中皆能正常開啟不損毀。
  */
 
+import * as XLSX from 'xlsx'
+
 // 由 openpyxl 產生之合法 OpenXML 工作簿（個案匯入範本內容），內部 XML 屬性值皆正確加上雙引號
 const VALID_DEMO_EXCEL_BASE64 =
   'UEsDBBQAAAAIANxuHl1Gx01IlwAAAM0AAAAQAAAAZG9jUHJvcHMvYXBwLnhtbE2PTQvCMBBE/0ro3aS16EFiQdSj6Ml7TDc2kGSX' +
@@ -377,6 +379,57 @@ export function createMockExcelBlob(): Blob {
  */
 export function createCaseImportTemplateExcelBlob(): Blob {
   return base64ToBlob(CASE_IMPORT_TEMPLATE_EXCEL_BASE64)
+}
+
+interface CaseProfileExportRow {
+  name: string
+  householdType?: string
+  nationalId?: string
+  gender?: string
+  birthDate?: string
+  siteName?: string
+  outboundVehicle?: string
+  inboundVehicle?: string
+  careContactRole?: string
+  careContactName?: string
+  registeredAddress?: string
+  homeAddress?: string
+}
+
+// 生日轉民國年 (YYY/MM/DD) 與依生日計算之歲數，欄位計算方式與後端 GenerateCaseProfileWorkbook 一致
+function toRocBirthdayAndAge(birthDate?: string): [string, string] {
+  if (!birthDate) return ['', '']
+  const d = new Date(birthDate)
+  if (Number.isNaN(d.getTime())) return ['', '']
+  const rocYear = d.getFullYear() - 1911
+  const birthday = `${String(rocYear).padStart(3, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+  const age = String(new Date().getFullYear() - d.getFullYear())
+  return [birthday, age]
+}
+
+/**
+ * 產生「個案資料彙整」匯出用 Excel Blob，欄位與順序須與後端 RenderCaseProfileWorkbook 一致，
+ * 依傳入的個案清單（可為使用者勾選後的子集合）逐列產生，而非固定範例資料。
+ */
+export function createCaseProfileExcelBlob(cases: CaseProfileExportRow[]): Blob {
+  const headers = [
+    '序號', '', '姓名', '戶別', '身分證字號', '性別', '生日', '歲數',
+    '據點', '接送車輛(去)', '接送車輛(回)', '個管or照專', '姓名', '戶籍', '居住地', 'REMARK'
+  ]
+  const rows = cases.map((item, i) => {
+    const [birthday, age] = toRocBirthdayAndAge(item.birthDate)
+    return [
+      i + 1, i + 1, item.name, item.householdType || '', item.nationalId || '', item.gender || '',
+      birthday, age, item.siteName || '', item.outboundVehicle || '', item.inboundVehicle || '',
+      item.careContactRole || '', item.careContactName || '', item.registeredAddress || '',
+      item.homeAddress || '', ''
+    ]
+  })
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows])
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, '進系統個案個資')
+  const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 }
 
 /**

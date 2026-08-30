@@ -34,7 +34,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/cases/schedules` | staff, admin | 批次建立排班 |
 | POST | `/cases/import` | staff, admin | 批次匯入個案 Excel |
 | POST | `/masters/import` | staff, admin | 同上，走另一條相容路徑（歷史因素，實際都打 `caseH.ImportExcel`） |
-| GET | `/cases/export` | viewer, staff, admin | 匯出個案彙整表 |
+| GET | `/cases/export?caseIds=` | viewer, staff, admin | 匯出個案彙整表；`caseIds` 為逗號分隔的個案 ID，省略則匯出全部個案 |
 | PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定 |
 
 ## 據點主檔 `siteH`

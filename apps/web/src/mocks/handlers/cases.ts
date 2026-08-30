@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { mockCases, mockSites, mockVehicles } from '../data/mockData'
-import { createMockExcelBlob, createCaseImportTemplateExcelBlob } from '../utils/mockExcel'
+import { createCaseImportTemplateExcelBlob, createCaseProfileExcelBlob } from '../utils/mockExcel'
 import { readXlsxRows } from '../utils/parseImportFile'
 import { findCaseHeader, parseCaseBirthDate } from '../utils/caseImportRules'
 import { isValidTaiwanNationalId, maskNationalId } from '../utils/nationalId'
@@ -55,8 +55,12 @@ export const casesHandlers = [
     })
   }),
 
-  http.get('/api/v1/cases/export', () => {
-    const excelBlob = createMockExcelBlob()
+  http.get('/api/v1/cases/export', ({ request }) => {
+    const url = new URL(request.url)
+    const caseIdsParam = url.searchParams.get('caseIds')
+    const caseIds = caseIdsParam ? caseIdsParam.split(',').map((id) => id.trim()) : []
+    const targetCases = caseIds.length > 0 ? mockCases.filter((c) => caseIds.includes(c.id)) : mockCases
+    const excelBlob = createCaseProfileExcelBlob(targetCases)
     return new HttpResponse(excelBlob, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

@@ -71,7 +71,7 @@
           批次匯入個案
         </el-button>
 
-        <el-button v-if="authStore.can('staff')" plain @click="handleExportProfile">
+        <el-button v-if="authStore.can('staff')" plain @click="openExportDialog">
           <el-icon><Download /></el-icon>
           匯出個案資料
         </el-button>
@@ -384,13 +384,62 @@
         <el-button type="primary" :loading="saving" @click="handleCreateCase">確認新增</el-button>
       </template>
     </el-dialog>
+
+    <!-- 匯出個案資料：勾選欲匯出的個案，欄位維持固定申報格式 -->
+    <el-dialog v-model="exportDialogVisible" title="匯出個案資料" width="720px">
+      <div class="export-toolbar">
+        <el-input
+          v-model="exportSearchKeyword"
+          placeholder="搜尋姓名／編號"
+          clearable
+          style="width: 220px"
+        />
+        <div class="export-toolbar-actions">
+          <el-button size="small" @click="handleSelectAllExportRows">全選</el-button>
+          <el-button size="small" @click="handleClearExportSelection">取消全選</el-button>
+          <span class="export-selected-count">已選擇 {{ exportSelectedRows.length }} / {{ exportCandidates.length }} 筆</span>
+        </div>
+      </div>
+      <el-table
+        ref="exportTableRef"
+        v-loading="exportLoading"
+        :data="filteredExportCandidates"
+        border
+        stripe
+        height="360px"
+        row-key="id"
+        @selection-change="handleExportSelectionChange"
+      >
+        <el-table-column type="selection" width="45" :reserve-selection="true" />
+        <el-table-column prop="code" label="個案編號" width="95" align="center" />
+        <el-table-column prop="name" label="姓名" width="110" />
+        <el-table-column prop="region" label="區域" width="100" align="center">
+          <template #default="{ row }">{{ REGION_LABELS[row.region as Region] || row.region }}</template>
+        </el-table-column>
+        <el-table-column prop="status" label="狀態" width="90" align="center">
+          <template #default="{ row }">{{ CASE_STATUS_LABELS[row.status as CaseStatus] || row.status }}</template>
+        </el-table-column>
+        <el-table-column prop="homeAddress" label="住家地址" min-width="180" show-overflow-tooltip />
+      </el-table>
+      <template #footer>
+        <el-button @click="exportDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="exporting"
+          :disabled="exportSelectedRows.length === 0"
+          @click="handleConfirmExport"
+        >
+          確認匯出（{{ exportSelectedRows.length }} 筆）
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { Plus, Upload, Download, ArrowDown, Edit } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type TableInstance } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
@@ -514,13 +563,62 @@ async function handleDownloadTemplate() {
   }
 }
 
-async function handleExportProfile() {
+// 匯出個案資料：先在對話框內一次列出多筆個案供勾選，再依勾選結果匯出（欄位維持固定申報格式）
+const exportDialogVisible = ref(false)
+const exportLoading = ref(false)
+const exporting = ref(false)
+const exportSearchKeyword = ref('')
+const exportCandidates = ref<CaseDTO[]>([])
+const exportSelectedRows = ref<CaseDTO[]>([])
+const exportTableRef = ref<TableInstance>()
+
+const filteredExportCandidates = computed(() => {
+  const keyword = exportSearchKeyword.value.trim().toLowerCase()
+  if (!keyword) return exportCandidates.value
+  return exportCandidates.value.filter(
+    (c) => c.name.toLowerCase().includes(keyword) || c.code.toLowerCase().includes(keyword)
+  )
+})
+
+async function openExportDialog() {
+  exportDialogVisible.value = true
+  exportSearchKeyword.value = ''
+  exportSelectedRows.value = []
+  exportLoading.value = true
   try {
-    const blob = await exportCaseProfileWorkbook()
+    const res = await listCases({ pageSize: 1000 })
+    exportCandidates.value = res.data
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入個案清單失敗'))
+  } finally {
+    exportLoading.value = false
+  }
+}
+
+function handleExportSelectionChange(rows: CaseDTO[]) {
+  exportSelectedRows.value = rows
+}
+
+function handleSelectAllExportRows() {
+  filteredExportCandidates.value.forEach((row) => exportTableRef.value?.toggleRowSelection(row, true))
+}
+
+function handleClearExportSelection() {
+  exportTableRef.value?.clearSelection()
+}
+
+async function handleConfirmExport() {
+  if (exportSelectedRows.value.length === 0) return
+  exporting.value = true
+  try {
+    const blob = await exportCaseProfileWorkbook(exportSelectedRows.value.map((row) => row.id))
     downloadBlob(blob, '個案資料彙整.xlsx')
-    ElMessage.success('個案資料匯出完成')
+    ElMessage.success(`已匯出 ${exportSelectedRows.value.length} 筆個案資料`)
+    exportDialogVisible.value = false
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '匯出個案資料失敗'))
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -758,4 +856,24 @@ executeFetch()
 .status-dot-suspended { background: var(--el-color-warning); }
 .status-dot-closed { background: var(--el-text-color-placeholder); }
 .empty-value { color: var(--el-text-color-placeholder); }
+
+.export-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.export-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-selected-count {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
 </style>

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -121,9 +122,21 @@ func (h *CaseHandler) CreateSchedule(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusCreated, newCaseScheduleResponse(*sched), nil)
 }
 
-// ExportProfileWorkbook 下載與個案彙整表相同格式的主檔資料。
+// ExportProfileWorkbook 下載與個案彙整表相同格式的主檔資料；caseIds 為逗號分隔的個案 ID，省略則匯出全部個案。
 func (h *CaseHandler) ExportProfileWorkbook(c *gin.Context) {
-	excelBytes, err := h.masterService.GenerateCaseProfileWorkbook(c.Request.Context())
+	var caseIDs []uuid.UUID
+	if raw := c.Query("caseIds"); raw != "" {
+		for _, idStr := range strings.Split(raw, ",") {
+			id, err := uuid.Parse(strings.TrimSpace(idStr))
+			if err != nil {
+				httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "caseIds 含有無效的個案 ID", nil)
+				return
+			}
+			caseIDs = append(caseIDs, id)
+		}
+	}
+
+	excelBytes, err := h.masterService.GenerateCaseProfileWorkbook(c.Request.Context(), caseIDs)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "產生個案主檔 Excel 失敗", nil)
 		return
