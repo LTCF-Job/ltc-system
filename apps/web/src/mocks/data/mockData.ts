@@ -73,7 +73,7 @@ export const mockVehicles: VehicleDTO[] = [
   { id: 'veh_6', plateNo: 'MNO-7890', displayName: '苗栗市1車', region: 'miaoli', active: true, createdAt: '2026-03-01' }
 ]
 
-// 司機主檔展示資料：涵蓋主責車輛指派、支援調度指派、在職與留職停薪狀態
+// 司機主檔展示資料：一位司機同期只掛一台車，竹北一車由兩位司機共同駕駛，另涵蓋尚未指派車輛的離職司機
 export const mockDrivers: DriverDTO[] = [
   {
     id: 'drv_1',
@@ -84,7 +84,7 @@ export const mockDrivers: DriverDTO[] = [
     active: true,
     createdAt: '2026-01-01',
     assignments: [
-      { id: 'asgn_1', driverId: 'drv_1', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-01-01', isPrimary: true }
+      { id: 'asgn_1', driverId: 'drv_1', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-01-01' }
     ]
   },
   {
@@ -96,8 +96,7 @@ export const mockDrivers: DriverDTO[] = [
     active: true,
     createdAt: '2026-01-01',
     assignments: [
-      { id: 'asgn_2', driverId: 'drv_2', vehicleId: 'veh_2', vehicleName: '竹北二車', vehiclePlateNo: 'ABC-1234', plateNo: 'ABC-1234', startDate: '2026-01-01', isPrimary: true },
-      { id: 'asgn_2_sub', driverId: 'drv_2', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-07-01', isPrimary: false }
+      { id: 'asgn_2', driverId: 'drv_2', vehicleId: 'veh_2', vehicleName: '竹北二車', vehiclePlateNo: 'ABC-1234', plateNo: 'ABC-1234', startDate: '2026-01-01' }
     ]
   },
   {
@@ -109,7 +108,7 @@ export const mockDrivers: DriverDTO[] = [
     active: true,
     createdAt: '2026-01-01',
     assignments: [
-      { id: 'asgn_3', driverId: 'drv_3', vehicleId: 'veh_4', vehicleName: '竹南2車', vehiclePlateNo: 'GHI-9012', plateNo: 'GHI-9012', startDate: '2026-01-01', isPrimary: true }
+      { id: 'asgn_3', driverId: 'drv_3', vehicleId: 'veh_4', vehicleName: '竹南2車', vehiclePlateNo: 'GHI-9012', plateNo: 'GHI-9012', startDate: '2026-01-01' }
     ]
   },
   {
@@ -121,7 +120,7 @@ export const mockDrivers: DriverDTO[] = [
     active: true,
     createdAt: '2026-02-01',
     assignments: [
-      { id: 'asgn_4', driverId: 'drv_4', vehicleId: 'veh_3', vehicleName: '竹南1車', vehiclePlateNo: 'DEF-5678', plateNo: 'DEF-5678', startDate: '2026-02-01', isPrimary: true }
+      { id: 'asgn_4', driverId: 'drv_4', vehicleId: 'veh_3', vehicleName: '竹南1車', vehiclePlateNo: 'DEF-5678', plateNo: 'DEF-5678', startDate: '2026-02-01' }
     ]
   },
   {
@@ -133,7 +132,7 @@ export const mockDrivers: DriverDTO[] = [
     active: true,
     createdAt: '2026-03-01',
     assignments: [
-      { id: 'asgn_5', driverId: 'drv_5', vehicleId: 'veh_6', vehicleName: '苗栗市1車', vehiclePlateNo: 'MNO-7890', plateNo: 'MNO-7890', startDate: '2026-03-01', isPrimary: true }
+      { id: 'asgn_5', driverId: 'drv_5', vehicleId: 'veh_6', vehicleName: '苗栗市1車', vehiclePlateNo: 'MNO-7890', plateNo: 'MNO-7890', startDate: '2026-03-01' }
     ]
   },
   {
@@ -145,6 +144,18 @@ export const mockDrivers: DriverDTO[] = [
     active: false,
     createdAt: '2026-01-15',
     assignments: []
+  },
+  {
+    id: 'drv_7',
+    name: '張美惠',
+    nationalId: 'A223456712',
+    phone: '0988222333',
+    email: 'driver7@ltc.example.com',
+    active: true,
+    createdAt: '2026-07-01',
+    assignments: [
+      { id: 'asgn_7', driverId: 'drv_7', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-07-01' }
+    ]
   }
 ]
 
@@ -192,12 +203,10 @@ export const mockCases: CaseDTO[] = [
     code: 'C0001',
     name: '蔡曾切',
     nationalId: 'A202559750',
-    phone: '0912345678',
     homeAddress: '苗栗縣竹南鎮大營路123號',
     region: 'miaoli',
     serviceCategory: 1,
     serviceUsageType: 2,
-    claimStartDate: '2026-07-01',
     status: 'active',
     householdType: '與子女同住',
     gender: '女',
@@ -251,12 +260,10 @@ export const mockCases: CaseDTO[] = [
     code: 'C0002',
     name: '葉秀珍',
     nationalId: 'J220123344',
-    phone: '0922333444',
     homeAddress: '新竹縣竹北市中正西路50號',
     region: 'hsinchu',
     serviceCategory: 1,
     serviceUsageType: 1,
-    claimStartDate: '2026-07-01',
     status: 'active',
     householdType: '獨居',
     gender: '女',
@@ -298,12 +305,10 @@ export const mockCases: CaseDTO[] = [
     code: 'C0003',
     name: '吳𣵛桂',
     nationalId: 'H229875566',
-    phone: '0933555666',
     homeAddress: '新竹縣竹北市福興東路二段88號',
     region: 'hsinchu',
     serviceCategory: 1,
     serviceUsageType: 2,
-    claimStartDate: '2026-07-01',
     status: 'active',
     householdType: '配偶同住',
     gender: '男',
@@ -342,12 +347,10 @@ export const mockCases: CaseDTO[] = [
     code: 'C0004',
     name: '張詹竹妹',
     nationalId: 'O201121122',
-    phone: '0955777888',
     homeAddress: '新竹縣竹北市三民路15號',
     region: 'hsinchu',
     serviceCategory: 1,
     serviceUsageType: 2,
-    claimStartDate: '2026-07-01',
     status: 'suspended',
     householdType: '與子女同住',
     gender: '女',
@@ -387,12 +390,10 @@ export const mockCases: CaseDTO[] = [
     code: 'C0005',
     name: '李國盛',
     nationalId: 'J123458899',
-    phone: '0966999000',
     homeAddress: '新竹縣竹北市文興路一段200號',
     region: 'hsinchu',
     serviceCategory: 2,
     serviceUsageType: 1,
-    claimStartDate: '2026-07-01',
     status: 'active',
     householdType: '獨居',
     gender: '男',
@@ -432,12 +433,10 @@ export const mockCases: CaseDTO[] = [
     code: 'C0006',
     name: '陳素貞',
     nationalId: 'J221234411',
-    phone: '0977111222',
     homeAddress: '新竹縣竹北市縣政九路80號',
     region: 'hsinchu',
     serviceCategory: 1,
     serviceUsageType: 3,
-    claimStartDate: '2026-06-01',
     claimEndDate: '2026-07-31',
     status: 'closed',
     householdType: '與子女同住',
@@ -477,12 +476,10 @@ export const mockCases: CaseDTO[] = [
     code: 'C0007',
     name: '黃天賜',
     nationalId: 'K123459900',
-    phone: '0988333444',
     homeAddress: '苗栗縣竹南鎮延平路66號',
     region: 'miaoli',
     serviceCategory: 1,
     serviceUsageType: 4,
-    claimStartDate: '2026-07-01',
     status: 'active',
     householdType: '與家人同住',
     gender: '男',
@@ -522,12 +519,10 @@ export const mockCases: CaseDTO[] = [
     code: 'C0008',
     name: '彭阿土',
     nationalId: 'K102342233',
-    phone: '0911555666',
     homeAddress: '苗栗縣苗栗市中正路500號',
     region: 'miaoli',
     serviceCategory: 2,
     serviceUsageType: 4,
-    claimStartDate: '2026-07-01',
     status: 'active',
     householdType: '與家人同住',
     gender: '男',
@@ -569,12 +564,10 @@ export const mockCases: CaseDTO[] = [
     code: 'C0009',
     name: '邱美蘭',
     nationalId: 'J203456677',
-    phone: '0928777888',
     homeAddress: '新竹縣湖口鄉達生路33號',
     region: 'hsinchu',
     serviceCategory: 1,
     serviceUsageType: 3,
-    claimStartDate: '2026-07-01',
     status: 'active',
     householdType: '獨居',
     gender: '女',
@@ -613,12 +606,10 @@ export const mockCases: CaseDTO[] = [
     code: 'C0010',
     name: '林阿祥',
     nationalId: 'K124561234',
-    phone: '0937999000',
     homeAddress: '苗栗縣竹南鎮光復路88號',
     region: 'miaoli',
     serviceCategory: 1,
     serviceUsageType: 2,
-    claimStartDate: '2026-07-01',
     status: 'active',
     householdType: '與配偶同住',
     gender: '男',
@@ -672,7 +663,6 @@ export const mockCases: CaseDTO[] = [
     region: 'miaoli',
     serviceCategory: 1,
     serviceUsageType: 2,
-    claimStartDate: '2026-08-01',
     status: 'active',
     householdType: '獨居',
     gender: '女',

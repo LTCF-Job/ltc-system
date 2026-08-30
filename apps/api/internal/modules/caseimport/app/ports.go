@@ -48,7 +48,6 @@ type NewCase struct {
 	RegisteredAddress *string
 	HomeAddress       *string
 	Region            *string
-	ClaimStartDate    *time.Time
 	ServiceCategory   int
 	ServiceUsageType  int
 	Status            string

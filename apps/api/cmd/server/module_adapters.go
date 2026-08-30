@@ -41,12 +41,16 @@ func (a rideDriverResolver) GetByNameNormalized(ctx context.Context, nameNorm st
 	return &rideapp.DriverRef{ID: d.ID, Name: d.Name}, nil
 }
 
-func (a rideDriverResolver) GetPrimaryDriverForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) (*rideapp.DriverRef, error) {
-	d, err := a.repo.GetPrimaryDriverForVehicleOnDate(ctx, vehicleID, serviceDate)
+func (a rideDriverResolver) ListDriversForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) ([]rideapp.DriverRef, error) {
+	list, err := a.repo.ListDriversForVehicleOnDate(ctx, vehicleID, serviceDate)
 	if err != nil {
 		return nil, err
 	}
-	return &rideapp.DriverRef{ID: d.ID, Name: d.Name}, nil
+	refs := make([]rideapp.DriverRef, 0, len(list))
+	for _, d := range list {
+		refs = append(refs, rideapp.DriverRef{ID: d.ID, Name: d.Name})
+	}
+	return refs, nil
 }
 
 // rideScheduleReader 讓 ride 取得比對回報所需的當日排班。
@@ -80,7 +84,7 @@ func (a taskScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year
 		}
 		out = append(out, taskapp.ActiveSchedule{
 			CaseID: s.CaseID, CaseCode: s.CaseCode, CaseName: s.CaseName, Region: s.Region,
-			ClaimStartDate: s.ClaimStartDate, ClaimEndDate: s.ClaimEndDate, SiteID: s.SiteID,
+			ClaimEndDate: s.ClaimEndDate, SiteID: s.SiteID,
 			SiteOpenDays: s.SiteOpenDays, EffectiveFrom: s.EffectiveFrom, EffectiveTo: s.EffectiveTo,
 			Weekdays: s.Weekdays, TripPattern: s.TripPattern, Legs: legs,
 		})
@@ -165,7 +169,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
-		ClaimStartDate: in.ClaimStartDate, ServiceCategory: in.ServiceCategory,
+		ServiceCategory: in.ServiceCategory,
 		ServiceUsageType: in.ServiceUsageType, Status: in.Status, Remarks: in.Remarks,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {

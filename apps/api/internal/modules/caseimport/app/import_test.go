@@ -39,7 +39,7 @@ func TestGenerateCaseImportTemplateExcel_Structure(t *testing.T) {
 	assert.Contains(t, headerRow, "接送車輛(去)")
 	assert.Contains(t, headerRow, "接送車輛(回)")
 	assert.Contains(t, headerRow, "姓名(個管/照專)")
-	assert.Contains(t, headerRow, "REMARK")
+	assert.Contains(t, headerRow, "備註")
 	assert.NotContains(t, headerRow, "週一趟數(0:不搭/1:單去/2:來回/4:四趟)")
 }
 
@@ -65,7 +65,7 @@ func TestParseCases_ProfileWorkbook(t *testing.T) {
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "REMARK"}
+	headers := []string{"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
 	for i, header := range headers {
 		cell, err := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestParseCases_OnlyNameRequired(t *testing.T) {
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "REMARK"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
 	for i, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheetName, cell, header))

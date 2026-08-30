@@ -56,7 +56,7 @@ type ScheduleReader interface {
 // DriverResolver 由姓名或當日車輛推導司機，由擁有司機主檔的模組實作。
 type DriverResolver interface {
 	GetByNameNormalized(ctx context.Context, nameNorm string) (*DriverRef, error)
-	GetPrimaryDriverForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) (*DriverRef, error)
+	ListDriversForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) ([]DriverRef, error)
 }
 
 // RideSourceRow 是單一 slot 已寫入的一筆回報來源，混車合併以此為輸入。

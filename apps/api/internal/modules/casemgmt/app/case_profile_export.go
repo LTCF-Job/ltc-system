@@ -5,14 +5,30 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/crypto"
 )
 
 // GenerateCaseProfileWorkbook 匯出與來源工作簿一致的個案彙整欄位。
-func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context) ([]byte, error) {
+// caseIDs 為空時匯出全部個案；非空時只匯出指定個案，欄位與順序不受影響。
+func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs []uuid.UUID) ([]byte, error) {
 	cases, _, err := s.caseRepo.List(ctx, "", "", "", 1, 10000, false)
 	if err != nil {
 		return nil, fmt.Errorf("list case profiles: %w", err)
+	}
+
+	if len(caseIDs) > 0 {
+		wanted := make(map[uuid.UUID]struct{}, len(caseIDs))
+		for _, id := range caseIDs {
+			wanted[id] = struct{}{}
+		}
+		filtered := make([]Case, 0, len(caseIDs))
+		for _, item := range cases {
+			if _, ok := wanted[item.ID]; ok {
+				filtered = append(filtered, item)
+			}
+		}
+		cases = filtered
 	}
 
 	rows := make([]CaseProfileRow, 0, len(cases))

@@ -88,7 +88,6 @@ func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.T
 
 		calInput := calendar.CaseScheduleCalendarInput{
 			CaseID:         sch.CaseID,
-			ClaimStartDate: sch.ClaimStartDate,
 			ClaimEndDate:   sch.ClaimEndDate,
 			EffectiveFrom:  sch.EffectiveFrom,
 			EffectiveTo:    sch.EffectiveTo,

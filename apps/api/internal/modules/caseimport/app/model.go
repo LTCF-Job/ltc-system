@@ -26,7 +26,6 @@ type CaseImportRowResult struct {
 	SheetName         string            `json:"sheetName"`
 	Name              string            `json:"name"`
 	NationalID        string            `json:"nationalId,omitempty"`
-	Phone             string            `json:"phone,omitempty"`
 	HouseholdType     string            `json:"householdType,omitempty"`
 	Gender            string            `json:"gender,omitempty"`
 	BirthDate         string            `json:"birthDate,omitempty"`
@@ -35,7 +34,6 @@ type CaseImportRowResult struct {
 	RegisteredAddress string            `json:"registeredAddress,omitempty"`
 	HomeAddress       string            `json:"homeAddress,omitempty"`
 	Region            string            `json:"region"`
-	ClaimStartDate    string            `json:"claimStartDate"`
 	ServiceCategory   int               `json:"serviceCategory"`
 	ServiceUsageType  int               `json:"serviceUsageType"`
 	SiteName          string            `json:"siteName"`

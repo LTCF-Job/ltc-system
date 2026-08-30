@@ -29,6 +29,16 @@ type fakeDriverStore struct {
 	lastCreate *Driver
 	lastUpdate *Driver
 	lastAssign *DriverAssignment
+
+	byVehicle   map[uuid.UUID][]Driver
+	lastReplace *replacedVehicleDrivers
+}
+
+// replacedVehicleDrivers 記錄一次 ReplaceVehicleDrivers 呼叫的參數。
+type replacedVehicleDrivers struct {
+	vehicleID     uuid.UUID
+	driverIDs     []uuid.UUID
+	effectiveFrom time.Time
 }
 
 func newFakeDriverStore() *fakeDriverStore {
@@ -68,6 +78,21 @@ func (f *fakeDriverStore) Update(ctx context.Context, d *Driver) error {
 func (f *fakeDriverStore) AssignVehicle(ctx context.Context, a *DriverAssignment) error {
 	f.lastAssign = a
 	return f.assignErr
+}
+
+func (f *fakeDriverStore) ListByVehicleIDsOnDate(ctx context.Context, vehicleIDs []uuid.UUID, on time.Time) (map[uuid.UUID][]Driver, error) {
+	out := map[uuid.UUID][]Driver{}
+	for _, id := range vehicleIDs {
+		if drivers, ok := f.byVehicle[id]; ok {
+			out[id] = drivers
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeDriverStore) ReplaceVehicleDrivers(ctx context.Context, vehicleID uuid.UUID, driverIDs []uuid.UUID, effectiveFrom time.Time) error {
+	f.lastReplace = &replacedVehicleDrivers{vehicleID: vehicleID, driverIDs: driverIDs, effectiveFrom: effectiveFrom}
+	return nil
 }
 
 func TestDriverService_Create(t *testing.T) {
@@ -165,13 +190,11 @@ func TestDriverService_AssignVehicle(t *testing.T) {
 
 	assignment, err := svc.AssignVehicle(context.Background(), driverID, AssignVehicleInput{
 		VehicleID:     vehicleID,
-		IsPrimary:     true,
 		EffectiveFrom: from,
 	})
 
 	assert.NoError(t, err)
 	assert.Equal(t, driverID, assignment.DriverID)
 	assert.Equal(t, vehicleID, assignment.VehicleID)
-	assert.True(t, assignment.IsPrimary)
 	assert.Same(t, assignment, store.lastAssign)
 }

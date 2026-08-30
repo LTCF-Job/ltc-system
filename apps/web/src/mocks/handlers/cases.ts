@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { mockCases, mockSites, mockVehicles } from '../data/mockData'
-import { createMockExcelBlob, createCaseImportTemplateExcelBlob } from '../utils/mockExcel'
+import { createCaseImportTemplateExcelBlob, createCaseProfileExcelBlob } from '../utils/mockExcel'
 import { readXlsxRows } from '../utils/parseImportFile'
 import { findCaseHeader, parseCaseBirthDate } from '../utils/caseImportRules'
 import { isValidTaiwanNationalId, maskNationalId } from '../utils/nationalId'
@@ -24,10 +24,6 @@ export const casesHandlers = [
           c.name.toLowerCase().includes(keyword) ||
           c.code.toLowerCase().includes(keyword) ||
           (c.nationalId ?? '').toLowerCase().includes(keyword) ||
-          (c.phone && (
-            c.phone.toLowerCase().includes(keyword) ||
-            c.phone.replace(/[-\s]/g, '').includes(keyword.replace(/[-\s]/g, ''))
-          )) ||
           (c.homeAddress && c.homeAddress.toLowerCase().includes(keyword))
       )
     }
@@ -59,8 +55,12 @@ export const casesHandlers = [
     })
   }),
 
-  http.get('/api/v1/cases/export', () => {
-    const excelBlob = createMockExcelBlob()
+  http.get('/api/v1/cases/export', ({ request }) => {
+    const url = new URL(request.url)
+    const caseIdsParam = url.searchParams.get('caseIds')
+    const caseIds = caseIdsParam ? caseIdsParam.split(',').map((id) => id.trim()) : []
+    const targetCases = caseIds.length > 0 ? mockCases.filter((c) => caseIds.includes(c.id)) : mockCases
+    const excelBlob = createCaseProfileExcelBlob(targetCases)
     return new HttpResponse(excelBlob, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -86,7 +86,6 @@ export const casesHandlers = [
       region: body.region,
       serviceCategory: body.serviceCategory,
       serviceUsageType: body.serviceUsageType,
-      claimStartDate: body.claimStartDate,
       status: body.status || 'active',
       remarks: body.remarks,
       createdAt: new Date().toISOString().split('T')[0],
@@ -234,7 +233,7 @@ export const casesHandlers = [
         const careContactName = getIdxVal(row, careContactNameIdx)
         const registeredAddress = getVal(row, '戶籍')
         const homeAddress = getVal(row, '居住地')
-        const remarks = getVal(row, 'REMARK') || getVal(row, '備註')
+        const remarks = getVal(row, '備註') || getVal(row, 'REMARK')
 
         const rowErrors: string[] = []
         if (rawBirth && !birthDate) {

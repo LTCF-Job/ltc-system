@@ -34,7 +34,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/cases/schedules` | staff, admin | 批次建立排班 |
 | POST | `/cases/import` | staff, admin | 批次匯入個案 Excel |
 | POST | `/masters/import` | staff, admin | 同上，走另一條相容路徑（歷史因素，實際都打 `caseH.ImportExcel`） |
-| GET | `/cases/export` | viewer, staff, admin | 匯出個案彙整表 |
+| GET | `/cases/export?caseIds=` | viewer, staff, admin | 匯出個案彙整表；`caseIds` 為逗號分隔的個案 ID，省略則匯出全部個案 |
 | PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定 |
 
 ## 據點主檔 `siteH`
@@ -48,11 +48,12 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 ## 車輛主檔 `vehicleH`
 
-| Method | Path | 角色 |
-|---|---|---|
-| GET | `/vehicles` | viewer, staff, admin |
-| POST | `/vehicles` | staff, admin |
-| PATCH | `/vehicles/:id` | staff, admin |
+| Method | Path | 角色 | 說明 |
+|---|---|---|---|
+| GET | `/vehicles` | viewer, staff, admin | 每筆帶 `drivers`（該車今日生效的司機，一台車可有多位） |
+| POST | `/vehicles` | staff, admin | |
+| PATCH | `/vehicles/:id` | staff, admin | |
+| PUT | `/vehicles/:id/drivers` | staff, admin | 整批設定本車司機：`{ driverIds: string[], effectiveFrom?: date }`；`driverIds` 為空代表清空 |
 
 ## 司機主檔 `driverH`
 
@@ -62,7 +63,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/drivers` | staff, admin | |
 | PATCH | `/drivers/:id` | staff, admin | |
 | POST | `/drivers/:id/reveal` | staff, admin | 明文顯示司機個資 |
-| POST | `/drivers/:id/assignments` | staff, admin | 指派車輛給司機 |
+| POST | `/drivers/:id/assignments` | staff, admin | 指派車輛給司機；一位司機同期只會有一台車，指派新車即取代原本的指派 |
 
 ## 司機接送匯報與欄位對應 `driverReportH`
 

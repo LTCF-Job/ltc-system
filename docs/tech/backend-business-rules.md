@@ -14,10 +14,17 @@
    1. 已有人工裁決（`ConflictResolvedAt` 有值）→ 用裁決指定的車輛／司機，**不會被新回報覆蓋**。
    2. 已有人工更正過車輛（`CorrectedAt` 且 `CorrectedVehicle` 有值）→ 用更正指定的車輛／司機。
    3. 有回報「有坐」→ 取這些回報中 `submitted_at` **最早**的那一筆的車輛／司機（不是最新，是最早——最早回報視為第一線真實情況）。
-   4. 都沒有 → 退回排班表的預設車輛／司機。
+   4. 都沒有 → 退回排班表的預設車輛／司機。預設司機由「該車在服務日生效的司機」推導（`DriverRepository.ListDriversForVehicleOnDate`）：**一台車可以有多位司機**，只有剛好一位時才自動帶入，多位時 `driverId` 留空由人工指定，不臆測是誰出車。
 6. **決定 `effectiveStatus`**（畫面實際顯示、拿去算應搭日曆比對的狀態）：如果這筆紀錄之前被人工更正過（`CorrectedAt` 有值），維持人工指定的狀態不變；但如果這次重算出來的 `mergedStatus` 跟人工指定的不一樣，會標記 `SourceChanged = true`，前端要能提示「來源資料已變更但人工判定維持不變」，避免使用者誤以為系統又自動改掉了人工結果。
 
 **保護規則的核心精神**：任何人工介入（裁決衝突、手動更正）之後，新匯入的司機接送匯報都只會被「記錄」（寫進 `ride_source`），不會反過來覆蓋人工結果；只會透過 `SourceChanged` 提示有落差。
+
+## 車輛與司機指派關係（`driver_assignments`）
+
+- 一位司機同一期間只會有一台車；一台車同一期間可以有多位司機（輪班或共同駕駛）。
+- 資料庫用 `no_overlapping_driver_assignment`（`driver_id` + `effective_range` 的 GiST EXCLUDE）強制前者；車輛端沒有唯一限制，所以後者成立。
+- 沒有「主要司機」的概念，`is_primary` 已於 migration `000006` 移除——司機唯一的那台車本來就是他的車。
+- 從車輛端整批設定司機（`PUT /vehicles/:id/drivers`）時，被加入本車的司機在其他車上尚未結束的指派，會從生效日起被收掉（`effective_range` 上界收到生效日，尚未生效的指派直接刪除），以維持上面第一條規則。
 
 ## 應搭日曆計算（`domain/calendar.CalculateExpectedRides`）
 

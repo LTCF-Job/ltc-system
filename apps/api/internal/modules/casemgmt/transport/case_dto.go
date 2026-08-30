@@ -23,7 +23,6 @@ type CreateCaseRequest struct {
 	LTCLevel          *string    `json:"ltcLevel"`
 	ServiceCategory   int        `json:"serviceCategory"`
 	ServiceUsageType  int        `json:"serviceUsageType"`
-	ClaimStartDate    *time.Time `json:"claimStartDate"`
 	ClaimEndDate      *time.Time `json:"claimEndDate"`
 	Status            string     `json:"status"`
 	Remarks           *string    `json:"remarks"`
@@ -46,7 +45,6 @@ func (r CreateCaseRequest) ToService() app.CreateCaseRequest {
 		LTCLevel:          r.LTCLevel,
 		ServiceCategory:   r.ServiceCategory,
 		ServiceUsageType:  r.ServiceUsageType,
-		ClaimStartDate:    r.ClaimStartDate,
 		ClaimEndDate:      r.ClaimEndDate,
 		Status:            r.Status,
 		Remarks:           r.Remarks,
@@ -128,7 +126,6 @@ type CaseResponse struct {
 	LTCLevel          *string    `json:"ltcLevel"`
 	ServiceCategory   int        `json:"serviceCategory"`
 	ServiceUsageType  int        `json:"serviceUsageType"`
-	ClaimStartDate    *time.Time `json:"claimStartDate"`
 	ClaimEndDate      *time.Time `json:"claimEndDate"`
 	Status            string     `json:"status"`
 	Remarks           *string    `json:"remarks"`
@@ -160,7 +157,6 @@ func newCaseResponse(c app.Case) CaseResponse {
 		LTCLevel:          c.LTCLevel,
 		ServiceCategory:   c.ServiceCategory,
 		ServiceUsageType:  c.ServiceUsageType,
-		ClaimStartDate:    c.ClaimStartDate,
 		ClaimEndDate:      c.ClaimEndDate,
 		Status:            c.Status,
 		Remarks:           c.Remarks,

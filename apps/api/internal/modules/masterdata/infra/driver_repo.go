@@ -53,6 +53,9 @@ func (r *driverRow) scanTargets() []interface{} {
 const driverColumns = `id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 	       email, region, status, created_at, updated_at`
 
+const driverColumnsWithAlias = `d.id, d.code, d.name, d.name_normalized, d.national_id_cipher, d.national_id_hmac,
+	       d.national_id_masked, d.email, d.region, d.status, d.created_at, d.updated_at`
+
 // DriverRepository 提供 drivers 與 driver_assignments 資料表之存取操作。
 type DriverRepository struct {
 	db *pgxpool.Pool
@@ -157,32 +160,152 @@ func (r *DriverRepository) Update(ctx context.Context, d *app.Driver) error {
 		Scan(&d.UpdatedAt)
 }
 
-// AssignVehicle 建立或更新司機車輛指派期間。
+// AssignVehicle 建立司機車輛指派期間。
 func (r *DriverRepository) AssignVehicle(ctx context.Context, a *app.DriverAssignment) error {
 	query := `
 		INSERT INTO driver_assignments (
-			id, driver_id, vehicle_id, is_primary, effective_range
-		) VALUES ($1, $2, $3, $4, daterange($5, $6, '[]'))
+			id, driver_id, vehicle_id, effective_range
+		) VALUES ($1, $2, $3, daterange($4, $5, '[]'))
 		RETURNING created_at
 	`
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
 	}
-	return r.db.QueryRow(ctx, query, a.ID, a.DriverID, a.VehicleID, a.IsPrimary, a.EffectiveFrom, a.EffectiveTo).
+	return r.db.QueryRow(ctx, query, a.ID, a.DriverID, a.VehicleID, a.EffectiveFrom, a.EffectiveTo).
 		Scan(&a.CreatedAt)
 }
 
-// GetPrimaryDriverForVehicleOnDate 查詢某車輛在特定日期的主要司機。
-func (r *DriverRepository) GetPrimaryDriverForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) (*app.Driver, error) {
+// ListDriversForVehicleOnDate 查詢某車輛在特定日期生效的所有司機，依司機代碼排序。
+func (r *DriverRepository) ListDriversForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) ([]app.Driver, error) {
+	if r.db == nil {
+		return nil, nil
+	}
 	query := `
-		SELECT d.id, d.code, d.name, d.name_normalized, d.national_id_cipher, d.national_id_hmac, d.national_id_masked,
-		       d.email, d.region, d.status, d.created_at, d.updated_at
+		SELECT ` + driverColumnsWithAlias + `
 		FROM driver_assignments a
 		JOIN drivers d ON a.driver_id = d.id
 		WHERE a.vehicle_id = $1
-		  AND a.is_primary = true
 		  AND a.effective_range @> $2::date
-		LIMIT 1
+		ORDER BY d.code ASC
 	`
-	return r.getOne(ctx, query, vehicleID, serviceDate)
+	rows, err := r.db.Query(ctx, query, vehicleID, serviceDate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query drivers for vehicle: %w", err)
+	}
+	defer rows.Close()
+
+	var list []app.Driver
+	for rows.Next() {
+		var d driverRow
+		if err := rows.Scan(d.scanTargets()...); err != nil {
+			return nil, err
+		}
+		list = append(list, d.toApp())
+	}
+	return list, rows.Err()
+}
+
+// ListByVehicleIDsOnDate 一次查出多台車在特定日期生效的司機，供車輛清單批次帶出。
+func (r *DriverRepository) ListByVehicleIDsOnDate(ctx context.Context, vehicleIDs []uuid.UUID, on time.Time) (map[uuid.UUID][]app.Driver, error) {
+	result := make(map[uuid.UUID][]app.Driver, len(vehicleIDs))
+	if r.db == nil || len(vehicleIDs) == 0 {
+		return result, nil
+	}
+	query := `
+		SELECT a.vehicle_id, ` + driverColumnsWithAlias + `
+		FROM driver_assignments a
+		JOIN drivers d ON a.driver_id = d.id
+		WHERE a.vehicle_id = ANY($1::uuid[])
+		  AND a.effective_range @> $2::date
+		ORDER BY d.code ASC
+	`
+	rows, err := r.db.Query(ctx, query, vehicleIDs, on)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query drivers by vehicles: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var vehicleID uuid.UUID
+		var d driverRow
+		if err := rows.Scan(append([]interface{}{&vehicleID}, d.scanTargets()...)...); err != nil {
+			return nil, err
+		}
+		result[vehicleID] = append(result[vehicleID], d.toApp())
+	}
+	return result, rows.Err()
+}
+
+// ReplaceVehicleDrivers 以 effectiveFrom 為界，將車輛的司機集合換成 driverIDs。
+func (r *DriverRepository) ReplaceVehicleDrivers(ctx context.Context, vehicleID uuid.UUID, driverIDs []uuid.UUID, effectiveFrom time.Time) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// 被移出本車的司機，其指派在 effectiveFrom 當日結束；尚未生效的指派直接刪除
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM driver_assignments
+		WHERE vehicle_id = $1 AND NOT (driver_id = ANY($2::uuid[])) AND lower(effective_range) >= $3::date
+	`, vehicleID, driverIDs, effectiveFrom); err != nil {
+		return fmt.Errorf("failed to drop future assignments: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE driver_assignments
+		SET effective_range = daterange(lower(effective_range), $3::date, '[)')
+		WHERE vehicle_id = $1 AND NOT (driver_id = ANY($2::uuid[])) AND effective_range @> $3::date
+	`, vehicleID, driverIDs, effectiveFrom); err != nil {
+		return fmt.Errorf("failed to close assignments: %w", err)
+	}
+
+	// 已在本車且指派仍生效的司機不動，避免每次儲存都切出一段沒有意義的歷史
+	rows, err := tx.Query(ctx, `
+		SELECT driver_id FROM driver_assignments
+		WHERE vehicle_id = $1 AND effective_range @> $2::date
+	`, vehicleID, effectiveFrom)
+	if err != nil {
+		return fmt.Errorf("failed to query current assignments: %w", err)
+	}
+	unchanged := make(map[uuid.UUID]bool)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		unchanged[id] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// 新加入的司機：先收掉他在別台車尚未結束的指派，再掛到本車
+	for _, driverID := range driverIDs {
+		if unchanged[driverID] {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `
+			DELETE FROM driver_assignments
+			WHERE driver_id = $1 AND lower(effective_range) >= $2::date
+		`, driverID, effectiveFrom); err != nil {
+			return fmt.Errorf("failed to drop future driver assignment: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE driver_assignments
+			SET effective_range = daterange(lower(effective_range), $2::date, '[)')
+			WHERE driver_id = $1 AND effective_range @> $2::date
+		`, driverID, effectiveFrom); err != nil {
+			return fmt.Errorf("failed to close driver assignment: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO driver_assignments (id, driver_id, vehicle_id, effective_range)
+			VALUES ($1, $2, $3, daterange($4::date, NULL, '[)'))
+		`, uuid.New(), driverID, vehicleID, effectiveFrom); err != nil {
+			return fmt.Errorf("failed to insert assignment: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }

@@ -153,6 +153,23 @@
             </template>
           </el-table-column>
 
+          <el-table-column label="目前司機" min-width="200">
+            <template #default="{ row }">
+              <div v-if="row.drivers && row.drivers.length" class="vehicle-driver-tags">
+                <el-tag
+                  v-for="d in row.drivers"
+                  :key="d.id"
+                  size="small"
+                  type="info"
+                  effect="plain"
+                >
+                  {{ d.name }}
+                </el-tag>
+              </div>
+              <span v-else class="vehicle-driver-empty">尚未指派</span>
+            </template>
+          </el-table-column>
+
           <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center">
             <template #default="{ row }">
               <span>{{ formatDateTime(row.createdAt) }}</span>
@@ -162,7 +179,7 @@
           <el-table-column
             v-if="authStore.can('staff')"
             label="操作"
-            width="150"
+            width="220"
             fixed="right"
             align="center"
           >
@@ -178,6 +195,9 @@
               <template v-else>
                 <el-button link type="success" size="small" :icon="Edit" @click="startInlineEdit(row as any)">
                   編輯
+                </el-button>
+                <el-button link type="primary" size="small" :icon="User" @click="openDriverDialog(row as any)">
+                  司機
                 </el-button>
                 <el-button link type="danger" size="small" :icon="Delete" @click="handleDeleteVehicle(row as any)">
                   刪除
@@ -241,25 +261,76 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 車輛司機維護彈窗 -->
+    <el-dialog
+      v-model="driverDialogVisible"
+      :title="`維護司機 - ${driverDialogVehicle?.displayName || ''}`"
+      width="520px"
+    >
+      <el-form label-width="120px">
+        <el-form-item label="本車司機">
+          <el-select
+            v-model="driverDialogForm.driverIds"
+            multiple
+            filterable
+            placeholder="可選擇多位司機"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="d in allDrivers"
+              :key="d.id"
+              :label="d.code ? `${d.name} (${d.code})` : d.name"
+              :value="d.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="生效日期">
+          <el-date-picker
+            v-model="driverDialogForm.effectiveFrom"
+            type="date"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <div class="driver-dialog-hint">
+        一位司機同一期間只會有一台車：被加入本車的司機，其他車上尚未結束的指派會從生效日起收掉。
+      </div>
+      <template #footer>
+        <el-button @click="driverDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingDrivers" @click="handleSaveDrivers">
+          確認儲存
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { Plus, Edit, Check, Delete } from '@element-plus/icons-vue'
+import { ref, reactive, onMounted } from 'vue'
+import { Plus, Edit, Check, Delete, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
-import { listVehicles, createVehicle, updateVehicle, deleteVehicle } from '@/api/masters'
+import { listVehicles, createVehicle, updateVehicle, deleteVehicle, listDrivers, setVehicleDrivers } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { formatDateTime } from '@/utils/formatters'
 import { REGION_LABELS, type Region } from '@/types/domain'
-import type { VehicleDTO, CreateVehicleRequest } from '@/types/api'
+import type { VehicleDTO, CreateVehicleRequest, DriverDTO } from '@/types/api'
 
 const authStore = useAuthStore()
 const vehicles = ref<VehicleDTO[]>([])
+const allDrivers = ref<DriverDTO[]>([])
 const dialogVisible = ref(false)
+const driverDialogVisible = ref(false)
+const driverDialogVehicle = ref<VehicleDTO | null>(null)
+const savingDrivers = ref(false)
+const driverDialogForm = reactive<{ driverIds: string[]; effectiveFrom: string }>({
+  driverIds: [],
+  effectiveFrom: new Date().toISOString().split('T')[0]
+})
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
 
@@ -316,6 +387,42 @@ const {
     total.value = res.meta.total
   }
 })
+
+async function loadDrivers() {
+  try {
+    const res = await listDrivers({ active: true, pageSize: 200 })
+    allDrivers.value = res.data
+  } catch {
+    allDrivers.value = []
+  }
+}
+
+onMounted(loadDrivers)
+
+function openDriverDialog(row: VehicleDTO) {
+  driverDialogVehicle.value = row
+  driverDialogForm.driverIds = (row.drivers || []).map((d) => d.id)
+  driverDialogForm.effectiveFrom = new Date().toISOString().split('T')[0]
+  driverDialogVisible.value = true
+}
+
+async function handleSaveDrivers() {
+  if (!driverDialogVehicle.value) return
+  savingDrivers.value = true
+  try {
+    await setVehicleDrivers(driverDialogVehicle.value.id, {
+      driverIds: driverDialogForm.driverIds,
+      effectiveFrom: driverDialogForm.effectiveFrom
+    })
+    ElMessage.success(`車輛「${driverDialogVehicle.value.displayName}」司機已更新`)
+    driverDialogVisible.value = false
+    await Promise.all([executeFetch(), loadDrivers()])
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新車輛司機失敗'))
+  } finally {
+    savingDrivers.value = false
+  }
+}
 
 function getRowClassName({ row }: { row: any }) {
   return editingRowId.value === row.id ? 'editing-row' : ''
@@ -434,6 +541,26 @@ executeFetch()
 </script>
 
 <style scoped>
+.vehicle-driver-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vehicle-driver-empty {
+  color: var(--el-text-color-placeholder);
+  font-size: 13px;
+}
+
+.driver-dialog-hint {
+  margin-top: -4px;
+  padding-left: 120px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 :deep(.el-table .editing-row) {
   background-color: var(--el-color-primary-light-9) !important;
 }

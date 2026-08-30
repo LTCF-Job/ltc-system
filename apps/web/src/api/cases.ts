@@ -72,8 +72,9 @@ export async function downloadCaseImportTemplate(): Promise<Blob> {
   return apiClient.get('/cases/template', { responseType: 'blob' })
 }
 
-export async function exportCaseProfileWorkbook(): Promise<Blob> {
-  return apiClient.get('/cases/export', { responseType: 'blob' })
+export async function exportCaseProfileWorkbook(caseIds?: string[]): Promise<Blob> {
+  const params = caseIds && caseIds.length > 0 ? { caseIds: caseIds.join(',') } : undefined
+  return apiClient.get('/cases/export', { params, responseType: 'blob' })
 }
 
 export async function revealCaseId(id: string): Promise<{ nationalId: string }> {

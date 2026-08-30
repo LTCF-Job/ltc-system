@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -29,6 +30,8 @@ type DriverStore interface {
 	Create(ctx context.Context, d *Driver) error
 	Update(ctx context.Context, d *Driver) error
 	AssignVehicle(ctx context.Context, a *DriverAssignment) error
+	ListByVehicleIDsOnDate(ctx context.Context, vehicleIDs []uuid.UUID, on time.Time) (map[uuid.UUID][]Driver, error)
+	ReplaceVehicleDrivers(ctx context.Context, vehicleID uuid.UUID, driverIDs []uuid.UUID, effectiveFrom time.Time) error
 }
 
 // RegionStore 定義區域主檔的讀寫邊界。

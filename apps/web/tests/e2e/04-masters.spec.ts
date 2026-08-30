@@ -39,6 +39,25 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
     await expectElMessage(page, /成功/, 'success')
   })
 
+  test('車輛管理：一台車可掛多位司機，維護後清單同步更新', async ({ page }) => {
+    await page.goto('/masters/vehicles')
+    await waitForTableLoaded(page)
+
+    // 竹北一車在展示資料中由兩位司機共同駕駛
+    const row = page.locator('.el-table__body tr').filter({ hasText: '竹北一車' }).first()
+    await expect(row.locator('.vehicle-driver-tags .el-tag')).toHaveCount(2)
+
+    await row.getByRole('button', { name: '司機' }).click()
+    const dialog = page.locator('.el-dialog').filter({ hasText: '維護司機' })
+    await expect(dialog).toBeVisible()
+
+    // 移除其中一位司機後，清單只剩另一位
+    await dialog.getByRole('button', { name: '關閉此標籤' }).first().click()
+    await dialog.getByRole('button', { name: '確認儲存' }).click()
+    await expectElMessage(page, /司機已更新/, 'success')
+    await expect(row.locator('.vehicle-driver-tags .el-tag')).toHaveCount(1)
+  })
+
   test('司機管理：清單載入、身分證遮罩與解密、新增司機', async ({ page }) => {
     await page.goto('/masters/drivers')
     await waitForTableLoaded(page)

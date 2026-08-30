@@ -96,7 +96,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM sites WHERE id = $1`, site.ID)
 	})
 
-	claimStart := time.Now().Format("2006-01-02")
 
 	// Row A：正常成功列。
 	rowA := importapp.CaseImportRowResult{
@@ -105,7 +104,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		NationalID:     "A202559750",
 		HomeAddress:    "苗栗縣測試路1號",
 		Region:         region,
-		ClaimStartDate: claimStart,
 		SiteName:       site.Name,
 	}
 
@@ -117,7 +115,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		NationalID:     "A100000000",
 		HomeAddress:    "苗栗縣測試路2號",
 		Region:         region,
-		ClaimStartDate: claimStart,
 		SiteName:       site.Name,
 	}
 
@@ -128,7 +125,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		NationalID:     "G121806465",
 		HomeAddress:    "苗栗縣測試路3號",
 		Region:         region,
-		ClaimStartDate: claimStart,
 		SiteName:       site.Name,
 	}
 
@@ -226,7 +222,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
-		ClaimStartDate: in.ClaimStartDate, ServiceCategory: in.ServiceCategory,
+		ServiceCategory: in.ServiceCategory,
 		ServiceUsageType: in.ServiceUsageType, Status: in.Status,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {

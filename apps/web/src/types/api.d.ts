@@ -179,13 +179,11 @@ export interface CaseDTO {
   name: string
   nameNormalized?: string
   nationalId?: string
-  phone?: string
   homeAddress?: string
   region?: Region
   ltcLevel?: string
   serviceCategory: ServiceCategory
   serviceUsageType: ServiceUsageType
-  claimStartDate?: string
   claimEndDate?: string
   status: CaseStatus
   householdType?: string
@@ -212,13 +210,11 @@ export interface CaseDTO {
 export interface CreateCaseRequest {
   name: string
   nationalId?: string
-  phone?: string
   homeAddress?: string
   region?: Region
   ltcLevel?: string
   serviceCategory: ServiceCategory
   serviceUsageType: ServiceUsageType
-  claimStartDate?: string
   claimEndDate?: string
   status?: CaseStatus
   householdType?: string
@@ -314,6 +310,14 @@ export interface VehicleDTO {
   region: Region
   active: boolean
   createdAt: string
+  drivers?: VehicleDriverDTO[]
+}
+
+// 掛在車輛上的司機摘要。一台車可以有多位司機，一位司機同期只會有一台車。
+export interface VehicleDriverDTO {
+  id: string
+  code?: string
+  name: string
 }
 
 export interface CreateVehicleRequest {
@@ -334,7 +338,6 @@ export interface DriverAssignmentDTO {
   plateNo?: string
   startDate: string
   endDate?: string
-  isPrimary: boolean
 }
 
 export interface DriverDTO {

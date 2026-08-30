@@ -14,17 +14,17 @@ func (ExcelRenderer) RenderCaseProfileWorkbook(rows []app.CaseProfileRow) ([]byt
 	defer f.Close()
 	sheet := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheet)
-	// A 欄依操作需求補上序號；C 至 P 嚴格沿用來源工作表的表頭與欄位位置。
-	headers := []string{"序號", "", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "REMARK"}
+	// A 至 N 嚴格沿用來源工作表的表頭與欄位位置。
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
 	for i, value := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		_ = f.SetCellValue(sheet, cell, value)
 	}
 	style, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}, Alignment: &excelize.Alignment{Horizontal: "center"}})
-	_ = f.SetCellStyle(sheet, "A1", "P1", style)
+	_ = f.SetCellStyle(sheet, "A1", "N1", style)
 	for i, item := range rows {
 		row := []interface{}{
-			i + 1, i + 1, item.Name, item.HouseholdType, item.NationalID, item.Gender, item.Birthday, item.Age,
+			item.Name, item.HouseholdType, item.NationalID, item.Gender, item.Birthday, item.Age,
 			item.SiteName, item.OutboundVehicle, item.InboundVehicle, item.CareContactRole, item.CareContactName,
 			item.RegisteredAddress, item.HomeAddress, "",
 		}
@@ -33,8 +33,8 @@ func (ExcelRenderer) RenderCaseProfileWorkbook(rows []app.CaseProfileRow) ([]byt
 			_ = f.SetCellValue(sheet, cell, cellValue)
 		}
 	}
-	_ = f.SetColWidth(sheet, "A", "P", 18)
-	_ = f.SetColWidth(sheet, "N", "O", 42)
+	_ = f.SetColWidth(sheet, "A", "N", 18)
+	_ = f.SetColWidth(sheet, "L", "M", 42)
 	var buf bytes.Buffer
 	if err := f.Write(&buf); err != nil {
 		return nil, err

@@ -122,7 +122,6 @@ func TestCreateCase_OnlyNameSucceeds(t *testing.T) {
 	assert.Nil(t, entity.NationalIDCipher)
 	assert.Nil(t, entity.HomeAddress)
 	assert.Nil(t, entity.Region)
-	assert.Nil(t, entity.ClaimStartDate)
 	assert.Equal(t, "active", entity.Status)
 }
 
