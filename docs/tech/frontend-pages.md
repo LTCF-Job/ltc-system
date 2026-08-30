@@ -17,6 +17,7 @@ covers: ["apps/web/src/router/index.ts"]
 | `/masters/sites` | `views/masters/SiteListView.vue` | admin/staff/dispatcher/viewer | `sites/*` |
 | `/masters/vehicles` | `views/masters/VehicleListView.vue` | 全部 | `vehicles/*` |
 | `/masters/drivers` | `views/masters/DriverListView.vue` | 全部 | `drivers/*` |
+| `/masters/caregivers` | `views/masters/CaregiverListView.vue` | admin/staff/dispatcher/viewer | `caregivers/*`、`caregivers/import`、`caregivers/template` |
 | `/forms` | `views/forms/FormListView.vue` | admin/staff/dispatcher/viewer | `forms`、`forms/:id/sync` |
 | `/forms/mappings` | `views/forms/FieldMappingView.vue` | admin/staff/dispatcher/viewer | `forms/columns*` |
 | `/rides` | `views/rides/RideCalendarView.vue`（含 `RideManualEntryDialog.vue`） | 全部 | `rides/calendar`、`rides/manual-report` |

@@ -23,6 +23,7 @@ Each module owns one business capability. Put new work in the module that alread
 | module | Owns |
 | --- | --- |
 | `masterdata` | Sites, vehicles, drivers, regions, driver–vehicle assignment |
+| `caregiver` | Caregiver master data and its batch Excel/CSV import |
 | `casemgmt` | Case master data, schedules, transport preference, case profile workbook |
 | `caseimport` | Batch Excel/CSV parsing, preview, and commit of cases |
 | `ride` | Google-form ingestion, ride-record merge, manual correction, conflict resolution |

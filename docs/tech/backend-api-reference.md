@@ -168,6 +168,18 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/tasks/check-missing-reports` | staff, admin | 觸發「未回報偵測」批次 |
 | POST | `/tasks/month-end-reminder` | staff, admin | 觸發「月底申報提醒」批次 |
 
+## 照護人員主檔 `caregiverH`
+
+| Method | Path | 角色 | 說明 |
+|---|---|---|---|
+| GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`unresolvedLink`（單位待關聯既有據點）、`incomplete`（聯絡方式或備註缺漏）篩選 |
+| POST | `/caregivers` | staff, admin | 新增照護人員，僅姓名必填 |
+| GET | `/caregivers/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
+| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel／CSV；姓名缺漏略過，單位比對不到或聯絡方式／備註缺漏仍建立資料並附警告 |
+| PATCH | `/caregivers/:id` | staff, admin | |
+| DELETE | `/caregivers/:id` | admin | |
+| PUT | `/caregivers/:id/site` | staff, admin | 將單位待關聯的照護人員連結至既有據點，並清空原始單位名稱 |
+
 ## ⚠️ 前端已預留但後端尚未實作
 
 前端 `src/api/users.ts`、`src/api/roles.ts` 已經寫好 `/users`、`/roles`、`/auth/change-password` 這幾支的呼叫（型別也定義好了），對應「使用者管理」「角色身分管理」頁面。**這幾支路由目前不存在於 `cmd/server/main.go`**，只有 MSW mock（`apps/web/src/mocks/handlers/`）在假裝有這個 API。

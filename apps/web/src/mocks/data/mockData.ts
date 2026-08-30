@@ -4,6 +4,7 @@ import type {
   SiteDTO,
   VehicleDTO,
   DriverDTO,
+  CaregiverDTO,
   FormDTO,
   FormColumnDTO,
   ExportJobDTO,
@@ -144,6 +145,42 @@ export const mockDrivers: DriverDTO[] = [
     active: false,
     createdAt: '2026-01-15',
     assignments: []
+  }
+]
+
+// 照護人員主檔展示資料：涵蓋單位已關聯、單位待關聯（siteNameRaw）、聯絡方式/備註缺漏待補齊三種狀態
+export const mockCaregivers: CaregiverDTO[] = [
+  {
+    id: 'caregiver_1',
+    siteId: 'site_1',
+    siteName: '竹北日照中心',
+    name: '陳小華',
+    type: 'case_manager',
+    contact: '0912-345-678',
+    notes: '熟悉輪椅移位協助',
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01'
+  },
+  {
+    id: 'caregiver_2',
+    siteNameRaw: '竹北二日照據點',
+    name: '王大明',
+    type: 'specialist',
+    contact: '0987-654-321',
+    notes: '',
+    createdAt: '2026-03-01',
+    updatedAt: '2026-03-01'
+  },
+  {
+    id: 'caregiver_3',
+    siteId: 'site_2',
+    siteName: '竹南日照據點',
+    name: '李美玲',
+    type: 'case_manager',
+    contact: '',
+    notes: '',
+    createdAt: '2026-04-01',
+    updatedAt: '2026-04-01'
   }
 ]
 

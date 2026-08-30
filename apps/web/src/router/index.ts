@@ -58,6 +58,12 @@ const router = createRouter({
           meta: { title: '司機管理', module: 'masters_drivers', roles: ['admin', 'staff', 'dispatcher', 'driver', 'viewer'] }
         },
         {
+          path: 'masters/caregivers',
+          name: 'CaregiverList',
+          component: () => import('@/views/masters/CaregiverListView.vue'),
+          meta: { title: '照護人員管理', module: 'masters_caregivers', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+        },
+        {
           path: 'forms',
           name: 'FormList',
           component: () => import('@/views/forms/FormListView.vue'),

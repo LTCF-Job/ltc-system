@@ -6,6 +6,7 @@ import (
 	"time"
 
 	audittransport "ltc-system/apps/api/internal/modules/audit/transport"
+	caregivertransport "ltc-system/apps/api/internal/modules/caregiver/transport"
 	importtransport "ltc-system/apps/api/internal/modules/caseimport/transport"
 	casetransport "ltc-system/apps/api/internal/modules/casemgmt/transport"
 	formtransport "ltc-system/apps/api/internal/modules/formsync/transport"
@@ -45,6 +46,7 @@ type handlers struct {
 	fuel         *opstransport.FuelHandler
 	dashboard    *reporttransport.DashboardHandler
 	form         *formtransport.FormHandler
+	caregiver    *caregivertransport.CaregiverHandler
 }
 
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
@@ -200,6 +202,15 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 		// 16. 排程與維運任務端點 (B5.2 / B5.3)
 		apiV1.POST("/tasks/check-missing-reports", auth.RequireRoles("staff", "admin"), h.task.CheckMissingReports)
 		apiV1.POST("/tasks/month-end-reminder", auth.RequireRoles("staff", "admin"), h.task.MonthEndReminder)
+
+		// 17. 照護人員主檔管理
+		apiV1.GET("/caregivers", auth.RequireRoles("viewer", "staff", "admin"), h.caregiver.List)
+		apiV1.POST("/caregivers", auth.RequireRoles("staff", "admin"), h.caregiver.Create)
+		apiV1.GET("/caregivers/template", auth.RequireRoles("viewer", "staff", "admin"), h.caregiver.DownloadTemplate)
+		apiV1.POST("/caregivers/import", auth.RequireRoles("staff", "admin"), h.caregiver.ImportExcel)
+		apiV1.PATCH("/caregivers/:id", auth.RequireRoles("staff", "admin"), h.caregiver.Update)
+		apiV1.DELETE("/caregivers/:id", auth.RequireRoles("admin"), h.caregiver.Delete)
+		apiV1.PUT("/caregivers/:id/site", auth.RequireRoles("staff", "admin"), h.caregiver.LinkSite)
 	}
 
 	return r

@@ -90,6 +90,13 @@ export const CASE_STATUS_LABELS: Record<CaseStatus, string> = {
   closed: '停案'
 }
 
+export type CaregiverType = 'case_manager' | 'specialist'
+
+export const CAREGIVER_TYPE_LABELS: Record<CaregiverType, string> = {
+  case_manager: '個管',
+  specialist: '專護'
+}
+
 export type Direction = 'outbound' | 'inbound'
 
 export const DIRECTION_LABELS: Record<Direction, string> = {
@@ -316,6 +323,7 @@ export const SYSTEM_MODULES: SystemModuleInfo[] = [
   { id: 'masters_sites', name: '據點管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_vehicles', name: '車輛管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_drivers', name: '司機管理', category: 'masters', categoryName: '主檔資料' },
+  { id: 'masters_caregivers', name: '照護人員管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'forms_sync', name: '表單同步管理', category: 'operations', categoryName: '表單與搭乘' },
   { id: 'forms_mappings', name: '欄位對應設定', category: 'operations', categoryName: '表單與搭乘' },
   { id: 'rides_calendar', name: '搭乘月曆表', category: 'operations', categoryName: '表單與搭乘' },
@@ -353,6 +361,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, SystemPermissions> = {
     masters_sites: { view: true, edit: true },
     masters_vehicles: { view: true, edit: true },
     masters_drivers: { view: true, edit: true },
+    masters_caregivers: { view: true, edit: true },
     forms_sync: { view: true, edit: true },
     forms_mappings: { view: true, edit: true },
     rides_calendar: { view: true, edit: true },
@@ -376,6 +385,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, SystemPermissions> = {
     masters_sites: { view: false, edit: false },
     masters_vehicles: { view: true, edit: false },
     masters_drivers: { view: true, edit: false },
+    masters_caregivers: { view: false, edit: false },
     forms_sync: { view: false, edit: false },
     forms_mappings: { view: false, edit: false },
     rides_calendar: { view: true, edit: false },
@@ -399,6 +409,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, SystemPermissions> = {
     masters_sites: { view: true, edit: true },
     masters_vehicles: { view: true, edit: true },
     masters_drivers: { view: true, edit: true },
+    masters_caregivers: { view: true, edit: true },
     forms_sync: { view: true, edit: true },
     forms_mappings: { view: true, edit: true },
     rides_calendar: { view: true, edit: true },

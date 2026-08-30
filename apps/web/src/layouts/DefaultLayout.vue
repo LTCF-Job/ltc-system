@@ -58,7 +58,7 @@
             <template #title>車輛維修保養</template>
           </el-menu-item>
 
-          <el-sub-menu v-if="authStore.hasPermission('masters_regions') || authStore.hasPermission('masters_cases') || authStore.hasPermission('masters_sites') || authStore.hasPermission('masters_vehicles') || authStore.hasPermission('masters_drivers')" index="masters">
+          <el-sub-menu v-if="authStore.hasPermission('masters_regions') || authStore.hasPermission('masters_cases') || authStore.hasPermission('masters_sites') || authStore.hasPermission('masters_vehicles') || authStore.hasPermission('masters_drivers') || authStore.hasPermission('masters_caregivers')" index="masters">
             <template #title>
               <el-icon><Management /></el-icon>
               <span>主檔資料</span>
@@ -82,6 +82,10 @@
             <el-menu-item v-if="authStore.hasPermission('masters_drivers')" index="/masters/drivers">
               <el-icon><Avatar /></el-icon>
               <template #title>司機管理</template>
+            </el-menu-item>
+            <el-menu-item v-if="authStore.hasPermission('masters_caregivers')" index="/masters/caregivers">
+              <el-icon><UserFilled /></el-icon>
+              <template #title>照護人員管理</template>
             </el-menu-item>
           </el-sub-menu>
 
@@ -244,7 +248,8 @@ import {
   List,
   Setting,
   MapLocation,
-  Lock
+  Lock,
+  UserFilled
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'

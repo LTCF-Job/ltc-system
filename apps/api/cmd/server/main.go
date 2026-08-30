@@ -11,6 +11,9 @@ import (
 	auditapp "ltc-system/apps/api/internal/modules/audit/app"
 	auditinfra "ltc-system/apps/api/internal/modules/audit/infra"
 	audittransport "ltc-system/apps/api/internal/modules/audit/transport"
+	caregiverapp "ltc-system/apps/api/internal/modules/caregiver/app"
+	caregiverinfra "ltc-system/apps/api/internal/modules/caregiver/infra"
+	caregivertransport "ltc-system/apps/api/internal/modules/caregiver/transport"
 	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
 	importinfra "ltc-system/apps/api/internal/modules/caseimport/infra"
 	importtransport "ltc-system/apps/api/internal/modules/caseimport/transport"
@@ -99,6 +102,7 @@ func main() {
 	dashboardRepo := reportinfra.NewDashboardRepository(pool)
 	precheckRepo := reportinfra.NewPrecheckRepository(pool)
 	taskRepo := taskinfra.NewTaskRepository(pool)
+	caregiverRepo := caregiverinfra.NewCaregiverRepository(pool)
 
 	// 初始化 Services
 	googleCli, err := google.NewClient(ctx, cfg.GoogleSAJSON)
@@ -151,6 +155,8 @@ func main() {
 	fuelSvc := opsapp.NewFuelService(fuelRepo, opsAudit)
 	dashboardSvc := reportapp.NewDashboardService(dashboardRepo)
 	taskSvc := taskapp.NewTaskService(taskRepo, taskScheduleReader{repo: caseRepo}, holidayRepo, notificationSvc)
+	caregiverExcelAdapter := caregiverinfra.NewExcelAdapter()
+	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverSiteLookup{repo: mdSiteRepo}, caregiverExcelAdapter, caregiverExcelAdapter)
 
 	// 初始化 Handlers
 	h := handlers{
@@ -172,6 +178,7 @@ func main() {
 		fuel:         opstransport.NewFuelHandler(fuelSvc),
 		dashboard:    reporttransport.NewDashboardHandler(dashboardSvc),
 		form:         formtransport.NewFormHandler(formSvc),
+		caregiver:    caregivertransport.NewCaregiverHandler(caregiverSvc),
 	}
 
 	r := newRouter(cfg, pool, h)

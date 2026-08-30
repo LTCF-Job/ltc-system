@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	caregiverapp "ltc-system/apps/api/internal/modules/caregiver/app"
 	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
 	caseinfra "ltc-system/apps/api/internal/modules/casemgmt/infra"
@@ -176,6 +177,17 @@ func (a caseRegistrar) RecordSkipped(ctx context.Context, row importapp.CaseImpo
 	a.svc.RecordSkippedCaseImport(ctx, caseapp.CaseImportSkippedRow{
 		RowIndex: row.RowIndex, CaseName: row.CaseName, Reasons: row.Reasons, RawValues: row.RawValues,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
+}
+
+// caregiverSiteLookup 讓 caregiver 匯入時以名稱比對據點。
+type caregiverSiteLookup struct{ repo *masterinfra.SiteRepository }
+
+func (a caregiverSiteLookup) GetByName(ctx context.Context, name string) (*caregiverapp.SiteRef, error) {
+	s, err := a.repo.GetByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return &caregiverapp.SiteRef{ID: s.ID, Name: s.Name}, nil
 }
 
 // caseDuplicateFinder 讓 caseimport 於 dry-run 階段透過 casemgmt 查重。

@@ -16,7 +16,8 @@ import type {
   NotificationTopic,
   AuditAction,
   AuditEntityType,
-  SystemPermissions
+  SystemPermissions,
+  CaregiverType
 } from './domain'
 
 // 共通分頁與錯誤結構
@@ -359,6 +360,30 @@ export interface CreateDriverRequest {
 
 export interface UpdateDriverRequest extends Partial<CreateDriverRequest> { }
 
+// 照護人員：siteId 為空但 siteNameRaw 有值時，代表匯入時的單位名稱尚未關聯既有據點
+export interface CaregiverDTO {
+  id: string
+  siteId?: string
+  siteName?: string
+  siteNameRaw?: string
+  name: string
+  type: CaregiverType
+  contact?: string
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateCaregiverRequest {
+  siteId?: string
+  name: string
+  type: CaregiverType
+  contact?: string
+  notes?: string
+}
+
+export interface UpdateCaregiverRequest extends Partial<CreateCaregiverRequest> { }
+
 // Google 表單與欄位對應
 export interface FormDTO {
   id: string
@@ -665,6 +690,13 @@ export interface CaseImportCommitResult {
   importedCount: number
   skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
   warnings?: Array<{ rowIndex: number; caseName?: string; field?: string; message: string }>
+}
+
+// 照護人員匯入結果：warnings 的 field 為 "site"／"contact"／"notes"，供「待維護」頁籤分類顯示
+export interface CaregiverImportCommitResult {
+  importedCount: number
+  skippedRows: Array<{ rowIndex: number; name: string; reasons: string[] }>
+  warnings?: Array<{ rowIndex: number; name?: string; field?: string; message: string }>
 }
 
 // 7. 系統稽核紀錄 (Audit Log)

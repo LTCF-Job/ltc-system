@@ -95,6 +95,7 @@ var excelModules = map[string]bool{
 	"caseimport": true,
 	"ops":        true,
 	"casemgmt":   true,
+	"caregiver":  true,
 }
 
 // domainAllowedExternal are the only non-stdlib imports internal/domain may use.
