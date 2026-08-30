@@ -17,7 +17,7 @@
         >
           <template #default>
             <div class="template-action">
-              <span>依照範本格式填寫個案姓名、身分證字號、區域及排班趟數等必填欄位。</span>
+              <span>依照範本格式填寫個案姓名、身分證字號等必填欄位，戶別、據點與接送車輛請填寫中文名稱，系統會自動比對現有主檔資料。</span>
               <el-button
                 type="primary"
                 plain

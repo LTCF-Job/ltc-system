@@ -173,6 +173,11 @@
             </template>
           </el-table-column>
           <el-table-column prop="claimStartDate" label="起聘申報日" width="115" align="center" />
+          <el-table-column prop="serviceUsageType" label="服務使用類型" width="170" align="center">
+            <template #default="{ row }">
+              <span>{{ SERVICE_USAGE_TYPE_LABELS[row.serviceUsageType as ServiceUsageType] || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="排班概要" min-width="160">
             <template #default="{ row }">
               <span v-if="row.activeSchedule">
@@ -438,9 +443,11 @@ import {
   REGION_LABELS,
   CASE_STATUS_LABELS,
   TRIP_PATTERN_LABELS,
+  SERVICE_USAGE_TYPE_LABELS,
   type Region,
   type CaseStatus,
-  type TripPattern
+  type TripPattern,
+  type ServiceUsageType
 } from '@/types/domain'
 import type { CaseDTO, CreateCaseRequest, SiteDTO, VehicleDTO } from '@/types/api'
 

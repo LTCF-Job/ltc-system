@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { mockCases } from '../data/mockData'
-import { createMockExcelBlob } from '../utils/mockExcel'
+import { createMockExcelBlob, createCaseImportTemplateExcelBlob } from '../utils/mockExcel'
 
 export const casesHandlers = [
   http.get('/api/v1/cases', ({ request }) => {
@@ -52,9 +52,9 @@ export const casesHandlers = [
 
     if (format === 'csv') {
       const csvContent =
-        '\uFEFF個案姓名*,身分證字號*,申報地區*(苗栗/新竹),住家地址*,開始申報日*(YYYY-MM-DD),服務類別*(1:補助/2:自費),服務使用類型*(1:社區長照/2:社區據點/3:輔具中心/4:身障日照),所屬據點*,每週搭乘日*(如 1,2,3,4,5),趟數型態*(1:單趟/2:來回/4:四趟),去程時間(HH:mm),回程時間(HH:mm),申報單價(元),單趟里程(公里),服務時長(分鐘)\r\n' +
-        '張曾阿妹,A202559750,苗栗,苗栗縣竹南鎮大營路123號,2026-07-01,1,2,竹南日照據點,"1,2,3,4,5",2,09:00,16:00,115,5.0,10\r\n' +
-        '李國盛,J123458899,新竹,新竹縣竹北市文興路一段200號,2026-07-01,2,1,竹北日照中心,"1,3,5",2,09:30,15:30,200,8.0,20\r\n'
+        '﻿姓名*,戶別,身分證字號*,性別(男/女),生日(YYYY-MM-DD),據點,去程車,回程車,個管or照專,個管姓名,戶籍,居住地,備註\r\n' +
+        '張曾阿妹,與子女同住,A202559750,女,1948-03-12,竹南日照據點,竹南2車,竹南2車,個管,蔡怡君,苗栗縣竹南鎮大營路123號,苗栗縣竹南鎮大營路123號,\r\n' +
+        '李國盛,獨居,J123458899,男,1952-01-05,竹北日照中心,竹北一車,竹北一車,照專,林小華,新竹縣竹北市文興路一段200號,新竹縣竹北市文興路一段200號,\r\n'
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' })
       return new HttpResponse(blob, {
         headers: {
@@ -64,7 +64,7 @@ export const casesHandlers = [
       })
     }
 
-    const excelBlob = createMockExcelBlob()
+    const excelBlob = createCaseImportTemplateExcelBlob()
     return new HttpResponse(excelBlob, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
