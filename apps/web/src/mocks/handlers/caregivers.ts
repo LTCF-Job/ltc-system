@@ -113,7 +113,8 @@ export const caregiversHandlers = [
     return HttpResponse.json({
       importedCount: 2,
       skippedRows: [
-        { rowIndex: 4, name: '', reasons: ['姓名：未填寫，本列已略過'] }
+        { rowIndex: 4, name: '', reasons: ['姓名：未填寫，本列已略過'] },
+        { rowIndex: 5, name: '', reasons: ['類型：未填寫或不是「個管」／「專護」，本列已略過'] }
       ],
       warnings: [
         { rowIndex: 2, name: '張小芳', field: 'site', message: '單位「查無此據點」未於據點管理中找到，已建立資料並保留原始名稱待人工關聯' }
