@@ -1,6 +1,9 @@
 import { http, HttpResponse } from 'msw'
-import { mockCases } from '../data/mockData'
+import { mockCases, mockSites, mockVehicles } from '../data/mockData'
 import { createMockExcelBlob, createCaseImportTemplateExcelBlob } from '../utils/mockExcel'
+import { readXlsxRows } from '../utils/parseImportFile'
+import { findCaseHeader, parseCaseBirthDate } from '../utils/caseImportRules'
+import { isValidTaiwanNationalId, maskNationalId } from '../utils/nationalId'
 
 export const casesHandlers = [
   http.get('/api/v1/cases', ({ request }) => {
@@ -46,24 +49,7 @@ export const casesHandlers = [
     })
   }),
 
-  http.get('/api/v1/cases/template', ({ request }) => {
-    const url = new URL(request.url)
-    const format = (url.searchParams.get('format') || 'xlsx').toLowerCase()
-
-    if (format === 'csv') {
-      const csvContent =
-        '﻿姓名*,戶別,身分證字號*,性別(男/女),生日(YYYY-MM-DD),據點,去程車,回程車,個管or照專,個管姓名,戶籍,居住地,備註\r\n' +
-        '張曾阿妹,與子女同住,A202559750,女,1948-03-12,竹南日照據點,竹南2車,竹南2車,個管,蔡怡君,苗栗縣竹南鎮大營路123號,苗栗縣竹南鎮大營路123號,\r\n' +
-        '李國盛,獨居,J123458899,男,1952-01-05,竹北日照中心,竹北一車,竹北一車,照專,林小華,新竹縣竹北市文興路一段200號,新竹縣竹北市文興路一段200號,\r\n'
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' })
-      return new HttpResponse(blob, {
-        headers: {
-          'Content-Type': 'text/csv;charset=utf-8',
-          'Content-Disposition': 'attachment; filename="case_template.csv"'
-        }
-      })
-    }
-
+  http.get('/api/v1/cases/template', () => {
     const excelBlob = createCaseImportTemplateExcelBlob()
     return new HttpResponse(excelBlob, {
       headers: {
@@ -173,38 +159,252 @@ export const casesHandlers = [
     return HttpResponse.json(c.activeSchedule)
   }),
 
-  http.post('/api/v1/cases/import', ({ request }) => {
+  // 依實際上傳的 .xlsx 內容解析，邏輯對齊後端 caseimport/app/parse.go 與 commit.go：
+  // 生日／身分證字號格式錯誤整列略過；疑似重複個案預設略過（需勾選才匯入）；據點與去回
+  // 程車輛比對不到既有主檔仍建立個案並保留原始名稱待人工關聯。
+  http.post('/api/v1/cases/import', async ({ request }) => {
     const url = new URL(request.url)
     const isDryRun = url.searchParams.get('dryRun') === 'true'
 
+    const formData = await request.formData()
+    const file = formData.get('file') as File | null
+    if (!file) {
+      return HttpResponse.json({ error: { code: 'VALIDATION_FAILED', message: '未提供上傳檔案' } }, { status: 400 })
+    }
+
+    const allRows = await readXlsxRows(file)
+    const { headerRowIdx, colMap, caseNameIdx, careContactNameIdx } = findCaseHeader(allRows)
+
+    interface ParsedRow {
+      rowIndex: number
+      name: string
+      nationalId: string
+      householdType: string
+      gender: string
+      birthDate: string
+      siteName: string
+      outboundVehicle: string
+      inboundVehicle: string
+      careContactRole: string
+      careContactName: string
+      registeredAddress: string
+      homeAddress: string
+      remarks: string
+      isDuplicate: boolean
+      duplicateCode?: string
+      duplicateName?: string
+      hasError: boolean
+      rowErrors: string[]
+    }
+
+    const results: ParsedRow[] = []
+    const errorsList: any[] = []
+    const warningsList: any[] = []
+    const previewRows: any[] = []
+    let totalRows = 0
+    let validRows = 0
+    let warningRows = 0
+
+    if (caseNameIdx >= 0) {
+      const getVal = (row: string[], key: string) => {
+        const idx = colMap[key]
+        return idx !== undefined && idx < row.length ? (row[idx] || '').trim() : ''
+      }
+      const getIdxVal = (row: string[], idx: number) => (idx >= 0 && idx < row.length ? (row[idx] || '').trim() : '')
+
+      for (let rIdx = headerRowIdx + 1; rIdx < allRows.length; rIdx++) {
+        const row = allRows[rIdx]
+        if (!row || row.length === 0 || (row.length === 1 && !row[0].trim())) continue
+
+        const name = getIdxVal(row, caseNameIdx)
+        if (!name || name.startsWith('例:') || name.startsWith('例：')) continue
+
+        totalRows++
+        const rowIndex = rIdx + 1
+
+        const nationalId = getVal(row, '身分證字號')
+        const householdType = getVal(row, '戶別')
+        const gender = getVal(row, '性別')
+        const rawBirth = getVal(row, '生日')
+        const birthDate = parseCaseBirthDate(rawBirth)
+        const siteName = getVal(row, '據點')
+        const outboundVehicle = getVal(row, '接送車輛(去)')
+        const inboundVehicle = getVal(row, '接送車輛(回)')
+        const careContactRole = getVal(row, '個管or照專')
+        const careContactName = getIdxVal(row, careContactNameIdx)
+        const registeredAddress = getVal(row, '戶籍')
+        const homeAddress = getVal(row, '居住地')
+        const remarks = getVal(row, 'REMARK') || getVal(row, '備註')
+
+        const rowErrors: string[] = []
+        if (rawBirth && !birthDate) {
+          const message = '生日：格式錯誤'
+          rowErrors.push(message)
+          errorsList.push({ rowIndex, caseName: name, field: '生日', message })
+        }
+
+        const normalizedNationalId = nationalId.toUpperCase()
+        if (normalizedNationalId && !isValidTaiwanNationalId(normalizedNationalId)) {
+          const message = '身分證字號：格式錯誤'
+          rowErrors.push(message)
+          errorsList.push({ rowIndex, caseName: name, field: '身分證字號', message })
+        }
+
+        const hasError = rowErrors.length > 0
+        let isDuplicate = false
+        let duplicateCode: string | undefined
+        let duplicateName: string | undefined
+
+        if (!hasError) {
+          const dup = normalizedNationalId
+            ? mockCases.find((c) => (c.nationalId || '').toUpperCase() === normalizedNationalId)
+            : mockCases.find((c) => c.name === name)
+          if (dup) {
+            isDuplicate = true
+            duplicateCode = dup.code
+            duplicateName = dup.name
+            warningsList.push({
+              rowIndex,
+              caseName: name,
+              field: '重複個案',
+              message: `疑似重複個案（既有個案代碼 ${dup.code}），預設略過，需勾選才會匯入`
+            })
+          }
+        }
+
+        if (hasError) {
+          // 錯誤列不計入合法筆數
+        } else {
+          validRows++
+          if (isDuplicate) warningRows++
+        }
+
+        results.push({
+          rowIndex, name, nationalId, householdType, gender, birthDate, siteName, outboundVehicle, inboundVehicle,
+          careContactRole, careContactName, registeredAddress, homeAddress, remarks,
+          isDuplicate, duplicateCode, duplicateName, hasError, rowErrors
+        })
+
+        previewRows.push({
+          rowIndex,
+          name,
+          nationalId: maskNationalId(nationalId),
+          householdType,
+          gender,
+          birthDate,
+          siteName,
+          outboundVehicle,
+          inboundVehicle,
+          careContactRole,
+          careContactName,
+          registeredAddress,
+          homeAddress,
+          remarks,
+          isDuplicate,
+          ...(isDuplicate ? { duplicateOf: { code: duplicateCode, name: duplicateName } } : {}),
+          __hasError: hasError,
+          __hasWarning: isDuplicate
+        })
+      }
+    }
+
     if (isDryRun) {
       return HttpResponse.json({
-        totalRows: 3,
-        validRows: 3,
-        errorRows: 0,
-        warningRows: 2,
-        previewRows: [
-          { rowIndex: 2, name: '張曾阿妹', householdType: '與子女同住', nationalId: 'A2****9750', gender: '女', birthDate: '1948-03-12', siteName: '竹南日照據點', outboundVehicle: '竹南2車', inboundVehicle: '竹南2車', careContactRole: '個管', careContactName: '蔡怡君', registeredAddress: '苗栗縣竹南鎮大營路123號', homeAddress: '苗栗縣竹南鎮大營路123號', remarks: '' },
-          { rowIndex: 3, name: '李國盛', householdType: '獨居', nationalId: 'J1****8899', gender: '男', birthDate: '1952-01-05', siteName: '竹北日照中心', outboundVehicle: '竹北一車', inboundVehicle: '竹北一車', careContactRole: '照專', careContactName: '林小華', registeredAddress: '新竹縣竹北市文興路一段200號', homeAddress: '新竹縣竹北市文興路一段200號', remarks: '', __hasWarning: true, isDuplicate: true, duplicateOf: { code: 'C0005', name: '李國盛' } },
-          { rowIndex: 4, name: '邱美玲', householdType: '獨居', nationalId: 'K2****7654', gender: '女', birthDate: '1950-05-20', siteName: '', outboundVehicle: '', inboundVehicle: '', careContactRole: '個管', careContactName: '邱志明', registeredAddress: '苗栗縣頭份市中華路50號', homeAddress: '苗栗縣頭份市中華路50號', remarks: '需輪椅接送', __hasWarning: true, siteNameRaw: '頭份日照中心（新）', outboundVehicleNameRaw: '頭份1號車' }
-        ],
-        errors: [],
-        warnings: [
-          { rowIndex: 3, caseName: '李國盛', field: '身分證字號', message: '疑似與既有個案「李國盛」(C0005) 重複，預設略過，請勾選後確認匯入' },
-          { rowIndex: 4, caseName: '邱美玲', field: '據點/接送車輛', message: '據點「頭份日照中心（新）」、去程車輛「頭份1號車」未於主檔中找到，將保留原始名稱待人工關聯' }
-        ]
+        totalRows,
+        validRows,
+        errorRows: totalRows - validRows,
+        warningRows,
+        previewRows,
+        errors: errorsList,
+        warnings: warningsList
       })
     }
 
-    return HttpResponse.json({
-      importedCount: 2,
-      skippedRows: [
-        { rowIndex: 3, caseName: '李國盛', reasons: ['偵測為重複個案，未勾選匯入'] }
-      ],
-      warnings: [
-        { rowIndex: 4, caseName: '邱美玲', field: '據點', message: '據點「頭份日照中心（新）」未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯' },
-        { rowIndex: 4, caseName: '邱美玲', field: '接送車輛(去)', message: '去程車輛「頭份1號車」未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯' }
-      ]
-    })
+    let includeDuplicateRows: number[] = []
+    try {
+      const raw = formData.get('includeDuplicateRows')
+      includeDuplicateRows = raw ? JSON.parse(String(raw)) : []
+    } catch {
+      includeDuplicateRows = []
+    }
+    const includeSet = new Set(includeDuplicateRows)
+
+    let importedCount = 0
+    const skippedRows: any[] = []
+    const warnings: any[] = []
+
+    for (const row of results) {
+      if (row.hasError) {
+        skippedRows.push({ rowIndex: row.rowIndex, caseName: row.name, reasons: row.rowErrors })
+        continue
+      }
+      if (row.isDuplicate && !includeSet.has(row.rowIndex)) {
+        skippedRows.push({ rowIndex: row.rowIndex, caseName: row.name, reasons: ['偵測為重複個案，未勾選匯入'] })
+        continue
+      }
+
+      const matchedSite = mockSites.find((s) => s.name === row.siteName)
+      const matchedOutbound = mockVehicles.find((v) => v.displayName === row.outboundVehicle)
+      const matchedInbound = mockVehicles.find((v) => v.displayName === row.inboundVehicle)
+
+      const newCase: any = {
+        id: `case_${Date.now()}_${importedCount}`,
+        code: `IMP-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+        name: row.name,
+        nationalId: row.nationalId || undefined,
+        householdType: row.householdType || undefined,
+        gender: row.gender || undefined,
+        birthDate: row.birthDate || undefined,
+        careContactRole: row.careContactRole || undefined,
+        careContactName: row.careContactName || undefined,
+        registeredAddress: row.registeredAddress || undefined,
+        homeAddress: row.homeAddress || undefined,
+        status: 'active',
+        serviceCategory: 1,
+        serviceUsageType: 2,
+        remarks: row.remarks || undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      if (matchedSite) {
+        newCase.siteId = matchedSite.id
+        newCase.siteName = matchedSite.name
+      } else if (row.siteName) {
+        newCase.siteNameRaw = row.siteName
+        warnings.push({
+          rowIndex: row.rowIndex,
+          caseName: row.name,
+          message: `據點「${row.siteName}」未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯`
+        })
+      }
+      if (matchedOutbound) {
+        newCase.outboundVehicleId = matchedOutbound.id
+        newCase.outboundVehicle = matchedOutbound.displayName
+      } else if (row.outboundVehicle) {
+        newCase.outboundVehicleNameRaw = row.outboundVehicle
+        warnings.push({
+          rowIndex: row.rowIndex,
+          caseName: row.name,
+          message: `接送車輛(去)『${row.outboundVehicle}』未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯`
+        })
+      }
+      if (matchedInbound) {
+        newCase.inboundVehicleId = matchedInbound.id
+        newCase.inboundVehicle = matchedInbound.displayName
+      } else if (row.inboundVehicle) {
+        newCase.inboundVehicleNameRaw = row.inboundVehicle
+        warnings.push({
+          rowIndex: row.rowIndex,
+          caseName: row.name,
+          message: `接送車輛(回)『${row.inboundVehicle}』未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯`
+        })
+      }
+
+      mockCases.push(newCase)
+      importedCount++
+    }
+
+    return HttpResponse.json({ importedCount, skippedRows, warnings })
   })
 ]
