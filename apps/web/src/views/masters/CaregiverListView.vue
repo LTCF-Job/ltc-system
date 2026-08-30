@@ -41,6 +41,11 @@
 
           <template #table>
             <el-table :data="caregivers" border stripe style="width: 100%">
+              <el-table-column label="類型" width="90" align="center">
+                <template #default="{ row }">
+                  <span>{{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type }}</span>
+                </template>
+              </el-table-column>
               <el-table-column label="單位" min-width="160">
                 <template #default="{ row }">
                   <span v-if="row.siteName">{{ row.siteName }}</span>
@@ -49,11 +54,6 @@
                 </template>
               </el-table-column>
               <el-table-column prop="name" label="姓名" width="120" />
-              <el-table-column label="類型" width="90" align="center">
-                <template #default="{ row }">
-                  <span>{{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type }}</span>
-                </template>
-              </el-table-column>
               <el-table-column label="聯絡方式" min-width="140">
                 <template #default="{ row }">
                   <span>{{ row.contact || '-' }}</span>
@@ -164,9 +164,9 @@
       @success="handleImportSuccess"
     >
       <template #columns>
+        <el-table-column prop="type" label="類型" width="80" />
         <el-table-column prop="siteName" label="單位" width="140" />
         <el-table-column prop="name" label="姓名" width="110" />
-        <el-table-column prop="type" label="類型" width="80" />
         <el-table-column prop="contact" label="聯絡方式" width="140" />
         <el-table-column prop="notes" label="備註" min-width="160" show-overflow-tooltip />
       </template>
@@ -179,14 +179,6 @@
       width="480px"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
-        <el-form-item label="單位" prop="siteId">
-          <el-select v-model="form.siteId" placeholder="請選擇據點" filterable clearable style="width: 100%">
-            <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="姓名" prop="name">
-          <el-input v-model="form.name" placeholder="請輸入姓名" />
-        </el-form-item>
         <el-form-item label="類型" prop="type">
           <el-select v-model="form.type" placeholder="請選擇類型" style="width: 100%">
             <el-option
@@ -196,6 +188,14 @@
               :value="key"
             />
           </el-select>
+        </el-form-item>
+        <el-form-item label="單位" prop="siteId">
+          <el-select v-model="form.siteId" placeholder="請選擇據點" filterable clearable style="width: 100%">
+            <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="姓名" prop="name">
+          <el-input v-model="form.name" placeholder="請輸入姓名" />
         </el-form-item>
         <el-form-item label="聯絡方式" prop="contact">
           <el-input v-model="form.contact" placeholder="選填" />

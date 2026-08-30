@@ -28,9 +28,9 @@ func TestRenderCaregiverImportTemplate_ReopensCleanly(t *testing.T) {
 	require.GreaterOrEqual(t, len(rows), 3, "範本應包含 1 列標題與至少 2 列範例資料")
 
 	headerRow := rows[0]
-	assert.Equal(t, "單位", headerRow[0])
-	assert.Equal(t, "姓名*", headerRow[1])
-	assert.Equal(t, "類型*", headerRow[2])
+	assert.Equal(t, "類型*", headerRow[0])
+	assert.Equal(t, "單位", headerRow[1])
+	assert.Equal(t, "姓名*", headerRow[2])
 	assert.Contains(t, rows[1], "個管")
 	assert.Contains(t, rows[2], "專護")
 }

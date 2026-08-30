@@ -47,7 +47,7 @@ func (r ExcelAdapter) RenderCaregiverImportTemplate() ([]byte, error) {
 	sheetName := "照護人員匯入範本"
 	f.SetSheetName("Sheet1", sheetName)
 
-	headers := []string{"單位", "姓名*", "類型*", "聯絡方式", "備註"}
+	headers := []string{"類型*", "單位", "姓名*", "聯絡方式", "備註"}
 
 	headerStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Bold: true, Color: "FFFFFF", Size: 11, Family: "Microsoft JhengHei"},
@@ -64,8 +64,8 @@ func (r ExcelAdapter) RenderCaregiverImportTemplate() ([]byte, error) {
 	_ = f.SetCellStyle(sheetName, "A1", lastCol, headerStyle)
 
 	sampleRows := [][]interface{}{
-		{"竹北日照中心", "陳小華", "個管", "0912-345-678", "熟悉輪椅移位協助"},
-		{"竹南日照據點", "王大明", "專護", "0987-654-321", ""},
+		{"個管", "竹北日照中心", "陳小華", "0912-345-678", "熟悉輪椅移位協助"},
+		{"專護", "竹南日照據點", "王大明", "0987-654-321", ""},
 	}
 	for rIdx, rData := range sampleRows {
 		rowNum := rIdx + 2
