@@ -21,7 +21,7 @@
 - Frontend accessibility：`.agents/skills/accessibility/SKILL.md`
 - mock／demo／seed／MSW：`.agents/skills/mock-and-demo-boundaries/SKILL.md`
 - architecture audit／refactoring review：`.agents/skills/architecture-review/SKILL.md`
-- Excel／CSV 匯入匯出、範本下載：`.agents/skills/excel-import-export-integrity/SKILL.md`
+- Excel 匯入匯出、範本下載（僅支援 .xlsx，不支援 CSV）：`.agents/skills/excel-import-export-integrity/SKILL.md`
 
 若 Claude 執行環境支援 Agent Skills 的自動發現，使用 `.agents/skills/` 作為專案 skills 來源；若該環境未自動發現，仍依上述步驟直接讀取檔案。請保留 `.agents/skills/` 為唯一 canonical 位置，不另建內容相同的 `.claude/skills/` 副本。
 

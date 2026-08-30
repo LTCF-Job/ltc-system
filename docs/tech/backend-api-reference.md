@@ -175,7 +175,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`unresolvedLink`（單位待關聯既有據點）、`incomplete`（聯絡方式或備註缺漏）篩選 |
 | POST | `/caregivers` | staff, admin | 新增照護人員，姓名與類型（`case_manager`＝個管／`specialist`＝專護）皆為必填 |
 | GET | `/caregivers/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
-| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel／CSV；姓名或類型缺漏（或類型不是個管／專護）略過，單位比對不到或聯絡方式／備註缺漏仍建立資料並附警告 |
+| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx）；姓名或類型缺漏（或類型不是個管／專護）略過，單位比對不到或聯絡方式／備註缺漏仍建立資料並附警告 |
 | PATCH | `/caregivers/:id` | staff, admin | |
 | DELETE | `/caregivers/:id` | admin | |
 | PUT | `/caregivers/:id/site` | staff, admin | 將單位待關聯的照護人員連結至既有據點，並清空原始單位名稱 |

@@ -19,7 +19,7 @@
 - 前端 accessibility、鍵盤操作、focus、ARIA、表單錯誤、dialog／drawer、表格或圖表語意：讀 `.agents/skills/accessibility/SKILL.md`。
 - mock、demo、seed、fixture、offline mode 或 MSW：讀 `.agents/skills/mock-and-demo-boundaries/SKILL.md`。
 - 架構盤點、跨層依賴、模組過大、契約漂移或重構建議：讀 `.agents/skills/architecture-review/SKILL.md`。
-- Excel／CSV 匯入、範本下載或匯出功能：讀 `.agents/skills/excel-import-export-integrity/SKILL.md`。
+- Excel 匯入、範本下載或匯出功能（本專案僅支援 .xlsx，不支援 CSV）：讀 `.agents/skills/excel-import-export-integrity/SKILL.md`。
 
 若同一任務跨越多個範圍，依「審查 → 後端／前端 → mock 邊界」順序讀取；只讀與當前任務有關的 skill。新增或修改 agent 文件時，遵守 `.agents/skills` 既有 skill 的 progressive disclosure、single source of truth 與最小必要內容原則。
 
