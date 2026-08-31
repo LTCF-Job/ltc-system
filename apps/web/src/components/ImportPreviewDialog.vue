@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     :title="title"
-    width="900px"
+    width="min(960px, calc(100vw - 32px))"
     destroy-on-close
     :before-close="handleClose"
   >
@@ -54,16 +54,14 @@
         </template>
       </el-upload>
 
-      <div class="dialog-footer">
-        <el-button @click="visible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :disabled="!selectedFile"
+      <div class="import-footer-spacing">
+        <DialogFooter
+          confirm-text="開始解析與預覽"
           :loading="analyzing"
-          @click="startDryRun"
-        >
-          開始解析與預覽
-        </el-button>
+          :confirm-disabled="!selectedFile"
+          @confirm="startDryRun"
+          @cancel="visible = false"
+        />
       </div>
     </div>
 
@@ -126,16 +124,15 @@
         </ul>
       </div>
 
-      <div class="dialog-footer">
-        <el-button @click="resetToUpload">重新選擇檔案</el-button>
-        <el-button
-          type="primary"
-          :disabled="dryRunResult.validRows === 0"
+      <div class="import-footer-spacing">
+        <DialogFooter
+          cancel-text="重新選擇檔案"
+          :confirm-text="`匯入 (${dryRunResult.validRows} 筆)`"
           :loading="submitting"
-          @click="confirmImport"
-        >
-          匯入 ({{ dryRunResult.validRows }} 筆)
-        </el-button>
+          :confirm-disabled="dryRunResult.validRows === 0"
+          @confirm="confirmImport"
+          @cancel="resetToUpload"
+        />
       </div>
 
       <div v-if="commitResult" class="result-list" role="status">
@@ -157,6 +154,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import { UploadFilled, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { DryRunImportResultDTO } from '@/types/api'
@@ -320,11 +318,8 @@ defineExpose({
   font-size: 13px;
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
+.import-footer-spacing {
+  margin-top: var(--app-space-4);
 }
 
 :deep(.row-error) {

@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     title="修改登入密碼"
-    width="460px"
+    width="min(480px, calc(100vw - 32px))"
     destroy-on-close
     :close-on-click-modal="false"
   >
@@ -46,18 +46,14 @@
     </el-form>
 
     <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" :loading="loading" @click="handleSubmit">
-          確認變更
-        </el-button>
-      </div>
+      <DialogFooter :loading="loading" @confirm="handleSubmit" @cancel="visible = false" />
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import { supabase } from '@/lib/supabase'
@@ -136,10 +132,4 @@ defineExpose({
 })
 </script>
 
-<style scoped>
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-</style>
+

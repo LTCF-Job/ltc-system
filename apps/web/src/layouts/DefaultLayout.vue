@@ -63,7 +63,7 @@
           </el-sub-menu>
 
           <el-menu-item v-if="authStore.hasPermission('attendance_fuel')" index="/attendance">
-            <el-icon><Calendar /></el-icon>
+            <el-icon><Clock /></el-icon>
             <template #title>出勤與油資管理</template>
           </el-menu-item>
 
@@ -74,7 +74,7 @@
 
           <el-sub-menu v-if="authStore.hasPermission('masters_regions') || authStore.hasPermission('masters_cases') || authStore.hasPermission('masters_sites') || authStore.hasPermission('masters_vehicles') || authStore.hasPermission('masters_drivers') || authStore.hasPermission('masters_caregivers')" index="masters">
             <template #title>
-              <el-icon><Management /></el-icon>
+              <el-icon><Folder /></el-icon>
               <span>主檔資料</span>
             </template>
             <el-menu-item v-if="authStore.hasPermission('masters_regions')" index="/masters/regions">
@@ -132,7 +132,7 @@
               <template #title>車輛趟數表</template>
             </el-menu-item>
             <el-menu-item v-if="authStore.hasPermission('reports_hsinchu_schedule')" index="/reports/hsinchu-schedule">
-              <el-icon><DocumentCopy /></el-icon>
+              <el-icon><Tickets /></el-icon>
               <template #title>新竹接送時刻表</template>
             </el-menu-item>
           </el-sub-menu>
@@ -143,7 +143,7 @@
           </el-menu-item>
 
           <el-menu-item v-if="authStore.hasPermission('audit_logs')" index="/audit">
-            <el-icon><DocumentCopy /></el-icon>
+            <el-icon><Notebook /></el-icon>
             <template #title>系統操作紀錄</template>
           </el-menu-item>
 
@@ -153,19 +153,19 @@
               <span>系統設定</span>
             </template>
             <el-menu-item v-if="authStore.hasPermission('settings_users')" index="/settings/users">
-              <el-icon><User /></el-icon>
+              <el-icon><Postcard /></el-icon>
               <template #title>使用者管理</template>
             </el-menu-item>
             <el-menu-item v-if="authStore.hasPermission('settings_roles')" index="/settings/roles">
-              <el-icon><Avatar /></el-icon>
+              <el-icon><Medal /></el-icon>
               <template #title>角色身分管理</template>
             </el-menu-item>
             <el-menu-item v-if="authStore.hasPermission('settings_notifications')" index="/settings/notifications">
-              <el-icon><Bell /></el-icon>
+              <el-icon><Message /></el-icon>
               <template #title>通知收件人</template>
             </el-menu-item>
             <el-menu-item v-if="authStore.hasPermission('settings_notifications')" index="/settings/holidays">
-              <el-icon><Calendar /></el-icon>
+              <el-icon><Timer /></el-icon>
               <template #title>政府假日與工作日設定</template>
             </el-menu-item>
           </el-sub-menu>
@@ -204,7 +204,7 @@
           <el-dropdown trigger="click" @command="handleCommand">
             <div class="user-dropdown-link">
               <div class="avatar-box">
-                <el-avatar :size="30" icon="UserFilled" class="user-avatar" />
+                <el-avatar :size="30" :icon="UserFilled" class="user-avatar" />
                 <span class="avatar-online-dot"></span>
               </div>
               <span class="user-name">{{ authStore.user?.displayName || '使用者' }}</span>
@@ -268,7 +268,15 @@ import {
   Setting,
   MapLocation,
   Lock,
-  UserFilled
+  UserFilled,
+  Tickets,
+  Notebook,
+  Clock,
+  Timer,
+  Folder,
+  Postcard,
+  Medal,
+  Message
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'
@@ -282,44 +290,11 @@ const authStore = useAuthStore()
 const isCollapse = ref(false)
 const isMobile = ref(false)
 const isMobileMenuOpen = ref(false)
+const userToggledCollapse = ref(false)
 const changePasswordDialogRef = ref<InstanceType<typeof ChangePasswordDialog>>()
 
-const menuLabels = [
-  '總覽儀表板',
-  '搭乘紀錄',
-  '搭乘月曆表',
-  '異常集中處理',
-  '未回報清單',
-  '出勤與油資管理',
-  '車輛維修保養',
-  '主檔資料',
-  '地區管理',
-  '個案管理',
-  '據點管理',
-  '車輛管理',
-  '司機管理',
-  '司機接送匯報',
-  '匯報表管理',
-  '欄位對應設定',
-  '報表管理',
-  '車輛趟數表',
-  '新竹接送時刻表',
-  '政府申報匯出',
-  '系統操作紀錄',
-  '系統設定',
-  '使用者管理',
-  '角色身分管理',
-  '通知收件人',
-  '政府假日與工作日設定'
-]
-
-const maxMenuLabelWidth = Math.max(...menuLabels.map((label) => {
-  return Array.from(label).reduce((width, character) => {
-    return width + (/^[\u0000-\u00ff]$/.test(character) ? 7 : 13)
-  }, 0)
-}))
-
-const expandedAsideWidth = computed(() => `${Math.max(184, maxMenuLabelWidth + 88)}px`)
+// 側邊欄展開寬度為固定值，取代原本依選單文字逐字估算寬度的作法
+const expandedAsideWidth = '220px'
 
 const activeRoute = computed(() => {
   const path = route.path
@@ -332,6 +307,10 @@ const isNavigationOpen = computed(() => isMobile.value ? isMobileMenuOpen.value 
 function updateViewportMode() {
   isMobile.value = window.matchMedia('(max-width: 640px)').matches
   if (!isMobile.value) isMobileMenuOpen.value = false
+  // 900px 到 640px 之間側欄若不自動收合，220px 側欄會壓縮主內容區
+  if (!userToggledCollapse.value) {
+    isCollapse.value = window.matchMedia('(max-width: 1024px)').matches
+  }
 }
 
 function toggleNavigation() {
@@ -339,6 +318,7 @@ function toggleNavigation() {
     isMobileMenuOpen.value = !isMobileMenuOpen.value
     return
   }
+  userToggledCollapse.value = true
   isCollapse.value = !isCollapse.value
 }
 
@@ -512,7 +492,7 @@ async function handleCommand(cmd: string) {
 }
 
 .layout-header {
-  height: 56px;
+  height: var(--app-header-height);
   background-color: var(--app-surface);
   border-bottom: 1px solid var(--app-border-color);
   display: flex;
@@ -532,7 +512,7 @@ async function handleCommand(cmd: string) {
       padding: 6px;
 
       &:hover {
-        background-color: #fff8f4;
+        background-color: var(--app-status-neutral-bg);
         color: var(--app-text-primary);
       }
     }
@@ -556,7 +536,7 @@ async function handleCommand(cmd: string) {
       transition: background-color 0.15s ease;
 
       &:hover {
-        background-color: #fff8f4;
+        background-color: var(--app-status-neutral-bg);
         transform: translateY(-1px);
       }
 
@@ -599,9 +579,9 @@ async function handleCommand(cmd: string) {
 .layout-main {
   background-color: var(--app-bg);
   padding: 24px;
-  min-height: calc(100vh - 56px);
+  min-height: calc(100vh - var(--app-header-height));
   min-width: 0;
-  height: calc(100vh - 56px);
+  height: calc(100vh - var(--app-header-height));
   overflow: auto;
 }
 

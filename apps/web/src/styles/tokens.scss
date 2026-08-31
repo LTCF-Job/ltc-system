@@ -72,3 +72,10 @@
 .mt-3 {
   margin-top: var(--app-space-3);
 }
+
+// 內容可能超過視窗高度的對話框表單，加這個 class 讓表單本身可捲動而不是被裁切
+.dialog-scroll-form {
+  max-height: min(560px, 70vh);
+  overflow-y: auto;
+  padding-right: var(--app-space-2);
+}

@@ -24,10 +24,14 @@
   --app-text-muted: #8b94a5;
   --app-border-color: #e9edf0;
   --app-border-light: #f0f2f4;
-  --app-orange: #2f6fed;
-  --app-orange-dark: #1f55c7;
-  --app-orange-light: #eaf2ff;
+  --app-primary: #2f6fed;
+  --app-primary-dark: #1f55c7;
+  --app-primary-light: #eaf2ff;
   --app-navy-dark: #101522;
+  // 舊名相容別名，全部改用 --app-primary* 後即可移除
+  --app-orange: var(--app-primary);
+  --app-orange-dark: var(--app-primary-dark);
+  --app-orange-light: var(--app-primary-light);
   --app-shadow-sm: 0 1px 2px rgba(16, 21, 34, 0.04);
   --app-shadow-md: 0 8px 24px rgba(16, 21, 34, 0.07);
   --app-radius-sm: 9px;
@@ -85,14 +89,14 @@ select {
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 
   &--primary:not(.is-plain):not(.is-link):not(.is-text) {
-    background: var(--app-orange);
-    border-color: var(--app-orange);
+    background: var(--app-primary);
+    border-color: var(--app-primary);
     color: #ffffff;
 
     &:hover,
     &:focus-visible {
-      background: var(--app-orange-dark);
-      border-color: var(--app-orange-dark);
+      background: var(--app-primary-dark);
+      border-color: var(--app-primary-dark);
       color: #ffffff;
       box-shadow: 0 4px 12px rgba(47, 111, 237, 0.22);
     }
@@ -150,14 +154,48 @@ select {
     }
   }
 
-  &--success {
-    &.is-link {
-      color: #087d58;
+  &--success.is-link {
+    color: var(--app-status-success-fg);
 
-      &:hover,
-      &:focus-visible {
-        color: #056144;
-      }
+    &:hover,
+    &:focus-visible {
+      color: #056144;
+    }
+  }
+
+  &--primary.is-link {
+    color: var(--app-primary);
+
+    &:hover,
+    &:focus-visible {
+      color: var(--app-primary-dark);
+    }
+  }
+
+  &--danger.is-link {
+    color: var(--app-status-danger-fg);
+
+    &:hover,
+    &:focus-visible {
+      color: #8f1730;
+    }
+  }
+
+  &--info.is-link {
+    color: var(--app-status-info-fg);
+
+    &:hover,
+    &:focus-visible {
+      color: #1a5570;
+    }
+  }
+
+  &--warning.is-link {
+    color: var(--app-status-warning-fg);
+
+    &:hover,
+    &:focus-visible {
+      color: #7a4b00;
     }
   }
 
@@ -186,28 +224,28 @@ select {
   padding: 0 10px;
 
   &--primary {
-    background: var(--app-orange-light);
-    color: var(--app-orange-dark);
+    background: var(--app-primary-light);
+    color: var(--app-primary-dark);
   }
 
   &--success {
-    background: #e8faf3;
-    color: #087d58;
+    background: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
   }
 
   &--warning {
-    background: #fff4dc;
-    color: #996000;
+    background: var(--app-status-warning-bg);
+    color: var(--app-status-warning-fg);
   }
 
   &--danger {
-    background: #ffebef;
-    color: #b51f3c;
+    background: var(--app-status-danger-bg);
+    color: var(--app-status-danger-fg);
   }
 
   &--info {
-    background: #eaf5fb;
-    color: #236f9a;
+    background: var(--app-status-info-bg);
+    color: var(--app-status-info-fg);
   }
 }
 
@@ -216,7 +254,7 @@ select {
   --el-table-header-bg-color: #f7f9fa;
   --el-table-header-text-color: var(--app-text-secondary);
   --el-table-border-color: var(--app-border-light);
-  --el-table-row-hover-bg-color: #fffaf8;
+  --el-table-row-hover-bg-color: var(--app-status-neutral-bg);
 
   th.el-table__cell {
     padding: 12px 0;
@@ -241,7 +279,7 @@ select {
   }
 
   &.is-focus {
-    box-shadow: 0 0 0 1px var(--app-orange) inset, 0 0 0 3px rgba(47, 111, 237, 0.12);
+    box-shadow: 0 0 0 1px var(--app-primary) inset, 0 0 0 3px rgba(47, 111, 237, 0.12);
   }
 }
 
@@ -257,7 +295,7 @@ select {
 .login-card {
   width: min(440px, 100%);
   border-radius: var(--app-radius-lg);
-  box-shadow: 0 18px 50px rgba(99, 56, 48, 0.12);
+  box-shadow: 0 18px 50px rgba(16, 21, 34, 0.12);
 }
 
 .status-indicator-dot {
@@ -296,8 +334,8 @@ select {
   transition: background-color 0.15s ease, outline-color 0.15s ease;
 
   &.status-boarded {
-    background: #e8faf3;
-    color: #087d58;
+    background: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
   }
 
   &.status-absent {
@@ -305,23 +343,23 @@ select {
   }
 
   &.status-unreported {
-    background: #fff4dc;
-    color: #996000;
+    background: var(--app-status-warning-bg);
+    color: var(--app-status-warning-fg);
   }
 
   &.status-conflict {
-    background: #ffebef;
-    color: #b51f3c;
+    background: var(--app-status-danger-bg);
+    color: var(--app-status-danger-fg);
   }
 
   &.status-non-scheduled {
-    background: #f7f9fa;
+    background: var(--app-card-bg);
     color: transparent;
     cursor: default;
   }
 
   &.is-corrected {
-    border: 1px solid var(--app-orange) !important;
+    border: 1px solid var(--app-primary) !important;
 
     &::after {
       content: '';
@@ -331,12 +369,12 @@ select {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: var(--app-orange);
+      background: var(--app-primary);
     }
   }
 
   &:hover:not(.status-non-scheduled) {
-    outline: 2px solid var(--app-orange);
+    outline: 2px solid var(--app-primary);
     outline-offset: -1px;
     z-index: 2;
   }
@@ -408,4 +446,112 @@ select {
     white-space: normal;
     line-height: 2.25;
   }
+}
+
+// 狀態切換膠囊按鈕（Driver／Region／Vehicle 三頁共用，原本各頁各寫一份）
+.status-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 5px 14px;
+  border-radius: var(--app-radius-full);
+  font-size: var(--app-font-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  outline: none;
+  background: transparent;
+  user-select: none;
+  line-height: 1;
+
+  .status-indicator-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-right: 0;
+    transition: all 0.2s ease;
+  }
+
+  &.is-active {
+    background-color: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
+
+    .status-indicator-dot {
+      background-color: var(--app-status-success-fg);
+    }
+
+    &:hover {
+      box-shadow: var(--app-shadow-sm);
+      transform: translateY(-1px);
+    }
+  }
+
+  &.is-inactive {
+    background-color: var(--app-status-neutral-bg);
+    color: var(--app-status-neutral-fg);
+
+    .status-indicator-dot {
+      background-color: var(--app-text-muted);
+    }
+
+    &:hover {
+      box-shadow: var(--app-shadow-sm);
+      transform: translateY(-1px);
+    }
+  }
+
+  &.is-readonly {
+    cursor: default;
+    pointer-events: none;
+  }
+}
+
+.status-label-text {
+  letter-spacing: 0.02em;
+}
+
+// 表單內狀態單選按鈕群組（Driver／Region／Vehicle 三頁共用，原本各頁各寫一份）
+.status-radio-group {
+  :deep(.el-radio-button__inner) {
+    padding: 8px 16px;
+    border-radius: var(--app-radius-xs) !important;
+    margin-right: var(--app-space-2);
+    border: 1px solid var(--app-border-color) !important;
+  }
+
+  :deep(.el-radio-button:first-child .el-radio-button__inner) {
+    border-left: 1px solid var(--app-border-color) !important;
+  }
+
+  :deep(.el-radio-button.is-active .el-radio-button__inner) {
+    background-color: var(--app-status-success-bg);
+    border-color: var(--app-status-success-fg) !important;
+    color: var(--app-status-success-fg);
+    box-shadow: none !important;
+  }
+}
+
+.radio-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.radio-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--app-text-muted);
+}
+
+.active-pill .radio-dot {
+  background-color: var(--app-status-success-fg);
+}
+
+.inactive-pill .radio-dot {
+  background-color: var(--app-text-muted);
 }

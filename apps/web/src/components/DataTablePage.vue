@@ -1,5 +1,10 @@
 <template>
   <div class="data-table-page">
+    <PageHeader v-if="title" :title="title" :description="description">
+      <template v-if="$slots.header" #actions>
+        <slot name="header" />
+      </template>
+    </PageHeader>
     <!-- 頂部查詢與操作列 -->
     <el-card v-if="$slots.filter || $slots.actions" class="filter-card" shadow="never">
       <div class="filter-header-container">
@@ -24,7 +29,7 @@
           :current-page="page || 1"
           :page-size="pageSize || 20"
           :total="total || 0"
-          :page-sizes="[10, 20, 50, 100]"
+          :page-sizes="pageSizes || [10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
           background
           @update:current-page="$emit('update:page', $event)"
@@ -38,11 +43,16 @@
 </template>
 
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
+
 defineProps<{
+  title?: string
+  description?: string
   loading?: boolean
   total?: number
   page?: number
   pageSize?: number
+  pageSizes?: number[]
 }>()
 
 defineEmits<{

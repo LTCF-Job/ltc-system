@@ -14,6 +14,7 @@ declare module 'vue' {
     AppLogo: typeof import('./components/AppLogo.vue')['default']
     ChangePasswordDialog: typeof import('./components/ChangePasswordDialog.vue')['default']
     DataTablePage: typeof import('./components/DataTablePage.vue')['default']
+    DialogFooter: typeof import('./components/DialogFooter.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']
@@ -68,9 +69,12 @@ declare module 'vue' {
     ElUpload: typeof import('element-plus/es')['ElUpload']
     ImportPreviewDialog: typeof import('./components/ImportPreviewDialog.vue')['default']
     MaskedId: typeof import('./components/MaskedId.vue')['default']
+    PageHeader: typeof import('./components/PageHeader.vue')['default']
     PrecheckResult: typeof import('./components/PrecheckResult.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    StatusTag: typeof import('./components/StatusTag.vue')['default']
+    TableRowActions: typeof import('./components/TableRowActions.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']
