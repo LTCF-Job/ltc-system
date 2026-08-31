@@ -60,9 +60,7 @@
               <el-table-column prop="caseName" label="個案姓名" width="120" />
               <el-table-column label="方向 / 趟次" width="130">
                 <template #default="{ row }">
-                  <el-tag :type="row.direction === 'outbound' ? 'primary' : 'info'" size="small">
-                    {{ (DIRECTION_LABELS as any)[row.direction] || row.direction }}
-                  </el-tag>
+                  <StatusTag :status="row.direction" preset="direction" />
                   <span style="margin-left: 6px; font-size: 13px;">第 {{ row.legSeq }} 趟</span>
                 </template>
               </el-table-column>
@@ -81,11 +79,6 @@
                   >
                     逾期 {{ row.daysOverdue || 0 }} 天
                   </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="狀態" min-width="120">
-                <template #default>
-                  <el-tag type="danger" size="small">司機未提交回覆</el-tag>
                 </template>
               </el-table-column>
               <el-table-column
@@ -168,7 +161,7 @@
               </el-table-column>
               <el-table-column label="主題" width="140">
                 <template #default="{ row }">
-                  <el-tag type="info">{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</el-tag>
+                  <span>{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
                 </template>
               </el-table-column>
               <el-table-column prop="subject" label="信件標題" min-width="220" show-overflow-tooltip />
@@ -336,6 +329,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import DataTablePage from '@/components/DataTablePage.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import { formatDateTime } from '@/utils/formatters'
 import { listMissingRides, submitManualRideReport } from '@/api/rides'
 import { listVehicles, listDrivers } from '@/api/masters'

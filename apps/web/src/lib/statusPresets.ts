@@ -55,10 +55,10 @@ export const COMPLETION_STATUS_PRESET: StatusPresetMap = {
   pending: { label: '處理中', variant: 'info' }
 }
 
-// 去程／回程方向：兩處呈現方式不同（tag、色條），語意統一為 primary/info
+// 去程／回程方向：StatusVariant 沒有 primary，用 info/neutral 區分兩個方向
 export const DIRECTION_PRESET: StatusPresetMap = {
   outbound: { label: '去程', variant: 'info' },
-  inbound: { label: '回程', variant: 'info' }
+  inbound: { label: '回程', variant: 'neutral' }
 }
 
 // 系統角色
