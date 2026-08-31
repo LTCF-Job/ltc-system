@@ -64,6 +64,7 @@
         <span class="legend-item"><span class="mark status-conflict"><el-icon><WarningFilled /></el-icon></span> 混車衝突 (Conflict)</span>
         <span class="legend-item"><span class="mark is-corrected">●</span> 已人工更正 (帶右上圓點)</span>
         <span class="legend-item"><span class="mark status-non-scheduled"></span> 非應搭日</span>
+        <span class="legend-item"><span class="mark mark-holiday">★</span> 假日／國定假日</span>
       </div>
     </el-card>
 
@@ -83,6 +84,7 @@
           label="個案姓名"
           width="96"
           fixed="left"
+          align="center"
         >
           <template #default="{ row }">
             <el-link
@@ -98,7 +100,7 @@
         <el-table-column
           prop="tripPattern"
           label="趟數"
-          width="60"
+          width="76"
           fixed="left"
           align="center"
         >
@@ -122,11 +124,23 @@
         <el-table-column
           v-for="day in daysInMonth"
           :key="day"
-          :label="isHoliday(day) ? `${day} ★` : `${day}`"
-          class-name="day-col"
-          label-class-name="day-col"
+          :label="`${day}`"
+          min-width="46"
+          :class-name="isHoliday(day) ? 'day-col day-col--holiday' : 'day-col'"
+          :label-class-name="isHoliday(day) ? 'day-col day-col--holiday' : 'day-col'"
           align="center"
         >
+          <template #header>
+            <el-tooltip
+              v-if="isHoliday(day)"
+              :content="`國定假日：${getHolidayName(day)}`"
+              placement="top"
+            >
+              <span>{{ day }} ★</span>
+            </el-tooltip>
+            <span v-else>{{ day }}</span>
+          </template>
+
           <template #default="{ row }">
             <div class="cell-legs-container">
               <template v-for="slot in getDaySlots(row, day)" :key="slot.legSeq">
@@ -284,6 +298,10 @@ async function fetchMatrix() {
 
 function isHoliday(day: number) {
   return Boolean(holidayMap.value[`${selectedDate.value}-${String(day).padStart(2, '0')}`])
+}
+
+function getHolidayName(day: number) {
+  return holidayMap.value[`${selectedDate.value}-${String(day).padStart(2, '0')}`]?.name || '放假'
 }
 
 function getCell(row: any, day: number) {
@@ -465,6 +483,11 @@ onMounted(() => {
           font-size: 13px;
         }
       }
+
+      .mark-holiday {
+        background-color: #f1f5f9;
+        color: #64748b;
+      }
     }
   }
 }
@@ -473,15 +496,28 @@ onMounted(() => {
   padding: 0;
 }
 
-/* 日期欄用 el-table 預設 padding 會裝不下 31 欄，改用最小 padding 讓表格寬度貼齊容器、不橫向捲動 */
 .calendar-table :deep(.day-col.el-table__cell),
 .calendar-table :deep(th.day-col) {
-  padding: 6px 1px;
-  font-size: clamp(11px, 1vw, 13px);
+  padding: 6px 2px;
 }
 
 .calendar-table :deep(.day-col .cell) {
   padding: 0;
+}
+
+.calendar-table :deep(th.day-col--holiday) {
+  background-color: #e2e8f0;
+  color: #475569;
+}
+
+.calendar-table :deep(td.day-col--holiday) {
+  background-color: #eef2f6;
+}
+
+/* 假日欄底色偏灰，需與「非應搭日」空格子的淺灰底拉開對比，避免看不出仍可點擊新增紀錄 */
+.calendar-table :deep(td.day-col--holiday) .calendar-cell.status-non-scheduled {
+  background-color: #ffffff;
+  border-color: var(--el-border-color);
 }
 
 .cell-legs-container {
@@ -491,14 +527,14 @@ onMounted(() => {
 }
 
 .calendar-cell {
-  width: clamp(18px, 2.1vw, 28px);
-  height: clamp(18px, 2.1vw, 28px);
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 4px;
   cursor: pointer;
-  font-size: clamp(11px, 1.1vw, 13px);
+  font-size: 13px;
   margin: 0 auto;
   transition: all 0.2s;
 
