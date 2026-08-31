@@ -1,35 +1,36 @@
 <template>
   <div class="driver-report-list-view">
-    <el-card shadow="never" class="table-card">
-      <template #header>
-        <div class="card-header">
-          <div class="header-filters">
-            <span class="title">司機接送匯報（共 {{ forms.length }} 台車）</span>
-            <el-input
-              v-model="searchQuery"
-              placeholder="搜尋匯報表名稱／車輛"
-              clearable
-              style="width: 240px"
-              @keyup.enter="fetchForms"
-            />
-            <el-button type="primary" icon="Search" @click="fetchForms">查詢</el-button>
-            <el-button @click="handleReset">重設</el-button>
-          </div>
-          <div class="header-actions">
-            <el-button
-              v-if="canEdit"
-              type="primary"
-              icon="Plus"
-              @click="openCreateDialog"
-            >
-              新增車輛匯報表
-            </el-button>
-          </div>
-        </div>
+    <DataTablePage
+      title="司機接送匯報"
+      :description="`共 ${forms.length} 台車`"
+      :loading="loading"
+    >
+      <template #filter>
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜尋匯報表名稱／車輛"
+          clearable
+          style="width: 240px"
+          @keyup.enter="fetchForms"
+        />
+        <el-button type="primary" @click="fetchForms">查詢</el-button>
+        <el-button @click="handleReset">重設</el-button>
       </template>
 
-      <el-table :data="forms" border stripe v-loading="loading">
-        <el-table-column prop="title" label="匯報表名稱" min-width="200" />
+      <template #actions>
+        <el-button
+          v-if="canEdit"
+          type="primary"
+          :icon="Plus"
+          @click="openCreateDialog"
+        >
+          新增車輛匯報表
+        </el-button>
+      </template>
+
+      <template #table>
+      <el-table :data="forms" border stripe>
+        <el-table-column prop="title" label="匯報表名稱" min-width="200" show-overflow-tooltip />
 
         <el-table-column label="所屬車輛／地區" width="180">
           <template #default="{ row }">
@@ -61,35 +62,34 @@
 
         <el-table-column label="操作" width="260" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button
-              v-if="canEdit"
-              link
-              type="primary"
-              size="small"
-              :icon="Upload"
-              @click="openImportDialog(row)"
-            >
-              匯入
-            </el-button>
-            <el-button
-              link
-              type="success"
-              size="small"
-              :icon="Edit"
-              @click="$router.push(`/driver-reports/mappings?formId=${row.id}`)"
-            >
-              欄位對應
-            </el-button>
-            <el-button
-              v-if="canEdit"
-              link
-              type="danger"
-              size="small"
-              :icon="Delete"
-              @click="handleDelete(row)"
-            >
-              刪除
-            </el-button>
+            <TableRowActions>
+              <el-button
+                v-if="canEdit"
+                link
+                type="primary"
+                size="small"
+                @click="openImportDialog(row)"
+              >
+                匯入
+              </el-button>
+              <el-button
+                link
+                type="primary"
+                size="small"
+                @click="$router.push(`/driver-reports/mappings?formId=${row.id}`)"
+              >
+                欄位對應
+              </el-button>
+              <el-button
+                v-if="canEdit"
+                link
+                type="danger"
+                size="small"
+                @click="handleDelete(row)"
+              >
+                刪除
+              </el-button>
+            </TableRowActions>
           </template>
         </el-table-column>
 
@@ -100,11 +100,12 @@
           </div>
         </template>
       </el-table>
-    </el-card>
+      </template>
+    </DataTablePage>
 
     <!-- 新增車輛匯報表 -->
-    <el-dialog v-model="createDialogVisible" title="新增車輛匯報表" width="480px" destroy-on-close>
-      <el-form :model="createForm" label-width="100px">
+    <el-dialog v-model="createDialogVisible" title="新增車輛匯報表" width="min(480px, calc(100vw - 32px))" destroy-on-close>
+      <el-form :model="createForm" label-width="110px">
         <el-form-item label="所屬車輛" required>
           <el-select
             v-model="createForm.vehicleId"
@@ -126,15 +127,13 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
+        <DialogFooter
+          confirm-text="建立"
           :loading="creating"
-          :disabled="!createForm.vehicleId || !createForm.title"
-          @click="handleCreate"
-        >
-          建立
-        </el-button>
+          :confirm-disabled="!createForm.vehicleId || !createForm.title"
+          @confirm="handleCreate"
+          @cancel="createDialogVisible = false"
+        />
       </template>
     </el-dialog>
 
@@ -144,8 +143,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Delete, Edit, Upload } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import DialogFooter from '@/components/DialogFooter.vue'
+import DataTablePage from '@/components/DataTablePage.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import {
   listDriverReportForms,
   createDriverReportForm,
@@ -225,7 +227,7 @@ async function handleDelete(row: any) {
   await ElMessageBox.confirm(
     `刪除「${row.title}」會一併移除其欄位對應與匯報紀錄，已寫入的搭乘紀錄不受影響。確定刪除？`,
     '刪除匯報表',
-    { type: 'warning', confirmButtonText: '確定刪除', cancelButtonText: '取消' }
+    { type: 'warning', confirmButtonText: '刪除', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' }
   )
   await deleteDriverReportForm(row.id)
   ElMessage.success('已刪除匯報表')
@@ -240,35 +242,6 @@ onMounted(fetchForms)
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.table-card {
-  border-radius: 8px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.header-filters {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.header-filters .title {
-  font-weight: 600;
-  font-size: 16px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
 }
 
 .text-secondary {

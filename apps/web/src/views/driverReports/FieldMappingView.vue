@@ -1,46 +1,43 @@
 <template>
   <div class="field-mapping-view">
-    <el-card shadow="never" class="filter-card">
-      <el-row :gutter="16" justify="space-between" align="middle">
-        <el-col :xs="24" :lg="18" class="filter-inputs">
-          <el-select
-            v-model="selectedFormId"
-            placeholder="選擇匯報表"
-            style="width: 260px"
-            @change="fetchColumns"
-          >
-            <el-option
-              v-for="f in forms"
-              :key="f.id"
-              :label="`${f.title} (${f.pendingColumns} 待對應)`"
-              :value="f.id"
-            />
-          </el-select>
+    <DataTablePage title="欄位對應設定" :loading="loading">
+      <template #filter>
+        <el-select
+          v-model="selectedFormId"
+          placeholder="選擇匯報表"
+          style="width: 260px"
+          @change="fetchColumns"
+        >
+          <el-option
+            v-for="f in forms"
+            :key="f.id"
+            :label="`${f.title} (${f.pendingColumns} 待對應)`"
+            :value="f.id"
+          />
+        </el-select>
 
-          <el-radio-group v-model="statusFilter" @change="fetchColumns">
-            <el-radio-button value="pending">待對應欄位</el-radio-button>
-            <el-radio-button value="mapped">已對應</el-radio-button>
-            <el-radio-button value="ignored">已略過</el-radio-button>
-            <el-radio-button value="">全部欄位</el-radio-button>
-          </el-radio-group>
-        </el-col>
+        <el-radio-group v-model="statusFilter" @change="fetchColumns">
+          <el-radio-button value="pending">待對應欄位</el-radio-button>
+          <el-radio-button value="mapped">已對應</el-radio-button>
+          <el-radio-button value="ignored">已略過</el-radio-button>
+          <el-radio-button value="">全部欄位</el-radio-button>
+        </el-radio-group>
+      </template>
 
-        <el-col :xs="24" :lg="6" class="actions-col">
-          <el-button
-            v-if="authStore.can('staff') && statusFilter === 'pending'"
-            type="success"
-            :disabled="pendingHighConfidenceCount === 0"
-            @click="handleBatchConfirmHighConfidence"
-          >
-            一鍵套用高信心度推薦 ({{ pendingHighConfidenceCount }})
-          </el-button>
-        </el-col>
-      </el-row>
-    </el-card>
+      <template #actions>
+        <el-button
+          v-if="authStore.can('staff') && statusFilter === 'pending'"
+          type="primary"
+          plain
+          :disabled="pendingHighConfidenceCount === 0"
+          @click="handleBatchConfirmHighConfidence"
+        >
+          一鍵套用高信心度推薦 ({{ pendingHighConfidenceCount }})
+        </el-button>
+      </template>
 
-    <!-- 欄位對應雙欄對照表 -->
-    <el-card shadow="never" class="table-card">
-      <el-table :data="columns" border stripe v-loading="loading">
+      <template #table>
+      <el-table :data="columns" border stripe>
         <el-table-column prop="columnIndex" label="#" width="60" align="center" />
 
         <!-- 左側：原始欄位與推薦 -->
@@ -74,7 +71,7 @@
                 placeholder="搜尋綁定個案"
                 filterable
                 clearable
-                style="width: 180px"
+                style="width: 240px"
                 :disabled="!authStore.can('staff')"
               >
                 <el-option
@@ -123,37 +120,39 @@
           align="center"
         >
           <template #default="{ row }">
-            <el-button
-              type="success"
-              link
-              size="small"
-              :icon="Check"
-              :disabled="!row.editCaseId"
-              @click="handleSaveMapping(row)"
-            >
-              確認綁定
-            </el-button>
-            <el-button
-              v-if="row.mappingStatus !== 'ignored'"
-              type="info"
-              link
-              size="small"
-              :icon="Close"
-              @click="handleIgnoreMapping(row)"
-            >
-              略過此欄
-            </el-button>
+            <TableRowActions>
+              <el-button
+                link
+                type="primary"
+                size="small"
+                :disabled="!row.editCaseId"
+                @click="handleSaveMapping(row)"
+              >
+                確認綁定
+              </el-button>
+              <el-button
+                v-if="row.mappingStatus !== 'ignored'"
+                link
+                type="primary"
+                size="small"
+                @click="handleIgnoreMapping(row)"
+              >
+                略過此欄
+              </el-button>
+            </TableRowActions>
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+      </template>
+    </DataTablePage>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import DataTablePage from '@/components/DataTablePage.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import { useRoute } from 'vue-router'
-import { Check, Close } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   listDriverReportForms,
@@ -281,38 +280,6 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.filter-card {
-  border-radius: 8px;
-}
-
-.filter-inputs {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.actions-col {
-  display: flex;
-  justify-content: flex-end;
-}
-
-@media (max-width: 640px) {
-  .filter-inputs,
-  .actions-col {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-
-  .actions-col {
-    justify-content: flex-start;
-    margin-top: 12px;
-  }
-}
-
-.table-card {
-  border-radius: 8px;
 }
 
 .raw-column-box {
