@@ -245,7 +245,7 @@ onMounted(load)
 }
 
 .quick-names-label {
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   color: var(--el-text-color-secondary);
 }
 

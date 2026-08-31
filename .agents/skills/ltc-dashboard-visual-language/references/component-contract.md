@@ -23,6 +23,7 @@ Token 定義在 `apps/web/src/styles/tokens.scss`；共用元件在 `apps/web/sr
 
 - 「編輯」不用 `type="success"`。綠色只留給真正的成功狀態。
 - 屬性順序：`link → type → size → :icon`。
+- 表格列操作按鈕（`link` + `size="small"`）的按鈕感視覺（淡底色 + 細邊框）由 `element-overrides.scss` 的 `.table-row-actions .el-button.is-link` 統一提供，只要包在 `<TableRowActions>` 裡就會生效，不要在頁面裡另外寫背景色。
 - icon 一律用綁定寫法 `:icon="Edit"` + 具名 import，不用字串 prop、不靠全域註冊。
 - `size` 只有兩種：表格列與 chip 用 `small`，其餘不寫。`large` 只留登入頁主按鈕。
 - **帶文字的按鈕不放 icon**，唯一例外是頁面主要「新增」按鈕的 `Plus`。

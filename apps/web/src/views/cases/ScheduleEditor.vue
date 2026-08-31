@@ -997,7 +997,7 @@ async function handleSave() {
   }
 
   .guide-badge {
-    font-size: 12px;
+    font-size: var(--app-font-xs);
     font-weight: 700;
     color: #1e293b;
     background: #f1f5f9;
@@ -1025,12 +1025,12 @@ async function handleSave() {
 
     .step-arrow {
       color: #94a3b8;
-      font-size: 12px;
+      font-size: var(--app-font-xs);
     }
   }
 
   .guide-desc {
-    font-size: 12px;
+    font-size: var(--app-font-xs);
     line-height: 1.6;
     color: #475569;
   }
@@ -1093,7 +1093,7 @@ async function handleSave() {
     flex-wrap: wrap;
 
     .stat-chip {
-      font-size: 12px;
+      font-size: var(--app-font-xs);
       color: var(--el-text-color-secondary);
       padding: 2px 8px;
       background: #ffffff;
@@ -1140,7 +1140,7 @@ async function handleSave() {
     flex-wrap: wrap;
 
     .action-btn {
-      font-size: 12px;
+      font-size: var(--app-font-xs);
       font-weight: 600;
       height: 32px;
       padding: 0 12px;
@@ -1232,7 +1232,7 @@ async function handleSave() {
   }
 
   .weekday-text {
-    font-size: 12px;
+    font-size: var(--app-font-xs);
     font-weight: normal;
     color: var(--el-text-color-secondary);
   }
@@ -1247,7 +1247,7 @@ async function handleSave() {
   }
 
   .holiday-badge {
-    font-size: 10px;
+    font-size: var(--app-font-xs);
     padding: 0 4px;
     height: 18px;
     line-height: 16px;
@@ -1261,18 +1261,18 @@ async function handleSave() {
 }
 
 .text-xs {
-  font-size: 11px;
+  font-size: var(--app-font-xs);
 }
 
 .month-info,
 .leg-label,
 .leg-direction {
   color: var(--el-text-color-secondary);
-  font-size: 12px;
+  font-size: var(--app-font-xs);
 }
 
 .source-tag {
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   font-weight: 500;
   border-radius: 4px;
   background: transparent !important; /* 確保無背景底色 */

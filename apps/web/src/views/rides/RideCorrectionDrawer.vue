@@ -403,7 +403,7 @@ defineExpose({
 
     .source-sub {
       margin-top: 4px;
-      font-size: 12px;
+      font-size: var(--app-font-xs);
       color: var(--el-text-color-secondary);
     }
   }
@@ -434,7 +434,7 @@ defineExpose({
 }
 
 .field-hint {
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   color: var(--el-text-color-secondary);
   margin-top: 2px;
 
@@ -445,7 +445,7 @@ defineExpose({
 }
 
 .audit-hint {
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   color: var(--el-text-color-secondary);
   background-color: var(--el-fill-color-light);
   padding: 8px 12px;

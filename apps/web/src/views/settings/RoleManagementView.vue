@@ -167,7 +167,7 @@
         <el-table-column prop="name" label="功能模組名稱" min-width="200">
           <template #default="{ row }">
             <span class="font-bold">{{ row.name }}</span>
-            <span class="font-mono text-muted" style="margin-left: 6px; font-size: 12px">({{ row.id }})</span>
+            <span class="font-mono text-muted" style="margin-left: 6px; font-size: var(--app-font-xs)">({{ row.id }})</span>
           </template>
         </el-table-column>
 
@@ -235,7 +235,7 @@
                   <el-tag :type="color.value" size="small" effect="dark" style="margin-right: 8px">
                     {{ color.label }}
                   </el-tag>
-                  <span style="color: var(--el-text-color-secondary); font-size: 12px">{{ color.desc }}</span>
+                  <span style="color: var(--el-text-color-secondary); font-size: var(--app-font-xs)">{{ color.desc }}</span>
                 </el-option>
               </el-select>
             </el-form-item>
@@ -723,7 +723,7 @@ onMounted(() => {
     }
 
     .role-key {
-      font-size: 12px;
+      font-size: var(--app-font-xs);
       color: var(--el-text-color-secondary);
     }
   }
@@ -745,7 +745,7 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    font-size: 12px;
+    font-size: var(--app-font-xs);
     color: var(--el-text-color-secondary);
     border-top: 1px dashed var(--el-border-color-lighter);
     padding-top: 8px;

@@ -900,7 +900,7 @@ onMounted(async () => {
       }
 
       .label {
-        font-size: 12px;
+        font-size: var(--app-font-xs);
         color: var(--el-text-color-secondary);
       }
 
@@ -910,7 +910,7 @@ onMounted(async () => {
       }
 
       .unit {
-        font-size: 11px;
+        font-size: var(--app-font-xs);
         color: var(--el-text-color-placeholder);
       }
 
@@ -964,7 +964,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   color: var(--el-text-color-regular);
 
   .summary-divider {
@@ -986,7 +986,7 @@ onMounted(async () => {
   border-radius: 4px;
   cursor: pointer;
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   transition: all 0.15s ease;
   background-color: transparent;
   color: var(--el-text-color-regular);

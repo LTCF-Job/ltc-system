@@ -269,7 +269,7 @@
                   class="action-download-btn"
                   @click="downloadFile(row.downloadUrl, row.fileName)"
                 >
-                  <el-icon><Download /></el-icon> 下載
+                  下載
                 </el-button>
               </template>
             </el-table-column>
@@ -289,7 +289,6 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Grid,
-  Download,
   ArrowRight
 } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
@@ -565,7 +564,7 @@ onMounted(() => {
     margin-bottom: 10px;
 
     .metric-label {
-      font-size: 11px;
+      font-size: var(--app-font-xs);
       font-weight: 700;
       color: var(--app-text-secondary);
       letter-spacing: 0.05em;
@@ -605,7 +604,7 @@ onMounted(() => {
 }
 
 .status-badge {
-  font-size: 11px;
+  font-size: var(--app-font-xs);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 9999px;

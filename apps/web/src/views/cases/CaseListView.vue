@@ -169,23 +169,25 @@
 
           <el-table-column label="操作" width="140" fixed="right" align="center">
             <template #default="{ row }">
-              <el-button
-                link
-                type="primary"
-                size="small"
-                @click="$router.push(`/cases/${row.id}?tab=basic`)"
-              >
-                編輯
-              </el-button>
-              <el-button
-                v-if="authStore.can('staff')"
-                link
-                type="danger"
-                size="small"
-                @click="handleDeleteCase(row as any)"
-              >
-                刪除
-              </el-button>
+              <TableRowActions>
+                <el-button
+                  link
+                  type="primary"
+                  size="small"
+                  @click="$router.push(`/cases/${row.id}?tab=basic`)"
+                >
+                  編輯
+                </el-button>
+                <el-button
+                  v-if="authStore.can('staff')"
+                  link
+                  type="danger"
+                  size="small"
+                  @click="handleDeleteCase(row as any)"
+                >
+                  刪除
+                </el-button>
+              </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
@@ -436,6 +438,7 @@ import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type TableInstance } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import {

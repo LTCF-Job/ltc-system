@@ -206,6 +206,60 @@ select {
   }
 }
 
+// 表格列操作按鈕：link 按鈕本身只有文字顏色，容易被誤認成純文字連結而非可點擊按鈕，
+// 這裡疊加淡底色 + 細邊框讓它讀起來明確是按鈕，不改 type/size 屬性與既有 e2e 選取器
+.table-row-actions .el-button.is-link {
+  padding: 2px 10px;
+  border-radius: var(--app-radius-xs);
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+
+  &.el-button--primary {
+    background: #f0f6ff;
+    border-color: #dbeafe;
+
+    &:hover,
+    &:focus-visible {
+      background: #dbeafe;
+      border-color: #93c5fd;
+    }
+  }
+
+  &.el-button--danger {
+    background: #fef2f2;
+    border-color: #fee2e2;
+
+    &:hover,
+    &:focus-visible {
+      background: #fee2e2;
+      border-color: #fecaca;
+    }
+  }
+
+  &.el-button--warning {
+    background: #fffbeb;
+    border-color: #fef3c7;
+
+    &:hover,
+    &:focus-visible {
+      background: #fef3c7;
+      border-color: #fde68a;
+    }
+  }
+
+  &.el-button--info {
+    background: #f8fafc;
+    border-color: #f1f5f9;
+
+    &:hover,
+    &:focus-visible {
+      background: #f1f5f9;
+      border-color: #e2e8f0;
+    }
+  }
+}
+
 .el-form-item__label,
 .el-breadcrumb__inner,
 .el-pagination,
@@ -258,7 +312,7 @@ select {
 
   th.el-table__cell {
     padding: 12px 0;
-    font-size: 12px;
+    font-size: var(--app-font-xs);
     font-weight: 700;
   }
 

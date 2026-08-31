@@ -78,10 +78,10 @@ onUnmounted(() => {
 
 .reveal-btn {
   padding: 0;
-  font-size: 12px;
+  font-size: var(--app-font-xs);
 }
 
 .timer-tag {
-  font-size: 11px;
+  font-size: var(--app-font-xs);
 }
 </style>

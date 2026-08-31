@@ -672,7 +672,7 @@ onMounted(() => {
   .parsed-email {
     color: var(--el-text-color-secondary);
     font-family: 'Consolas', monospace;
-    font-size: 12px;
+    font-size: var(--app-font-xs);
   }
 
   .parsed-raw {

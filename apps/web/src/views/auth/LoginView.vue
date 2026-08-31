@@ -228,7 +228,7 @@ function quickLogin(role: UserRole) {
 .form-kicker {
   margin: 0 0 10px;
   color: var(--app-primary);
-  font-size: 11px;
+  font-size: var(--app-font-xs);
   font-weight: 700;
   letter-spacing: 0.18em;
 }
@@ -279,13 +279,13 @@ function quickLogin(role: UserRole) {
 
   .divider-tag {
     color: var(--app-text-secondary);
-    font-size: 12px;
+    font-size: var(--app-font-xs);
     font-weight: 600;
   }
 
   .demo-tip {
     margin: 0 0 12px;
-    font-size: 12px;
+    font-size: var(--app-font-xs);
     color: var(--el-text-color-secondary);
     text-align: center;
   }

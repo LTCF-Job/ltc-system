@@ -63,7 +63,7 @@ withDefaults(defineProps<{
 
 .app-logo__system {
   color: #8faec8;
-  font-size: 11px;
+  font-size: var(--app-font-xs);
   font-weight: 500;
 }
 

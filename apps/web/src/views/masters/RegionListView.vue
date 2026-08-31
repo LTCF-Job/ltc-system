@@ -507,13 +507,13 @@ onMounted(() => {
   font-weight: 600;
 }
 .form-tip {
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   color: var(--app-text-muted);
   margin-top: 4px;
   line-height: 1.4;
 }
 .form-tip-inline {
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   color: var(--app-text-muted);
   margin-left: 10px;
 }
@@ -524,7 +524,7 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   padding: 0 10px;
   height: 32px;
   border-radius: 6px;
@@ -586,7 +586,7 @@ onMounted(() => {
 }
 
 .sort-order-badge {
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   font-weight: 600;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   color: var(--app-text-primary);

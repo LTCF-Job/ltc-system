@@ -455,6 +455,6 @@ executeFetch()
 
 .vehicle-plate {
   color: #606266;
-  font-size: 13px;
+  font-size: var(--app-font-md);
 }
 </style>

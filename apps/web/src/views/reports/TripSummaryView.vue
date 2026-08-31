@@ -293,7 +293,7 @@ onMounted(() => {
       color: var(--el-text-color-primary);
 
       .veh-plate {
-        font-size: 13px;
+        font-size: var(--app-font-md);
         font-weight: normal;
         color: var(--el-text-color-secondary);
         font-family: var(--el-font-family);

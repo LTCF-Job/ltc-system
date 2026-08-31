@@ -554,7 +554,7 @@ executeFetch()
   margin-top: -4px;
   padding-left: 120px;
   color: var(--el-text-color-secondary);
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   line-height: 1.6;
 }
 

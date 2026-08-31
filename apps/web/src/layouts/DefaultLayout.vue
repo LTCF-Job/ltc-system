@@ -108,13 +108,9 @@
               <el-icon><DocumentCopy /></el-icon>
               <span>司機接送匯報</span>
             </template>
-            <el-menu-item v-if="authStore.hasPermission('driver_reports')" index="/driver-reports">
-              <el-icon><Upload /></el-icon>
-              <template #title>匯報表管理</template>
-            </el-menu-item>
             <el-menu-item v-if="authStore.hasPermission('driver_reports')" index="/driver-reports/batch-import">
               <el-icon><UploadFilled /></el-icon>
-              <template #title>批次上傳</template>
+              <template #title>上傳接送匯報</template>
             </el-menu-item>
             <el-menu-item v-if="authStore.hasPermission('driver_report_mappings')" index="/driver-reports/mappings">
               <el-icon><Connection /></el-icon>
