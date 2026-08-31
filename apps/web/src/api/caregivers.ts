@@ -15,6 +15,7 @@ export async function listCaregivers(params?: {
   q?: string
   unresolvedLink?: boolean
   incomplete?: boolean
+  excludePending?: boolean
 }): Promise<Paged<CaregiverDTO>> {
   return apiClient.get('/caregivers', { params })
 }

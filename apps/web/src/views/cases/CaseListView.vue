@@ -85,7 +85,7 @@
           <el-table-column prop="name" label="姓名" width="110" />
           <el-table-column prop="nationalId" label="身分證字號" min-width="150" align="center">
             <template #default="{ row }">
-              <span class="font-mono">{{ row.nationalId || '-' }}</span>
+              <span class="font-mono text-id">{{ row.nationalId || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="region" label="區域" width="115" align="center">
@@ -505,7 +505,8 @@ const {
       pageSize: pageSize.value,
       q: filters.q,
       region: filters.region,
-      status: filters.status
+      status: filters.status,
+      excludePending: true
     })
     cases.value = res.data
     total.value = res.meta.total

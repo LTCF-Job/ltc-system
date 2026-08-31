@@ -40,8 +40,9 @@ func (h *CaseHandler) List(c *gin.Context) {
 	status := c.Query("status")
 	q := c.Query("q")
 	unresolvedLink := c.Query("unresolvedLink") == "true"
+	excludePending := c.Query("excludePending") == "true"
 
-	cases, total, err := h.masterService.ListCases(c.Request.Context(), region, status, q, page, pageSize, unresolvedLink)
+	cases, total, err := h.masterService.ListCases(c.Request.Context(), region, status, q, page, pageSize, unresolvedLink, excludePending)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢個案失敗", nil)
 		return

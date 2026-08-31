@@ -18,7 +18,7 @@ func newFakeCaregiverStore() *fakeCaregiverStore {
 	return &fakeCaregiverStore{byID: map[uuid.UUID]*Caregiver{}}
 }
 
-func (f *fakeCaregiverStore) List(ctx context.Context, q string, unresolvedLink, incomplete bool, page, pageSize int) ([]Caregiver, int64, error) {
+func (f *fakeCaregiverStore) List(ctx context.Context, q string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
 	var out []Caregiver
 	for _, c := range f.byID {
 		out = append(out, *c)

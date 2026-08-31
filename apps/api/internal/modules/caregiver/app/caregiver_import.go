@@ -197,7 +197,7 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 
 // findDuplicateCaregiver 以正規化姓名比對既有照護人員；查詢失敗時視為無重複，不中斷整批解析。
 func (s *CaregiverService) findDuplicateCaregiver(ctx context.Context, name string) *CaregiverDuplicateRef {
-	matches, _, err := s.store.List(ctx, name, false, false, 1, 5)
+	matches, _, err := s.store.List(ctx, name, false, false, false, 1, 5)
 	if err != nil {
 		return nil
 	}

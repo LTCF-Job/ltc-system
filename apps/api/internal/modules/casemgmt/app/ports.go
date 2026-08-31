@@ -9,7 +9,7 @@ import (
 
 // CaseStore 定義個案主檔與排班的讀寫邊界。
 type CaseStore interface {
-	List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink bool) ([]Case, int64, error)
+	List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Case, error)
 	GetByHMAC(ctx context.Context, hmac []byte) (*Case, error)
 	GetByNameNormalized(ctx context.Context, nameNorm string) ([]Case, error)

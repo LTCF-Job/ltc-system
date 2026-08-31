@@ -292,7 +292,7 @@ const {
 } = useListQuery({
   defaultFilters: { q: '' },
   onFetch: async () => {
-    const res = await listCaregivers({ page: page.value, pageSize: pageSize.value, q: filters.q })
+    const res = await listCaregivers({ page: page.value, pageSize: pageSize.value, q: filters.q, excludePending: true })
     caregivers.value = res.data
     total.value = res.meta.total
   }

@@ -12,7 +12,7 @@ import (
 // GenerateCaseProfileWorkbook 匯出與來源工作簿一致的個案彙整欄位。
 // caseIDs 為空時匯出全部個案；非空時只匯出指定個案，欄位與順序不受影響。
 func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs []uuid.UUID) ([]byte, error) {
-	cases, _, err := s.caseRepo.List(ctx, "", "", "", 1, 10000, false)
+	cases, _, err := s.caseRepo.List(ctx, "", "", "", 1, 10000, false, false)
 	if err != nil {
 		return nil, fmt.Errorf("list case profiles: %w", err)
 	}

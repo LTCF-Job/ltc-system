@@ -23,7 +23,7 @@ type fakeCaseStore struct {
 	sched *app.CaseSchedule
 }
 
-func (f *fakeCaseStore) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink bool) ([]app.Case, int64, error) {
+func (f *fakeCaseStore) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
 	return f.cases, int64(len(f.cases)), nil
 }
 

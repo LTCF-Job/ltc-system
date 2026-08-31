@@ -18,6 +18,7 @@ export async function listCases(params?: {
   status?: string
   q?: string
   unresolvedLink?: boolean
+  excludePending?: boolean
 }): Promise<Paged<CaseDTO>> {
   const res: any = await apiClient.get('/cases', { params })
   const rawData = res?.data ?? res

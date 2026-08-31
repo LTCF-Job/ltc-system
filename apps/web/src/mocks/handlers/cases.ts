@@ -12,10 +12,14 @@ export const casesHandlers = [
     const region = url.searchParams.get('region')
     const status = url.searchParams.get('status')
     const unresolvedLink = url.searchParams.get('unresolvedLink') === 'true'
+    const excludePending = url.searchParams.get('excludePending') === 'true'
 
     let filtered = [...mockCases]
     if (unresolvedLink) {
       filtered = filtered.filter((c) => c.siteNameRaw || c.outboundVehicleNameRaw || c.inboundVehicleNameRaw)
+    }
+    if (excludePending) {
+      filtered = filtered.filter((c) => !c.siteNameRaw && !c.outboundVehicleNameRaw && !c.inboundVehicleNameRaw)
     }
     if (q) {
       const keyword = q.trim().toLowerCase()

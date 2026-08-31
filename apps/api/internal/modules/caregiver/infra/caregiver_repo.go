@@ -21,8 +21,9 @@ func NewCaregiverRepository(db *pgxpool.Pool) *CaregiverRepository {
 	return &CaregiverRepository{db: db}
 }
 
-// List 取得照護人員清單，支援關鍵字、單位待關聯與資料待補齊篩選。
-func (r *CaregiverRepository) List(ctx context.Context, q string, unresolvedLink, incomplete bool, page, pageSize int) ([]app.Caregiver, int64, error) {
+// List 取得照護人員清單，支援關鍵字、單位待關聯與資料待補齊篩選。excludePending 為 true
+// 時排除單位待關聯或聯絡方式／備註缺漏的資料列，供主列表與「待維護」分頁互斥呈現。
+func (r *CaregiverRepository) List(ctx context.Context, q string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]app.Caregiver, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT ` + caregiverColumns + `
@@ -31,10 +32,14 @@ func (r *CaregiverRepository) List(ctx context.Context, q string, unresolvedLink
 		WHERE ($1 = '' OR c.name ILIKE '%' || $1 || '%')
 		  AND ($2 = false OR (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> ''))
 		  AND ($3 = false OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = '')
+		  AND ($6 = false OR NOT (
+		        (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> '')
+		        OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = ''
+		      ))
 		ORDER BY c.name ASC
 		LIMIT $4 OFFSET $5
 	`
-	rows, err := r.db.Query(ctx, query, q, unresolvedLink, incomplete, pageSize, offset)
+	rows, err := r.db.Query(ctx, query, q, unresolvedLink, incomplete, pageSize, offset, excludePending)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query caregivers: %w", err)
 	}
@@ -55,8 +60,12 @@ func (r *CaregiverRepository) List(ctx context.Context, q string, unresolvedLink
 		WHERE ($1 = '' OR c.name ILIKE '%' || $1 || '%')
 		  AND ($2 = false OR (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> ''))
 		  AND ($3 = false OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = '')
+		  AND ($4 = false OR NOT (
+		        (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> '')
+		        OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = ''
+		      ))
 	`
-	_ = r.db.QueryRow(ctx, countQuery, q, unresolvedLink, incomplete).Scan(&total)
+	_ = r.db.QueryRow(ctx, countQuery, q, unresolvedLink, incomplete, excludePending).Scan(&total)
 
 	return list, total, nil
 }

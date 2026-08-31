@@ -29,8 +29,9 @@ func (h *CaregiverHandler) List(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	unresolvedLink, _ := strconv.ParseBool(c.DefaultQuery("unresolvedLink", "false"))
 	incomplete, _ := strconv.ParseBool(c.DefaultQuery("incomplete", "false"))
+	excludePending, _ := strconv.ParseBool(c.DefaultQuery("excludePending", "false"))
 
-	list, total, err := h.svc.List(c.Request.Context(), c.Query("q"), unresolvedLink, incomplete, page, pageSize)
+	list, total, err := h.svc.List(c.Request.Context(), c.Query("q"), unresolvedLink, incomplete, excludePending, page, pageSize)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢照護人員失敗", nil)
 		return

@@ -25,6 +25,7 @@ export const caregiversHandlers = [
     const q = url.searchParams.get('q')?.trim().toLowerCase()
     const unresolvedLink = url.searchParams.get('unresolvedLink') === 'true'
     const incomplete = url.searchParams.get('incomplete') === 'true'
+    const excludePending = url.searchParams.get('excludePending') === 'true'
 
     let filtered = [...mockCaregivers]
     if (q) {
@@ -35,6 +36,9 @@ export const caregiversHandlers = [
     }
     if (incomplete) {
       filtered = filtered.filter((c) => !c.contact || !c.notes)
+    }
+    if (excludePending) {
+      filtered = filtered.filter((c) => !(!c.siteId && !!c.siteNameRaw) && !!c.contact && !!c.notes)
     }
 
     return HttpResponse.json({ data: filtered, meta: { total: filtered.length } })

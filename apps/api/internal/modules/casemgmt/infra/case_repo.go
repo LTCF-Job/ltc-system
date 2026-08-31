@@ -23,8 +23,9 @@ func NewCaseRepository(db *pgxpool.Pool) *CaseRepository {
 }
 
 // List 取得個案清單（預設回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳據點／去回程車輛
-// 任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案。
-func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink bool) ([]app.Case, int64, error) {
+// 任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案；excludePending 為 true 時排除
+// 這類待維護個案，供主列表與「待補建關聯」分頁互斥呈現。
+func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT c.id, c.code, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
@@ -45,10 +46,15 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
 		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
 		      ))
+		  AND ($7 = false OR NOT (
+		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
+		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
+		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
+		      ))
 		ORDER BY c.code ASC
 		LIMIT $4 OFFSET $5
 	`
-	rows, err := r.db.Query(ctx, query, region, status, q, pageSize, offset, unresolvedLink)
+	rows, err := r.db.Query(ctx, query, region, status, q, pageSize, offset, unresolvedLink, excludePending)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query cases: %w", err)
 	}
@@ -81,8 +87,13 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
 		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
 		      ))
+		  AND ($5 = false OR NOT (
+		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
+		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
+		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
+		      ))
 	`
-	_ = r.db.QueryRow(ctx, countQuery, region, status, q, unresolvedLink).Scan(&total)
+	_ = r.db.QueryRow(ctx, countQuery, region, status, q, unresolvedLink, excludePending).Scan(&total)
 
 	return list, total, nil
 }

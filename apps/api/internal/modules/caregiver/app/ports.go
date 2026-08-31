@@ -8,7 +8,7 @@ import (
 
 // CaregiverStore 定義照護人員主檔的讀寫邊界。
 type CaregiverStore interface {
-	List(ctx context.Context, q string, unresolvedLink, incomplete bool, page, pageSize int) ([]Caregiver, int64, error)
+	List(ctx context.Context, q string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]Caregiver, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Caregiver, error)
 	Create(ctx context.Context, c *Caregiver) error
 	Update(ctx context.Context, c *Caregiver) error
