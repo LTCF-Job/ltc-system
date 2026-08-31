@@ -4,7 +4,7 @@
       <!-- 分頁一：未回報清單 -->
       <el-tab-pane label="未回報清單" name="missing">
         <DataTablePage
-          :max-width="1030"
+          :max-width="1090"
           :loading="loadingMissing"
           :total="missingTotal"
           :page="page"
@@ -110,7 +110,7 @@
       <!-- 分頁二：催報通知歷史 -->
       <el-tab-pane label="催報通知歷史" name="history">
         <DataTablePage
-          :max-width="1230"
+          :max-width="1400"
           :loading="loadingLogs"
           :total="logsTotal"
           :page="logPage"
@@ -157,7 +157,7 @@
           </template>
 
           <template #table>
-            <el-table :data="logList" stripe border style="width: 100%;">
+            <el-table :data="logList" stripe border table-layout="auto" style="width: 100%;">
               <el-table-column prop="sentAt" label="發送時間" width="170" sortable align="center">
                 <template #default="{ row }">
                   <span>{{ formatDateTime(row.sentAt) }}</span>
@@ -192,11 +192,61 @@
                   <span v-else class="text-secondary">{{ row.contentSummary || row.body || '-' }}</span>
                 </template>
               </el-table-column>
+              <el-table-column label="操作" width="90" align="center" fixed="right">
+                <template #default="{ row }">
+                  <TableRowActions>
+                    <el-button
+                      link
+                      type="info"
+                      size="small"
+                      @click="openLogDetail(row)"
+                    >
+                      詳情
+                    </el-button>
+                  </TableRowActions>
+                </template>
+              </el-table-column>
             </el-table>
           </template>
         </DataTablePage>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 通知歷史詳情對話框 -->
+    <el-dialog
+      v-model="logDetailVisible"
+      title="通知發送詳情"
+      width="min(820px, calc(100vw - 32px))"
+      destroy-on-close
+    >
+      <el-descriptions v-if="currentLogRow" class="log-detail-descriptions" :column="1" border size="small">
+        <el-descriptions-item label="發送時間">{{ formatDateTime(currentLogRow.sentAt) }}</el-descriptions-item>
+        <el-descriptions-item label="主題">
+          {{ (NOTIFICATION_TOPIC_LABELS as any)[currentLogRow.topic] || currentLogRow.topic }}
+        </el-descriptions-item>
+        <el-descriptions-item label="通知管道">{{ currentLogRow.channel }}</el-descriptions-item>
+        <el-descriptions-item label="信件標題">{{ currentLogRow.subject }}</el-descriptions-item>
+        <el-descriptions-item label="收件人清單">
+          <span v-if="currentLogRow.recipientEmails && currentLogRow.recipientEmails.length">
+            {{ currentLogRow.recipientEmails.join(', ') }}
+          </span>
+          <span v-else-if="(currentLogRow as any).target">{{ (currentLogRow as any).target }}</span>
+          <el-tag v-else type="danger" size="small">無設定收件人</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="觸發來源">{{ currentLogRow.triggeredByName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="狀態">
+          <el-tag :type="currentLogRow.status === 'sent' || (currentLogRow as any).success ? 'success' : 'danger'" size="small">
+            {{ currentLogRow.status === 'sent' || (currentLogRow as any).success ? '發送成功' : '失敗' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item v-if="currentLogRow.errorMessage || (currentLogRow as any).error" label="失敗原因">
+          <span style="color: var(--el-color-danger);">{{ currentLogRow.errorMessage || (currentLogRow as any).error }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="完整內容">
+          <div style="white-space: pre-wrap;">{{ currentLogRow.contentSummary || (currentLogRow as any).body || '-' }}</div>
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
 
     <!-- 人工輸入回報內容對話框 -->
     <el-dialog
@@ -416,6 +466,15 @@ const selectedTopic = ref<string | undefined>(undefined)
 
 const triggering = ref(false)
 
+// 通知歷史詳情對話框狀態
+const logDetailVisible = ref(false)
+const currentLogRow = ref<NotificationLogDTO | null>(null)
+
+function openLogDetail(row: any) {
+  currentLogRow.value = row
+  logDetailVisible.value = true
+}
+
 async function fetchVehicles() {
   try {
     const res = await listVehicles({ active: true, pageSize: 100 })
@@ -602,6 +661,10 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.log-detail-descriptions :deep(.el-descriptions__body .el-descriptions__table .el-descriptions__cell) {
+  font-size: var(--app-font-md);
 }
 
 .text-secondary {

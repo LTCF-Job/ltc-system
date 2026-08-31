@@ -183,7 +183,7 @@
       <!-- 分頁 2: 車輛油資登錄 -->
       <el-tab-pane label="車輛油資登錄" name="fuel">
         <DataTablePage
-          :max-width="1080"
+          :max-width="1100"
           :loading="fuelLoading"
           v-model:page="fuelPage"
           v-model:pageSize="fuelPageSize"
@@ -258,7 +258,7 @@
 
           <template #table>
           <!-- 油資統計指標 -->
-          <el-row :gutter="16" class="mb-3">
+          <el-row :gutter="16" class="stat-row mb-3">
             <el-col :xs="24" :sm="8">
               <el-card shadow="never" class="stat-card">
                 <div class="stat-inner">
@@ -286,7 +286,7 @@
           </el-row>
 
           <!-- 油資表格 -->
-          <el-table :data="fuelLogs" border stripe size="small" style="width: 100%;">
+          <el-table :data="fuelLogs" border stripe size="small" table-layout="auto" style="width: 100%;">
             <el-table-column prop="fuelDate" label="加油日期" min-width="120" align="center">
               <template #default="{ row }">
                 <span>{{ row.fuelDate?.slice(0, 10) }}</span>
@@ -1086,6 +1086,11 @@ onMounted(async () => {
   .cell-empty {
     color: var(--el-text-color-placeholder);
   }
+}
+
+.stat-row {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 
 .stat-card {

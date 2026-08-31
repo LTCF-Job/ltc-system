@@ -156,7 +156,7 @@
         </el-table-column>
         <el-table-column prop="totalCases" label="個案數" width="90" align="center" />
         <el-table-column prop="totalRows" label="總趟數" width="90" align="center" />
-        <el-table-column prop="createdAt" label="產生時間" min-width="170" align="center">
+        <el-table-column prop="createdAt" label="產生時間" width="170" align="center">
           <template #default="{ row }">
             <span>{{ formatDateTime(row.createdAt) }}</span>
           </template>

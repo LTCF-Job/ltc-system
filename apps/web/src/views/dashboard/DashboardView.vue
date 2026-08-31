@@ -244,7 +244,7 @@
                 <span class="trip-count-badge">{{ row.totalRows }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="createdAt" label="匯出時間" min-width="170" align="center">
+            <el-table-column prop="createdAt" label="匯出時間" width="170" align="center">
               <template #default="{ row }">
                 <span class="text-muted">{{ formatDateTime(row.createdAt) }}</span>
               </template>
@@ -259,7 +259,7 @@
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="90" align="center">
+            <el-table-column label="操作" width="100" align="center">
               <template #default="{ row }">
                 <el-button
                   v-if="row.status === 'succeeded' && row.downloadUrl"
@@ -326,7 +326,7 @@ const recentExports = ref<ExportJobDTO[]>([])
 const metricsError = ref(false)
 const exportsError = ref(false)
 
-// 獲取總覽儀表板指標與最近匯出紀錄
+// 取得總覽儀表板指標與最近匯出紀錄
 async function fetchDashboardData() {
   loading.value = true
   metricsError.value = false

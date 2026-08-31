@@ -2,7 +2,7 @@
   <div class="user-management-view">
     <DataTablePage
       title="使用者管理"
-      :max-width="1150"
+      :max-width="1230"
       :loading="loading"
       :total="total"
       :page="page"
@@ -50,8 +50,8 @@
       </template>
 
       <template #table>
-        <el-table :data="users" border stripe style="width: 100%">
-          <el-table-column prop="displayName" label="使用者姓名" min-width="140">
+        <el-table :data="users" border stripe table-layout="auto" style="width: 100%">
+          <el-table-column prop="displayName" label="使用者姓名" min-width="170">
             <template #default="{ row }">
               <div class="user-name-cell">
                 <span class="font-bold">{{ row.displayName }}</span>

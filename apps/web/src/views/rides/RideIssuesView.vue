@@ -25,9 +25,9 @@
     <el-tabs v-model="activeTab" type="border-card" class="issues-tabs" @tab-change="fetchIssues">
       <!-- 分頁 1：混車衝突 -->
       <el-tab-pane label="混車衝突待裁決" name="conflict">
-        <DataTablePage :max-width="940" :loading="loading">
+        <DataTablePage :max-width="990" :loading="loading">
         <template #table>
-        <el-table :data="issueList" border stripe style="width: 100%">
+        <el-table :data="issueList" border stripe table-layout="auto" style="width: 100%">
           <el-table-column prop="serviceDate" label="服務日期" width="110" />
           <el-table-column prop="caseName" label="個案姓名" width="120" />
           <el-table-column label="趟次" width="80" align="center">
@@ -47,13 +47,16 @@
           <el-table-column
             v-if="authStore.can('staff')"
             label="操作"
-            width="120"
+            width="100"
+            fixed="right"
             align="center"
           >
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openResolveDialog(row as any)">
-                人工裁決
-              </el-button>
+              <TableRowActions>
+                <el-button link type="primary" size="small" @click="openResolveDialog(row as any)">
+                  人工裁決
+                </el-button>
+              </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
@@ -63,9 +66,9 @@
 
       <!-- 分頁 2：未回報清單 -->
       <el-tab-pane label="應搭未回報清單" name="unreported">
-        <DataTablePage :max-width="780" :loading="loading">
+        <DataTablePage :max-width="830" :loading="loading">
         <template #table>
-        <el-table :data="issueList" border stripe style="width: 100%">
+        <el-table :data="issueList" border stripe table-layout="auto" style="width: 100%">
           <el-table-column prop="serviceDate" label="服務日期" width="110" />
           <el-table-column prop="caseName" label="個案姓名" width="120" />
           <el-table-column label="趟次" width="80" align="center">
@@ -74,14 +77,18 @@
             </template>
           </el-table-column>
           <el-table-column prop="description" label="說明" min-width="260" />
-          <el-table-column label="操作" width="160" align="center">
+          <!-- 「前往回報」「查看排班」為 4 字操作文案，比一般 2 字按鈕（編輯／刪除）長，
+               標準 2 顆按鈕寬度 140px 會被裁切，故加寬到 190px -->
+          <el-table-column label="操作" width="190" fixed="right" align="center">
             <template #default="{ row }">
-              <el-button link type="info" size="small" @click="$router.push('/rides/missing')">
-                前往回報
-              </el-button>
-              <el-button link type="info" size="small" @click="$router.push(`/cases/${row.caseId}`)">
-                查看排班
-              </el-button>
+              <TableRowActions>
+                <el-button link type="info" size="small" @click="$router.push('/rides/missing')">
+                  前往回報
+                </el-button>
+                <el-button link type="info" size="small" @click="$router.push(`/cases/${row.caseId}`)">
+                  查看排班
+                </el-button>
+              </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
@@ -93,7 +100,7 @@
       <el-tab-pane label="表單匯入異常" name="import_error">
         <DataTablePage :max-width="650" :loading="loading">
         <template #table>
-        <el-table :data="issueList" border stripe style="width: 100%">
+        <el-table :data="issueList" border stripe table-layout="auto" style="width: 100%">
           <el-table-column prop="serviceDate" label="服務日期" width="110" />
           <el-table-column prop="caseName" label="回報文字/欄位" width="180" />
           <el-table-column prop="description" label="錯誤訊息與原始 Payload" min-width="300" show-overflow-tooltip />
@@ -150,6 +157,7 @@ import { ref, reactive, onMounted } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import DataTablePage from '@/components/DataTablePage.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listIssueRides, resolveConflict } from '@/api/rides'
 import { listVehicles, listDrivers } from '@/api/masters'

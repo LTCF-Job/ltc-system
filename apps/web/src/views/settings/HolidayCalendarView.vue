@@ -51,9 +51,11 @@
           </el-table-column>
           <el-table-column label="操作" width="100" align="center">
             <template #default="{ row }">
-              <el-button link type="danger" size="small" @click="removeHoliday(row.holidayDate)">
-                刪除
-              </el-button>
+              <TableRowActions>
+                <el-button link type="danger" size="small" @click="removeHoliday(row.holidayDate)">
+                  刪除
+                </el-button>
+              </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
@@ -122,6 +124,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import {
   createHoliday,
   deleteHoliday,

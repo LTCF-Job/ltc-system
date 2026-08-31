@@ -118,7 +118,7 @@
             </div>
           </template>
 
-          <el-table :data="veh.rows" border stripe style="width: 100%;">
+          <el-table :data="veh.rows" border stripe style="width: fit-content; max-width: 100%;">
             <el-table-column prop="caseCode" label="個案編號" width="120" />
             <el-table-column prop="caseName" label="個案姓名" width="140" />
             <el-table-column prop="outboundCount" label="去程趟數" align="right" width="150">
@@ -131,7 +131,7 @@
                 <span class="count-cell">{{ row.inboundCount }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="totalCount" label="個人趟數合計" align="right" min-width="150">
+            <el-table-column prop="totalCount" label="個人趟數合計" align="right" width="150">
               <template #default="{ row }">
                 <b class="count-cell">{{ row.totalCount }}</b>
               </template>
@@ -272,17 +272,21 @@ onMounted(() => {
 
 .tables-wrapper {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 16px;
 }
 
 .vehicle-card {
+  flex: 0 0 auto;
+  max-width: 100%;
   border-radius: 8px;
 
   .veh-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
+    gap: 24px;
 
     .veh-title {
       display: flex;

@@ -2,7 +2,6 @@
   <div class="audit-log-view">
     <DataTablePage
       title="系統操作紀錄"
-      :max-width="1090"
       :loading="loading"
       :total="total"
       :page="page"
@@ -58,48 +57,42 @@
       </template>
 
       <template #table>
-        <el-table :data="auditList" stripe border style="width: 100%;">
-          <el-table-column prop="createdAt" label="操作時間" width="170" sortable align="center">
+        <el-table :data="auditList" stripe border table-layout="auto">
+          <el-table-column prop="createdAt" label="操作時間" width="165" sortable align="center">
             <template #default="{ row }">
               <span>{{ formatDateTime(row.createdAt) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作者" width="140" align="center">
+          <el-table-column label="操作者" width="110" align="center">
             <template #default="{ row }">
               <span>{{ getActorDisplayName(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="動作" width="140" align="center">
+          <el-table-column label="動作" width="150" align="center">
             <template #default="{ row }">
-              <span :class="getActionClass((row as any).action)">
-                {{ (AUDIT_ACTION_LABELS as any)[(row as any).action] || (row as any).action }}
-              </span>
+              <StatusTag :status="(row as any).action" preset="auditAction" variant="chip" />
             </template>
           </el-table-column>
-          <el-table-column label="實體種類" width="130" align="center">
+          <el-table-column label="實體種類" width="110" align="center">
             <template #default="{ row }">
               <span>{{ (AUDIT_ENTITY_LABELS as any)[(row as any).entityType] || (row as any).entityType }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="entityName" label="操作對象" min-width="200" show-overflow-tooltip>
+          <el-table-column prop="entityName" label="操作對象" class-name="entity-col">
             <template #default="{ row }">
               <span :title="(row as any).entityId ? `實體編號：${(row as any).entityId}` : undefined">
                 {{ getEntityDisplayName(row as any) }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="ipAddress" label="IP 位址" width="130" align="center" />
+          <el-table-column prop="ipAddress" label="IP 位址" width="120" align="center" />
           <el-table-column label="操作" width="120" fixed="right" align="center">
             <template #default="{ row }">
-              <el-button
-                v-if="(row as any).beforeData || (row as any).afterData"
-                link
-                type="primary"
-                size="small"
-                @click="openDetail(row as any)"
-              >
-                異動前後
-              </el-button>
+              <TableRowActions v-if="(row as any).beforeData || (row as any).afterData">
+                <el-button link type="primary" size="small" @click="openDetail(row as any)">
+                  異動前後
+                </el-button>
+              </TableRowActions>
               <span v-else class="text-muted">-</span>
             </template>
           </el-table-column>
@@ -107,7 +100,7 @@
       </template>
     </DataTablePage>
 
-    <!-- 異動前後比較彈窗 -->
+    <!-- 異動前後比較對話框 -->
     <el-dialog
       v-model="detailVisible"
       title="系統操作紀錄異動詳情"
@@ -188,6 +181,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import DataTablePage from '@/components/DataTablePage.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import { listAuditLogs } from '@/api/audit'
 import { formatDateTime } from '@/utils/formatters'
 import type { AuditLogDTO } from '@/types/api'
@@ -610,6 +605,24 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* Element Plus 的 .el-table 是 div，內建 width: 100%；改成 width: auto 沒用，
+   因為 div 預設就是撐滿容器寬度，不會像原生表格一樣自動縮到內容寬度。
+   改用 max-content 才能讓外層容器真的縮到跟各欄實際寬度加總一致，
+   搭配 table-layout="auto" 讓「操作對象」欄依內容自然伸縮、不吃掉多餘空間。
+   欄位加總寬度若超過版面，交給 DataTablePage 既有的 overflow-x: auto 處理水平捲動。 */
+.audit-log-view :deep(.el-table) {
+  width: max-content;
+}
+
+/* 「操作對象」欄不套 show-overflow-tooltip：那個 prop 底層是 overflow: hidden，
+   會讓 table-layout="auto" 在量測「這欄實際需要多寬」時把這欄當成 0 寬（反正會被裁掉），
+   結果欄寬永遠縮到最小、跟內容脫鉤（連頁面還有空間時也一樣，等於本來想要的「有空間就展開」失效）。
+   改成只鎖 white-space: nowrap（不換行），不加 overflow: hidden，
+   讓瀏覽器照實際文字寬度分配欄寬；真的超出版面時交給外層既有的 overflow-x: auto 水平捲動，不做裁切省略。 */
+.audit-log-view :deep(.entity-col .cell) {
+  white-space: nowrap;
 }
 
 .text-muted {

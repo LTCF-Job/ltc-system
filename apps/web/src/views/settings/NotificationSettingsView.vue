@@ -1,6 +1,6 @@
 <template>
   <div class="notification-settings-view">
-    <DataTablePage title="通知收件人管理" :max-width="1110" :loading="loading">
+    <DataTablePage title="通知收件人管理" :max-width="1160" :loading="loading">
       <template #filter>
         <el-input
           v-model="searchQuery"
@@ -58,6 +58,7 @@
         :data="filteredRecipientList"
         stripe
         border
+        table-layout="auto"
         style="width: 100%;"
         @selection-change="handleTableSelectionChange"
       >
@@ -124,7 +125,7 @@
       </template>
     </DataTablePage>
 
-    <!-- 新增外部信箱彈窗（支援多行換行輸入） -->
+    <!-- 新增外部信箱對話框（支援多行換行輸入） -->
     <el-dialog
       v-model="addDialogVisible"
       title="新增外部信箱"
@@ -220,7 +221,7 @@
       </template>
     </el-dialog>
 
-    <!-- 單筆編輯外部信箱彈窗 -->
+    <!-- 單筆編輯外部信箱對話框 -->
     <el-dialog
       v-model="editDialogVisible"
       title="編輯外部信箱"
@@ -309,13 +310,13 @@ const searchQuery = ref('')
 const selectedTopic = ref<string | undefined>(undefined)
 const selectedTableRows = ref<NotificationRecipientDTO[]>([])
 
-// 新增外部信箱彈窗狀態
+// 新增外部信箱對話框狀態
 const addDialogVisible = ref(false)
 const addTopic = ref<NotificationTopic>('missing_report')
 const rawEmailsInput = ref('')
 const addSubmitting = ref(false)
 
-// 編輯外部信箱彈窗狀態
+// 編輯外部信箱對話框狀態
 const editDialogVisible = ref(false)
 const currentEditId = ref<string | null>(null)
 const editSaving = ref(false)
@@ -588,7 +589,7 @@ onMounted(() => {
   font-weight: bold;
 }
 
-/* 新增外部信箱彈窗樣式 */
+/* 新增外部信箱對話框樣式 */
 .add-dialog-content {
   display: flex;
   flex-direction: column;

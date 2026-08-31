@@ -158,7 +158,7 @@
         size="small"
         style="width: 100%"
       >
-        <el-table-column prop="categoryName" label="分類" width="130" align="center">
+        <el-table-column prop="categoryName" label="分類" width="150" align="center">
           <template #default="{ row }">
             <span>{{ row.categoryName }}</span>
           </template>

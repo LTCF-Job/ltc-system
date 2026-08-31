@@ -2,7 +2,7 @@
   <div class="vehicle-list-view">
     <DataTablePage
       title="車輛管理"
-      :max-width="1250"
+      :max-width="1290"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -59,6 +59,7 @@
           :data="vehicles"
           border
           stripe
+          table-layout="auto"
           style="width: 100%"
           :row-class-name="getRowClassName"
           @row-dblclick="(row: any) => handleRowDblClick(row)"
@@ -211,7 +212,7 @@
       </template>
     </DataTablePage>
 
-    <!-- 新增車輛彈窗 -->
+    <!-- 新增車輛對話框 -->
     <el-dialog
       v-model="dialogVisible"
       title="新增車輛"
@@ -261,7 +262,7 @@
       </template>
     </el-dialog>
 
-    <!-- 車輛司機維護彈窗 -->
+    <!-- 車輛司機維護對話框 -->
     <el-dialog
       v-model="driverDialogVisible"
       :title="`維護司機 - ${driverDialogVehicle?.displayName || ''}`"
@@ -564,7 +565,7 @@ executeFetch()
 }
 
 
-/* 彈窗內狀態單選群組 */
+/* 對話框內狀態單選群組 */
 .region-label {
   display: inline-flex;
   align-items: center;

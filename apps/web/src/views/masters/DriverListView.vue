@@ -50,7 +50,7 @@
 
       <!-- 表格 -->
       <template #table>
-        <el-table :data="drivers" border stripe style="width: 100%">
+        <el-table :data="drivers" border stripe table-layout="auto" style="width: 100%">
           <el-table-column prop="name" label="司機姓名" width="130" align="center">
             <template #default="{ row }"><span class="driver-name">{{ row.name }}</span></template>
           </el-table-column>
@@ -133,7 +133,7 @@
       </template>
     </DataTablePage>
 
-    <!-- 新增/編輯司機彈窗 -->
+    <!-- 新增/編輯司機對話框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯司機資料' : '新增司機'"
@@ -174,7 +174,7 @@
       </template>
     </el-dialog>
 
-    <!-- 車輛期間指派彈窗 -->
+    <!-- 車輛期間指派對話框 -->
     <el-dialog v-model="assignDialogVisible" title="指派駕駛車輛" width="min(480px, calc(100vw - 32px))">
       <el-form ref="assignFormRef" :model="assignForm" :rules="assignRules" label-width="110px">
         <el-form-item label="選擇車輛" prop="vehicleId">
@@ -430,7 +430,7 @@ executeFetch()
 
 <style scoped>
 /* 狀態互動切換按鈕 / 膠囊標籤 */
-/* 彈窗內狀態單選群組 */
+/* 對話框內狀態單選群組 */
 .assigned-vehicle-info {
   display: inline-flex;
   align-items: center;

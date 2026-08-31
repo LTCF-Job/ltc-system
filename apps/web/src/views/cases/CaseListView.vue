@@ -3,7 +3,7 @@
     <el-tabs v-model="activeTab" type="border-card" class="case-tabs" @tab-change="handleTabChange">
     <el-tab-pane label="個案清單" name="list">
     <DataTablePage
-      :max-width="1470"
+      :max-width="1680"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -147,12 +147,12 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="serviceUsageType" label="服務使用類型" width="170" align="center">
+          <el-table-column prop="serviceUsageType" label="服務使用類型" min-width="190" align="center">
             <template #default="{ row }">
               <span>{{ SERVICE_USAGE_TYPE_LABELS[row.serviceUsageType as ServiceUsageType] || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="排班概要" min-width="160">
+          <el-table-column label="排班概要" min-width="320">
             <template #default="{ row }">
               <span v-if="row.activeSchedule">
                 {{ TRIP_PATTERN_LABELS[row.activeSchedule.tripPattern as TripPattern] }}
@@ -196,12 +196,11 @@
     </DataTablePage>
     </el-tab-pane>
 
-    <!-- 待補建關聯：據點/去程車/回程車比對不到主檔資料的個案，供事後關聯或新增主檔 -->
-    <el-tab-pane label="待補建關聯" name="unresolved">
-      <DataTablePage :max-width="925" :loading="unresolvedLoading">
-        <template #table>
-        <el-empty v-if="!unresolvedLoading && unresolvedCases.length === 0" description="目前沒有待補建關聯的個案" />
-        <el-table v-else :data="unresolvedCases" border stripe style="width: 100%">
+    <!-- 待維護：據點/去程車/回程車比對不到主檔資料的個案，供事後關聯或新增主檔；版面比照照護人員管理的待維護頁籤 -->
+    <el-tab-pane label="待維護" name="unresolved">
+      <div v-loading="unresolvedLoading" class="pending-panel">
+        <el-empty v-if="!unresolvedLoading && unresolvedCases.length === 0" description="目前沒有待維護的個案" />
+        <el-table v-else :data="unresolvedCases" border stripe table-layout="auto" style="width: 100%">
           <el-table-column prop="code" label="個案編號" width="95" align="center" />
           <el-table-column prop="name" label="姓名" width="110" />
           <el-table-column label="據點" min-width="220">
@@ -256,8 +255,7 @@
             </template>
           </el-table-column>
         </el-table>
-        </template>
-      </DataTablePage>
+      </div>
     </el-tab-pane>
     </el-tabs>
 
@@ -639,14 +637,14 @@ async function handleCommitImport(file: File, includeDuplicateRows: number[]) {
   return commitImportCases(file, includeDuplicateRows)
 }
 
-// 匯入完成後，若有據點/車輛待補建關聯，導引使用者前往「待補建關聯」頁籤處理；
+// 匯入完成後，若有據點/車輛待補建關聯，導引使用者前往「待維護」頁籤處理；
 // 無論點選哪個按鈕都視為使用者已確認匯入結果，一併關閉匯入視窗
 function handleImportSuccess() {
   executeFetch()
   ElMessageBox.confirm(
-    '本次匯入若有據點或去回程車輛未比對到既有主檔，已建立資料並列入「待補建關聯」頁籤，是否立即前往查看？',
+    '本次匯入若有據點或去回程車輛未比對到既有主檔，已建立資料並列入「待維護」頁籤，是否立即前往查看？',
     '匯入完成',
-    { confirmButtonText: '前往待補建關聯', cancelButtonText: '稍後再說', type: 'info' }
+    { confirmButtonText: '前往待維護', cancelButtonText: '稍後再說', type: 'info' }
   )
     .then(() => {
       activeTab.value = 'unresolved'
@@ -705,7 +703,7 @@ async function handleCreateCase() {
   })
 }
 
-// 待補建關聯頁籤
+// 待維護頁籤
 const unresolvedLoading = ref(false)
 const unresolvedCases = ref<CaseDTO[]>([])
 const availableSites = ref<SiteDTO[]>([])
@@ -717,7 +715,7 @@ async function fetchUnresolvedCases() {
     const res = await listCases({ unresolvedLink: true, pageSize: 100 })
     unresolvedCases.value = res.data
   } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入待補建關聯清單失敗'))
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入待維護清單失敗'))
   } finally {
     unresolvedLoading.value = false
   }
@@ -804,7 +802,7 @@ async function handleQuickCreateAndLink() {
   }
 }
 
-// 待補建關聯頁籤首次切入時才拉取清單，避免一般個案清單頁多打一次 API
+// 待維護頁籤首次切入時才拉取清單，避免一般個案清單頁多打一次 API
 let unresolvedLoaded = false
 async function handleTabChange(name: string | number) {
   if (name === 'unresolved' && !unresolvedLoaded) {
@@ -827,16 +825,31 @@ executeFetch()
   border-radius: 8px;
 }
 
+.pending-panel {
+  min-height: 120px;
+  max-width: 970px;
+}
+
+/* 不用 flex-wrap: wrap，理由同照護人員管理待維護頁籤：欄寬不夠時會把
+   「選擇既有據點/車輛」跟「新增」按鈕擠成第二行，即使頁面還有空間也一樣。
+   改成 nowrap + table-layout="auto"，讓欄位依內容自然撐寬、有空間就單行顯示。 */
 .unresolved-slot {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
+.unresolved-slot > * {
+  flex-shrink: 0;
+}
+
+/* flex-wrap: nowrap 只防止元素被擠到下一行，這個 span 沒有固定寬度時
+   文字本身還是會自己換行，要另外鎖 white-space: nowrap 才能維持單行。 */
 .unresolved-raw-name {
   color: var(--el-color-warning);
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .inline-value,

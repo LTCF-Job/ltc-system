@@ -484,6 +484,7 @@ onMounted(() => {
         }
       }
 
+      /* 假日標記色僅供本頁面使用，非跨頁共用樣式，調整不影響出勤與油資登錄頁 */
       .mark-holiday {
         background-color: #f1f5f9;
         color: #64748b;
@@ -505,6 +506,7 @@ onMounted(() => {
   padding: 0;
 }
 
+/* 假日欄底色僅供本頁面使用，非跨頁共用樣式，調整不影響出勤與油資登錄頁 */
 .calendar-table :deep(th.day-col--holiday) {
   background-color: #e2e8f0;
   color: #475569;

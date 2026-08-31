@@ -206,56 +206,65 @@ select {
   }
 }
 
-// 表格列操作按鈕：link 按鈕本身只有文字顏色，容易被誤認成純文字連結而非可點擊按鈕，
-// 這裡疊加淡底色 + 細邊框讓它讀起來明確是按鈕，不改 type/size 屬性與既有 e2e 選取器
+// 表格列操作按鈕：link 按鈕本身只有文字顏色，容易被誤認成純文字連結或 tag 而非可點擊按鈕，
+// 這裡疊加淡底色 + 實色邊框 + hover 陰影位移讓它讀起來明確是按鈕，不改 type/size 屬性與既有 e2e 選取器。
+// 上下 padding 從 2px 加到 5px 改善擁擠感；左右維持 10px 不變，操作欄寬度仍依按鈕數固定（見下方按鈕數對照）不會溢出裁切
 .table-row-actions .el-button.is-link {
-  padding: 2px 10px;
+  padding: 5px 10px;
   border-radius: var(--app-radius-xs);
   border: 1px solid transparent;
   background: transparent;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 
   &.el-button--primary {
     background: #f0f6ff;
-    border-color: #dbeafe;
+    border-color: #60a5fa;
 
     &:hover,
     &:focus-visible {
       background: #dbeafe;
-      border-color: #93c5fd;
+      border-color: var(--app-primary);
+      box-shadow: 0 3px 8px rgba(47, 111, 237, 0.22);
+      transform: translateY(-1px);
     }
   }
 
   &.el-button--danger {
     background: #fef2f2;
-    border-color: #fee2e2;
+    border-color: #f87171;
 
     &:hover,
     &:focus-visible {
       background: #fee2e2;
-      border-color: #fecaca;
+      border-color: #dc2626;
+      box-shadow: 0 3px 8px rgba(237, 41, 75, 0.22);
+      transform: translateY(-1px);
     }
   }
 
   &.el-button--warning {
     background: #fffbeb;
-    border-color: #fef3c7;
+    border-color: #fbbf24;
 
     &:hover,
     &:focus-visible {
       background: #fef3c7;
-      border-color: #fde68a;
+      border-color: #d97706;
+      box-shadow: 0 3px 8px rgba(225, 138, 0, 0.22);
+      transform: translateY(-1px);
     }
   }
 
   &.el-button--info {
     background: #f8fafc;
-    border-color: #f1f5f9;
+    border-color: #94a3b8;
 
     &:hover,
     &:focus-visible {
       background: #f1f5f9;
-      border-color: #e2e8f0;
+      border-color: #64748b;
+      box-shadow: 0 3px 8px rgba(16, 21, 34, 0.12);
+      transform: translateY(-1px);
     }
   }
 }

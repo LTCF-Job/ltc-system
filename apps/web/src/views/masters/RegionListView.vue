@@ -54,6 +54,7 @@
           :data="regions"
           border
           stripe
+          table-layout="auto"
           style="width: 100%"
           :row-class-name="tableRowClassName"
           v-loading="loading || isSavingSort"
@@ -169,7 +170,7 @@
       </template>
     </DataTablePage>
 
-    <!-- 新增/編輯彈窗 -->
+    <!-- 新增/編輯對話框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯地區設定' : '新增營運地區'"

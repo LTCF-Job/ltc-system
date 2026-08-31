@@ -3,7 +3,7 @@
     <DataTablePage
       title="車輛維修保養管理"
       description="車隊定期保養、臨時維修紀錄登錄與空白檢查表下載"
-      :max-width="1250"
+      :max-width="1370"
       :loading="loading"
       v-model:page="page"
       v-model:pageSize="pageSize"
@@ -65,7 +65,7 @@
       </template>
 
       <template #table>
-      <el-table :data="records" border stripe size="small" style="width: 100%">
+      <el-table :data="records" border stripe size="small" table-layout="auto" style="width: 100%">
         <el-table-column prop="serviceDate" label="保養日期" width="110" align="center">
           <template #default="{ row }">
             <span>{{ row.serviceDate?.slice(0, 10) }}</span>

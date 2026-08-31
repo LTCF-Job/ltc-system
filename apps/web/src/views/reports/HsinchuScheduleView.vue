@@ -88,6 +88,7 @@
         border
         stripe
         size="small"
+        table-layout="auto"
         :cell-class-name="getCellClass"
       >
         <el-table-column label="趟次" width="90" align="center">
@@ -140,6 +141,7 @@
         border
         stripe
         size="small"
+        table-layout="auto"
         :cell-class-name="getCellClass"
       >
         <el-table-column label="趟次" width="90" align="center">

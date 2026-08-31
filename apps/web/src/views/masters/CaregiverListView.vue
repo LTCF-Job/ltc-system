@@ -40,7 +40,7 @@
           </template>
 
           <template #table>
-            <el-table :data="caregivers" border stripe style="width: 100%">
+            <el-table :data="caregivers" border stripe table-layout="auto" style="width: 100%">
               <el-table-column label="類型" width="90" align="center">
                 <template #default="{ row }">
                   <span>{{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type }}</span>
@@ -103,7 +103,7 @@
       <el-tab-pane label="待維護" name="pending">
         <div v-loading="pendingLoading" class="pending-panel">
           <el-empty v-if="!pendingLoading && pendingCaregivers.length === 0" description="目前沒有待維護的照護人員" />
-          <el-table v-else :data="pendingCaregivers" border stripe style="width: 100%">
+          <el-table v-else :data="pendingCaregivers" border stripe table-layout="auto" style="width: 100%">
             <el-table-column prop="name" label="姓名" width="120" />
             <el-table-column label="單位" min-width="220">
               <template #default="{ row }">
@@ -150,7 +150,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 新增據點快速建立彈窗 -->
+    <!-- 新增據點快速建立對話框 -->
     <el-dialog v-model="quickCreateSiteVisible" title="新增據點" width="min(480px, calc(100vw - 32px))">
       <el-form label-width="90px">
         <el-form-item label="據點名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
@@ -171,7 +171,7 @@
       </template>
     </el-dialog>
 
-    <!-- 批次匯入彈窗 -->
+    <!-- 批次匯入對話框 -->
     <ImportPreviewDialog
       ref="importDialogRef"
       title="批次匯入照護人員 (類型/單位/姓名/聯絡方式/備註.xlsx)"
@@ -203,7 +203,7 @@
       </template>
     </ImportPreviewDialog>
 
-    <!-- 新增/編輯彈窗 -->
+    <!-- 新增/編輯對話框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯照護人員資料' : '新增照護人員'"
@@ -372,7 +372,7 @@ function missingFields(row: CaregiverDTO): string[] {
   return missing
 }
 
-// 新增/編輯彈窗
+// 新增/編輯對話框
 const dialogVisible = ref(false)
 const saving = ref(false)
 const editingId = ref<string | null>(null)
@@ -555,16 +555,27 @@ executeFetch()
   max-width: 970px;
 }
 
+/* 不用 flex-wrap: wrap——欄寬不夠時會把「選擇既有據點」跟「新增據點」擠成第二行，
+   即使頁面還有空間也一樣。改成 nowrap，搭配 el-table 的 table-layout="auto"，
+   讓這欄依這一整行內容自然撐寬，有空間就單行顯示，不主動換行。 */
 .unresolved-slot {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
+.unresolved-slot > * {
+  flex-shrink: 0;
+}
+
+/* flex-wrap: nowrap 跟 .unresolved-slot > * 的 flex-shrink: 0 只防止各元素被擠壓，
+   這個 span 沒有固定寬度時，文字本身還是會照 flex 容器目前的寬度自己換行——
+   要另外鎖 white-space: nowrap 才能讓整段名稱維持單行。 */
 .unresolved-raw-name {
   color: var(--el-color-warning);
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .missing-fields {

@@ -108,13 +108,16 @@
               <el-icon><DocumentCopy /></el-icon>
               <span>司機接送匯報</span>
             </template>
-            <el-menu-item v-if="authStore.hasPermission('driver_reports')" index="/driver-reports/batch-import">
-              <el-icon><UploadFilled /></el-icon>
-              <template #title>上傳接送匯報</template>
+            <el-menu-item v-if="authStore.hasPermission('driver_reports')" index="/driver-reports/status">
+              <el-icon><DocumentCopy /></el-icon>
+              <template #title>接送匯報總覽</template>
             </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('driver_report_mappings')" index="/driver-reports/mappings">
+            <el-menu-item
+              v-if="authStore.hasPermission('driver_reports') || authStore.hasPermission('driver_report_mappings')"
+              index="/driver-reports/import"
+            >
               <el-icon><Connection /></el-icon>
-              <template #title>欄位對應設定</template>
+              <template #title>批次上傳與待維護資料</template>
             </el-menu-item>
           </el-sub-menu>
 
@@ -249,7 +252,6 @@ import {
   Avatar,
   DocumentCopy,
   Upload,
-  UploadFilled,
   Connection,
   Calendar,
   Grid,

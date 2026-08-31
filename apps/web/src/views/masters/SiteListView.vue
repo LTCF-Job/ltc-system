@@ -55,7 +55,7 @@
 
       <!-- 表格 -->
       <template #table>
-        <el-table :data="sites" border stripe style="width: 100%">
+        <el-table :data="sites" border stripe table-layout="auto" style="width: 100%">
           <el-table-column prop="name" label="據點名稱" width="160" />
           <el-table-column prop="region" label="區域" width="120" align="center">
             <template #default="{ row }">
@@ -93,7 +93,7 @@
       </template>
     </DataTablePage>
 
-    <!-- 新增/編輯彈窗 -->
+    <!-- 新增/編輯對話框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯據點資料' : '新增據點'"
