@@ -65,15 +65,13 @@ const router = createRouter({
         },
         {
           path: 'driver-reports',
-          name: 'DriverReportList',
-          component: () => import('@/views/driverReports/DriverReportListView.vue'),
-          meta: { title: '匯報表管理', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+          redirect: '/driver-reports/batch-import'
         },
         {
           path: 'driver-reports/batch-import',
           name: 'DriverReportBatchImport',
           component: () => import('@/views/driverReports/DriverReportBatchImportView.vue'),
-          meta: { title: '批次上傳', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+          meta: { title: '上傳接送匯報', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
         },
         {
           path: 'driver-reports/mappings',

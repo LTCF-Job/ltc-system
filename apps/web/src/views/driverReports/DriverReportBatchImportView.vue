@@ -2,7 +2,10 @@
   <div class="batch-import-view">
     <el-card shadow="never" class="batch-card">
       <template #header>
-        <PageHeader title="批次上傳接送匯報" description="一次處理多台車、多個月份的接送匯報檔">
+        <PageHeader
+          title="上傳接送匯報"
+          description="每一列代表一輛車在指定月份的接送紀錄。先選擇檔案並點選試算檢查，確認無誤後即可儲存。新上傳的檔案會直接取代該車該月份的所有舊資料；檔案內只能包含指定月份的日期。尚未建立匯報表的車輛會在第一次上傳時自動建立。"
+        >
           <template #actions>
             <label class="month-field">
               <span class="month-label">匯入月份</span>
@@ -30,14 +33,6 @@
           </template>
         </PageHeader>
       </template>
-
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        title="每一列是「一輛車 × 一個月」，逐列上傳、逐列試算，確認後逐列寫入。"
-        description="宣告月份後，該車該月的既有匯入資料會被這次的檔案整月覆蓋；檔案內出現該月以外的日期會整份拒絕。沒有匯報表的車輛在第一次上傳時自動建立。"
-      />
 
       <div v-if="!rows.length" class="empty-state">
         <el-empty :description="normalizedMonths.length ? '沒有啟用中的車輛' : '請先選擇要匯入的月份'" />
@@ -232,14 +227,22 @@ const route = useRoute()
 const router = useRouter()
 const canEdit = computed(() => authStore.hasPermission('driver_reports', 'edit'))
 
-// 月份寫進 query，讓「哪幾個月要補傳」這件事可以直接分享連結
-const selectedMonths = ref<string[]>(parseMonthsQuery(route.query.months))
+function getCurrentYearMonth(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  return `${year}-${month}`
+}
 
 function parseMonthsQuery(raw: unknown): string[] {
   const value = Array.isArray(raw) ? raw[0] : raw
-  if (typeof value !== 'string') return []
-  return value.split(',').filter((m) => /^\d{4}-(0[1-9]|1[0-2])$/.test(m.trim()))
+  if (typeof value !== 'string') return [getCurrentYearMonth()]
+  const parsed = value.split(',').filter((m) => /^\d{4}-(0[1-9]|1[0-2])$/.test(m.trim()))
+  return parsed.length > 0 ? parsed : [getCurrentYearMonth()]
 }
+
+// 月份寫進 query，讓「哪幾個月要補傳」這件事可以直接分享連結；預設帶入當前月份
+const selectedMonths = ref<string[]>(parseMonthsQuery(route.query.months))
 
 const rows = ref<BatchRow[]>([])
 const cases = ref<CaseDTO[]>([])

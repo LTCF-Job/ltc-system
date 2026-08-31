@@ -262,7 +262,7 @@ onMounted(fetchForms)
 }
 
 .pending-hint {
-  font-size: 12px;
+  font-size: var(--app-font-xs);
   color: var(--el-color-warning);
 }
 

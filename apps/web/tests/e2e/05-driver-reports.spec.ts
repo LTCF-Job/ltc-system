@@ -27,74 +27,22 @@ test.describe('05. 司機接送匯報匯入與欄位對應 (Driver Report Import
     await loginAs(page, 'admin')
   })
 
-  test('匯報表清單以車輛為主體，顯示欄位對應進度與最後匯入時間', async ({ page }) => {
-    await page.goto('/driver-reports')
+  test('上傳接送匯報：預設載入當前月份並直接顯示啟用車輛，不需先手動挑選月份', async ({ page }) => {
+    await page.goto('/driver-reports/batch-import')
     await waitForTableLoaded(page)
 
+    await expect(page.getByRole('heading', { name: '上傳接送匯報' })).toBeVisible()
+    await expect(page.getByText('每一列代表一輛車在指定月份的接送紀錄')).toBeVisible()
     await expect(page.locator('.el-table').first()).toBeVisible()
-    await expect(page.getByText('司機接送匯報（共 4 台車）')).toBeVisible()
-    await expect(page.locator('.el-table').first().getByText('竹南2車').first()).toBeVisible()
-    await expect(page.getByRole('button', { name: '新增車輛匯報表' })).toBeVisible()
+    // 預設當月份已列出全部啟用車輛，不需要先選月份
+    await expect(page.locator('.el-table__row')).toHaveCount(5)
   })
 
-  test('上傳匯報檔後就地確認欄位對應，寫入搭乘紀錄', async ({ page }) => {
+  test('/driver-reports 路由自動重定向至 /driver-reports/batch-import', async ({ page }) => {
     await page.goto('/driver-reports')
     await waitForTableLoaded(page)
-
-    const firstRow = page.locator('.el-table__row').first()
-    await firstRow.getByRole('button', { name: '匯入' }).click()
-
-    const dialog = page.locator('.el-dialog').filter({ hasText: '匯入司機接送匯報' })
-    await expect(dialog).toBeVisible()
-    await expect(dialog.getByRole('button', { name: /下載該車匯報範本/ })).toBeVisible()
-
-    await uploadReport(page, [
-      HEADER,
-      ['1150302', '郭澤威', '有坐', '沒坐', '無'],
-      ['115/3/3', '郭澤威', '沒坐', '有坐', ''],
-      ['壞掉的日期', '郭澤威', '有坐', '有坐', '日期打錯']
-    ])
-
-    // 預覽統計：兩天可匯入、一天日期錯誤
-    await expect(dialog.getByText('匯報天數：3')).toBeVisible()
-    await expect(dialog.getByText('可匯入：2')).toBeVisible()
-    await expect(dialog.getByText('日期錯誤：1')).toBeVisible()
-
-    // 欄位對應段：張詹竹妹該欄尚未對應，系統已帶出推薦個案
-    await expect(dialog.getByText('1.張詹竹妹 [去程]')).toBeVisible()
-    await expect(dialog.getByText(/待對應欄位：1 \/ 2/)).toBeVisible()
-
-    // 每日匯報段可檢視解析後的服務日期與檢核訊息
-    await dialog.getByRole('tab', { name: /每日匯報/ }).click()
-    await expect(dialog.getByText('2026-03-02')).toBeVisible()
-    await expect(dialog.getByText(/日期格式無法解析/)).toBeVisible()
-
-    await dialog.getByRole('button', { name: /^匯入 \(2 天\)$/ }).click()
-    await expectElMessage(page, /已匯入 2 天的接送匯報/, 'success')
-    await expect(dialog.getByText(/產生 \d+ 筆搭乘紀錄/)).toBeVisible()
-  })
-
-  test('表頭不符時明確擋下並說明應有的欄位順序', async ({ page }) => {
-    await page.goto('/driver-reports')
-    await waitForTableLoaded(page)
-
-    await page.locator('.el-table__row').first().getByRole('button', { name: '匯入' }).click()
-    const dialog = page.locator('.el-dialog').filter({ hasText: '匯入司機接送匯報' })
-    await expect(dialog).toBeVisible()
-
-    await uploadReport(page, [
-      ['時間戳記', '今天日期', '今日駕駛人', '問題回報'],
-      ['46084', '1150302', '郭澤威', '']
-    ])
-
-    // 失敗原因以通知條列呈現，操作人員看得到該修哪一欄
-    const notification = page.locator('.el-notification')
-    await expect(notification).toBeVisible({ timeout: 10000 })
-    await expect(notification).toContainText('匯入司機接送匯報失敗')
-    await expect(notification).toContainText('找不到匯報表表頭')
-
-    // 解析失敗時停在上傳步驟，不會誤進預覽
-    await expect(dialog.getByRole('button', { name: '開始解析與預覽' })).toBeVisible()
+    await expect(page).toHaveURL(/.*\/driver-reports\/batch-import/)
+    await expect(page.getByRole('heading', { name: '上傳接送匯報' })).toBeVisible()
   })
 
   test('欄位對應設定：檢視推薦信心度、單筆綁定與略過欄位', async ({ page }) => {
@@ -186,7 +134,7 @@ test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)'
     await expect(rowOf(page, '竹北二車')).toContainText('待處理')
   })
 
-  test('B3 對沒有匯報表的車上傳，自動建表後成功試算並出現在匯報表清單', async ({ page }) => {
+  test('B3 對沒有匯報表的車上傳，自動建表後成功試算且不再顯示尚未建表', async ({ page }) => {
     await page.goto(`/driver-reports/batch-import?months=${MONTH}`)
     await waitForTableLoaded(page)
 
@@ -198,10 +146,6 @@ test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)'
 
     await expect(rowOf(page, '苗栗市1車')).toContainText('可匯入 1 天')
     await expect(rowOf(page, '苗栗市1車')).not.toContainText('尚未建表')
-
-    await page.goto('/driver-reports')
-    await waitForTableLoaded(page)
-    await expect(page.getByText('司機接送匯報（共 5 台車）')).toBeVisible()
   })
 
   test('B4 檔案日期不屬於該列宣告的月份時，該列顯示錯誤且不得被匯入', async ({ page }) => {

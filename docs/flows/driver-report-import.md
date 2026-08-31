@@ -19,10 +19,10 @@ covers:
 - `POST /api/v1/driver-reports/:id/import`，角色限 `staff`、`admin`。
 - `dryRun=true`（預設）回傳預覽不寫入；`dryRun=false` 正式寫入。
 - `yearMonth`（`YYYY-MM`）選填，宣告這次要覆蓋哪一個月。
-- 前端有兩個入口，兩者共用 `DriverReportColumnMappingTable.vue` 做欄位對應：
-  - `DriverReportImportDialog.vue`：由 `DriverReportListView.vue` 逐車開啟，不帶 `yearMonth`。
-  - `DriverReportBatchImportView.vue`（`/driver-reports/batch-import`）：表格每列是「一輛車 × 一個月」，
-    逐列各自送出 dry run 與 commit，兩者都帶該列的 `yearMonth`。
+- 前端主要入口為 `DriverReportBatchImportView.vue`（上傳接送匯報，`/driver-reports/batch-import`）：
+  - 進入頁面預設帶入當前月份，表格每列為「一輛車 × 一個月」。
+  - 逐列各自送出 dry run 與 commit，兩者都帶該列的 `yearMonth`。
+  - 共用 `DriverReportColumnMappingTable.vue` 進行欄位對應。
 - `GET /api/v1/driver-reports/imported-months` 供批次頁判斷某台車某個月是否為重傳；月份由
   `form_submissions.service_date` 分組推得，不落地成欄位。
 

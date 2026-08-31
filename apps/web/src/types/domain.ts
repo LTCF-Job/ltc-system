@@ -324,7 +324,7 @@ export const SYSTEM_MODULES: SystemModuleInfo[] = [
   { id: 'masters_vehicles', name: '車輛管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_drivers', name: '司機管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_caregivers', name: '照護人員管理', category: 'masters', categoryName: '主檔資料' },
-  { id: 'driver_reports', name: '匯報表管理', category: 'operations', categoryName: '司機接送匯報與搭乘' },
+  { id: 'driver_reports', name: '上傳接送匯報', category: 'operations', categoryName: '司機接送匯報與搭乘' },
   { id: 'driver_report_mappings', name: '欄位對應設定', category: 'operations', categoryName: '司機接送匯報與搭乘' },
   { id: 'rides_calendar', name: '搭乘月曆表', category: 'operations', categoryName: '司機接送匯報與搭乘' },
   { id: 'rides_issues', name: '異常集中處理', category: 'operations', categoryName: '司機接送匯報與搭乘' },
