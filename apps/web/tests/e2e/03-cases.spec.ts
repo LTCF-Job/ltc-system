@@ -37,7 +37,7 @@ test.describe('03. 個案主檔與排班設定 (Cases & Schedules)', () => {
     await dialog.getByPlaceholder(/請輸入住家地址/).fill('新竹市東區中央路 100 號')
 
     // 送出
-    await dialog.getByRole('button', { name: '確認新增' }).click()
+    await dialog.getByRole('button', { name: '新增' }).click()
     await expectElMessage(page, /成功/, 'success')
   })
 

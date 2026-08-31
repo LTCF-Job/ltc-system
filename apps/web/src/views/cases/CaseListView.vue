@@ -16,7 +16,7 @@
           v-model="filters.q"
           placeholder="搜尋姓名／編號／身分證／電話／地址"
           clearable
-          style="width: 270px"
+          style="width: 240px"
           @keyup.enter="handleSearch"
         />
 
@@ -56,23 +56,15 @@
 
       <!-- 操作按鈕列 -->
       <template #actions>
-        <el-button v-if="authStore.can('staff')" type="info" plain @click="handleDownloadTemplate">
-          <el-icon><Download /></el-icon>
+        <el-button v-if="authStore.can('staff')" plain @click="handleDownloadTemplate">
           下載匯入範本
         </el-button>
 
-        <el-button
-          v-if="authStore.can('staff')"
-          type="success"
-          plain
-          @click="openImportDialog"
-        >
-          <el-icon><Upload /></el-icon>
+        <el-button v-if="authStore.can('staff')" plain @click="openImportDialog">
           批次匯入個案
         </el-button>
 
         <el-button v-if="authStore.can('staff')" plain @click="openExportDialog">
-          <el-icon><Download /></el-icon>
           匯出個案資料
         </el-button>
 
@@ -91,7 +83,7 @@
         <el-table :data="cases" border stripe style="width: 100%">
           <el-table-column prop="code" label="個案編號" width="95" align="center" />
           <el-table-column prop="name" label="姓名" width="110" />
-          <el-table-column prop="nationalId" label="身分證字號" width="130" align="center">
+          <el-table-column prop="nationalId" label="身分證字號" min-width="150" align="center">
             <template #default="{ row }">
               <span class="font-mono">{{ row.nationalId || '-' }}</span>
             </template>
@@ -179,9 +171,8 @@
             <template #default="{ row }">
               <el-button
                 link
-                type="success"
+                type="primary"
                 size="small"
-                :icon="Edit"
                 @click="$router.push(`/cases/${row.id}?tab=basic`)"
               >
                 編輯
@@ -204,7 +195,8 @@
 
     <!-- 待補建關聯：據點/去程車/回程車比對不到主檔資料的個案，供事後關聯或新增主檔 -->
     <el-tab-pane label="待補建關聯" name="unresolved">
-      <div v-loading="unresolvedLoading" class="unresolved-panel">
+      <DataTablePage :loading="unresolvedLoading">
+        <template #table>
         <el-empty v-if="!unresolvedLoading && unresolvedCases.length === 0" description="目前沒有待補建關聯的個案" />
         <el-table v-else :data="unresolvedCases" border stripe style="width: 100%">
           <el-table-column prop="code" label="個案編號" width="95" align="center" />
@@ -261,12 +253,13 @@
             </template>
           </el-table-column>
         </el-table>
-      </div>
+        </template>
+      </DataTablePage>
     </el-tab-pane>
     </el-tabs>
 
     <!-- 新增據點/車輛快速建立彈窗 -->
-    <el-dialog v-model="quickCreateVisible" :title="quickCreateKind === 'site' ? '新增據點' : '新增車輛'" width="480px">
+    <el-dialog v-model="quickCreateVisible" :title="quickCreateKind === 'site' ? '新增據點' : '新增車輛'" width="min(480px, calc(100vw - 32px))">
       <el-form v-if="quickCreateKind === 'site'" label-width="90px">
         <el-form-item label="據點名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
         <el-form-item label="區域">
@@ -286,8 +279,12 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="quickCreateVisible = false">取消</el-button>
-        <el-button type="primary" :loading="quickCreateSaving" @click="handleQuickCreateAndLink">建立並關聯</el-button>
+        <DialogFooter
+          confirm-text="建立並關聯"
+          :loading="quickCreateSaving"
+          @confirm="handleQuickCreateAndLink"
+          @cancel="quickCreateVisible = false"
+        />
       </template>
     </el-dialog>
 
@@ -335,8 +332,8 @@
     </ImportPreviewDialog>
 
     <!-- 新增個案彈窗 -->
-    <el-dialog v-model="createDialogVisible" title="新增個案基本資料" width="600px">
-      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="120px">
+    <el-dialog v-model="createDialogVisible" title="新增個案基本資料" width="min(600px, calc(100vw - 32px))">
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="110px" class="dialog-scroll-form">
         <el-form-item label="個案姓名" prop="name">
           <el-input v-model="createForm.name" placeholder="請輸入姓名（含罕用字）" />
         </el-form-item>
@@ -380,13 +377,12 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleCreateCase">確認新增</el-button>
+        <DialogFooter :loading="saving" @confirm="handleCreateCase" @cancel="createDialogVisible = false" />
       </template>
     </el-dialog>
 
     <!-- 匯出個案資料：勾選欲匯出的個案，欄位維持固定申報格式 -->
-    <el-dialog v-model="exportDialogVisible" title="匯出個案資料" width="720px">
+    <el-dialog v-model="exportDialogVisible" title="匯出個案資料" width="min(820px, calc(100vw - 32px))">
       <div class="export-toolbar">
         <el-input
           v-model="exportSearchKeyword"
@@ -422,15 +418,13 @@
         <el-table-column prop="homeAddress" label="住家地址" min-width="180" show-overflow-tooltip />
       </el-table>
       <template #footer>
-        <el-button @click="exportDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
+        <DialogFooter
+          :confirm-text="`確認匯出（${exportSelectedRows.length} 筆）`"
           :loading="exporting"
-          :disabled="exportSelectedRows.length === 0"
-          @click="handleConfirmExport"
-        >
-          確認匯出（{{ exportSelectedRows.length }} 筆）
-        </el-button>
+          :confirm-disabled="exportSelectedRows.length === 0"
+          @confirm="handleConfirmExport"
+          @cancel="exportDialogVisible = false"
+        />
       </template>
     </el-dialog>
   </div>
@@ -438,11 +432,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
-import { Plus, Upload, Download, ArrowDown, Edit } from '@element-plus/icons-vue'
+import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type TableInstance } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import {
   listCases,
   createCase,
@@ -545,7 +540,7 @@ async function handleDeleteCase(row: CaseDTO) {
       `確定要刪除個案「${row.name} (${row.code})」？此操作將一併移除其關聯排班資料，且無法復原。`,
       '刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning',
         confirmButtonClass: 'el-button--danger'
@@ -825,10 +820,6 @@ executeFetch()
 
 .case-tabs {
   border-radius: 8px;
-}
-
-.unresolved-panel {
-  min-height: 120px;
 }
 
 .unresolved-slot {

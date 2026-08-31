@@ -36,18 +36,13 @@
               <span class="font-mono font-bold">{{ caseData?.nationalId }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="目前狀態">
-              <el-tag
-                v-if="caseData"
-                :type="caseData.status === 'active' ? 'success' : (caseData.status === 'suspended' ? 'warning' : 'danger')"
-              >
-                {{ CASE_STATUS_LABELS[caseData.status] || caseData.status }}
-              </el-tag>
+              <StatusTag v-if="caseData" :status="caseData.status" preset="caseStatus" />
             </el-descriptions-item>
             <el-descriptions-item label="建立時間">{{ formatDateTime(caseData?.createdAt) }}</el-descriptions-item>
             <el-descriptions-item label="最後更新" :span="2">{{ formatDateTime(caseData?.updatedAt) }}</el-descriptions-item>
           </el-descriptions>
 
-          <el-row :gutter="20">
+          <el-row :gutter="16">
             <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="個案姓名" prop="name">
                 <el-input v-model="editForm.name" />
@@ -76,7 +71,7 @@
             </el-col>
           </el-row>
 
-          <el-row :gutter="20">
+          <el-row :gutter="16">
             <el-col :span="24">
               <el-form-item label="住家地址" prop="homeAddress">
                 <el-input v-model="editForm.homeAddress" />
@@ -84,7 +79,7 @@
             </el-col>
           </el-row>
 
-          <el-row :gutter="20">
+          <el-row :gutter="16">
             <el-col :xs="24" :lg="12">
               <el-form-item label="服務類別" prop="serviceCategory">
                 <el-radio-group v-model="editForm.serviceCategory">
@@ -105,7 +100,7 @@
             </el-col>
           </el-row>
 
-          <el-row :gutter="20">
+          <el-row :gutter="16">
             <el-col :xs="24" :lg="12">
               <el-form-item label="結束申報日">
                 <el-date-picker
@@ -121,7 +116,7 @@
 
           <el-divider content-position="left">個案背景與聯絡人</el-divider>
 
-          <el-row :gutter="20">
+          <el-row :gutter="16">
             <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="家戶類型" prop="householdType">
                 <el-input v-model="editForm.householdType" placeholder="如：獨居、與子女同住" />
@@ -147,7 +142,7 @@
             </el-col>
           </el-row>
 
-          <el-row :gutter="20">
+          <el-row :gutter="16">
             <el-col :xs="24" :sm="12" :lg="8">
               <el-form-item label="照顧者聯絡人角色" prop="careContactRole">
                 <el-input v-model="editForm.careContactRole" placeholder="如：個管、照專" />
@@ -165,7 +160,7 @@
             </el-col>
           </el-row>
 
-          <el-row :gutter="20">
+          <el-row :gutter="16">
             <el-col :span="24">
               <el-form-item label="備註" prop="remarks">
                 <el-input v-model="editForm.remarks" type="textarea" :rows="2" placeholder="選填" />
@@ -183,7 +178,7 @@
         <el-divider content-position="left">交通偏好</el-divider>
 
         <el-form label-width="140px" :disabled="!authStore.can('staff')">
-          <el-row :gutter="20">
+          <el-row :gutter="16">
             <el-col :xs="24" :sm="12" :lg="8">
               <el-form-item label="所屬據點">
                 <el-select v-model="transportForm.siteId" filterable style="width: 100%">
@@ -251,11 +246,12 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import ScheduleEditor from './ScheduleEditor.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import { getCase, updateCase, deleteCase, getCaseSchedule, updateCaseTransportPreference } from '@/api/cases'
 import { listSites, listVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
-import { CASE_STATUS_LABELS, REGION_LABELS } from '@/types/domain'
+import { REGION_LABELS } from '@/types/domain'
 import type { CaseDTO, UpdateCaseRequest, UpdateCaseTransportPreferenceRequest, SiteDTO, VehicleDTO } from '@/types/api'
 
 const route = useRoute()
@@ -386,7 +382,7 @@ async function handleDeleteCase() {
       `確定要刪除個案「${caseData.value?.name} (${caseData.value?.code})」？此操作將一併移除其關聯排班資料，且無法復原。`,
       '刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning',
         confirmButtonClass: 'el-button--danger'

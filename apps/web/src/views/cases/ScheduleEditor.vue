@@ -4,7 +4,7 @@
       ref="formRef"
       :model="formData"
       :rules="rules"
-      label-width="130px"
+      label-width="140px"
       :disabled="!authStore.can('staff')"
     >
       <!-- 排班優先順序引導說明 -->
@@ -37,7 +37,7 @@
           </div>
         </template>
 
-        <el-row :gutter="20">
+        <el-row :gutter="16">
           <el-col :xs="24" :lg="12">
             <el-form-item label="所屬據點" prop="siteId">
               <el-select
@@ -129,7 +129,7 @@
               </div>
             </div>
 
-            <div class="table-scroll-container">
+            <div class="table-clip-container">
               <el-table
                 :data="monthDaysList"
                 border
@@ -366,7 +366,7 @@
 
         <!-- 模式 3：固定統一排班 (常態基準) -->
         <template v-else>
-          <el-row :gutter="20">
+          <el-row :gutter="16">
             <el-col :xs="24" :lg="12">
               <el-form-item label="趟數型態" prop="tripPattern">
                 <el-radio-group v-model="formData.tripPattern" @change="(val: any) => handlePatternChange(val)">
@@ -394,7 +394,7 @@
         </template>
 
         <!-- 費用與時長欄位 (共用) -->
-        <el-row :gutter="20" style="margin-top: 16px;">
+        <el-row :gutter="16" style="margin-top: 16px;">
           <el-col :xs="24" :sm="8">
             <el-form-item label="申報單價 (元)" prop="unitPrice">
               <el-input-number
@@ -1105,29 +1105,29 @@ async function handleSave() {
       }
 
       &.highlight {
-        color: #166534;
-        border-color: #bbf7d0;
-        background: #f0fdf4;
+        color: var(--app-status-success-fg);
+        border-color: var(--app-status-success-bg);
+        background: var(--app-status-success-bg);
         strong {
-          color: #15803d;
+          color: var(--app-status-success-fg);
         }
       }
 
       &.custom {
-        color: #1e40af;
-        border-color: #bfdbfe;
-        background: #eff6ff;
+        color: var(--app-status-info-fg);
+        border-color: var(--app-status-info-bg);
+        background: var(--app-status-info-bg);
         strong {
-          color: #1d4ed8;
+          color: var(--app-status-info-fg);
         }
       }
 
       &.holiday {
-        color: #b91c1c;
-        border-color: #fecaca;
-        background: #fef2f2;
+        color: var(--app-status-danger-fg);
+        border-color: var(--app-status-danger-bg);
+        background: var(--app-status-danger-bg);
         strong {
-          color: #991b1b;
+          color: var(--app-status-danger-fg);
         }
       }
     }
@@ -1210,7 +1210,7 @@ async function handleSave() {
   }
 }
 
-.table-scroll-container {
+.table-clip-container {
   border-radius: 6px;
   overflow: hidden;
 }
@@ -1283,8 +1283,8 @@ async function handleSave() {
   }
 
   &.weekly {
-    color: #16a34a !important;
-    border-color: #86efac !important;
+    color: var(--app-status-success-fg) !important;
+    border-color: var(--app-status-success-fg) !important;
   }
 
   &.fixed {
