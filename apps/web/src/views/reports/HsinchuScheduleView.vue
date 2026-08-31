@@ -13,7 +13,7 @@
             v-model="searchQuery"
             placeholder="搜尋個案姓名／代碼／地址"
             clearable
-            style="width: 220px"
+            style="width: 240px"
             @keyup.enter="fetchSchedule"
           />
 
@@ -47,20 +47,18 @@
             />
           </el-select>
 
-          <el-button type="primary" icon="Search" @click="fetchSchedule">
+          <el-button type="primary" @click="fetchSchedule">
             查詢
           </el-button>
           <el-button @click="handleReset">
             重設
           </el-button>
 
-          <el-button type="success" @click="handleExportExcel" :loading="exporting">
-            <el-icon><Download /></el-icon>
+          <el-button plain @click="handleExportExcel" :loading="exporting">
             匯出 Excel
           </el-button>
 
-          <el-button type="info" @click="handlePrint">
-            <el-icon><Printer /></el-icon>
+          <el-button plain @click="handlePrint">
             列印 (A4 橫式)
           </el-button>
         </div>
@@ -113,13 +111,13 @@
             <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="origin" label="出發地 (住家)" min-width="180" />
+        <el-table-column prop="origin" label="出發地 (住家)" min-width="180" show-overflow-tooltip />
         <el-table-column prop="arriveTime" label="抵達時間" width="95" align="center">
           <template #default="{ row }">
             {{ row.arriveTime || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="destination" label="目的地 (據點)" min-width="180" />
+        <el-table-column prop="destination" label="目的地 (據點)" min-width="180" show-overflow-tooltip />
         <el-table-column prop="vehicleName" label="承接車輛" width="110" align="center" />
       </el-table>
       <el-empty
@@ -165,13 +163,13 @@
             <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="origin" label="出發地 (據點)" min-width="180" />
+        <el-table-column prop="origin" label="出發地 (據點)" min-width="180" show-overflow-tooltip />
         <el-table-column prop="arriveTime" label="抵達時間" width="95" align="center">
           <template #default="{ row }">
             {{ row.arriveTime || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="destination" label="目的地 (住家)" min-width="180" />
+        <el-table-column prop="destination" label="目的地 (住家)" min-width="180" show-overflow-tooltip />
         <el-table-column prop="vehicleName" label="承接車輛" width="110" align="center" />
       </el-table>
       <el-empty
@@ -186,8 +184,6 @@
 import { ref, onMounted } from 'vue'
 import {
   Refresh,
-  Download,
-  Printer,
   Right,
   Back
 } from '@element-plus/icons-vue'
@@ -326,7 +322,7 @@ onMounted(async () => {
   }
 
   &.bg-inbound {
-    border-left: 3px solid var(--el-color-warning);
+    border-left: 3px solid var(--app-status-info-fg);
   }
 }
 

@@ -1,5 +1,6 @@
 <template>
   <div class="trip-summary-view">
+    <PageHeader title="車輛趟數表" />
     <!-- 篩選與操作列 -->
     <el-card class="filter-card" shadow="never">
       <el-row :gutter="16" justify="space-between" align="middle">
@@ -18,7 +19,7 @@
               v-model="queryKeyword"
               placeholder="搜尋車輛／車牌／司機"
               clearable
-              style="width: 200px;"
+              style="width: 240px;"
               @keyup.enter="fetchReport"
             />
 
@@ -53,7 +54,7 @@
               />
             </el-select>
 
-            <el-button type="primary" icon="Search" @click="fetchReport">
+            <el-button type="primary" @click="fetchReport">
               查詢報表
             </el-button>
             <el-button @click="handleReset">
@@ -63,8 +64,7 @@
         </el-col>
         <el-col :xs="24" :lg="6" class="actions-col">
           <el-button
-            type="success"
-            icon="Download"
+            plain
             :loading="exporting"
             @click="handleExportExcel"
           >
@@ -108,7 +108,6 @@
           <template #header>
             <div class="veh-header">
               <div class="veh-title">
-                <el-icon><Van /></el-icon>
                 <span class="veh-name">{{ veh.vehicleName }}</span>
                 <span class="veh-plate">({{ veh.plateNo }})</span>
                 <span v-if="veh.driverName" class="veh-driver">主要司機：{{ veh.driverName }}</span>
@@ -132,7 +131,7 @@
                 <span class="count-cell">{{ row.inboundCount }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="totalCount" label="個人趟數合計" align="right">
+            <el-table-column prop="totalCount" label="個人趟數合計" align="right" min-width="150">
               <template #default="{ row }">
                 <b class="count-cell">{{ row.totalCount }}</b>
               </template>
@@ -148,7 +147,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Van, Download, Search } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
 import { ElMessage } from 'element-plus'
 import { getTripSummaryReport, exportTripSummaryExcel } from '@/api/reports'
 import { listVehicles } from '@/api/masters'

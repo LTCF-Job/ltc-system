@@ -1,5 +1,6 @@
 <template>
   <div class="export-view">
+    <PageHeader title="政府申報匯出" />
     <!-- 匯出條件設定卡片 -->
     <el-card shadow="never" class="export-settings-card">
       <template #header>
@@ -12,7 +13,7 @@
         label-width="140px"
         :disabled="!authStore.can('staff')"
       >
-        <el-row :gutter="20">
+        <el-row :gutter="16">
           <el-col :xs="24" :sm="12">
             <el-form-item label="申報年月 (民國)">
               <div class="roc-month-picker">
@@ -51,7 +52,7 @@
           </el-col>
         </el-row>
 
-        <el-row :gutter="20" align="middle" class="export-mode-row">
+        <el-row :gutter="16" align="middle" class="export-mode-row">
           <el-col :xs="24" :sm="12">
             <el-form-item label="匯出檔案模式" class="mode-form-item">
               <el-radio-group v-model="form.mode">
@@ -64,12 +65,10 @@
           <el-col :xs="24" :sm="12">
             <div v-if="authStore.can('staff')" class="action-buttons">
               <el-button
-                type="info"
                 plain
                 :loading="checking"
                 @click="handleRunPrecheck"
               >
-                <el-icon><Warning /></el-icon>
                 執行前置檢核
               </el-button>
 
@@ -189,6 +188,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import PageHeader from '@/components/PageHeader.vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'

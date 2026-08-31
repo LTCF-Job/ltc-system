@@ -34,9 +34,6 @@
         <el-card shadow="hover" class="metric-card">
           <div class="metric-header">
             <span class="metric-label">在案個案總數</span>
-            <div class="metric-icon-box bg-neutral-subtle">
-              <el-icon><User /></el-icon>
-            </div>
           </div>
           <div class="metric-body">
             <div class="metric-val-group">
@@ -51,9 +48,6 @@
         <el-card shadow="hover" class="metric-card">
           <div class="metric-header">
             <span class="metric-label">本月已回報趟數</span>
-            <div class="metric-icon-box bg-neutral-subtle">
-              <el-icon><Van /></el-icon>
-            </div>
           </div>
           <div class="metric-body">
             <div class="metric-val-group">
@@ -68,9 +62,6 @@
         <el-card shadow="hover" class="metric-card">
           <div class="metric-header">
             <span class="metric-label">司機平均請假率</span>
-            <div class="metric-icon-box bg-neutral-subtle">
-              <el-icon><Calendar /></el-icon>
-            </div>
           </div>
           <div class="metric-body">
             <div class="metric-val-group">
@@ -87,9 +78,6 @@
         <el-card shadow="hover" class="metric-card" :class="{ 'is-urgent': (metrics?.pendingConflictsCount || 0) > 0 }">
           <div class="metric-header">
             <span class="metric-label">待處理混車衝突</span>
-            <div class="metric-icon-box" :class="(metrics?.pendingConflictsCount || 0) > 0 ? 'bg-danger-subtle' : 'bg-neutral-subtle'">
-              <el-icon><Warning /></el-icon>
-            </div>
           </div>
           <div class="metric-body">
             <div class="metric-val-group">
@@ -106,9 +94,6 @@
         <el-card shadow="hover" class="metric-card">
           <div class="metric-header">
             <span class="metric-label">待對應表單欄位</span>
-            <div class="metric-icon-box bg-neutral-subtle">
-              <el-icon><Connection /></el-icon>
-            </div>
           </div>
           <div class="metric-body">
             <div class="metric-val-group">
@@ -131,7 +116,6 @@
             <template #header>
               <div class="chart-header">
                 <div class="header-title-group">
-                  <span class="header-icon-dot"></span>
                   <span class="chart-title">各車當月接送趟數分佈</span>
                 </div>
                 <el-tag size="small" type="primary" effect="light">{{ metrics?.currentMonth }}</el-tag>
@@ -154,7 +138,6 @@
             <template #header>
               <div class="chart-header">
                 <div class="header-title-group">
-                  <span class="header-icon-dot"></span>
                   <span class="chart-title">車隊出勤與請假狀態</span>
                 </div>
               </div>
@@ -176,69 +159,56 @@
         <el-card shadow="never" class="quick-links-card">
           <template #header>
             <div class="header-title-group">
-              <span class="header-icon-dot"></span>
               <span class="section-title">常用快捷功能</span>
             </div>
           </template>
 
           <div class="links-grid">
             <el-button
-              type="default"
               plain
               class="quick-btn"
               @click="$router.push('/rides')"
             >
-              <div class="quick-btn-icon bg-neutral-subtle"><el-icon><Grid /></el-icon></div>
               <span>搭乘月曆表</span>
             </el-button>
 
             <el-button
-              type="default"
               plain
               class="quick-btn"
               @click="$router.push('/rides/issues')"
             >
-              <div class="quick-btn-icon bg-neutral-subtle"><el-icon><Warning /></el-icon></div>
               <span>異常集中處理</span>
             </el-button>
 
             <el-button
-              type="default"
               plain
               class="quick-btn"
               @click="$router.push('/exports')"
             >
-              <div class="quick-btn-icon bg-neutral-subtle"><el-icon><Download /></el-icon></div>
               <span>政府申報匯出</span>
             </el-button>
 
             <el-button
-              type="default"
               plain
               class="quick-btn"
               @click="$router.push('/reports/hsinchu-schedule')"
             >
-              <div class="quick-btn-icon bg-neutral-subtle"><el-icon><Document /></el-icon></div>
               <span>新竹接送時刻表</span>
             </el-button>
 
             <el-button
-              type="default"
               plain
               class="quick-btn"
               @click="$router.push('/vehicles/maintenance')"
             >
-              <div class="quick-btn-icon bg-neutral-subtle"><el-icon><Management /></el-icon></div>
               <span>車輛保養管理</span>
             </el-button>
 
             <el-button
-              type="default"
               plain
               class="quick-btn"
               @click="$router.push('/attendance')"
             >
-              <div class="quick-btn-icon bg-neutral-subtle"><el-icon><Calendar /></el-icon></div>
               <span>出勤與油資登錄</span>
             </el-button>
           </div>
@@ -250,7 +220,6 @@
           <template #header>
             <div class="card-header">
               <div class="header-title-group">
-                <span class="header-icon-dot"></span>
                 <span class="section-title">最近申報匯出紀錄</span>
               </div>
               <el-link type="primary" :underline="false" class="view-all-link" @click="$router.push('/exports')">
@@ -319,15 +288,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  User,
-  Van,
-  Calendar,
-  Warning,
-  Connection,
   Grid,
   Download,
-  Document,
-  Management,
   ArrowRight
 } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
@@ -582,14 +544,14 @@ onMounted(() => {
   overflow: hidden;
 
   &:hover {
-    border-color: #f3cbb1;
-    box-shadow: 0 8px 22px rgba(99, 56, 48, 0.08);
+    border-color: var(--app-border-color);
+    box-shadow: var(--app-shadow-md);
     transform: translateY(-2px);
   }
 
   &.is-urgent {
     border-color: #fecaca;
-    background: #fffaf8;
+    background: var(--app-status-danger-bg);
   }
 
   :deep(.el-card__body) {
@@ -610,16 +572,6 @@ onMounted(() => {
       text-transform: uppercase;
     }
 
-    .metric-icon-box {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
-    }
   }
 
   .metric-body {
@@ -640,7 +592,7 @@ onMounted(() => {
         line-height: 1;
 
         &.text-danger {
-          color: #b51f3c;
+          color: var(--app-status-danger-fg);
         }
         &.font-urgent {
           font-weight: 800;
@@ -650,7 +602,6 @@ onMounted(() => {
 
   }
 
-  &:hover .metric-icon-box { transform: scale(1.06) rotate(-3deg); }
 }
 
 .status-badge {
@@ -662,28 +613,14 @@ onMounted(() => {
   align-items: center;
 
   &.badge-critical {
-    background-color: #fef2f2;
-    color: #dc2626;
-  }
-
-  &.badge-moderate {
-    background-color: #fffbeb;
-    color: #d97706;
+    background-color: var(--app-status-danger-bg);
+    color: var(--app-status-danger-fg);
   }
 
   &.badge-routine {
-    background-color: #ecfdf5;
-    color: #059669;
+    background-color: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
   }
-}
-
-.bg-neutral-subtle {
-  background-color: #f1f3f4;
-  color: var(--app-text-secondary);
-}
-.bg-danger-subtle {
-  background-color: #ffebef;
-  color: #b51f3c;
 }
 
 .left-charts-column {
@@ -733,13 +670,6 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
 
-  .header-icon-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-  background-color: #2f6fed;
-  }
-
   .section-title,
   .chart-title {
     font-size: 14.5px;
@@ -780,19 +710,6 @@ onMounted(() => {
       &:hover { transform: translateY(-2px); box-shadow: 0 5px 12px rgba(16, 21, 34, 0.07); }
       &:active { transform: translateY(0) scale(0.98); }
 
-      .quick-btn-icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 15px;
-        flex-shrink: 0;
-        transition: transform 0.18s ease-out;
-      }
-
-      &:hover .quick-btn-icon { transform: scale(1.08); }
   }
 }
 
@@ -809,14 +726,6 @@ onMounted(() => {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
     color: var(--app-text-primary);
-  }
-
-  .region-pill {
-    background-color: #f1f5f9;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    color: #475569;
   }
 
   .trip-count-badge {
@@ -841,7 +750,7 @@ onMounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .metric-card, .metric-icon-box, .alert-feed-item, .quick-btn, .quick-btn-icon { transition: none !important; }
+  .metric-card, .alert-feed-item, .quick-btn { transition: none !important; }
   .metric-card:hover, .alert-feed-item:hover, .quick-btn:hover { transform: none; }
 }
 </style>

@@ -195,7 +195,7 @@ function quickLogin(role: UserRole) {
 .login-card {
   width: min(900px, 100%);
   overflow: hidden;
-  border: 1px solid var(--app-border);
+  border: 1px solid var(--app-border-color);
   border-radius: 20px;
   background: var(--app-surface);
   box-shadow: 0 18px 50px rgba(25, 50, 77, 0.12);
