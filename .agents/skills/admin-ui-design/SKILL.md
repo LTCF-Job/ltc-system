@@ -50,6 +50,9 @@ Design for staff who complete repeated operational tasks with real records. Opti
 
 ## Review checklist
 
+- [ ] Button `type`/`size`/icon usage matches `ltc-dashboard-visual-language`'s [component-contract.md](../ltc-dashboard-visual-language/references/component-contract.md) — no new `type="success"` on an edit action, no icon on a text button except the primary "add" action.
+- [ ] Text-bearing table columns (name, address, note, email, description) use `min-width` + `show-overflow-tooltip` instead of a fixed `width`.
+- [ ] No new hardcoded hex color was introduced for a status/tag/badge; it resolves to an `--app-status-*` token or an existing `statusPresets.ts` entry.
 - [ ] The page purpose, user role, scope, and primary action are clear on entry.
 - [ ] Navigation and permissions match the available routes and operations.
 - [ ] Search, filters, sorting, pagination, selection, and bulk actions explain their scope and result.

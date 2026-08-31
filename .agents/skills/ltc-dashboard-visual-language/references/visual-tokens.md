@@ -1,93 +1,105 @@
 # LTC Dashboard Visual Tokens
 
-Use the project's existing token system when equivalent tokens exist. These values are the reference direction for new visual work.
+Use the project's existing token system when equivalent tokens exist. These are the actual variable names defined in `apps/web/src/styles/tokens.scss` and `apps/web/src/styles/element-overrides.scss` — not a separate naming scheme. For the full component-level rules (buttons, tables, dialogs, status colors), see [component-contract.md](component-contract.md).
 
 ## Colors
 
 ```css
---page-background: #f4f7fa;
---surface: #ffffff;
---surface-muted: #f7f9fa;
---border-subtle: #e9edf0;
---text-primary: #101522;
---text-secondary: #586174;
---text-muted: #8b94a5;
---accent-blue: #2f6fed;
---accent-blue-dark: #1f55c7;
---status-critical: #ed294b;
---status-warning: #e18a00;
---status-info: #399bd3;
---status-success: #16c889;
---accent-purple: #7430c7;
---accent-cyan: #12b8c9;
+--app-bg: #f4f7fa;
+--app-surface: #ffffff;
+--app-card-bg: #f7f9fa;
+--app-border-color: #e9edf0;
+--app-border-light: #f0f2f4;
+--app-text-primary: #101522;
+--app-text-regular: #303949;
+--app-text-secondary: #586174;
+--app-text-muted: #8b94a5;
+
+--app-primary: #2f6fed;
+--app-primary-dark: #1f55c7;
+--app-primary-light: #eaf2ff;
+
+--app-status-success-bg: #e8faf3;
+--app-status-success-fg: #087d58;
+--app-status-warning-bg: #fff4dc;
+--app-status-warning-fg: #996000;
+--app-status-danger-bg: #ffebef;
+--app-status-danger-fg: #b51f3c;
+--app-status-info-bg: #eaf5fb;
+--app-status-info-fg: #236f9a;
+--app-status-neutral-bg: #f1f3f4;
+--app-status-neutral-fg: #586174;
+
+--app-role-admin-fg / -dot
+--app-role-dispatcher-fg / -dot
+--app-role-staff-fg / -dot
+--app-role-driver-fg / -dot
+--app-role-viewer-fg / -dot
 ```
 
-Use saturated colors for semantic emphasis, not large background areas.
+Use `--app-status-*-bg` for tag/badge backgrounds and `--app-status-*-fg` for their text/dot color. Do not hardcode a new green/red/amber — every status color in the product must resolve to one of these five pairs.
 
 ## Shape and depth
 
-- Application shell: `18px` to `24px` radius
-- Cards: `12px` to `16px` radius
-- Buttons and inputs: `8px` to `10px` radius
-- Prefer subtle borders before shadows.
-- Keep shadows soft, diffuse, and low contrast.
-- Avoid thick borders, strong drop shadows, and decorative glassmorphism.
+```css
+--app-radius-xs: 6px;
+--app-radius-sm: 9px;
+--app-radius-md: 14px;
+--app-radius-lg: 20px;
+--app-radius-full: 9999px;
+--app-shadow-sm: 0 1px 2px rgba(16, 21, 34, 0.04);
+--app-shadow-md: 0 8px 24px rgba(16, 21, 34, 0.07);
+```
+
+- Application shell: `--app-radius-lg`
+- Cards: `--app-radius-md`
+- Buttons and inputs: `--app-radius-sm`
+- Small pills/dots: `--app-radius-xs` or `--app-radius-full`
+- Prefer subtle borders before shadows. Keep shadows soft and low contrast.
 
 ## Spacing and sizing
 
-Use a 4px or 8px spacing scale.
+```css
+--app-space-1: 4px;
+--app-space-2: 8px;
+--app-space-3: 12px;
+--app-space-4: 16px;
+--app-space-6: 24px;
+--app-space-8: 32px;
 
-- Page padding: `20px` to `24px`
-- Card gap: `12px` to `16px`
-- Section gap: `20px` to `28px`
-- Sidebar width: `160px` to `190px`
-- Header height: `48px` to `56px`
-- Card padding: `14px` to `18px`
+--app-header-height: 56px;
+--app-aside-width: 220px;
+--app-aside-width-collapsed: 68px;
+```
+
+- Page padding: `--app-space-4` to `--app-space-6`
+- Card gap: `--app-space-3` to `--app-space-4`
+- Section gap: `--app-space-6`
+- Card padding: `--app-space-4`
+
+Do not write a new spacing magic number. If none of these fit, that is a signal to reconsider the layout, not to add a one-off value.
 
 ## Typography
 
-- Page title: `20px` to `24px`, weight `600`
-- Section title: `13px` to `15px`, weight `600`
-- KPI number: `26px` to `32px`, weight `500` to `600`
-- Body text: `12px` to `14px`
-- Metadata and labels: `10px` to `12px`
-- Navigation labels: `11px` to `13px`
-
-Use plain, concise text for labels. Use uppercase only when it materially improves scanning for compact metadata or KPI headings; avoid decorative label treatments and repeated captions.
-
-## Motion tokens
-
 ```css
---motion-fast: 120ms;
---motion-standard: 180ms;
---motion-panel: 260ms;
---motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
---motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
---motion-dock-max-scale: 1.16;
---motion-dock-adjacent-scale: 1.06;
+--app-font-xs: 12px;
+--app-font-sm: 13px;
+--app-font-md: 14px;
+--app-font-lg: 16px;
+--app-font-xl: 20px;
+--app-font-2xl: 24px;
 ```
 
-Use `transform`, `opacity`, `background-color`, `border-color`, and `box-shadow` for most interactions. Avoid animating layout-heavy properties such as `width`, `height`, `top`, and `left` when a transform can provide the same feedback.
+- Page title: `--app-font-xl`, weight `600`
+- Section title: `--app-font-sm` to `--app-font-lg`, weight `600`
+- Body text: `--app-font-sm` to `--app-font-md`
+- Metadata and labels: `--app-font-xs`
+- Navigation labels: `--app-font-sm`
 
-Recommended effects:
+Use plain, concise text for labels. Use uppercase only when it materially improves scanning for compact metadata; avoid decorative label treatments and repeated captions.
 
-| Component | Trigger | Effect | Duration |
-| --- | --- | --- | --- |
-| Primary button | hover | Slight color lift and soft shadow | 120–180ms |
-| Primary button | active | Subtle press scale, no bounce | 120ms |
-| Card | hover | Small upward translation and border emphasis | 180ms |
-| Drawer or Sidebar | open/close | Opacity plus horizontal translation | 220–260ms |
-| Progress bar | value change | Smooth fill transition | 180–260ms |
-| New critical alert | inserted | One brief highlight or pulse | 220–300ms |
+## Motion
 
-## Dock-inspired action group
+No dedicated motion token variables exist in the codebase yet. Keep transitions short (120ms–220ms for buttons/cards, up to 300ms for panels/drawers) and consistent with the existing `.el-button`, `.el-card.is-hover-shadow`, and `.calendar-cell` transitions already defined in `element-overrides.scss`. Respect `prefers-reduced-motion: reduce`.
 
-Use this pattern only for a compact set of related utility actions. Calculate each item's influence from pointer distance or focus proximity, then interpolate between the base scale, adjacent scale, and maximum scale. Keep the group in a fixed or flex-stable container so the visual size change does not reflow the page.
-
-在 Vue 專案中，沿用現有 Vue 技術實作互動；參考元件只借鑑效果，不引入另一套技術。
-
-Provide a non-pointer equivalent: focused items may receive the maximum scale, while neighboring items remain at the adjacent scale. Disable magnification and keep state changes immediate when `prefers-reduced-motion` is enabled.
-
-Use the existing framework's implementation for this interaction. A reference component's framework or dependency is not a reason to introduce another technology stack.
-
-For reduced-motion users, keep state changes immediate or use a short opacity transition only. Never rely on animation alone to communicate urgency or completion.
+Do not introduce a dock-style magnification effect — the codebase does not use one, and adding it would be a new pattern outside this system.

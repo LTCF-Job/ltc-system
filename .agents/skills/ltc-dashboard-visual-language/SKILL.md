@@ -16,6 +16,8 @@ Apply a calm, precise, high-trust operations interface style. Optimize for fast 
 
 For detailed values and component rules, read [visual-tokens.md](references/visual-tokens.md) when implementing or reviewing the visual layer.
 
+Before editing any `.vue` file under `apps/web`, read [component-contract.md](references/component-contract.md) — it has the concrete, copy-as-is tables for buttons, status colors, table columns, dialogs, and confirmation text. If a value or component you need is not in that table, that is the trigger to discuss adding it there before writing a new one-off style in a page.
+
 ## Technology boundaries
 
 沿用專案現有技術棧；例如使用 Vue 時就使用 Vue 實作，不引入 React 或另一套平行技術。
