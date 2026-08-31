@@ -2,6 +2,7 @@
   <div class="user-management-view">
     <DataTablePage
       title="使用者管理"
+      :max-width="1150"
       :loading="loading"
       :total="total"
       :page="page"

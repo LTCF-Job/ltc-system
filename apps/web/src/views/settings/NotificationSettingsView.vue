@@ -1,6 +1,6 @@
 <template>
   <div class="notification-settings-view">
-    <DataTablePage title="通知收件人管理" :loading="loading">
+    <DataTablePage title="通知收件人管理" :max-width="1110" :loading="loading">
       <template #filter>
         <el-input
           v-model="searchQuery"

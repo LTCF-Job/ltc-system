@@ -2,6 +2,7 @@
   <div class="vehicle-list-view">
     <DataTablePage
       title="車輛管理"
+      :max-width="1250"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -86,7 +87,7 @@
                 @keyup.enter="saveInlineEdit(row as any)"
                 @keyup.esc="cancelInlineEdit"
               />
-              <span v-else class="font-mono">{{ row.plateNo }}</span>
+              <span v-else class="font-mono text-id">{{ row.plateNo }}</span>
             </template>
           </el-table-column>
 
@@ -171,7 +172,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center">
+          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center" show-overflow-tooltip>
             <template #default="{ row }">
               <span>{{ formatDateTime(row.createdAt) }}</span>
             </template>

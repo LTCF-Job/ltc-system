@@ -476,7 +476,8 @@ onMounted(() => {
 /* 日期欄用 el-table 預設 padding 會裝不下 31 欄，改用最小 padding 讓表格寬度貼齊容器、不橫向捲動 */
 .calendar-table :deep(.day-col.el-table__cell),
 .calendar-table :deep(th.day-col) {
-  padding: 6px 2px;
+  padding: 6px 1px;
+  font-size: clamp(11px, 1vw, 13px);
 }
 
 .calendar-table :deep(.day-col .cell) {
@@ -490,14 +491,14 @@ onMounted(() => {
 }
 
 .calendar-cell {
-  width: 28px;
-  height: 28px;
+  width: clamp(18px, 2.1vw, 28px);
+  height: clamp(18px, 2.1vw, 28px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: clamp(11px, 1.1vw, 13px);
   margin: 0 auto;
   transition: all 0.2s;
 

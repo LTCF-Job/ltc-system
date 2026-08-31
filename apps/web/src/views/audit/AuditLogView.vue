@@ -2,6 +2,7 @@
   <div class="audit-log-view">
     <DataTablePage
       title="系統操作紀錄"
+      :max-width="1090"
       :loading="loading"
       :total="total"
       :page="page"

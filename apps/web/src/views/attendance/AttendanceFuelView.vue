@@ -183,6 +183,7 @@
       <!-- 分頁 2: 車輛油資登錄 -->
       <el-tab-pane label="車輛油資登錄" name="fuel">
         <DataTablePage
+          :max-width="1080"
           :loading="fuelLoading"
           v-model:page="fuelPage"
           v-model:pageSize="fuelPageSize"

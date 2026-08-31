@@ -3,6 +3,7 @@
     <DataTablePage
       title="司機接送匯報"
       :description="`共 ${forms.length} 台車`"
+      :max-width="1190"
       :loading="loading"
     >
       <template #filter>
@@ -29,7 +30,7 @@
       </template>
 
       <template #table>
-      <el-table :data="forms" border stripe>
+      <el-table :data="forms" border stripe style="width: 100%">
         <el-table-column prop="title" label="匯報表名稱" min-width="200" show-overflow-tooltip />
 
         <el-table-column label="所屬車輛／地區" width="180">

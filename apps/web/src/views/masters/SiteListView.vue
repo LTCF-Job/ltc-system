@@ -2,6 +2,7 @@
   <div class="site-list-view">
     <DataTablePage
       title="據點管理"
+      :max-width="940"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -62,7 +63,7 @@
             </template>
           </el-table-column>
           <el-table-column prop="address" label="據點地址" min-width="180" show-overflow-tooltip />
-          <el-table-column label="開放時間" width="220" class-name="open-days-column">
+          <el-table-column label="開放時間" width="260" class-name="open-days-column">
             <template #default="{ row }">
               {{ row.openDays?.map((d: number) => `週${'一二三四五六日'[d-1]}`).join('、') || '未設定' }}
             </template>

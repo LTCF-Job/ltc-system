@@ -13,8 +13,10 @@ Token 定義在 `apps/web/src/styles/tokens.scss`；共用元件在 `apps/web/sr
 | 破壞性批次動作 | `type="danger" plain` |
 | 篩選列查詢 | `type="primary"`，無 icon |
 | 篩選列重設 | 不帶 type，無 icon |
-| 表格列一般操作 | `link type="primary" size="small"`，無 icon |
-| 表格列破壞性操作 | `link type="danger" size="small"`，無 icon |
+| 表格列查看／導航類操作（如「查看排班」「前往回報」） | `link type="info" size="small"`，無 icon |
+| 表格列編輯／設定／指派／新增子項類操作（如「編輯」「指派車輛」「設定權限」「新增據點」） | `link type="primary" size="small"`，無 icon |
+| 表格列破壞性操作（如「刪除」） | `link type="danger" size="small"`，無 icon |
+| 表格列可逆狀態轉換操作（如「停用」，非破壞性但會改變資料狀態） | `link type="warning" size="small"`，無 icon |
 | 對話框取消 | 不帶 type |
 | 對話框確認 | `type="primary"` |
 | 對話框破壞性確認 | `type="danger"` |
@@ -23,7 +25,7 @@ Token 定義在 `apps/web/src/styles/tokens.scss`；共用元件在 `apps/web/sr
 
 - 「編輯」不用 `type="success"`。綠色只留給真正的成功狀態。
 - 屬性順序：`link → type → size → :icon`。
-- 表格列操作按鈕（`link` + `size="small"`）的按鈕感視覺（淡底色 + 細邊框）由 `element-overrides.scss` 的 `.table-row-actions .el-button.is-link` 統一提供，只要包在 `<TableRowActions>` 裡就會生效，不要在頁面裡另外寫背景色。
+- 表格列操作按鈕（`link` + `size="small"`）的按鈕感視覺（淡底色 + 實色邊框，靜態即可見、非僅 hover 才出現 + hover 陰影／位移加強）由 `element-overrides.scss` 的 `.table-row-actions .el-button.is-link` 統一提供，只要包在 `<TableRowActions>` 裡就會生效，不要在頁面裡另外寫背景色。這組樣式的 `padding`／`border-width` 刻意維持原尺寸不變（只加深邊框飽和度與 hover 陰影），因為操作欄寬度是依按鈕數固定的（見下方表格欄位規則），放大按鈕本身會讓既有頁面的操作欄溢出裁切。
 - icon 一律用綁定寫法 `:icon="Edit"` + 具名 import，不用字串 prop、不靠全域註冊。
 - `size` 只有兩種：表格列與 chip 用 `small`，其餘不寫。`large` 只留登入頁主按鈕。
 - **帶文字的按鈕不放 icon**，唯一例外是頁面主要「新增」按鈕的 `Plus`。
@@ -38,7 +40,7 @@ Token 定義在 `apps/web/src/styles/tokens.scss`；共用元件在 `apps/web/sr
 - `variant="tag"`（預設）：`el-tag`，用於表格狀態欄與計數。
 - `variant="dot"`：圓點 + 文字，用於可點擊切換的行內狀態。
 - 顏色一律來自 `src/lib/statusPresets.ts` 的 preset map。新增狀態值前先確認語意屬於哪個既有 preset，找不到情境才新增一組；不要在頁面裡寫三元式或硬寫色碼。
-- 已知的 preset：`caseStatus`、`activeState`、`employmentState`、`batchImportStatus`、`fieldMappingStatus`、`completionStatus`、`direction`、`role`。
+- 已知的 preset：`caseStatus`、`activeState`、`employmentState`、`batchImportStatus`、`fieldMappingStatus`、`completionStatus`、`role`。去程／回程等非狀態語意的方向欄用純文字，不套 `StatusTag`。
 - 不使用 `effect="plain"` 的 `el-tag`（不吃全域色覆寫，會跟實心色系不一致）。
 
 ## 語意色 token（`tokens.scss`）
@@ -75,7 +77,7 @@ Token 定義在 `apps/web/src/styles/tokens.scss`；共用元件在 `apps/web/sr
 | `TableRowActions.vue` | 包住表格列的多顆操作按鈕，統一間距 |
 | `DialogFooter.vue` | 對話框底部按鈕，props `confirmText`／`cancelText`／`confirmType`／`loading`，emits `confirm`／`cancel` |
 | `StatusTag.vue` | 見上一節 |
-| `DataTablePage.vue` | 列表頁版面骨架。新增了 `title`／`description` props 與 `#header` slot（內部渲染 `PageHeader`），`pageSizes` 可覆寫（預設 `[10,20,50,100]`）。`.filter-card` / `.table-card` class 名稱不可改，e2e 測試依賴它們 |
+| `DataTablePage.vue` | 列表頁版面骨架。新增了 `title`／`description` props 與 `#header` slot（內部渲染 `PageHeader`），`pageSizes` 可覆寫（預設 `[10,20,50,100]`）。`.filter-card` / `.table-card` class 名稱不可改，e2e 測試依賴它們。欄位少、內容短的列表頁可傳 `max-width`（純數字 px＝頁面實際欄寬總和含操作欄 + 約 30-60px 緩衝）讓版面不硬撐滿；`el-table` 本身仍維持 `style="width: 100%"` 不要拿掉，不要改用 `width: fit-content`（會讓 `fixed="right"` 操作欄被裁切，已實測過）。矩陣型表格或欄位內容本身需要大量空間的頁面不套用 |
 
 ## 表格欄位
 

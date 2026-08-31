@@ -4,6 +4,7 @@
       <el-tab-pane label="照護人員清單" name="list">
         <DataTablePage
           title="照護人員管理"
+          :max-width="990"
           v-model:page="page"
           v-model:pageSize="pageSize"
           :total="total"
@@ -551,6 +552,7 @@ executeFetch()
 
 .pending-panel {
   min-height: 120px;
+  max-width: 970px;
 }
 
 .unresolved-slot {

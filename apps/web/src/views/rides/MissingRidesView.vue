@@ -4,6 +4,7 @@
       <!-- 分頁一：未回報清單 -->
       <el-tab-pane label="未回報清單" name="missing">
         <DataTablePage
+          :max-width="1030"
           :loading="loadingMissing"
           :total="missingTotal"
           :page="page"
@@ -60,7 +61,7 @@
               <el-table-column prop="caseName" label="個案姓名" width="120" />
               <el-table-column label="方向 / 趟次" width="130">
                 <template #default="{ row }">
-                  <StatusTag :status="row.direction" preset="direction" />
+                  <span>{{ (DIRECTION_LABELS as any)[row.direction] || row.direction }}</span>
                   <span style="margin-left: 6px; font-size: 13px;">第 {{ row.legSeq }} 趟</span>
                 </template>
               </el-table-column>
@@ -73,12 +74,12 @@
               <el-table-column prop="driverName" label="司機" width="120" />
               <el-table-column label="逾期天數" width="120" align="center">
                 <template #default="{ row }">
-                  <el-tag
-                    :type="(row.daysOverdue || 0) >= 3 ? 'danger' : 'warning'"
-                    size="small"
+                  <span
+                    class="overdue-days"
+                    :class="(row.daysOverdue || 0) >= 3 ? 'is-danger' : 'is-warning'"
                   >
                     逾期 {{ row.daysOverdue || 0 }} 天
-                  </el-tag>
+                  </span>
                 </template>
               </el-table-column>
               <el-table-column
@@ -89,14 +90,16 @@
                 fixed="right"
               >
                 <template #default="{ row }">
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
-                    @click="openReportDialog(row)"
-                  >
-                    人工回報
-                  </el-button>
+                  <TableRowActions>
+                    <el-button
+                      link
+                      type="primary"
+                      size="small"
+                      @click="openReportDialog(row)"
+                    >
+                      人工回報
+                    </el-button>
+                  </TableRowActions>
                 </template>
               </el-table-column>
             </el-table>
@@ -107,6 +110,7 @@
       <!-- 分頁二：催報通知歷史 -->
       <el-tab-pane label="催報通知歷史" name="history">
         <DataTablePage
+          :max-width="1230"
           :loading="loadingLogs"
           :total="logsTotal"
           :page="logPage"
@@ -206,9 +210,7 @@
           <el-descriptions-item label="個案姓名">{{ currentReportRow.caseName }}</el-descriptions-item>
           <el-descriptions-item label="服務日期">{{ currentReportRow.serviceDate }}</el-descriptions-item>
           <el-descriptions-item label="方向與趟次">
-            <el-tag :type="currentReportRow.direction === 'outbound' ? 'primary' : 'info'" size="small">
-              {{ (DIRECTION_LABELS as any)[currentReportRow.direction] || currentReportRow.direction }}
-            </el-tag>
+            <span>{{ (DIRECTION_LABELS as any)[currentReportRow.direction] || currentReportRow.direction }}</span>
             <span style="margin-left: 6px;">第 {{ currentReportRow.legSeq }} 趟</span>
           </el-descriptions-item>
           <el-descriptions-item label="排定出發時間">{{ currentReportRow.departTime || '-' }}</el-descriptions-item>
@@ -329,7 +331,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import DataTablePage from '@/components/DataTablePage.vue'
-import StatusTag from '@/components/StatusTag.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import { formatDateTime } from '@/utils/formatters'
 import { listMissingRides, submitManualRideReport } from '@/api/rides'
 import { listVehicles, listDrivers } from '@/api/masters'
@@ -605,6 +607,19 @@ onMounted(() => {
 .text-secondary {
   color: var(--el-text-color-secondary);
   font-size: 13px;
+}
+
+.overdue-days {
+  font-weight: 600;
+  font-size: var(--app-font-sm);
+
+  &.is-danger {
+    color: var(--app-status-danger-fg);
+  }
+
+  &.is-warning {
+    color: var(--app-status-warning-fg);
+  }
 }
 
 .report-dialog-body {

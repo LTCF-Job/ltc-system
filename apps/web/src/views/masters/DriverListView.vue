@@ -2,6 +2,7 @@
   <div class="driver-list-view">
     <DataTablePage
       title="司機管理"
+      :max-width="1260"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -50,7 +51,7 @@
       <!-- 表格 -->
       <template #table>
         <el-table :data="drivers" border stripe style="width: 100%">
-          <el-table-column prop="name" label="司機姓名" width="130">
+          <el-table-column prop="name" label="司機姓名" width="130" align="center">
             <template #default="{ row }"><span class="driver-name">{{ row.name }}</span></template>
           </el-table-column>
           <el-table-column prop="nationalId" label="身分證字號" width="140" align="center">
@@ -109,7 +110,7 @@
           <el-table-column
             v-if="authStore.can('staff')"
             label="操作"
-            width="200"
+            width="240"
             fixed="right"
             align="center"
           >

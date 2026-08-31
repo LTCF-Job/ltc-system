@@ -1,6 +1,6 @@
 <template>
   <div class="holiday-calendar-view">
-    <DataTablePage title="政府假日與工作日設定" :loading="loading">
+    <DataTablePage title="政府假日與工作日設定" :max-width="740" :loading="loading">
       <template #filter>
         <el-date-picker
           v-model="year"

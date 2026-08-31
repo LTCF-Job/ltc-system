@@ -1,5 +1,5 @@
 <template>
-  <div class="data-table-page">
+  <div class="data-table-page" :style="maxWidth ? { maxWidth: `${maxWidth}px` } : undefined">
     <PageHeader v-if="title" :title="title" :description="description">
       <template v-if="$slots.header" #actions>
         <slot name="header" />
@@ -53,6 +53,8 @@ defineProps<{
   page?: number
   pageSize?: number
   pageSizes?: number[]
+  // 欄位少、內容短的主檔列表可傳入頁面實際欄寬總和（含操作欄，建議加 30px 緩衝），避免整頁被硬撐滿
+  maxWidth?: number
 }>()
 
 defineEmits<{

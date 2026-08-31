@@ -2,6 +2,7 @@
   <div class="region-list-view">
     <DataTablePage
       title="地區管理"
+      :max-width="1020"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -93,7 +94,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="name" label="地區名稱" min-width="150">
+          <el-table-column prop="name" label="地區名稱" min-width="150" align="center">
             <template #default="{ row }">
               <span class="font-bold text-gray-800">{{ row.name }}</span>
             </template>

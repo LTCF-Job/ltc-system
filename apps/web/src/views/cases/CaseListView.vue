@@ -3,6 +3,7 @@
     <el-tabs v-model="activeTab" type="border-card" class="case-tabs" @tab-change="handleTabChange">
     <el-tab-pane label="個案清單" name="list">
     <DataTablePage
+      :max-width="1470"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -82,7 +83,7 @@
       <template #table>
         <el-table :data="cases" border stripe style="width: 100%">
           <el-table-column prop="code" label="個案編號" width="95" align="center" />
-          <el-table-column prop="name" label="姓名" width="110" />
+          <el-table-column prop="name" label="姓名" width="110" align="center" />
           <el-table-column prop="nationalId" label="身分證字號" min-width="150" align="center">
             <template #default="{ row }">
               <span class="font-mono text-id">{{ row.nationalId || '-' }}</span>
@@ -197,7 +198,7 @@
 
     <!-- 待補建關聯：據點/去程車/回程車比對不到主檔資料的個案，供事後關聯或新增主檔 -->
     <el-tab-pane label="待補建關聯" name="unresolved">
-      <DataTablePage :loading="unresolvedLoading">
+      <DataTablePage :max-width="925" :loading="unresolvedLoading">
         <template #table>
         <el-empty v-if="!unresolvedLoading && unresolvedCases.length === 0" description="目前沒有待補建關聯的個案" />
         <el-table v-else :data="unresolvedCases" border stripe style="width: 100%">

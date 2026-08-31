@@ -61,6 +61,11 @@
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 }
 
+// 車牌號碼、身分證字號等需逐字核對的高辨識度識別碼，字級比一般表格內文（13px）大一級
+.text-id {
+  font-size: var(--app-font-md);
+}
+
 .text-muted {
   color: var(--app-text-muted);
 }
