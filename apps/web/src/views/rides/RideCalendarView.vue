@@ -35,23 +35,6 @@
             />
           </div>
 
-          <el-select
-            v-model="regionFilter"
-            placeholder="全部區域"
-            clearable
-            filterable
-            style="width: 140px"
-            @change="fetchMatrix"
-          >
-            <el-option label="全部區域" value="" />
-            <el-option
-              v-for="(label, key) in REGION_LABELS"
-              :key="key"
-              :label="label"
-              :value="key"
-            />
-          </el-select>
-
           <el-input
             v-model="searchQuery"
             placeholder="搜尋個案姓名／編號"
@@ -98,7 +81,7 @@
         <el-table-column
           prop="caseName"
           label="個案姓名"
-          width="110"
+          width="96"
           fixed="left"
         >
           <template #default="{ row }">
@@ -113,23 +96,9 @@
         </el-table-column>
 
         <el-table-column
-          prop="region"
-          label="區域"
-          width="85"
-          fixed="left"
-          align="center"
-        >
-          <template #default="{ row }">
-            <span class="inline-value">
-              {{ REGION_LABELS[row.region] || row.region }}
-            </span>
-          </template>
-        </el-table-column>
-
-        <el-table-column
           prop="tripPattern"
           label="趟數"
-          width="76"
+          width="60"
           fixed="left"
           align="center"
         >
@@ -154,7 +123,8 @@
           v-for="day in daysInMonth"
           :key="day"
           :label="isHoliday(day) ? `${day} ★` : `${day}`"
-          min-width="46"
+          class-name="day-col"
+          label-class-name="day-col"
           align="center"
         >
           <template #default="{ row }">
@@ -255,13 +225,11 @@ import { getRideCalendarMatrix } from '@/api/rides'
 import { listHolidays } from '@/api/holidays'
 import { formatDateTime } from '@/utils/formatters'
 import { useRocMonth } from '@/composables/useRocMonth'
-import { REGION_LABELS } from '@/types/domain'
 import type { RideCalendarMatrixDTO, CaseRideCalendarRowDTO, RideRecordDTO } from '@/types/api'
 
 const { toRocMonth } = useRocMonth()
 
 const selectedDate = ref<string>('2026-07')
-const regionFilter = ref<string>('')
 const searchQuery = ref<string>('')
 const loading = ref(false)
 const matrixData = ref<RideCalendarMatrixDTO | null>(null)
@@ -305,9 +273,8 @@ async function fetchMatrix() {
   try {
     const [res, holidayResponse] = await Promise.all([getRideCalendarMatrix({
       month: currentRocMonth.value,
-      region: regionFilter.value || undefined,
       q: searchQuery.value || undefined
-    }), listHolidays({ startDate: `${selectedDate.value}-01`, endDate: `${selectedDate.value}-${String(daysInMonth.value).padStart(2, '0')}`, region: regionFilter.value || undefined })])
+    }), listHolidays({ startDate: `${selectedDate.value}-01`, endDate: `${selectedDate.value}-${String(daysInMonth.value).padStart(2, '0')}` })])
     matrixData.value = (res as any)?.cases ? res : ((res as any)?.data || res)
     holidayMap.value = Object.fromEntries((holidayResponse.data || []).map((item) => [item.holidayDate, item]))
   } finally {
@@ -506,6 +473,16 @@ onMounted(() => {
   padding: 0;
 }
 
+/* 日期欄用 el-table 預設 padding 會裝不下 31 欄，改用最小 padding 讓表格寬度貼齊容器、不橫向捲動 */
+.calendar-table :deep(.day-col.el-table__cell),
+.calendar-table :deep(th.day-col) {
+  padding: 6px 2px;
+}
+
+.calendar-table :deep(.day-col .cell) {
+  padding: 0;
+}
+
 .cell-legs-container {
   display: flex;
   flex-direction: column;
@@ -588,7 +565,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--app-font-xs);
 }
 
 @media (max-width: 640px) {
