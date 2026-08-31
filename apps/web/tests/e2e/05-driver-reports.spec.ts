@@ -32,7 +32,7 @@ test.describe('05. 司機接送匯報總覽 (Driver Report Status Overview)', ()
     await expect(page.getByRole('columnheader', { name: '匯報表名稱' })).toHaveCount(0)
   })
 
-  test('/driver-reports 重定向至 /driver-reports/status；批次上傳與欄位對應舊路徑重定向至 /driver-reports/import', async ({ page }) => {
+  test('/driver-reports 重定向至 /driver-reports/status；批次上傳對應舊路徑重定向至 /driver-reports/import', async ({ page }) => {
     await page.goto('/driver-reports')
     await waitForTableLoaded(page)
     await expect(page).toHaveURL(/.*\/driver-reports\/status/)

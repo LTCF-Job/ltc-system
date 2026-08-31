@@ -222,7 +222,7 @@ export function useGooglePicker() {
   }
 
   onMounted(() => {
-    // 預先在背景載入 SDK，以確保使用者點擊時能直接同步開啟 Google 登入彈跳視窗
+    // 預先在背景載入 SDK，以確保使用者點選時能直接同步開啟 Google 登入彈跳視窗
     ensureSdkLoaded().catch((err) => {
       console.warn('[useGooglePicker] Preload SDK warning:', err)
     })

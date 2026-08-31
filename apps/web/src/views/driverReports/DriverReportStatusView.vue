@@ -70,7 +70,7 @@
         <template #empty>
           <div class="empty-state">
             <p>尚未建立任何車輛的接送匯報表。</p>
-            <p class="text-secondary">請到「批次上傳與待維護資料」頁面上傳司機填寫的 .xlsx 匯報檔，系統會自動建立對應車輛的匯報表。</p>
+            <p class="text-secondary">請到「批次上傳」頁面上傳司機填寫的 .xlsx 匯報檔，系統會自動建立對應車輛的匯報表。</p>
           </div>
         </template>
       </el-table>

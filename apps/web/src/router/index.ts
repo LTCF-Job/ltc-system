@@ -77,7 +77,7 @@ const router = createRouter({
           path: 'driver-reports/import',
           name: 'DriverReportImport',
           component: () => import('@/views/driverReports/DriverReportImportView.vue'),
-          meta: { title: '批次上傳與待維護資料', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+          meta: { title: '批次上傳', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
         },
         {
           path: 'driver-reports/batch-import',
