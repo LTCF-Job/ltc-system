@@ -24,8 +24,8 @@ submitted_at)` 永遠不衝突；`ride_sources` 是純 INSERT 且表上沒有唯
 清除範圍由選填的 `yearMonth` 決定：有宣告就清整個月，沒宣告就只清檔案實際涵蓋的日期。宣告月份時，
 檔案內出現該月以外的有效日期即整份拒絕。
 
-批次上傳頁一律宣告月份，單車上傳對話框維持不宣告；兩種模式的殘留行為見
-[driver-report-import.md](../flows/driver-report-import.md)。
+批次上傳頁的 dry run 不宣告月份（讓後端逐日解析），commit 時改為針對前端自動推導出的每個月份
+各自宣告一次；殘留行為見 [driver-report-import.md](../flows/driver-report-import.md)。
 
 ## Alternatives
 

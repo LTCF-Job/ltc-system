@@ -15,16 +15,12 @@ import (
 	"ltc-system/apps/api/internal/domain/rocdate"
 )
 
-// 司機接送匯報表的固定欄位：第一欄民國日期、第二欄駕駛人、最後一欄備註，
-// 中間全部是「個案＋趟次」欄位。
+// 司機接送匯報表固定含日期、駕駛人（緊接日期欄）與備註三個欄位，中間全部是
+// 「個案＋趟次」欄位；欄位的絕對位置不固定，由 findReportHeader 逐一搜尋定位。
 const (
 	headerReportDate = "民國日期"
-	headerDriver     = "駕駛人"
 	headerRemark     = "備註"
 )
-
-// minCaseColumns 是一份可用匯報表至少要有的欄數（日期＋駕駛人＋一個個案欄＋備註）。
-const minReportColumns = 4
 
 // ErrFormNotFound 代表指定的匯報表不存在。
 var ErrFormNotFound = errors.New("driver report form not found")
@@ -37,13 +33,15 @@ var ErrInvalidYearMonth = errors.New("匯入月份格式錯誤，請使用 YYYY-
 // 解析階段不寫入任何資料：未對應的欄位會附上推薦個案與趟次，交由使用者在預覽畫面
 // 就地確認後，才於 CommitDriverReport 一併寫回 form_columns 與搭乘紀錄。
 //
-// yearMonth 為選填的宣告匯入月份（YYYY-MM）。有宣告時，檔案內任一有效列落在該月之外
-// 就整份拒絕；匯入是以月覆蓋，放行等於讓傳錯檔案清空另一個月的資料。
+// yearMonth 為選填的宣告匯入月份（YYYY-MM）。有宣告時，落在該月之外的列僅標記為
+// 錯誤列、不計入可匯入範圍，其餘列照常產生預覽；是否要調整月份或忽略這些列交由
+// 使用者在預覽畫面決定，實際覆蓋範圍仍以 CommitDriverReport 只寫入無錯誤列為準。
 func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, yearMonth string) (*PreviewResult, error) {
 	monthStart, monthDeclared, err := parseYearMonth(yearMonth)
 	if err != nil {
 		return nil, err
 	}
+	monthPrefix := monthStart.Format("2006-01")
 
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -64,15 +62,14 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 	}
 
 	rows := tables[0]
-	headerRowIdx, header, err := findReportHeader(rows)
+	headerRowIdx, dateIdx, remarkIdx, err := findReportHeader(rows)
 	if err != nil {
 		return nil, err
 	}
+	driverIdx := dateIdx + 1
 
-	remarkIdx := len(header) - 1
-	caseHeaders := header[2:remarkIdx]
-
-	columns, err := s.buildColumnPreviews(ctx, formID, caseHeaders)
+	caseHeaders := trimTrailingEmpty(rows[headerRowIdx])[driverIdx+1 : remarkIdx]
+	columns, err := s.buildColumnPreviews(ctx, formID, caseHeaders, driverIdx+1)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +86,7 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 
 	for i := headerRowIdx + 1; i < len(rows); i++ {
 		rowNum := i + 1
-		dateRaw := cellAt(rows[i], 0)
+		dateRaw := cellAt(rows[i], dateIdx)
 		if strings.TrimSpace(dateRaw) == "" {
 			// 空白日期代表總計列或表尾空列，直接略過而不計入統計。
 			continue
@@ -108,7 +105,15 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 		}
 		row.ServiceDate = serviceDate.Format("2006-01-02")
 
-		row.DriverRaw = strings.TrimSpace(cellAt(rows[i], 1))
+		if monthDeclared && !strings.HasPrefix(row.ServiceDate, monthPrefix) {
+			row.ErrorMessage = fmt.Sprintf("日期 %s 不屬於宣告匯入的 %s，請確認上傳的是該月份的檔案", row.ServiceDate, monthPrefix)
+			result.Errors = append(result.Errors, ImportErrorItem{RowIndex: rowNum, Field: headerReportDate, Message: row.ErrorMessage})
+			result.ErrorRows++
+			result.PreviewRows = append(result.PreviewRows, row)
+			continue
+		}
+
+		row.DriverRaw = strings.TrimSpace(cellAt(rows[i], driverIdx))
 		if row.DriverRaw == "" {
 			row.WarningMessage = appendMessage(row.WarningMessage, "未填寫駕駛人，該日搭乘紀錄將沒有司機")
 		} else if driver, _ := s.driverRepo.GetByNameNormalized(ctx, namenorm.Normalize(row.DriverRaw)); driver != nil {
@@ -143,12 +148,6 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 		result.PreviewRows = append(result.PreviewRows, row)
 	}
 
-	if monthDeclared {
-		if err := assertRowsWithinMonth(result.PreviewRows, monthStart); err != nil {
-			return nil, err
-		}
-	}
-
 	for _, c := range columns {
 		if c.MappingStatus == "pending" {
 			result.UnmappedColumns++
@@ -172,18 +171,6 @@ func parseYearMonth(raw string) (time.Time, bool, error) {
 	return start, true, nil
 }
 
-// assertRowsWithinMonth 確認所有成功解析日期的列都落在宣告月份內。
-func assertRowsWithinMonth(rows []RowPreview, monthStart time.Time) error {
-	prefix := monthStart.Format("2006-01")
-	for _, row := range rows {
-		if row.ServiceDate == "" || strings.HasPrefix(row.ServiceDate, prefix) {
-			continue
-		}
-		return fmt.Errorf("第 %d 列的日期 %s 不屬於宣告匯入的 %s，請確認上傳的是該月份的檔案", row.RowIndex, row.ServiceDate, prefix)
-	}
-	return nil
-}
-
 // daysInMonth 列出該月的每一天，作為覆蓋式重匯的清除範圍。
 func daysInMonth(monthStart time.Time) []time.Time {
 	next := monthStart.AddDate(0, 1, 0)
@@ -196,7 +183,8 @@ func daysInMonth(monthStart time.Time) []time.Time {
 
 // buildColumnPreviews 把檔案表頭與既有 form_columns 對照起來；沒對應過的欄位
 // 以姓名相似度推薦個案，並由 [去程]／[回程] 標記推薦趟次。
-func (s *DriverReportService) buildColumnPreviews(ctx context.Context, formID uuid.UUID, caseHeaders []string) ([]ColumnPreview, error) {
+// colOffset 是 caseHeaders[0] 在原始列中的 0-based 位置，用來還原每欄實際的 ColumnIndex。
+func (s *DriverReportService) buildColumnPreviews(ctx context.Context, formID uuid.UUID, caseHeaders []string, colOffset int) ([]ColumnPreview, error) {
 	existing, err := s.repo.ListColumnsWithMapping(ctx, formID.String(), "")
 	if err != nil {
 		return nil, err
@@ -212,7 +200,7 @@ func (s *DriverReportService) buildColumnPreviews(ctx context.Context, formID uu
 	for i, h := range caseHeaders {
 		parsed := namenorm.ParseColumnHeader(h)
 		col := ColumnPreview{
-			ColumnIndex:   i + 3,
+			ColumnIndex:   colOffset + i + 1,
 			ColumnHeader:  h,
 			CleanedName:   parsed.CleanedName,
 			Direction:     parsed.Direction,
@@ -272,23 +260,38 @@ func legSeqForDirection(direction string) *int16 {
 	}
 }
 
-// findReportHeader 找出表頭列並驗證固定欄位；表頭前允許有標題或空白列。
-func findReportHeader(rows [][]string) (int, []string, error) {
+// findReportHeader 找出表頭列，回傳日期欄與備註欄的 0-based 位置（駕駛人固定緊接在日期欄後）。
+//
+// 日期欄以「含『日期』字樣、右鄰欄含『駕駛』字樣」定位，而非固定在第 0 欄，
+// 讓 Google 表單原始匯出檔（開頭多一欄「時間戳記」）也能正確辨識；備註欄同樣以
+// 內容搜尋定位，不要求它是整列最後一格，備註欄之後不論還有多少殘留欄位一律略過不匯入。
+func findReportHeader(rows [][]string) (headerRowIdx, dateIdx, remarkIdx int, err error) {
 	for idx, row := range rows {
 		header := trimTrailingEmpty(row)
-		if len(header) < minReportColumns {
+		dateIdx = -1
+		for i := 0; i+1 < len(header); i++ {
+			if strings.Contains(header[i], "日期") && strings.Contains(header[i+1], "駕駛") {
+				dateIdx = i
+				break
+			}
+		}
+		if dateIdx < 0 {
 			continue
 		}
-		if !strings.Contains(header[0], "日期") || !strings.Contains(header[1], "駕駛") {
-			continue
+		remarkIdx = -1
+		for i := dateIdx + 2; i < len(header); i++ {
+			cell := strings.TrimSpace(header[i])
+			if cell == headerRemark || strings.Contains(cell, "問題回報") {
+				remarkIdx = i
+				break
+			}
 		}
-		last := strings.TrimSpace(header[len(header)-1])
-		if last != headerRemark && !strings.Contains(last, "問題回報") {
-			return 0, nil, fmt.Errorf("最後一欄應為「%s」，目前為「%s」", headerRemark, last)
+		if remarkIdx < 0 {
+			return 0, 0, 0, fmt.Errorf("找不到「%s」欄", headerRemark)
 		}
-		return idx, header, nil
+		return idx, dateIdx, remarkIdx, nil
 	}
-	return 0, nil, fmt.Errorf("找不到匯報表表頭，第一列應為「%s、%s、各個案趟次欄、%s」", headerReportDate, headerDriver, headerRemark)
+	return 0, 0, 0, fmt.Errorf("找不到匯報表表頭，應有一欄含「日期」且右鄰欄含「駕駛」")
 }
 
 // parseReportDate 解析民國日期。接受 1150302、115/3/2、115-03-02 三種寫法，

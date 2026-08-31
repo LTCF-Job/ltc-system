@@ -2165,3 +2165,10 @@ export const mockDashboardMetrics: DashboardMetricsDTO = {
   ],
   claimFulfillmentRate: 98.2
 }
+
+// 司機接送匯報已匯入的服務日期，依匯報表分組；用純物件（非 Map/Set）儲存，
+// 讓 demoStore 的 JSON 快照／還原機制能正確持久化，重新整理頁面後不遺失
+export const mockDriverReportImportedDates: Record<string, string[]> = {}
+
+// 司機接送匯報每個 (匯報表, 月份) 各自的最後匯入時間，對應後端的 max(submitted_at)
+export const mockDriverReportLastImportByMonth: Record<string, string> = {}

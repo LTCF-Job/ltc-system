@@ -119,8 +119,9 @@ func (h *DriverReportHandler) DownloadTemplate(c *gin.Context) {
 
 // ImportExcel 上傳匯報表 .xlsx；dryRun=true 回傳預覽，dryRun=false 正式寫入。
 //
-// yearMonth（YYYY-MM）為選填的宣告匯入月份：有帶時整個月會被這份檔案覆蓋，且檔案內
-// 出現該月以外的日期即整份拒絕。未帶時只覆蓋檔案實際涵蓋的日期。
+// yearMonth（YYYY-MM）為選填的宣告匯入月份：有帶時整個月會被這份檔案覆蓋；檔案內
+// 出現該月以外的日期不會整份拒絕，只有那幾列會標成錯誤列並在寫入時被跳過。
+// 未帶時只覆蓋檔案實際涵蓋的日期。
 func (h *DriverReportHandler) ImportExcel(c *gin.Context) {
 	formID, ok := parseFormID(c)
 	if !ok {

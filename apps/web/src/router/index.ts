@@ -65,19 +65,27 @@ const router = createRouter({
         },
         {
           path: 'driver-reports',
-          redirect: '/driver-reports/batch-import'
+          redirect: '/driver-reports/status'
+        },
+        {
+          path: 'driver-reports/status',
+          name: 'DriverReportStatus',
+          component: () => import('@/views/driverReports/DriverReportStatusView.vue'),
+          meta: { title: '接送匯報總覽', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+        },
+        {
+          path: 'driver-reports/import',
+          name: 'DriverReportImport',
+          component: () => import('@/views/driverReports/DriverReportImportView.vue'),
+          meta: { title: '批次上傳與待維護資料', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
         },
         {
           path: 'driver-reports/batch-import',
-          name: 'DriverReportBatchImport',
-          component: () => import('@/views/driverReports/DriverReportBatchImportView.vue'),
-          meta: { title: '上傳接送匯報', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+          redirect: '/driver-reports/import'
         },
         {
           path: 'driver-reports/mappings',
-          name: 'FieldMapping',
-          component: () => import('@/views/driverReports/FieldMappingView.vue'),
-          meta: { title: '欄位對應設定', module: 'driver_report_mappings', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+          redirect: '/driver-reports/import'
         },
         {
           path: 'rides',

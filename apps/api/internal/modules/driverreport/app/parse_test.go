@@ -173,6 +173,21 @@ func TestParseDriverReport_ColumnsAndRows(t *testing.T) {
 	assert.Equal(t, 1, result.Columns[1].AbsentCount)
 }
 
+func TestParseDriverReport_RowsOutsideDeclaredMonthAreErrorRowsNotWholeFileRejection(t *testing.T) {
+	// 月份不符不再整份拒絕：解析仍要成功回傳，讓使用者在預覽畫面看得到比對結果，
+	// 自行決定要調整宣告月份還是忽略那幾列後繼續匯入。
+	svc := newTestService(sampleTable(), nil)
+
+	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"), "2026-04")
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, result.ValidRows, "sampleTable 的日期都在三月，宣告 2026-04 時沒有列落在月份內")
+	assert.Equal(t, 3, result.ErrorRows)
+	require.Len(t, result.PreviewRows, 3)
+	assert.Contains(t, result.PreviewRows[0].ErrorMessage, "不屬於宣告匯入的 2026-04")
+	assert.Equal(t, "2026-03-02", result.PreviewRows[0].ServiceDate, "月份不符的列仍保留已解析出的服務日期供畫面顯示")
+}
+
 func TestParseDriverReport_UnknownDriverIsWarningNotError(t *testing.T) {
 	table := sampleTable()
 	table[1][1] = "查無此人"
@@ -208,10 +223,45 @@ func TestParseDriverReport_KeepsExistingMapping(t *testing.T) {
 	assert.Equal(t, 1, result.UnmappedColumns, "只剩回程欄待對應")
 }
 
+func TestParseDriverReport_AcceptsLeadingTimestampColumn(t *testing.T) {
+	// Google 表單原始匯出檔會在日期欄前多一欄「時間戳記」；日期／駕駛人欄應改用
+	// 內容比對定位，而不是假設固定在第 0、1 欄。
+	table := [][]string{
+		{"時間戳記", "今天日期", "今日駕駛人", "1.吳桂(去程竹3) [去程]", "問題回報"},
+		{"46084", "1150302", "林彥衡", "有坐", "備註內容"},
+	}
+	svc := newTestService(table, nil)
+
+	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"), "")
+	require.NoError(t, err)
+
+	require.Len(t, result.PreviewRows, 1)
+	assert.Equal(t, "2026-03-02", result.PreviewRows[0].ServiceDate)
+	assert.Equal(t, "林彥衡", result.PreviewRows[0].DriverName)
+	assert.Equal(t, "備註內容", result.PreviewRows[0].Remark)
+	assert.Equal(t, 1, result.PreviewRows[0].BoardedCount)
+}
+
+func TestParseDriverReport_IgnoresColumnsAfterRemark(t *testing.T) {
+	// 備註欄之後若還殘留欄位（如表單後續編修累加的舊題目），一律忽略，不當成個案欄匯入。
+	table := [][]string{
+		{"民國日期", "駕駛人", "1.吳桂(去程竹3) [去程]", "備註", "10.李吳素娥 [去程]"},
+		{"1150302", "林彥衡", "有坐", "無", "有坐"},
+	}
+	svc := newTestService(table, nil)
+
+	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"), "")
+	require.NoError(t, err)
+
+	require.Len(t, result.Columns, 1)
+	assert.Equal(t, "1.吳桂(去程竹3) [去程]", result.Columns[0].ColumnHeader)
+	assert.Equal(t, "無", result.PreviewRows[0].Remark)
+}
+
 func TestParseDriverReport_RejectsWrongHeader(t *testing.T) {
 	table := [][]string{
-		{"時間戳記", "今天日期", "今日駕駛人", "問題回報"},
-		{"46084", "1150302", "林彥衡", ""},
+		{"備註", "其他欄位"},
+		{"", ""},
 	}
 	svc := newTestService(table, nil)
 

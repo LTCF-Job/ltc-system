@@ -2,6 +2,8 @@ import { http, HttpResponse } from 'msw'
 import {
   mockDriverReportForms,
   mockDriverReportColumns,
+  mockDriverReportImportedDates,
+  mockDriverReportLastImportByMonth,
   mockCases,
   mockDrivers,
   mockVehicles
@@ -22,18 +24,36 @@ import type {
 const HEADER_REPORT_DATE = '民國日期'
 const HEADER_REMARK = '備註'
 
-function findReportHeader(rows: string[][]): { headerRowIdx: number; header: string[] } | string {
+// findReportHeader 找出表頭列，回傳日期欄與備註欄的 0-based 位置（駕駛人固定緊接在日期欄後）。
+// 日期欄以「含『日期』字樣、右鄰欄含『駕駛』字樣」定位，而非固定在第 0 欄，讓 Google
+// 表單原始匯出檔（開頭多一欄「時間戳記」）也能正確辨識；備註欄同樣以內容搜尋定位，不要求
+// 它是整列最後一格，備註欄之後不論還有多少殘留欄位一律略過不匯入。
+function findReportHeader(
+  rows: string[][]
+): { headerRowIdx: number; dateIdx: number; remarkIdx: number } | string {
   for (let idx = 0; idx < rows.length; idx++) {
     const header = trimTrailingEmpty(rows[idx])
-    if (header.length < 4) continue
-    if (!header[0].includes('日期') || !header[1].includes('駕駛')) continue
-    const last = header[header.length - 1].trim()
-    if (last !== HEADER_REMARK && !last.includes('問題回報')) {
-      return `最後一欄應為「${HEADER_REMARK}」，目前為「${last}」`
+    let dateIdx = -1
+    for (let i = 0; i + 1 < header.length; i++) {
+      if (header[i].includes('日期') && header[i + 1].includes('駕駛')) {
+        dateIdx = i
+        break
+      }
     }
-    return { headerRowIdx: idx, header }
+    if (dateIdx < 0) continue
+
+    let remarkIdx = -1
+    for (let i = dateIdx + 2; i < header.length; i++) {
+      const cell = header[i].trim()
+      if (cell === HEADER_REMARK || cell.includes('問題回報')) {
+        remarkIdx = i
+        break
+      }
+    }
+    if (remarkIdx < 0) return `找不到「${HEADER_REMARK}」欄`
+    return { headerRowIdx: idx, dateIdx, remarkIdx }
   }
-  return `找不到匯報表表頭，第一列應為「${HEADER_REPORT_DATE}、駕駛人、各個案趟次欄、${HEADER_REMARK}」`
+  return `找不到匯報表表頭，應有一欄含「日期」且右鄰欄含「駕駛」`
 }
 
 function trimTrailingEmpty(row: string[]): string[] {
@@ -102,7 +122,56 @@ function knownColumnsFor(formId: string): Map<string, DriverReportColumnDTO> {
   )
 }
 
-function buildColumnPreviews(formId: string, caseHeaders: string[]): DriverReportPreviewColumn[] {
+// persistColumnRecords 對應後端 CommitDriverReport 的 persistColumnDecisions：正式匯入時把檔案
+// 出現過的所有欄位登錄成 form_columns（首次出現即 pending），讓「待維護資料」查得到完全比對不到
+// 個案的欄位；已對應的欄位覆寫成 mapped，其餘沿用既有狀態。
+function persistColumnRecords(
+  formId: string,
+  vehicleName: string,
+  formTitle: string,
+  columns: DriverReportPreviewColumn[],
+  mapped: Map<string, { caseId: string; legSeq: number }>
+) {
+  const known = knownColumnsFor(formId)
+  for (const col of columns) {
+    const target = mapped.get(col.columnHeader)
+    const existing = known.get(col.columnHeader)
+    if (existing) {
+      if (target) {
+        existing.mappingStatus = 'mapped'
+        existing.caseId = target.caseId
+        existing.caseName = mockCases.find((c) => c.id === target.caseId)?.name ?? existing.caseName
+        existing.legSeq = target.legSeq
+      }
+      continue
+    }
+    mockDriverReportColumns.push({
+      id: `col_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      formId,
+      formTitle,
+      vehicleName,
+      columnIndex: col.columnIndex,
+      columnHeader: col.columnHeader,
+      cleanedName: col.cleanedName,
+      kind: 'ride',
+      mappingStatus: target ? 'mapped' : 'pending',
+      caseId: target?.caseId ?? null,
+      caseName: target ? mockCases.find((c) => c.id === target.caseId)?.name ?? null : null,
+      legSeq: target?.legSeq ?? null,
+      suggestedCaseId: col.suggestedCaseId ?? null,
+      suggestedCaseName: col.suggestedCaseName ?? null,
+      suggestedLegSeq: col.suggestedLegSeq ?? null,
+      suggestionScore: col.suggestionScore ?? 0
+    })
+  }
+}
+
+// colOffset 是 caseHeaders[0] 在原始列中的 0-based 位置，用來還原每欄實際的 columnIndex。
+function buildColumnPreviews(
+  formId: string,
+  caseHeaders: string[],
+  colOffset: number
+): DriverReportPreviewColumn[] {
   const known = knownColumnsFor(formId)
 
   return caseHeaders.map((header, i) => {
@@ -110,7 +179,7 @@ function buildColumnPreviews(formId: string, caseHeaders: string[]): DriverRepor
     const prev = known.get(header)
     const column: DriverReportPreviewColumn = {
       columnId: prev?.id,
-      columnIndex: i + 3,
+      columnIndex: colOffset + i + 1,
       columnHeader: header,
       cleanedName: parsed.cleanedName,
       direction: parsed.direction,
@@ -159,14 +228,19 @@ async function readColumnDecisions(request: Request) {
   return { rows, decisions }
 }
 
-// importedDatesByForm 記錄每份匯報表已匯入的服務日期，讓 mock 與後端一樣是覆蓋而非疊加：
-// 重匯同一份檔案時 submissionCount 不會翻倍。ride 資料本身由 saveRideOverride 以
-// (caseId, serviceDate, legSeq) 為鍵覆寫，本來就冪等。
-const importedDatesByForm = new Map<string, Set<string>>()
+// mockDriverReportImportedDates／mockDriverReportLastImportByMonth（見 mockData.ts）記錄每份
+// 匯報表已匯入的服務日期與各月份最後匯入時間，讓 mock 與後端一樣是覆蓋而非疊加：重匯同一份
+// 檔案時 submissionCount 不會翻倍。ride 資料本身由 saveRideOverride 以 (caseId, serviceDate,
+// legSeq) 為鍵覆寫，本來就冪等。用純物件（而非 Map/Set）儲存是為了讓 demoStore 的 JSON 快照／
+// 還原機制能正確持久化，重新整理頁面後不遺失。
 
-// 每個 (匯報表, 月份) 各自的最後匯入時間，對應後端的 max(submitted_at)；
-// 沿用匯報表層級的單一時間戳會讓舊月份顯示成最近一次匯入的時間
-const lastImportByFormMonth = new Map<string, string>()
+function getImportedDates(formId: string): Set<string> {
+  return new Set(mockDriverReportImportedDates[formId] ?? [])
+}
+
+function setImportedDates(formId: string, dates: Set<string>) {
+  mockDriverReportImportedDates[formId] = [...dates]
+}
 
 function formMonthKey(formId: string, yearMonth: string): string {
   return `${formId}::${yearMonth}`
@@ -175,16 +249,16 @@ function formMonthKey(formId: string, yearMonth: string): string {
 // forgetImportedDates 對應 form_submissions.form_id 的 ON DELETE CASCADE：
 // 匯報表被刪除時，它的已匯入月份也要一起消失
 function forgetImportedDates(formId: string) {
-  importedDatesByForm.delete(formId)
-  for (const key of [...lastImportByFormMonth.keys()]) {
-    if (key.startsWith(`${formId}::`)) lastImportByFormMonth.delete(key)
+  delete mockDriverReportImportedDates[formId]
+  for (const key of Object.keys(mockDriverReportLastImportByMonth)) {
+    if (key.startsWith(`${formId}::`)) delete mockDriverReportLastImportByMonth[key]
   }
 }
 
 // clearImportedDates 對應後端的 RideService.ClearImportedDates：宣告月份時清整個月，
 // 未宣告時只清本次檔案涵蓋的日期。
 function clearImportedDates(formId: string, dates: string[], yearMonth: string): Set<string> {
-  const known = importedDatesByForm.get(formId) ?? new Set<string>()
+  const known = getImportedDates(formId)
   if (yearMonth) {
     for (const date of [...known]) {
       if (date.startsWith(yearMonth)) known.delete(date)
@@ -192,24 +266,13 @@ function clearImportedDates(formId: string, dates: string[], yearMonth: string):
   } else {
     for (const date of dates) known.delete(date)
   }
-  importedDatesByForm.set(formId, known)
+  setImportedDates(formId, known)
   return known
 }
 
-// assertRowsWithinMonth 與後端 parse.go 同規則：宣告月份時，任一有效列落在該月之外
-// 就整份拒絕，避免傳錯檔案覆蓋掉別的月份。
-function assertRowsWithinMonth(
-  previewRows: DriverReportPreviewRow[],
-  yearMonth: string
-): string | null {
-  for (const row of previewRows) {
-    if (!row.serviceDate || row.serviceDate.startsWith(yearMonth)) continue
-    return `第 ${row.rowIndex} 列的日期 ${row.serviceDate} 不屬於宣告匯入的 ${yearMonth}，請確認上傳的是該月份的檔案`
-  }
-  return null
-}
-
-// monthRejection 把月份不符的訊息包成與後端一致的錯誤回應。
+// monthRejection 把宣告月份格式錯誤的訊息包成與後端一致的錯誤回應。
+// 個別列的日期不屬於宣告月份不在此列——那與單列日期打錯一樣，由 buildPreview
+// 標記成該列的 errorMessage，讓使用者在預覽畫面自行決定是否忽略或調整。
 function monthRejection(message: string) {
   return HttpResponse.json(
     {
@@ -223,13 +286,14 @@ function monthRejection(message: string) {
   )
 }
 
-function buildPreview(formId: string, rows: string[][]) {
+function buildPreview(formId: string, rows: string[][], yearMonth: string) {
   const found = findReportHeader(rows)
   if (typeof found === 'string') return found
 
-  const { headerRowIdx, header } = found
-  const remarkIdx = header.length - 1
-  const columns = buildColumnPreviews(formId, header.slice(2, remarkIdx))
+  const { headerRowIdx, dateIdx, remarkIdx } = found
+  const driverIdx = dateIdx + 1
+  const header = trimTrailingEmpty(rows[headerRowIdx])
+  const columns = buildColumnPreviews(formId, header.slice(driverIdx + 1, remarkIdx), driverIdx + 1)
   const form = mockDriverReportForms.find((f) => f.id === formId)
 
   const previewRows: DriverReportPreviewRow[] = []
@@ -242,7 +306,7 @@ function buildPreview(formId: string, rows: string[][]) {
 
   for (let i = headerRowIdx + 1; i < rows.length; i++) {
     const rowNum = i + 1
-    const dateRaw = (rows[i][0] ?? '').trim()
+    const dateRaw = (rows[i][dateIdx] ?? '').trim()
     if (!dateRaw) continue
 
     totalRows++
@@ -263,7 +327,23 @@ function buildPreview(formId: string, rows: string[][]) {
       continue
     }
 
-    const driverRaw = (rows[i][1] ?? '').trim()
+    if (yearMonth && !serviceDate.startsWith(yearMonth)) {
+      const message = `日期 ${serviceDate} 不屬於宣告匯入的 ${yearMonth}，請確認上傳的是該月份的檔案`
+      errors.push({ rowIndex: rowNum, field: HEADER_REPORT_DATE, message })
+      errorRows++
+      previewRows.push({
+        rowIndex: rowNum,
+        reportDate: dateRaw,
+        serviceDate,
+        driverRaw: '',
+        boardedCount: 0,
+        absentCount: 0,
+        errorMessage: message
+      })
+      continue
+    }
+
+    const driverRaw = (rows[i][driverIdx] ?? '').trim()
     const driver = mockDriverReportDriver(driverRaw)
     let warningMessage = ''
     if (!driverRaw) {
@@ -342,7 +422,7 @@ export const driverReportsHandlers = [
   // 與後端一樣由已匯入的服務日期分組推導，不另外維護一份月份狀態
   http.get('/api/v1/driver-reports/imported-months', () => {
     const items: DriverReportImportedMonthDTO[] = []
-    for (const [formId, dates] of importedDatesByForm) {
+    for (const [formId, dates] of Object.entries(mockDriverReportImportedDates)) {
       const countByMonth = new Map<string, number>()
       for (const date of dates) {
         const yearMonth = date.slice(0, 7)
@@ -353,7 +433,7 @@ export const driverReportsHandlers = [
           formId,
           yearMonth,
           submissionCount,
-          lastImportedAt: lastImportByFormMonth.get(formMonthKey(formId, yearMonth)) ?? ''
+          lastImportedAt: mockDriverReportLastImportByMonth[formMonthKey(formId, yearMonth)] ?? ''
         })
       }
     }
@@ -427,7 +507,7 @@ export const driverReportsHandlers = [
           { status: 400 }
         )
       }
-      const preview = buildPreview(formId, rows)
+      const preview = buildPreview(formId, rows, yearMonth)
       if (typeof preview === 'string') {
         return HttpResponse.json(
           {
@@ -440,10 +520,6 @@ export const driverReportsHandlers = [
           { status: 400 }
         )
       }
-      const monthError = yearMonth ? assertRowsWithinMonth(preview.previewRows, yearMonth) : null
-      if (monthError) {
-        return monthRejection(monthError)
-      }
       return HttpResponse.json(preview)
     }
 
@@ -455,7 +531,7 @@ export const driverReportsHandlers = [
       )
     }
 
-    const preview = buildPreview(formId, rows)
+    const preview = buildPreview(formId, rows, yearMonth)
     if (typeof preview === 'string') {
       return HttpResponse.json(
         {
@@ -467,11 +543,6 @@ export const driverReportsHandlers = [
         },
         { status: 400 }
       )
-    }
-
-    const monthError = yearMonth ? assertRowsWithinMonth(preview.previewRows, yearMonth) : null
-    if (monthError) {
-      return monthRejection(monthError)
     }
 
     const mapped = new Map(
@@ -499,13 +570,14 @@ export const driverReportsHandlers = [
     }
 
     const form = mockDriverReportForms.find((f) => f.id === formId)
+    persistColumnRecords(formId, form?.vehicleName ?? '', form?.title ?? '', preview.columns, mapped)
     const coveredDates = preview.previewRows
       .filter((row) => !row.errorMessage && row.serviceDate)
       .map((row) => row.serviceDate)
     // 沒有任何可寫入的列時不清除，與後端 clearPreviousImport 一致
     const importedDates = coveredDates.length
       ? clearImportedDates(formId, coveredDates, yearMonth)
-      : (importedDatesByForm.get(formId) ?? new Set<string>())
+      : getImportedDates(formId)
     let rideRecordRows = 0
     const skippedRows: Array<{ rowIndex: number; reportDate: string; reasons: string[] }> = []
     let importedRows = 0
@@ -548,16 +620,19 @@ export const driverReportsHandlers = [
       importedDates.add(row.serviceDate)
       importedRows++
     }
-    importedDatesByForm.set(formId, importedDates)
+    setImportedDates(formId, importedDates)
 
-    // 只更新這次真的寫入的月份；importedDates 還含著其他月份的既有日期
-    const importedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
-    for (const date of coveredDates) {
-      lastImportByFormMonth.set(formMonthKey(formId, date.slice(0, 7)), importedAt)
+    // 全部列都被跳過（月份不符或格式錯誤）時代表沒有任何一列真的匯入，
+    // 不更新最後匯入時間，避免使用者誤以為這次上傳已經成功，與後端 MarkImported 的守則一致。
+    if (importedRows > 0) {
+      const importedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
+      for (const date of coveredDates) {
+        mockDriverReportLastImportByMonth[formMonthKey(formId, date.slice(0, 7))] = importedAt
+      }
+      if (form) form.lastImportedAt = importedAt
     }
 
     if (form) {
-      form.lastImportedAt = importedAt
       form.submissionCount = importedDates.size
       form.totalColumns = preview.columns.length
       form.mappedColumns = mapped.size

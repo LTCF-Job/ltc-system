@@ -162,17 +162,24 @@ func TestCommitDriverReport_RepeatedImportProducesSameWrites(t *testing.T) {
 	assert.Len(t, second.submissions, len(first.submissions))
 }
 
-func TestCommitDriverReport_RejectsRowsOutsideDeclaredMonth(t *testing.T) {
+func TestCommitDriverReport_SkipsRowsOutsideDeclaredMonth(t *testing.T) {
+	// 月份不符不再整份拒絕：讓使用者在預覽畫面看得到比對結果並自行決定，
+	// 這裡改成比照「單列日期打錯」的規則，逐列略過而不中斷整個匯入。
 	ingestor := &fakeIngestor{}
 	svc, store := newCommitService(sampleTable(), ingestor)
 
-	_, err := commit(svc, "2026-04")
+	result, err := commit(svc, "2026-04")
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "不屬於宣告匯入的 2026-04")
-	assert.Empty(t, ingestor.clears, "月份不符時不得清除任何既有資料")
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ImportedRows)
+	// sampleTable 三列有日期的資料：兩列可解析但落在三月（月份不符），一列日期格式本身無效。
+	require.Len(t, result.SkippedRows, 3)
+	assert.Contains(t, result.SkippedRows[0].Reasons[0], "不屬於宣告匯入的 2026-04")
+	assert.Contains(t, result.SkippedRows[1].Reasons[0], "不屬於宣告匯入的 2026-04")
+	assert.Contains(t, result.SkippedRows[2].Reasons[0], "日期格式無法解析")
+	assert.Empty(t, ingestor.clears, "沒有任何可寫入的列時不得清除既有資料")
 	assert.Empty(t, ingestor.submissions)
-	assert.False(t, store.markedImported)
+	assert.False(t, store.markedImported, "整份都被跳過時不算成功匯入，不得更新最後匯入時間")
 }
 
 func TestCommitDriverReport_RejectsMalformedYearMonth(t *testing.T) {

@@ -11,294 +11,235 @@ function buildReportWorkbook(rows: string[][]): Buffer {
   return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' }) as Buffer
 }
 
-async function uploadReport(page: Page, rows: string[][]) {
-  await page.locator('.el-dialog input[type="file"]').setInputFiles({
-    name: 'driver-report.xlsx',
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    buffer: buildReportWorkbook(rows)
-  })
-  await page.getByRole('button', { name: '開始解析與預覽' }).click()
-}
-
 const HEADER = ['民國日期', '駕駛人', '1.張詹竹妹 [去程]', '1.吳𣵛桂(去程竹3) [去程]', '備註']
+// 「王小明」不存在於任何個案主檔，用來製造完全比對不到個案、必須進待維護的欄位；
+// 另外保留一欄比對得到的「張詹竹妹」，確保至少有一欄可對應，檔案本身仍能成功匯入
+const HEADER_UNMATCHED = ['民國日期', '駕駛人', '1.張詹竹妹 [去程]', '1.王小明 [去程]', '備註']
 
-test.describe('05. 司機接送匯報匯入與欄位對應 (Driver Report Import & Field Mapping)', () => {
+test.describe('05. 司機接送匯報總覽 (Driver Report Status Overview)', () => {
   test.beforeEach(async ({ page }) => {
     await loginAs(page, 'admin')
   })
 
-  test('上傳接送匯報：預設載入當前月份並直接顯示啟用車輛，不需先手動挑選月份', async ({ page }) => {
-    await page.goto('/driver-reports/batch-import')
+  test('接送匯報總覽：只顯示各車已有資料的月份，不提供上傳功能', async ({ page }) => {
+    await page.goto('/driver-reports/status')
     await waitForTableLoaded(page)
 
-    await expect(page.getByRole('heading', { name: '上傳接送匯報' })).toBeVisible()
-    await expect(page.getByText('每一列代表一輛車在指定月份的接送紀錄')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '接送匯報總覽' })).toBeVisible()
     await expect(page.locator('.el-table').first()).toBeVisible()
-    // 預設當月份已列出全部啟用車輛，不需要先選月份
-    await expect(page.locator('.el-table__row')).toHaveCount(5)
+    await expect(page.getByRole('button', { name: '批次上傳' })).toHaveCount(0)
+    await expect(page.getByRole('columnheader', { name: '車輛' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '匯報表名稱' })).toHaveCount(0)
   })
 
-  test('/driver-reports 路由自動重定向至 /driver-reports/batch-import', async ({ page }) => {
+  test('/driver-reports 重定向至 /driver-reports/status；批次上傳與欄位對應舊路徑重定向至 /driver-reports/import', async ({ page }) => {
     await page.goto('/driver-reports')
     await waitForTableLoaded(page)
-    await expect(page).toHaveURL(/.*\/driver-reports\/batch-import/)
-    await expect(page.getByRole('heading', { name: '上傳接送匯報' })).toBeVisible()
-  })
+    await expect(page).toHaveURL(/.*\/driver-reports\/status/)
 
-  test('欄位對應設定：檢視推薦信心度、單筆綁定與略過欄位', async ({ page }) => {
+    await page.goto('/driver-reports/batch-import')
+    await waitForTableLoaded(page)
+    await expect(page).toHaveURL(/.*\/driver-reports\/import/)
+
     await page.goto('/driver-reports/mappings')
     await waitForTableLoaded(page)
-    await expect(page.locator('.el-table').first()).toBeVisible()
-
-    await expect(page.getByText('原始表單欄位名稱 (左側)')).toBeVisible()
-    await expect(page.getByText('目標個案與排班時段 (右側)')).toBeVisible()
-
-    const ignoreBtn = page.locator('.el-table__row').locator('button').filter({ hasText: '略過此欄' }).first()
-    if (await ignoreBtn.isVisible()) {
-      await ignoreBtn.click()
-      await expectElMessage(page, /略過/, 'info')
-    }
+    await expect(page).toHaveURL(/.*\/driver-reports\/import/)
   })
 })
 
-// 批次上傳頁：每一列是「一輛車 × 一個月」。月份寫在 query 讓連結可分享，測試沿用同一個入口。
+// 批次上傳直接常駐在「批次上傳」頁籤（左側上傳與送出、右側逐檔卡片），待維護資料則是同頁另一個頁籤：
+// 解析後立即匯入，完全比對不到個案的欄位進入待維護頁籤，稍後連結既有個案或建立新個案。
 test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)', () => {
-  const MONTH = '2026-03'
-
-  function rowOf(page: Page, vehicleName: string) {
-    return page.locator('.el-table__row').filter({ hasText: vehicleName }).first()
+  function rowOf(page: Page, fileName: string) {
+    return page.locator('.file-card').filter({ hasText: fileName }).first()
   }
 
-  async function uploadRowFile(page: Page, vehicleName: string, rows: string[][]) {
-    await rowOf(page, vehicleName).locator('input[type="file"]').setInputFiles({
-      name: 'driver-report.xlsx',
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      buffer: buildReportWorkbook(rows)
-    })
-  }
-
-  async function analyzeRow(page: Page, vehicleName: string) {
-    await rowOf(page, vehicleName).getByRole('button', { name: '試算' }).click()
-  }
-
-  // 試算後若該列仍有欄位待對應，就地把待對應的欄位綁到第一個個案，讓該列變成可匯入
-  async function resolvePendingMappings(page: Page, vehicleName: string) {
-    const statusTag = rowOf(page, vehicleName).locator('.el-tag')
-    // 先等試算結束，狀態還停在「試算中」時判斷會誤以為沒有待對應欄位
-    await expect(statusTag.filter({ hasText: /需處理|可匯入|失敗/ })).toBeVisible()
-    if (!(await statusTag.filter({ hasText: '需處理' }).isVisible())) return
-
-    const expanded = page.locator('.el-table__expanded-cell').filter({ hasText: vehicleName })
-    await expect(expanded).toBeVisible()
-    const mappingRows = expanded.locator('.el-table__row')
-    await expect(mappingRows.first()).toBeVisible()
-    for (let i = 0; i < (await mappingRows.count()); i++) {
-      const mappingRow = mappingRows.nth(i)
-      if ((await mappingRow.locator('.el-tag').filter({ hasText: '待對應' }).count()) === 0) continue
-      await mappingRow.locator('.el-select').first().click()
-      // 用鍵盤挑下一個選項：多列同時展開時會有多個 dropdown，直接點選容易命中別列的；
-      // 而且重選同一個個案不會觸發 change，該欄會留在待對應
-      await page.keyboard.press('ArrowDown')
-      await page.keyboard.press('Enter')
-      await expect(mappingRow.locator('.el-tag').filter({ hasText: '待對應' })).toHaveCount(0)
-    }
-    await expect(statusTag.filter({ hasText: '可匯入' })).toBeVisible()
+  async function uploadFiles(page: Page, files: Array<{ name: string; rows: string[][] }>) {
+    await page.locator('.drop-zone input[type="file"]').setInputFiles(
+      files.map((f) => ({
+        name: f.name,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        buffer: buildReportWorkbook(f.rows)
+      }))
+    )
   }
 
   test.beforeEach(async ({ page }) => {
     await loginAs(page, 'admin')
+    await page.goto('/driver-reports/import')
+    await waitForTableLoaded(page)
   })
 
-  test('B1 選兩個月時，表格列出全部啟用車輛 × 2 列，沒有匯報表的車也在其中', async ({ page }) => {
-    await page.goto('/driver-reports/batch-import?months=2026-03,2026-04')
-    await waitForTableLoaded(page)
-
-    // 啟用車輛 5 台 × 2 個月
-    await expect(page.locator('.el-table__row')).toHaveCount(10)
-    await expect(rowOf(page, '苗栗市1車')).toContainText('尚未建表')
-    await expect(page.locator('.el-table__row').filter({ hasText: '2026-04' }).first()).toBeVisible()
-  })
-
-  test('B2 對已有匯報表的車上傳並試算，只有該列出現結果', async ({ page }) => {
-    await page.goto(`/driver-reports/batch-import?months=${MONTH}`)
-    await waitForTableLoaded(page)
-
-    await uploadRowFile(page, '竹北一車', [
-      HEADER,
-      ['1150302', '郭澤威', '有坐', '沒坐', '無'],
-      ['115/3/3', '郭澤威', '沒坐', '有坐', '']
+  test('B1 檔名含車輛名稱時自動判斷車輛並自動解析出涵蓋月份，確認後直接匯入', async ({ page }) => {
+    await uploadFiles(page, [
+      {
+        name: '竹北一車.xlsx',
+        rows: [
+          HEADER,
+          ['1150302', '郭澤威', '有坐', '沒坐', '無'],
+          ['115/3/3', '郭澤威', '沒坐', '有坐', '']
+        ]
+      }
     ])
-    await analyzeRow(page, '竹北一車')
+    const row = rowOf(page, '竹北一車.xlsx')
+    await expect(row).toContainText('竹北一車')
+    await expect(row).toContainText('2026-03', { timeout: 10000 })
 
-    await expect(rowOf(page, '竹北一車')).toContainText('可匯入 2 天')
-    await expect(rowOf(page, '竹北二車')).toContainText('待處理')
+    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
+    await expect(row).toContainText('已匯入', { timeout: 10000 })
+    await expect(row).toContainText('可匯入 2 天')
+    await expect(page.locator('.result-banner')).toContainText('成功 1 個檔案、共 2 天')
   })
 
-  test('B3 對沒有匯報表的車上傳，自動建表後成功試算且不再顯示尚未建表', async ({ page }) => {
-    await page.goto(`/driver-reports/batch-import?months=${MONTH}`)
-    await waitForTableLoaded(page)
-
-    await uploadRowFile(page, '苗栗市1車', [
-      HEADER,
-      ['1150302', '郭澤威', '有坐', '沒坐', '無']
+  test('B2 對沒有匯報表的車上傳，自動建表後成功匯入', async ({ page }) => {
+    await uploadFiles(page, [
+      { name: '苗栗市1車 (回覆).xlsx', rows: [HEADER, ['1150302', '郭澤威', '有坐', '沒坐', '無']] }
     ])
-    await analyzeRow(page, '苗栗市1車')
-
+    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
+    await expect(rowOf(page, '苗栗市1車')).toContainText('已匯入', { timeout: 10000 })
     await expect(rowOf(page, '苗栗市1車')).toContainText('可匯入 1 天')
-    await expect(rowOf(page, '苗栗市1車')).not.toContainText('尚未建表')
   })
 
-  test('B4 檔案日期不屬於該列宣告的月份時，該列顯示錯誤且不得被匯入', async ({ page }) => {
-    await page.goto(`/driver-reports/batch-import?months=${MONTH}`)
-    await waitForTableLoaded(page)
-
-    await uploadRowFile(page, '竹北一車', [
-      HEADER,
-      ['1150402', '郭澤威', '有坐', '沒坐', '無']
+  test('B3 單一檔案橫跨兩個月份時，各月份各自整月匯入', async ({ page }) => {
+    await uploadFiles(page, [
+      {
+        name: '竹北一車.xlsx',
+        rows: [
+          HEADER,
+          ['1150302', '郭澤威', '有坐', '沒坐', '無'],
+          ['1150402', '郭澤威', '有坐', '沒坐', '無']
+        ]
+      }
     ])
-    await analyzeRow(page, '竹北一車')
+    const row = rowOf(page, '竹北一車.xlsx')
+    await expect(row).toContainText('2026-03', { timeout: 10000 })
+    await expect(row).toContainText('2026-04')
 
-    await expect(rowOf(page, '竹北一車')).toContainText('不屬於宣告匯入的 2026-03')
-    await expect(rowOf(page, '竹北一車')).toContainText('失敗')
-    await expect(page.getByRole('button', { name: /確認匯入 \(0\)/ })).toBeDisabled()
+    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
+    await expect(row).toContainText('可匯入 2 天', { timeout: 10000 })
   })
 
-  test('B5 有未對應欄位的列標記需處理，就地對應後才可確認匯入', async ({ page }) => {
-    await page.goto(`/driver-reports/batch-import?months=${MONTH}`)
-    await waitForTableLoaded(page)
-
-    await uploadRowFile(page, '竹北一車', [
-      HEADER,
-      ['1150302', '郭澤威', '有坐', '沒坐', '無']
+  test('B4 檔名比對不到車輛時需手動選擇，選定後自動解析並可開始匯入', async ({ page }) => {
+    await uploadFiles(page, [
+      { name: 'driver-report.xlsx', rows: [HEADER, ['1150302', '郭澤威', '有坐', '沒坐', '無']] }
     ])
-    await analyzeRow(page, '竹北一車')
+    const row = rowOf(page, 'driver-report.xlsx')
+    await expect(row).toContainText('待選車輛')
+    await expect(page.getByRole('button', { name: /開始解析與匯入/ })).toBeDisabled()
 
-    await expect(rowOf(page, '竹北一車')).toContainText('需處理')
-    await expect(page.getByRole('button', { name: /確認匯入 \(0\)/ })).toBeDisabled()
+    await row.locator('.el-select').click()
+    await page.locator('.el-select-dropdown__item').filter({ hasText: '竹南1車' }).click()
+    await expect(row).toContainText('2026-03', { timeout: 10000 })
+    await expect(page.getByRole('button', { name: /開始解析與匯入/ })).toBeEnabled()
 
-    // 展開列的欄位對應表格：選定個案後該欄即視為已對應
-    const expanded = page.locator('.el-table__expanded-cell')
-    await expect(expanded).toBeVisible()
-    await expanded.locator('.el-select').first().click()
-    await page.locator('.el-select-dropdown__item').first().click()
-
-    await expect(rowOf(page, '竹北一車')).toContainText('可匯入')
-    await expect(page.getByRole('button', { name: /確認匯入 \(1\)/ })).toBeEnabled()
+    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
+    await expect(row).toContainText('已匯入', { timeout: 10000 })
   })
 
-  test('B6 對已匯入過的月份重傳時跳確認視窗，確認後筆數不翻倍', async ({ page }) => {
-    const file: string[][] = [
+  test('B5 對已匯入過的月份重傳時，就地顯示覆蓋警示並需勾選確認才能送出', async ({ page }) => {
+    const file = [
       HEADER,
       ['1150302', '郭澤威', '有坐', '沒坐', '無'],
       ['115/3/3', '郭澤威', '沒坐', '有坐', '']
     ]
 
-    await page.goto(`/driver-reports/batch-import?months=${MONTH}`)
+    await uploadFiles(page, [{ name: '竹北一車.xlsx', rows: file }])
+    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
+    await expect(rowOf(page, '竹北一車.xlsx')).toContainText('已匯入', { timeout: 10000 })
+
+    // 重傳同一份檔案（換個檔名避免被去重擋下）：涵蓋月份標籤變成 warning，就地跳出覆蓋警示
+    await uploadFiles(page, [{ name: '竹北一車再傳.xlsx', rows: file }])
+    const row = rowOf(page, '竹北一車再傳.xlsx')
+    await expect(row).toContainText('2026-03', { timeout: 10000 })
+
+    const overlapAlert = page.locator('.overlap-alert')
+    await expect(overlapAlert).toBeVisible()
+    await expect(overlapAlert).toContainText('竹北一車')
+    await expect(page.getByRole('button', { name: /開始解析與匯入/ })).toBeDisabled()
+
+    await overlapAlert.locator('.el-checkbox').click()
+    await expect(page.getByRole('button', { name: /開始解析與匯入/ })).toBeEnabled()
+    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
+
+    await expect(row).toContainText('已匯入', { timeout: 10000 })
+
+    await page.goto('/driver-reports/status')
     await waitForTableLoaded(page)
+    await expect(page.locator('.el-table__row').filter({ hasText: '竹北一車' })).toContainText('2026-03（2天）')
+  })
 
-    await uploadRowFile(page, '竹北一車', file)
-    await analyzeRow(page, '竹北一車')
-    await resolvePendingMappings(page, '竹北一車')
-    await page.getByRole('button', { name: /確認匯入/ }).click()
-    await expectElMessage(page, /已匯入 1 列接送匯報/, 'success')
-    await expect(rowOf(page, '竹北一車')).toContainText('已匯入')
-    await expect(rowOf(page, '竹北一車')).toContainText('2 天')
-    // 等第一則成功訊息消失，避免第二則與它同時存在而選到兩個元素
-    await expect(page.locator('.el-message--success')).toHaveCount(0, { timeout: 10000 })
-
-    // 重傳同一個月：先跳覆蓋確認，確認後仍是 2 天而非 4 天
-    await uploadRowFile(page, '竹北一車', file)
-    await analyzeRow(page, '竹北一車')
-    await resolvePendingMappings(page, '竹北一車')
-    await page.getByRole('button', { name: /確認匯入/ }).click()
+  test('B6 完全比對不到個案的欄位進入待維護，匯入完成後提示是否前往處理', async ({ page }) => {
+    await uploadFiles(page, [
+      { name: '竹北二車.xlsx', rows: [HEADER_UNMATCHED, ['1150302', '郭澤威', '有坐', '沒坐', '無']] }
+    ])
+    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
+    await expect(rowOf(page, '竹北二車.xlsx')).toContainText('已匯入', { timeout: 10000 })
+    await expect(rowOf(page, '竹北二車.xlsx')).toContainText('1 欄待維護')
+    await expect(page.locator('.result-banner')).toContainText('個欄位找不到對應個案，已進入待維護資料')
 
     const confirmBox = page.locator('.el-message-box')
     await expect(confirmBox).toBeVisible()
-    await expect(confirmBox).toContainText('既有 2 天')
-    await confirmBox.getByRole('button', { name: '確認送出' }).click()
+    await expect(confirmBox).toContainText('是否立即前往處理')
+    await confirmBox.getByRole('button', { name: '前往待維護' }).click()
 
-    await expectElMessage(page, /已匯入 1 列接送匯報/, 'success')
-    await expect(rowOf(page, '竹北一車')).toContainText('2 天')
+    await expect(page.getByRole('tab', { name: /待維護資料/ })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('.el-table__row').filter({ hasText: '王小明' })).toBeVisible()
   })
 
-  test('B10 重新選擇檔案後，試算與匯入用的是新檔而不是第一次選的那份', async ({ page }) => {
-    await page.goto(`/driver-reports/batch-import?months=${MONTH}`)
-    await waitForTableLoaded(page)
-
-    await uploadRowFile(page, '竹北一車', [HEADER, ['1150302', '郭澤威', '有坐', '沒坐', '無']])
-    await analyzeRow(page, '竹北一車')
-    await expect(rowOf(page, '竹北一車')).toContainText('可匯入 1 天')
-
-    // 換成三天的檔案：沿用舊檔的話這裡會停在 1 天
-    await uploadRowFile(page, '竹北一車', [
-      HEADER,
-      ['1150302', '郭澤威', '有坐', '沒坐', '無'],
-      ['1150303', '郭澤威', '沒坐', '有坐', ''],
-      ['1150304', '郭澤威', '有坐', '有坐', '']
+  test('B7 一個檔案找不到匯報表表頭時單獨失敗，不影響其他檔案', async ({ page }) => {
+    const validFile = [HEADER, ['1150302', '郭澤威', '有坐', '沒坐', '無']]
+    await uploadFiles(page, [
+      { name: '竹北一車.xlsx', rows: validFile },
+      { name: '竹南1車.xlsx', rows: [['車牌', '備註']] }
     ])
-    await analyzeRow(page, '竹北一車')
-    await expect(rowOf(page, '竹北一車')).toContainText('可匯入 3 天')
+    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
 
-    await resolvePendingMappings(page, '竹北一車')
-    await page.getByRole('button', { name: /確認匯入/ }).click()
-    await expectElMessage(page, /已匯入 1 列接送匯報/, 'success')
-    await expect(rowOf(page, '竹北一車')).toContainText('3 天')
+    await expect(rowOf(page, '竹北一車.xlsx')).toContainText('已匯入', { timeout: 10000 })
+    await expect(rowOf(page, '竹南1車.xlsx')).toContainText('失敗')
+    await expect(rowOf(page, '竹南1車.xlsx')).toContainText('找不到匯報表表頭')
   })
 
-  test('B11 清空月份選擇後畫面仍可用，回到請先選擇月份的空狀態', async ({ page }) => {
-    await page.goto(`/driver-reports/batch-import?months=${MONTH}`)
-    await waitForTableLoaded(page)
-    await expect(page.locator('.el-table__row').first()).toBeVisible()
+  test('B8 移除已加入的檔案列', async ({ page }) => {
+    await uploadFiles(page, [
+      { name: '竹北一車.xlsx', rows: [HEADER, ['1150302', '郭澤威', '有坐', '沒坐', '無']] }
+    ])
+    const row = rowOf(page, '竹北一車.xlsx')
+    await expect(row).toBeVisible()
+    await row.getByRole('button', { name: /移除/ }).click()
+    await expect(row).toHaveCount(0)
+  })
+})
 
-    await page.locator('.el-date-editor').hover()
-    await page.locator('.el-input__icon.clear-icon, .el-select__caret.is-clear').first().click()
-
-    await expect(page.getByText('請先選擇要匯入的月份')).toBeVisible()
-    await expect(page.locator('.el-table__row')).toHaveCount(0)
+// 待維護資料頁籤：連結既有個案或建立新個案，建立時預帶匯報表原始欄位解析出的姓名
+test.describe('05c. 司機接送匯報待維護資料 (Driver Report Pending Mappings)', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAs(page, 'admin')
   })
 
-  test('B12 列數超過並發上限時佇列仍會排乾，全部列都有最終結果', async ({ page }) => {
-    await page.goto(`/driver-reports/batch-import?months=${MONTH}`)
+  test('C1 新增個案並綁定：預帶原始欄位姓名，完成後從待維護清單移除', async ({ page }) => {
+    // 先透過批次上傳製造一筆完全比對不到個案的待維護欄位
+    await page.goto('/driver-reports/import')
     await waitForTableLoaded(page)
+    await page.locator('.drop-zone input[type="file"]').setInputFiles({
+      name: '竹北二車.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer: buildReportWorkbook([HEADER_UNMATCHED, ['1150302', '郭澤威', '有坐', '沒坐', '無']])
+    })
+    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
+    await expect(page.locator('.result-banner')).toContainText('1 個欄位找不到對應個案', { timeout: 10000 })
 
-    const validFile: string[][] = [HEADER, ['1150302', '郭澤威', '有坐', '沒坐', '無']]
-    const vehicles = ['竹北一車', '竹北二車', '竹南1車', '竹南2車', '苗栗市1車']
-    for (const vehicle of vehicles) {
-      await uploadRowFile(page, vehicle, validFile)
-    }
+    const confirmBox = page.locator('.el-message-box')
+    await confirmBox.getByRole('button', { name: '前往待維護' }).click()
 
-    // 5 列 > MAX_CONCURRENT_REQUESTS(3)，後面兩列必須由 worker 從佇列取出處理
-    await page.getByRole('button', { name: /全部試算/ }).click()
-    for (const vehicle of vehicles) {
-      await expect(rowOf(page, vehicle)).toContainText('可匯入 1 天')
-    }
-  })
+    const pendingRow = page.locator('.el-table__row').filter({ hasText: '王小明' })
+    await expect(pendingRow).toBeVisible()
 
-  test('B7 三列同時處理，失敗列顯示原因且不影響其他列', async ({ page }) => {
-    await page.goto(`/driver-reports/batch-import?months=${MONTH}`)
-    await waitForTableLoaded(page)
+    await pendingRow.getByRole('button', { name: '新增個案' }).click()
+    const dialog = page.locator('.el-dialog').filter({ hasText: '新增個案並綁定' })
+    await expect(dialog.locator('input').first()).toHaveValue('王小明')
+    await dialog.getByRole('button', { name: '建立並綁定' }).click()
 
-    const validFile: string[][] = [HEADER, ['1150302', '郭澤威', '有坐', '沒坐', '無']]
-
-    await uploadRowFile(page, '竹北一車', validFile)
-    await uploadRowFile(page, '竹南1車', validFile)
-    await uploadRowFile(page, '苗栗市1車', [['時間戳記', '今天日期', '今日駕駛人', '問題回報']])
-
-    await page.getByRole('button', { name: /全部試算/ }).click()
-
-    await expect(rowOf(page, '苗栗市1車')).toContainText('找不到匯報表表頭')
-    await expect(rowOf(page, '苗栗市1車')).toContainText('失敗')
-    await expect(rowOf(page, '竹北一車')).toContainText('可匯入 1 天')
-    await expect(rowOf(page, '竹南1車')).toContainText('可匯入 1 天')
-
-    // 失敗列被排除在確認匯入之外，其餘兩列照常寫入
-    await resolvePendingMappings(page, '竹北一車')
-    await resolvePendingMappings(page, '竹南1車')
-    await page.getByRole('button', { name: /確認匯入 \(2\)/ }).click()
-
-    await expectElMessage(page, /已匯入 2 列接送匯報/, 'success')
-    await expect(rowOf(page, '竹北一車')).toContainText('已匯入')
-    await expect(rowOf(page, '竹南1車')).toContainText('已匯入')
-    await expect(rowOf(page, '苗栗市1車')).toContainText('找不到匯報表表頭')
+    await expectElMessage(page, /已建立個案「王小明」並完成綁定/, 'success')
+    await expect(page.locator('.el-table__row').filter({ hasText: '王小明' })).toHaveCount(0)
   })
 })

@@ -113,6 +113,11 @@ func (s *DriverReportService) CommitDriverReport(
 			}
 		}
 
+		if result.ImportedRows == 0 {
+			// 全部列都被跳過（月份不符或格式錯誤）時代表沒有任何一列真的匯入，
+			// 不更新最後匯入時間，避免使用者誤以為這次上傳已經成功。
+			return nil
+		}
 		return s.repo.MarkImported(txCtx, formID, submittedAt)
 	})
 	if txErr != nil {
