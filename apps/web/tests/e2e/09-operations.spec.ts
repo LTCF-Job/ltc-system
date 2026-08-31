@@ -27,7 +27,7 @@ test.describe('09. 車輛保養與出勤油資 (Operations: Maintenance & Attend
     const costInput = dialog.locator('.el-input-number input').last()
     await costInput.fill('2500')
 
-    await dialog.getByRole('button', { name: '確定儲存' }).click()
+    await dialog.getByRole('button', { name: '儲存' }).click()
     await expectElMessage(page, /成功/, 'success')
   })
 

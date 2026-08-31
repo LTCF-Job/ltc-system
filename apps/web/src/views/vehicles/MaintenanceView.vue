@@ -1,70 +1,69 @@
 <template>
-  <div class="maintenance-view" v-loading="loading">
-    <!-- 頂部過濾與操作列 -->
-    <el-card shadow="never" class="filter-card">
-      <div class="header-content">
-        <div class="title-section">
-          <h2 class="page-title">車輛維修保養管理</h2>
-          <span class="subtitle">車隊定期保養、臨時維修紀錄登錄與空白檢查表下載</span>
-        </div>
+  <div class="maintenance-view">
+    <DataTablePage
+      title="車輛維修保養管理"
+      description="車隊定期保養、臨時維修紀錄登錄與空白檢查表下載"
+      :loading="loading"
+      v-model:page="page"
+      v-model:pageSize="pageSize"
+      :total="total"
+      @page-change="fetchList"
+      @size-change="fetchList"
+    >
+      <template #filter>
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜尋車牌／車名／保養廠／項目／備註"
+          clearable
+          style="width: 240px"
+          @keyup.enter="fetchList"
+        />
 
-        <div class="action-section">
-          <el-input
-            v-model="searchQuery"
-            placeholder="搜尋車牌／車名／保養廠／項目／備註"
-            clearable
-            style="width: 240px"
-            @keyup.enter="fetchList"
+        <el-select
+          v-model="queryVehicleId"
+          placeholder="全部車輛"
+          clearable
+          style="width: 150px"
+          @change="fetchList"
+        >
+          <el-option
+            v-for="veh in vehicles"
+            :key="veh.id"
+            :label="veh.displayName"
+            :value="veh.id"
           />
+        </el-select>
 
-          <el-select
-            v-model="queryVehicleId"
-            placeholder="全部車輛"
-            clearable
-            style="width: 150px"
-            @change="fetchList"
-          >
-            <el-option
-              v-for="veh in vehicles"
-              :key="veh.id"
-              :label="veh.displayName"
-              :value="veh.id"
-            />
-          </el-select>
+        <el-date-picker
+          v-model="dateRange"
+          type="daterange"
+          range-separator="至"
+          start-placeholder="開始日期"
+          end-placeholder="結束日期"
+          value-format="YYYY-MM-DD"
+          style="width: 240px"
+          @change="fetchList"
+        />
 
-          <el-date-picker
-            v-model="dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="開始日期"
-            end-placeholder="結束日期"
-            value-format="YYYY-MM-DD"
-            style="width: 240px"
-            @change="fetchList"
-          />
+        <el-button type="primary" @click="fetchList">
+          查詢
+        </el-button>
+        <el-button @click="handleReset">
+          重設
+        </el-button>
+      </template>
 
-          <el-button type="primary" icon="Search" @click="fetchList">
-            查詢
-          </el-button>
-          <el-button @click="handleReset">
-            重設
-          </el-button>
+      <template #actions>
+        <el-button plain @click="handleDownloadBlank" :loading="downloadingBlank">
+          下載空白保養表 (.xlsx)
+        </el-button>
 
-          <el-button type="info" @click="handleDownloadBlank" :loading="downloadingBlank">
-            <el-icon><Document /></el-icon>
-            下載空白保養表 (.xlsx)
-          </el-button>
+        <el-button v-if="authStore.can('staff')" type="primary" :icon="Plus" @click="openCreateDialog">
+          新增保養紀錄
+        </el-button>
+      </template>
 
-          <el-button v-if="authStore.can('staff')" type="primary" @click="openCreateDialog">
-            <el-icon><Plus /></el-icon>
-            新增保養紀錄
-          </el-button>
-        </div>
-      </div>
-    </el-card>
-
-    <!-- 維修保養資料列表 -->
-    <el-card shadow="never" class="table-card mt-3">
+      <template #table>
       <el-table :data="records" border stripe size="small">
         <el-table-column prop="serviceDate" label="保養日期" width="110" align="center">
           <template #default="{ row }">
@@ -78,8 +77,8 @@
             {{ Number(row.mileage).toLocaleString() }}
           </template>
         </el-table-column>
-        <el-table-column prop="items" label="保養／維修項目" min-width="200" />
-        <el-table-column prop="vendor" label="廠商／車廠" width="140">
+        <el-table-column prop="items" label="保養／維修項目" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="vendor" label="廠商／車廠" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.vendor || '-' }}
           </template>
@@ -102,49 +101,39 @@
             <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="note" label="備註" min-width="140">
+        <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.note || '-' }}
           </template>
         </el-table-column>
         <el-table-column v-if="authStore.can('staff')" label="操作" width="140" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row)">
-              編輯
-            </el-button>
-            <el-button link type="danger" size="small" :icon="Delete" @click="handleDelete(row)">
-              刪除
-            </el-button>
+            <TableRowActions>
+              <el-button link type="primary" size="small" @click="openEditDialog(row)">
+                編輯
+              </el-button>
+              <el-button link type="danger" size="small" @click="handleDelete(row)">
+                刪除
+              </el-button>
+            </TableRowActions>
           </template>
         </el-table-column>
       </el-table>
-
-      <!-- 分頁 -->
-      <div class="pagination-box">
-        <el-pagination
-          v-model:current-page="page"
-          v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="fetchList"
-          @current-change="fetchList"
-        />
-      </div>
-    </el-card>
+      </template>
+    </DataTablePage>
 
     <!-- 新增 / 編輯保養紀錄 Dialog -->
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯保養紀錄' : '新增保養紀錄'"
-      width="540px"
+      width="min(600px, calc(100vw - 32px))"
       destroy-on-close
     >
       <el-form
         ref="formRef"
         :model="form"
         :rules="rules"
-        label-width="100px"
+        label-width="110px"
         label-position="right"
       >
         <el-form-item label="保養車輛" prop="vehicleId">
@@ -211,12 +200,7 @@
       </el-form>
 
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="saving" @click="handleSave">
-            確定儲存
-          </el-button>
-        </span>
+        <DialogFooter :loading="saving" @confirm="handleSave" @cancel="dialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -224,14 +208,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import {
-  Refresh,
-  Document,
-  Plus,
-  Edit,
-  Delete
-} from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
+import DataTablePage from '@/components/DataTablePage.vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import DialogFooter from '@/components/DialogFooter.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import {
   listMaintenance,
@@ -413,35 +394,6 @@ onMounted(async () => {
   gap: 16px;
 }
 
-.header-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-
-  .title-section {
-    .page-title {
-      font-size: 18px;
-      font-weight: bold;
-      color: var(--el-text-color-primary);
-      margin: 0 0 4px 0;
-    }
-
-    .subtitle {
-      font-size: 13px;
-      color: var(--el-text-color-secondary);
-    }
-  }
-
-  .action-section {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-}
-
 .font-bold {
   font-weight: 600;
 }
@@ -450,13 +402,4 @@ onMounted(async () => {
   color: var(--el-text-color-placeholder);
 }
 
-.pagination-box {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-
-.mt-3 {
-  margin-top: 12px;
-}
 </style>

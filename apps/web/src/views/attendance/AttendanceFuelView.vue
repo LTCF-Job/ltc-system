@@ -1,5 +1,6 @@
 <template>
   <div class="attendance-fuel-view">
+    <PageHeader title="出勤與油資登錄" />
     <el-tabs v-model="activeTab" type="border-card" class="main-tabs">
       <!-- 分頁 1: 司機出勤與請假月曆 -->
       <el-tab-pane label="司機出勤與請假" name="attendance">
@@ -21,7 +22,7 @@
                 v-model="attendanceQuery"
                 placeholder="搜尋司機姓名／代碼"
                 clearable
-                style="width: 180px"
+                style="width: 240px"
                 @keyup.enter="fetchAttendance"
               />
 
@@ -40,7 +41,7 @@
                 />
               </el-select>
 
-              <el-button type="primary" icon="Search" @click="fetchAttendance">
+              <el-button type="primary" @click="fetchAttendance">
                 查詢
               </el-button>
               <el-button @click="handleResetAttendance">
@@ -101,9 +102,10 @@
               <el-table-column
                 prop="driverName"
                 label="司機姓名"
-                width="140"
+                width="160"
                 fixed="left"
                 align="center"
+                show-overflow-tooltip
               >
                 <template #default="{ row }">
                   <span class="driver-name-text">
@@ -180,105 +182,110 @@
 
       <!-- 分頁 2: 車輛油資登錄 -->
       <el-tab-pane label="車輛油資登錄" name="fuel">
-        <div class="tab-content" v-loading="fuelLoading">
-          <!-- 油資過濾與統計卡片 -->
-          <div class="fuel-top-section">
-            <div class="filter-header">
-              <div class="left-controls" style="display: flex; gap: 8px; align-items: center;">
-                <el-input
-                  v-model="fuelQuery"
-                  placeholder="搜尋車牌／車名／司機"
-                  clearable
-                  style="width: 180px"
-                  @keyup.enter="fetchFuelLogs"
-                />
+        <DataTablePage
+          :loading="fuelLoading"
+          v-model:page="fuelPage"
+          v-model:pageSize="fuelPageSize"
+          :total="fuelTotal"
+          :page-sizes="[10, 20, 50]"
+          @page-change="fetchFuelLogs"
+          @size-change="fetchFuelLogs"
+        >
+          <template #filter>
+            <el-input
+              v-model="fuelQuery"
+              placeholder="搜尋車牌／車名／司機"
+              clearable
+              style="width: 240px"
+              @keyup.enter="fetchFuelLogs"
+            />
 
-                <el-select
-                  v-model="fuelVehicleId"
-                  placeholder="全部車輛"
-                  clearable
-                  style="width: 140px"
-                  @change="fetchFuelLogs"
-                >
-                  <el-option
-                    v-for="veh in vehicles"
-                    :key="veh.id"
-                    :label="veh.displayName"
-                    :value="veh.id"
-                  />
-                </el-select>
+            <el-select
+              v-model="fuelVehicleId"
+              placeholder="全部車輛"
+              clearable
+              style="width: 140px"
+              @change="fetchFuelLogs"
+            >
+              <el-option
+                v-for="veh in vehicles"
+                :key="veh.id"
+                :label="veh.displayName"
+                :value="veh.id"
+              />
+            </el-select>
 
-                <el-select
-                  v-model="fuelDriverId"
-                  placeholder="全部司機"
-                  clearable
-                  style="width: 140px"
-                  @change="fetchFuelLogs"
-                >
-                  <el-option
-                    v-for="d in drivers"
-                    :key="d.id"
-                    :label="d.name"
-                    :value="d.id"
-                  />
-                </el-select>
+            <el-select
+              v-model="fuelDriverId"
+              placeholder="全部司機"
+              clearable
+              style="width: 140px"
+              @change="fetchFuelLogs"
+            >
+              <el-option
+                v-for="d in drivers"
+                :key="d.id"
+                :label="d.name"
+                :value="d.id"
+              />
+            </el-select>
 
-                <el-date-picker
-                  v-model="fuelDateRange"
-                  type="daterange"
-                  range-separator="至"
-                  start-placeholder="開始日期"
-                  end-placeholder="結束日期"
-                  value-format="YYYY-MM-DD"
-                  style="width: 230px"
-                  @change="fetchFuelLogs"
-                />
+            <el-date-picker
+              v-model="fuelDateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="開始日期"
+              end-placeholder="結束日期"
+              value-format="YYYY-MM-DD"
+              style="width: 230px"
+              @change="fetchFuelLogs"
+            />
 
-                <el-button type="primary" icon="Search" @click="fetchFuelLogs">
-                  查詢
-                </el-button>
-                <el-button @click="handleResetFuel">
-                  重設
-                </el-button>
-              </div>
+            <el-button type="primary" @click="fetchFuelLogs">
+              查詢
+            </el-button>
+            <el-button @click="handleResetFuel">
+              重設
+            </el-button>
+          </template>
 
-              <el-button v-if="authStore.can('staff')" type="primary" @click="openFuelDialog()">
-                <el-icon><Plus /></el-icon>
-                新增加油紀錄
-              </el-button>
-            </div>
+          <template #actions>
+            <el-button v-if="authStore.can('staff')" type="primary" :icon="Plus" @click="openFuelDialog()">
+              新增加油紀錄
+            </el-button>
+          </template>
 
-            <!-- 油資統計指標 -->
-            <el-row :gutter="16" class="mt-3">
-              <el-col :xs="24" :sm="8">
-                <el-card shadow="never" class="stat-card">
-                  <div class="stat-inner">
-                    <span class="stat-label">加油總筆數</span>
-                    <span class="stat-val">{{ fuelTotal }} <span class="unit">筆</span></span>
-                  </div>
-                </el-card>
-              </el-col>
-              <el-col :xs="24" :sm="8">
-                <el-card shadow="never" class="stat-card">
-                  <div class="stat-inner">
-                    <span class="stat-label">總加油公升數</span>
-                    <span class="stat-val">{{ fuelTotalLiters.toFixed(1) }} <span class="unit">L</span></span>
-                  </div>
-                </el-card>
-              </el-col>
-              <el-col :xs="24" :sm="8">
-                <el-card shadow="never" class="stat-card">
-                  <div class="stat-inner">
-                    <span class="stat-label">總花費金額</span>
-                    <span class="stat-val">${{ fuelTotalCost.toLocaleString() }}</span>
-                  </div>
-                </el-card>
-              </el-col>
-            </el-row>
-          </div>
+          <template #table>
+          <!-- 油資統計指標 -->
+          <el-row :gutter="16" class="mb-3">
+            <el-col :xs="24" :sm="8">
+              <el-card shadow="never" class="stat-card">
+                <div class="stat-inner">
+                  <span class="stat-label">加油總筆數</span>
+                  <span class="stat-val">{{ fuelTotal }} <span class="unit">筆</span></span>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :xs="24" :sm="8">
+              <el-card shadow="never" class="stat-card">
+                <div class="stat-inner">
+                  <span class="stat-label">總加油公升數</span>
+                  <span class="stat-val">{{ fuelTotalLiters.toFixed(1) }} <span class="unit">L</span></span>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :xs="24" :sm="8">
+              <el-card shadow="never" class="stat-card">
+                <div class="stat-inner">
+                  <span class="stat-label">總花費金額</span>
+                  <span class="stat-val">${{ fuelTotalCost.toLocaleString() }}</span>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
 
           <!-- 油資表格 -->
-          <el-table :data="fuelLogs" border stripe size="small" class="mt-3" style="width: 100%;">
+          <el-table :data="fuelLogs" border stripe size="small" style="width: 100%;">
             <el-table-column prop="fuelDate" label="加油日期" min-width="120" align="center">
               <template #default="{ row }">
                 <span>{{ row.fuelDate?.slice(0, 10) }}</span>
@@ -316,29 +323,19 @@
             </el-table-column>
             <el-table-column v-if="authStore.can('staff')" label="操作" width="140" align="center" fixed="right">
               <template #default="{ row }">
-                <el-button link type="success" size="small" :icon="Edit" @click="openFuelDialog(row)">
-                  編輯
-                </el-button>
-                <el-button link type="danger" size="small" :icon="Delete" @click="handleDeleteFuel(row)">
-                  刪除
-                </el-button>
+                <TableRowActions>
+                  <el-button link type="primary" size="small" @click="openFuelDialog(row)">
+                    編輯
+                  </el-button>
+                  <el-button link type="danger" size="small" @click="handleDeleteFuel(row)">
+                    刪除
+                  </el-button>
+                </TableRowActions>
               </template>
             </el-table-column>
           </el-table>
-
-          <!-- 分頁 -->
-          <div class="pagination-box">
-            <el-pagination
-              v-model:current-page="fuelPage"
-              v-model:page-size="fuelPageSize"
-              :page-sizes="[10, 20, 50]"
-              :total="fuelTotal"
-              layout="total, sizes, prev, pager, next, jumper"
-              @size-change="fetchFuelLogs"
-              @current-change="fetchFuelLogs"
-            />
-          </div>
-        </div>
+          </template>
+        </DataTablePage>
       </el-tab-pane>
     </el-tabs>
 
@@ -346,7 +343,7 @@
     <el-dialog
       v-model="attendanceDialogVisible"
       title="登記司機出勤狀態"
-      width="420px"
+      width="min(480px, calc(100vw - 32px))"
       destroy-on-close
     >
       <div v-if="selectedCell" class="dialog-content">
@@ -369,7 +366,7 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <el-form label-width="80px" label-position="right">
+        <el-form label-width="90px" label-position="right">
           <el-form-item label="出勤狀態">
             <el-radio-group v-model="editStatus">
               <el-radio-button label="work">出勤 (O)</el-radio-button>
@@ -391,12 +388,7 @@
       </div>
 
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="attendanceDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="attendanceSaving" @click="handleSaveAttendance">
-            確定變更
-          </el-button>
-        </span>
+        <DialogFooter :loading="attendanceSaving" @confirm="handleSaveAttendance" @cancel="attendanceDialogVisible = false" />
       </template>
     </el-dialog>
 
@@ -404,14 +396,14 @@
     <el-dialog
       v-model="fuelDialogVisible"
       :title="editingFuelId ? '編輯加油紀錄' : '新增加油紀錄'"
-      width="480px"
+      width="min(480px, calc(100vw - 32px))"
       destroy-on-close
     >
       <el-form
         ref="fuelFormRef"
         :model="fuelForm"
         :rules="fuelRules"
-        label-width="100px"
+        label-width="110px"
         label-position="right"
       >
         <el-form-item label="加油車輛" prop="vehicleId">
@@ -473,12 +465,7 @@
       </el-form>
 
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="fuelDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="fuelSaving" @click="handleSaveFuel">
-            確定儲存
-          </el-button>
-        </span>
+        <DialogFooter :loading="fuelSaving" @confirm="handleSaveFuel" @cancel="fuelDialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -486,7 +473,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Refresh, Plus, Edit, Delete } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
+import DataTablePage from '@/components/DataTablePage.vue'
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import {
@@ -1131,12 +1122,6 @@ onMounted(async () => {
 
 .text-muted {
   color: var(--el-text-color-placeholder);
-}
-
-.pagination-box {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
 }
 
 .mt-3 {
