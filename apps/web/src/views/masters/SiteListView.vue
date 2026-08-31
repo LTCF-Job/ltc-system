@@ -1,6 +1,7 @@
 <template>
   <div class="site-list-view">
     <DataTablePage
+      title="據點管理"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -60,7 +61,7 @@
               <span>{{ REGION_LABELS[row.region as Region] || row.region }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="address" label="據點地址" min-width="180" />
+          <el-table-column prop="address" label="據點地址" min-width="180" show-overflow-tooltip />
           <el-table-column label="開放時間" width="220" class-name="open-days-column">
             <template #default="{ row }">
               {{ row.openDays?.map((d: number) => `週${'一二三四五六日'[d-1]}`).join('、') || '未設定' }}
@@ -75,12 +76,14 @@
             align="center"
           >
             <template #default="{ row }">
-              <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row)">
-                編輯
-              </el-button>
-              <el-button link type="danger" size="small" @click="handleDelete(row)">
-                刪除
-              </el-button>
+              <TableRowActions>
+                <el-button link type="primary" size="small" @click="openEditDialog(row)">
+                  編輯
+                </el-button>
+                <el-button link type="danger" size="small" @click="handleDelete(row)">
+                  刪除
+                </el-button>
+              </TableRowActions>
             </template>
 
           </el-table-column>
@@ -93,9 +96,9 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯據點資料' : '新增據點'"
-      width="540px"
+      width="min(600px, calc(100vw - 32px))"
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px" class="dialog-scroll-form">
         <el-form-item label="據點名稱" prop="name">
           <el-input v-model="form.name" placeholder="如：竹北日照中心" />
         </el-form-item>
@@ -130,10 +133,11 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          確認儲存
-        </el-button>
+        <DialogFooter
+          :loading="submitting"
+          @confirm="handleSubmit"
+          @cancel="dialogVisible = false"
+        />
       </template>
     </el-dialog>
   </div>
@@ -144,6 +148,8 @@ import { ref, reactive } from 'vue'
 import { Plus, Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import { listSites, createSite, updateSite, deleteSite } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
@@ -239,9 +245,10 @@ async function handleSubmit() {
 
 async function handleDelete(row: any) {
   await ElMessageBox.confirm(`確定刪除據點「${row.name}」？此操作無法還原。`, '確認刪除', {
-    confirmButtonText: '確定',
+    confirmButtonText: '刪除',
     cancelButtonText: '取消',
-    type: 'warning'
+    type: 'warning',
+    confirmButtonClass: 'el-button--danger'
   })
 
   await deleteSite(row.id)

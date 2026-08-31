@@ -1,6 +1,7 @@
 <template>
   <div class="vehicle-list-view">
     <DataTablePage
+      title="車輛管理"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -184,25 +185,25 @@
             align="center"
           >
             <template #default="{ row }">
-              <template v-if="editingRowId === row.id">
-                <el-button type="success" size="small" :loading="savingRow" :icon="Check" @click="saveInlineEdit(row as any)">
+              <TableRowActions v-if="editingRowId === row.id">
+                <el-button type="primary" size="small" :loading="savingRow" @click="saveInlineEdit(row as any)">
                   儲存
                 </el-button>
                 <el-button size="small" :disabled="savingRow" @click="cancelInlineEdit">
                   取消
                 </el-button>
-              </template>
-              <template v-else>
-                <el-button link type="success" size="small" :icon="Edit" @click="startInlineEdit(row as any)">
+              </TableRowActions>
+              <TableRowActions v-else>
+                <el-button link type="primary" size="small" @click="startInlineEdit(row as any)">
                   編輯
                 </el-button>
-                <el-button link type="primary" size="small" :icon="User" @click="openDriverDialog(row as any)">
+                <el-button link type="primary" size="small" @click="openDriverDialog(row as any)">
                   司機
                 </el-button>
-                <el-button link type="danger" size="small" :icon="Delete" @click="handleDeleteVehicle(row as any)">
+                <el-button link type="danger" size="small" @click="handleDeleteVehicle(row as any)">
                   刪除
                 </el-button>
-              </template>
+              </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
@@ -213,9 +214,9 @@
     <el-dialog
       v-model="dialogVisible"
       title="新增車輛"
-      width="500px"
+      width="min(480px, calc(100vw - 32px))"
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
         <el-form-item label="顯示車名" prop="displayName">
           <el-input v-model="form.displayName" placeholder="如：竹北一車、竹南2車" />
         </el-form-item>
@@ -255,10 +256,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          確認儲存
-        </el-button>
+        <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
       </template>
     </el-dialog>
 
@@ -266,9 +264,9 @@
     <el-dialog
       v-model="driverDialogVisible"
       :title="`維護司機 - ${driverDialogVehicle?.displayName || ''}`"
-      width="520px"
+      width="min(480px, calc(100vw - 32px))"
     >
-      <el-form label-width="120px">
+      <el-form label-width="110px">
         <el-form-item label="本車司機">
           <el-select
             v-model="driverDialogForm.driverIds"
@@ -298,10 +296,7 @@
         一位司機同一期間只會有一台車：被加入本車的司機，其他車上尚未結束的指派會從生效日起收掉。
       </div>
       <template #footer>
-        <el-button @click="driverDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="savingDrivers" @click="handleSaveDrivers">
-          確認儲存
-        </el-button>
+        <DialogFooter :loading="savingDrivers" @confirm="handleSaveDrivers" @cancel="driverDialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -309,10 +304,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { Plus, Edit, Check, Delete, User } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import { listVehicles, createVehicle, updateVehicle, deleteVehicle, listDrivers, setVehicleDrivers } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
@@ -521,7 +518,7 @@ async function handleDeleteVehicle(row: VehicleDTO) {
       `確定要刪除車輛「${row.displayName} (${row.plateNo})」？`,
       '刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning',
         confirmButtonClass: 'el-button--danger'
@@ -565,120 +562,8 @@ executeFetch()
   background-color: var(--el-color-primary-light-9) !important;
 }
 
-/* 狀態互動切換按鈕 / 膠囊標籤 */
-.status-toggle-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 5px 14px;
-  border-radius: 9999px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid transparent;
-  outline: none;
-  background: transparent;
-  user-select: none;
-  line-height: 1;
-}
-
-.status-toggle-pill.is-active {
-  background-color: #ecfdf5;
-  color: #047857;
-  border-color: #a7f3d0;
-}
-
-.status-toggle-pill.is-active:hover {
-  background-color: #d1fae5;
-  border-color: #6ee7b7;
-  color: #065f46;
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(5, 150, 105, 0.18);
-}
-
-.status-toggle-pill.is-inactive {
-  background-color: #f3f4f6;
-  color: #4b5563;
-  border-color: #e5e7eb;
-}
-
-.status-toggle-pill.is-inactive:hover {
-  background-color: #e5e7eb;
-  border-color: #d1d5db;
-  color: #1f2937;
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
-}
-
-.status-toggle-pill.is-readonly {
-  cursor: default;
-  pointer-events: none;
-}
-
-.status-indicator-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-}
-
-.is-active .status-indicator-dot {
-  background-color: #10b981;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
-}
-
-.is-inactive .status-indicator-dot {
-  background-color: #9ca3af;
-}
-
-.status-label-text {
-  letter-spacing: 0.02em;
-}
 
 /* 彈窗內狀態單選群組 */
-.status-radio-group :deep(.el-radio-button__inner) {
-  padding: 8px 16px;
-  border-radius: 6px !important;
-  margin-right: 8px;
-  border: 1px solid #dcdfe6 !important;
-}
-
-.status-radio-group :deep(.el-radio-button:first-child .el-radio-button__inner) {
-  border-left: 1px solid #dcdfe6 !important;
-}
-
-.status-radio-group :deep(.el-radio-button.is-active .el-radio-button__inner) {
-  background-color: #f0fdf4;
-  border-color: #10b981 !important;
-  color: #047857;
-  box-shadow: none !important;
-}
-
-.radio-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 500;
-}
-
-.radio-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background-color: #9ca3af;
-}
-
-.active-pill .radio-dot {
-  background-color: #10b981;
-}
-
-.inactive-pill .radio-dot {
-  background-color: #6b7280;
-}
-
 .region-label {
   display: inline-flex;
   align-items: center;

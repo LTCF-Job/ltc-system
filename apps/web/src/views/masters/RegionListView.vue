@@ -1,6 +1,7 @@
 <template>
   <div class="region-list-view">
     <DataTablePage
+      title="地區管理"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -14,7 +15,7 @@
           v-model="filters.q"
           placeholder="搜尋區域名稱／說明"
           clearable
-          style="width: 260px"
+          style="width: 240px"
           @keyup.enter="handleSearch"
         />
 
@@ -147,19 +148,20 @@
             align="center"
           >
             <template #default="{ row }">
-              <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row as any)">
-                編輯
-              </el-button>
-              <el-button
-                v-if="authStore.can('admin')"
-                link
-                type="danger"
-                size="small"
-                :icon="Delete"
-                @click="handleDelete(row as any)"
-              >
-                刪除
-              </el-button>
+              <TableRowActions>
+                <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
+                  編輯
+                </el-button>
+                <el-button
+                  v-if="authStore.can('admin')"
+                  link
+                  type="danger"
+                  size="small"
+                  @click="handleDelete(row as any)"
+                >
+                  刪除
+                </el-button>
+              </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
@@ -170,10 +172,10 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯地區設定' : '新增營運地區'"
-      width="540px"
+      width="min(600px, calc(100vw - 32px))"
       destroy-on-close
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
         <el-form-item label="地區名稱" prop="name">
           <el-input v-model="form.name" placeholder="如：臺北市、臺中市" />
         </el-form-item>
@@ -211,10 +213,7 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          儲存
-        </el-button>
+        <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -226,6 +225,8 @@ import { Plus, Rank, InfoFilled, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import { listRegions, createRegion, updateRegion, deleteRegion } from '@/api/masters'
 import { formatDateTime } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/auth'
@@ -476,9 +477,10 @@ async function handleDelete(row: RegionDTO) {
       `確定要刪除區域「${row.name}」嗎？若該區域已有綁定個案、車輛或據點，建議優先改為「停用」。`,
       '刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
-        type: 'warning'
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
       }
     )
     await deleteRegion(row.id)
@@ -506,129 +508,16 @@ onMounted(() => {
 }
 .form-tip {
   font-size: 12px;
-  color: #909399;
+  color: var(--app-text-muted);
   margin-top: 4px;
   line-height: 1.4;
 }
 .form-tip-inline {
   font-size: 12px;
-  color: #909399;
+  color: var(--app-text-muted);
   margin-left: 10px;
 }
 
-/* 營運狀態互動切換按鈕 / 膠囊標籤 */
-.status-toggle-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 5px 14px;
-  border-radius: 9999px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid transparent;
-  outline: none;
-  background: transparent;
-  user-select: none;
-  line-height: 1;
-}
-
-.status-toggle-pill.is-active {
-  background-color: #ecfdf5;
-  color: #047857;
-  border-color: #a7f3d0;
-}
-
-.status-toggle-pill.is-active:hover {
-  background-color: #d1fae5;
-  border-color: #6ee7b7;
-  color: #065f46;
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(5, 150, 105, 0.18);
-}
-
-.status-toggle-pill.is-inactive {
-  background-color: #f3f4f6;
-  color: #4b5563;
-  border-color: #e5e7eb;
-}
-
-.status-toggle-pill.is-inactive:hover {
-  background-color: #e5e7eb;
-  border-color: #d1d5db;
-  color: #1f2937;
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
-}
-
-.status-toggle-pill.is-readonly {
-  cursor: default;
-  pointer-events: none;
-}
-
-.status-indicator-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-}
-
-.is-active .status-indicator-dot {
-  background-color: #10b981;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
-}
-
-.is-inactive .status-indicator-dot {
-  background-color: #9ca3af;
-}
-
-.status-label-text {
-  letter-spacing: 0.02em;
-}
-
-/* 彈窗內狀態單選群組 */
-.status-radio-group :deep(.el-radio-button__inner) {
-  padding: 8px 16px;
-  border-radius: 6px !important;
-  margin-right: 8px;
-  border: 1px solid #dcdfe6 !important;
-}
-
-.status-radio-group :deep(.el-radio-button:first-child .el-radio-button__inner) {
-  border-left: 1px solid #dcdfe6 !important;
-}
-
-.status-radio-group :deep(.el-radio-button.is-active .el-radio-button__inner) {
-  background-color: #f0fdf4;
-  border-color: #10b981 !important;
-  color: #047857;
-  box-shadow: none !important;
-}
-
-.radio-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 500;
-}
-
-.radio-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background-color: #9ca3af;
-}
-
-.active-pill .radio-dot {
-  background-color: #10b981;
-}
-
-.inactive-pill .radio-dot {
-  background-color: #6b7280;
-}
 
 /* 拖曳排序握把與狀態 */
 .drag-hint-tag {
@@ -650,7 +539,7 @@ onMounted(() => {
 
 .sort-col-header .help-icon {
   font-size: 13px;
-  color: #909399;
+  color: var(--app-text-muted);
 }
 
 .drag-handle-pill {
@@ -660,8 +549,8 @@ onMounted(() => {
   gap: 6px;
   padding: 4px 8px;
   border-radius: 6px;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--app-card-bg);
+  border: 1px solid var(--app-border-color);
   transition: all 0.2s ease;
   user-select: none;
 }
@@ -671,9 +560,9 @@ onMounted(() => {
 }
 
 .drag-handle-pill.is-draggable:hover {
-  background-color: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #059669;
+  background-color: var(--app-status-success-bg);
+  border-color: var(--app-status-success-fg);
+  color: var(--app-status-success-fg);
   box-shadow: 0 2px 5px rgba(5, 150, 105, 0.15);
 }
 
@@ -688,37 +577,37 @@ onMounted(() => {
 
 .drag-grip-icon {
   font-size: 14px;
-  color: #64748b;
+  color: var(--app-text-muted);
   transition: color 0.2s;
 }
 
 .drag-handle-pill:hover .drag-grip-icon {
-  color: #10b981;
+  color: var(--app-status-success-fg);
 }
 
 .sort-order-badge {
   font-size: 12px;
   font-weight: 600;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: #334155;
+  color: var(--app-text-primary);
   min-width: 16px;
 }
 
 /* 拖曳時整列的高亮與插入指示線 */
 :deep(.el-table__row.row-is-dragging) {
   opacity: 0.45;
-  background-color: #f1f5f9 !important;
+  background-color: var(--app-status-neutral-bg) !important;
 }
 
 :deep(.el-table__row.row-drop-target-above td) {
-  border-top: 3px solid #10b981 !important;
-  background-color: #f0fdf4 !important;
+  border-top: 3px solid var(--app-status-success-fg) !important;
+  background-color: var(--app-status-success-bg) !important;
   transition: background-color 0.15s ease;
 }
 
 :deep(.el-table__row.row-drop-target-below td) {
-  border-bottom: 3px solid #10b981 !important;
-  background-color: #f0fdf4 !important;
+  border-bottom: 3px solid var(--app-status-success-fg) !important;
+  background-color: var(--app-status-success-bg) !important;
   transition: background-color 0.15s ease;
 }
 </style>

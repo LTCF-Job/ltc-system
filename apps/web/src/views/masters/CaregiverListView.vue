@@ -3,6 +3,7 @@
     <el-tabs v-model="activeTab" type="border-card" class="caregiver-tabs" @tab-change="handleTabChange">
       <el-tab-pane label="照護人員清單" name="list">
         <DataTablePage
+          title="照護人員管理"
           v-model:page="page"
           v-model:pageSize="pageSize"
           :total="total"
@@ -15,7 +16,7 @@
               v-model="filters.q"
               placeholder="搜尋姓名"
               clearable
-              style="width: 220px"
+              style="width: 240px"
               @keyup.enter="handleSearch"
             />
             <el-button type="primary" @click="handleSearch">查詢</el-button>
@@ -23,13 +24,11 @@
           </template>
 
           <template #actions>
-            <el-button v-if="authStore.can('staff')" type="info" plain @click="handleDownloadTemplate">
-              <el-icon><Download /></el-icon>
+            <el-button v-if="authStore.can('staff')" plain @click="handleDownloadTemplate">
               下載匯入範本
             </el-button>
 
-            <el-button v-if="authStore.can('staff')" type="success" plain @click="openImportDialog">
-              <el-icon><Upload /></el-icon>
+            <el-button v-if="authStore.can('staff')" plain @click="openImportDialog">
               批次匯入照護人員
             </el-button>
 
@@ -78,18 +77,20 @@
 
               <el-table-column label="操作" width="140" fixed="right" align="center">
                 <template #default="{ row }">
-                  <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row)">
-                    編輯
-                  </el-button>
-                  <el-button
-                    v-if="authStore.can('admin')"
-                    link
-                    type="danger"
-                    size="small"
-                    @click="handleDelete(row)"
-                  >
-                    刪除
-                  </el-button>
+                  <TableRowActions>
+                    <el-button link type="primary" size="small" @click="openEditDialog(row)">
+                      編輯
+                    </el-button>
+                    <el-button
+                      v-if="authStore.can('admin')"
+                      link
+                      type="danger"
+                      size="small"
+                      @click="handleDelete(row)"
+                    >
+                      刪除
+                    </el-button>
+                  </TableRowActions>
                 </template>
               </el-table-column>
             </el-table>
@@ -131,14 +132,16 @@
                 <span>{{ row.notes || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="缺少欄位" min-width="160">
+            <el-table-column label="缺少欄位" min-width="160" show-overflow-tooltip>
               <template #default="{ row }">
                 <span class="missing-fields">缺少：{{ missingFields(row as CaregiverDTO).join('、') }}</span>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="100" align="center">
               <template #default="{ row }">
-                <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row)">編輯</el-button>
+                <TableRowActions>
+                  <el-button link type="primary" size="small" @click="openEditDialog(row)">編輯</el-button>
+                </TableRowActions>
               </template>
             </el-table-column>
           </el-table>
@@ -147,7 +150,7 @@
     </el-tabs>
 
     <!-- 新增據點快速建立彈窗 -->
-    <el-dialog v-model="quickCreateSiteVisible" title="新增據點" width="480px">
+    <el-dialog v-model="quickCreateSiteVisible" title="新增據點" width="min(480px, calc(100vw - 32px))">
       <el-form label-width="90px">
         <el-form-item label="據點名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
         <el-form-item label="區域">
@@ -158,8 +161,12 @@
         <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="quickCreateSiteVisible = false">取消</el-button>
-        <el-button type="primary" :loading="quickCreateSiteSaving" @click="handleQuickCreateSiteAndLink">建立並關聯</el-button>
+        <DialogFooter
+          confirm-text="建立並關聯"
+          :loading="quickCreateSiteSaving"
+          @confirm="handleQuickCreateSiteAndLink"
+          @cancel="quickCreateSiteVisible = false"
+        />
       </template>
     </el-dialog>
 
@@ -199,7 +206,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯照護人員資料' : '新增照護人員'"
-      width="480px"
+      width="min(480px, calc(100vw - 32px))"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-form-item label="類型" prop="type">
@@ -228,8 +235,12 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">確認送出</el-button>
+        <DialogFooter
+          confirm-text="確認送出"
+          :loading="saving"
+          @confirm="handleSave"
+          @cancel="dialogVisible = false"
+        />
       </template>
     </el-dialog>
   </div>
@@ -237,10 +248,12 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { Plus, Upload, Download, Edit } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
 import {
   listCaregivers,
@@ -430,7 +443,7 @@ async function handleSave() {
 async function handleDelete(row: any) {
   try {
     await ElMessageBox.confirm(`確定要刪除照護人員「${row.name}」？此操作無法復原。`, '刪除確認', {
-      confirmButtonText: '確定刪除',
+      confirmButtonText: '刪除',
       cancelButtonText: '取消',
       type: 'warning',
       confirmButtonClass: 'el-button--danger'

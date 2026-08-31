@@ -1,6 +1,7 @@
 <template>
   <div class="driver-list-view">
     <DataTablePage
+      title="司機管理"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -62,7 +63,7 @@
               <span class="driver-data">{{ row.phone || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="email" label="電子信箱" min-width="200">
+          <el-table-column prop="email" label="電子信箱" min-width="200" show-overflow-tooltip>
             <template #default="{ row }"><span class="driver-data">{{ row.email || '-' }}</span></template>
           </el-table-column>
           <el-table-column label="目前指派車輛" min-width="180">
@@ -113,15 +114,17 @@
             align="center"
           >
             <template #default="{ row }">
-              <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row)">
-                編輯
-              </el-button>
-              <el-button link type="primary" size="small" :icon="Van" @click="openAssignDialog(row)">
-                指派車輛
-              </el-button>
-              <el-button link type="danger" size="small" :icon="Delete" @click="handleDeleteDriver(row as any)">
-                刪除
-              </el-button>
+              <TableRowActions>
+                <el-button link type="primary" size="small" @click="openEditDialog(row)">
+                  編輯
+                </el-button>
+                <el-button link type="primary" size="small" @click="openAssignDialog(row)">
+                  指派車輛
+                </el-button>
+                <el-button link type="danger" size="small" @click="handleDeleteDriver(row as any)">
+                  刪除
+                </el-button>
+              </TableRowActions>
             </template>
           </el-table-column>
 
@@ -133,9 +136,9 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯司機資料' : '新增司機'"
-      width="500px"
+      width="min(480px, calc(100vw - 32px))"
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
         <el-form-item label="司機姓名" prop="name">
           <el-input v-model="form.name" placeholder="請輸入姓名" />
         </el-form-item>
@@ -166,16 +169,13 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          確認儲存
-        </el-button>
+        <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
       </template>
     </el-dialog>
 
     <!-- 車輛期間指派彈窗 -->
-    <el-dialog v-model="assignDialogVisible" title="指派駕駛車輛" width="500px">
-      <el-form ref="assignFormRef" :model="assignForm" :rules="assignRules" label-width="120px">
+    <el-dialog v-model="assignDialogVisible" title="指派駕駛車輛" width="min(480px, calc(100vw - 32px))">
+      <el-form ref="assignFormRef" :model="assignForm" :rules="assignRules" label-width="110px">
         <el-form-item label="選擇車輛" prop="vehicleId">
           <el-select v-model="assignForm.vehicleId" placeholder="請選擇車輛" style="width: 100%">
             <el-option
@@ -205,10 +205,12 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="assignDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleAssignSubmit">
-          確認指派
-        </el-button>
+        <DialogFooter
+          confirm-text="確認指派"
+          :loading="submitting"
+          @confirm="handleAssignSubmit"
+          @cancel="assignDialogVisible = false"
+        />
       </template>
     </el-dialog>
   </div>
@@ -216,10 +218,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { Plus, Edit, Van, Delete } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import {
   listDrivers,
   createDriver,
@@ -399,7 +403,7 @@ async function handleDeleteDriver(row: DriverDTO) {
       `確定要刪除司機「${row.name} (${row.code})」？`,
       '刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning',
         confirmButtonClass: 'el-button--danger'
@@ -425,111 +429,7 @@ executeFetch()
 
 <style scoped>
 /* 狀態互動切換按鈕 / 膠囊標籤 */
-.status-toggle-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 5px 14px;
-  border-radius: 9999px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid transparent;
-  outline: none;
-  background: transparent;
-  user-select: none;
-  line-height: 1;
-}
-
-.status-toggle-pill.is-active {
-  color: #047857;
-  border-color: transparent;
-}
-
-.status-toggle-pill.is-active:hover {
-  border-color: #10b981;
-  color: #065f46;
-}
-
-.status-toggle-pill.is-inactive {
-  color: #4b5563;
-  border-color: transparent;
-}
-
-.status-toggle-pill.is-inactive:hover {
-  border-color: #9ca3af;
-  color: #1f2937;
-}
-
-.status-toggle-pill.is-readonly {
-  cursor: default;
-  pointer-events: none;
-}
-
-.status-indicator-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-}
-
-.is-active .status-indicator-dot {
-  background-color: #10b981;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
-}
-
-.is-inactive .status-indicator-dot {
-  background-color: #9ca3af;
-}
-
-.status-label-text {
-  letter-spacing: 0.02em;
-}
-
 /* 彈窗內狀態單選群組 */
-.status-radio-group :deep(.el-radio-button__inner) {
-  padding: 8px 16px;
-  border-radius: 6px !important;
-  margin-right: 8px;
-  border: 1px solid #dcdfe6 !important;
-}
-
-.status-radio-group :deep(.el-radio-button:first-child .el-radio-button__inner) {
-  border-left: 1px solid #dcdfe6 !important;
-}
-
-.status-radio-group :deep(.el-radio-button.is-active .el-radio-button__inner) {
-  background-color: #f0fdf4;
-  border-color: #10b981 !important;
-  color: #047857;
-  box-shadow: none !important;
-}
-
-.radio-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 500;
-}
-
-.radio-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background-color: #9ca3af;
-}
-
-.active-pill .radio-dot {
-  background-color: #10b981;
-}
-
-.inactive-pill .radio-dot {
-  background-color: #6b7280;
-}
-
 .assigned-vehicle-info {
   display: inline-flex;
   align-items: center;

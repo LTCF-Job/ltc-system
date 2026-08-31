@@ -19,7 +19,7 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
 
     await dialog.getByPlaceholder('如：竹北日照中心').fill('測試日照中心')
     await dialog.getByPlaceholder('請輸入完整地址').fill('新竹縣竹北市光明六路 1 號')
-    await dialog.getByRole('button', { name: '確認儲存' }).click()
+    await dialog.getByRole('button', { name: '儲存' }).click()
     await expectElMessage(page, /成功/, 'success')
   })
 
@@ -35,7 +35,7 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
 
     await dialog.getByPlaceholder(/竹北一車/).fill('測試測試車')
     await dialog.getByPlaceholder(/BZG-7915/).fill('E2E-8888')
-    await dialog.getByRole('button', { name: '確認儲存' }).click()
+    await dialog.getByRole('button', { name: '儲存' }).click()
     await expectElMessage(page, /成功/, 'success')
   })
 
@@ -53,7 +53,7 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
 
     // 移除其中一位司機後，清單只剩另一位
     await dialog.getByRole('button', { name: '關閉此標籤' }).first().click()
-    await dialog.getByRole('button', { name: '確認儲存' }).click()
+    await dialog.getByRole('button', { name: '儲存' }).click()
     await expectElMessage(page, /司機已更新/, 'success')
     await expect(row.locator('.vehicle-driver-tags .el-tag')).toHaveCount(1)
   })
@@ -71,7 +71,7 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
     await dialog.getByPlaceholder(/請輸入姓名/).fill('測試司機')
     await dialog.getByPlaceholder(/1 碼英文/).fill('B123456789')
     await dialog.getByPlaceholder(/0912345678/).fill('0988777666')
-    await dialog.getByRole('button', { name: '確認儲存' }).click()
+    await dialog.getByRole('button', { name: '儲存' }).click()
     await expectElMessage(page, /成功/, 'success')
   })
 
