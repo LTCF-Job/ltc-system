@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/modules/ride/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // ListRideSourcesForSlot 取得單一 slot 已寫入的全部回報來源，供混車合併運算。
@@ -22,7 +23,8 @@ func (r *RideRepository) ListRideSourcesForSlot(
 		WHERE rs.case_id = $1 AND rs.service_date = $2 AND rs.leg_seq = $3
 		ORDER BY fs.submitted_at ASC
 	`
-	rows, err := r.db.Query(ctx, query, caseID, serviceDate, legSeq)
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, caseID, serviceDate, legSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +62,8 @@ func (r *RideRepository) ListCalendarCases(
 		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%' OR c.code ILIKE '%' || $4 || '%')
 		ORDER BY c.code ASC
 	`
-	rows, err := r.db.Query(ctx, query, start, end, region, keyword)
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, start, end, region, keyword)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +98,7 @@ func (r *RideRepository) ListCalendarCases(
 		ids = append(ids, id)
 	}
 
-	legRows, err := r.db.Query(ctx, `
+	legRows, err := db.Query(ctx, `
 		SELECT sl.schedule_id, sl.leg_seq, sl.direction, to_char(sl.depart_time, 'HH24:MI'),
 		       sl.vehicle_id, COALESCE(v.display_name, '')
 		FROM schedule_legs sl
@@ -143,7 +146,8 @@ func (r *RideRepository) ListRideRecordsInRange(
 		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%' OR c.code ILIKE '%' || $4 || '%')
 		ORDER BY rr.service_date ASC, rr.leg_seq ASC
 	`
-	rows, err := r.db.Query(ctx, query, start, end, region, keyword)
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, start, end, region, keyword)
 	if err != nil {
 		return nil, err
 	}

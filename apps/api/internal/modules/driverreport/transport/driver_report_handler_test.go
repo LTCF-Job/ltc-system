@@ -3,11 +3,13 @@ package transport
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -22,10 +24,16 @@ import (
 // 讓這支測試涵蓋「渲染 → handler → HTTP 回應主體」的整條位元組路徑。
 type stubService struct {
 	commitCalledWith []app.ColumnDecision
+	parseYearMonth   string
+	commitYearMonth  string
 	parseErr         error
+	importedMonths   []app.ImportedMonth
 }
 
 func (s *stubService) ListForms(context.Context) ([]app.ReportForm, error) { return nil, nil }
+func (s *stubService) ListImportedMonths(context.Context) ([]app.ImportedMonth, error) {
+	return s.importedMonths, nil
+}
 func (s *stubService) CreateForm(context.Context, string, string) (*app.ReportForm, error) {
 	return nil, nil
 }
@@ -43,14 +51,16 @@ func (s *stubService) TemplateExcel(context.Context, uuid.UUID) ([]byte, string,
 	data, err := infra.NewExcelAdapter().RenderDriverReportTemplate("竹南2車", []string{"1.吳桂 [去程]"})
 	return data, "竹南2車", err
 }
-func (s *stubService) ParseDriverReport(context.Context, uuid.UUID, io.Reader) (*app.PreviewResult, error) {
+func (s *stubService) ParseDriverReport(_ context.Context, _ uuid.UUID, _ io.Reader, yearMonth string) (*app.PreviewResult, error) {
+	s.parseYearMonth = yearMonth
 	if s.parseErr != nil {
 		return nil, s.parseErr
 	}
 	return &app.PreviewResult{TotalRows: 1, ValidRows: 1}, nil
 }
-func (s *stubService) CommitDriverReport(_ context.Context, _ uuid.UUID, _ io.Reader, decisions []app.ColumnDecision, _ app.Actor) (*app.CommitResult, error) {
+func (s *stubService) CommitDriverReport(_ context.Context, _ uuid.UUID, _ io.Reader, decisions []app.ColumnDecision, yearMonth string, _ app.Actor) (*app.CommitResult, error) {
 	s.commitCalledWith = decisions
+	s.commitYearMonth = yearMonth
 	return &app.CommitResult{ImportedRows: 1, RideRecordRows: 2}, nil
 }
 
@@ -58,7 +68,12 @@ func newTestRouter(svc *stubService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h := NewDriverReportHandler(svc)
+	// 靜態路徑與 :id 萬用路徑必須同時註冊：routes.go 就是這樣掛的，
+	// 只註冊其中一支會漏掉 gin 路由樹衝突（衝突會在服務啟動時 panic）
+	r.GET("/api/v1/driver-reports/imported-months", h.ListImportedMonths)
+	r.GET("/api/v1/driver-reports/columns", h.ListColumns)
 	r.GET("/api/v1/driver-reports/:id/template", h.DownloadTemplate)
+	r.DELETE("/api/v1/driver-reports/:id", h.DeleteForm)
 	r.POST("/api/v1/driver-reports/:id/import", h.ImportExcel)
 	return r
 }
@@ -149,6 +164,41 @@ func TestImportExcel_DryRunAndCommit(t *testing.T) {
 	}
 }
 
+func TestImportExcel_ForwardsDeclaredYearMonth(t *testing.T) {
+	svc := &stubService{}
+	r := newTestRouter(svc)
+	formID := uuid.New().String()
+
+	for _, tt := range []struct {
+		name  string
+		query string
+	}{
+		{name: "預覽帶入宣告月份", query: "?dryRun=true&yearMonth=2026-03"},
+		{name: "正式寫入帶入宣告月份", query: "?dryRun=false&yearMonth=2026-03"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			svc.parseYearMonth, svc.commitYearMonth = "", ""
+
+			body := &bytes.Buffer{}
+			writer := multipart.NewWriter(body)
+			part, err := writer.CreateFormFile("file", "report.xlsx")
+			require.NoError(t, err)
+			_, _ = part.Write([]byte("dummy"))
+			require.NoError(t, writer.Close())
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/driver-reports/"+formID+"/import"+tt.query, body)
+			req.Header.Set("Content-Type", writer.FormDataContentType())
+
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, "2026-03", svc.parseYearMonth+svc.commitYearMonth,
+				"宣告月份必須原樣傳到服務層，否則覆蓋範圍會落在錯誤的月份")
+		})
+	}
+}
+
 func TestImportExcel_MissingFile(t *testing.T) {
 	r := newTestRouter(&stubService{})
 
@@ -158,4 +208,42 @@ func TestImportExcel_MissingFile(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestListImportedMonths_ReturnsCountAndFormattedLastImportedAt(t *testing.T) {
+	formID := uuid.New()
+	svc := &stubService{importedMonths: []app.ImportedMonth{
+		{
+			FormID:          formID,
+			YearMonth:       "2026-03",
+			SubmissionCount: 21,
+			LastImportedAt:  time.Date(2026, 3, 31, 10, 20, 30, 0, time.UTC),
+		},
+	}}
+	r := newTestRouter(svc)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/driver-reports/imported-months", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var body struct {
+		Data []ImportedMonthDTO `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Len(t, body.Data, 1)
+	assert.Equal(t, formID.String(), body.Data[0].FormID)
+	assert.Equal(t, "2026-03", body.Data[0].YearMonth)
+	assert.Equal(t, 21, body.Data[0].SubmissionCount)
+	assert.Equal(t, "2026-03-31 10:20:30", body.Data[0].LastImportedAt,
+		"時間一律格式化至秒數，不得輸出 raw ISO 8601")
+}
+
+func TestListImportedMonths_NoDataIsAnEmptyArray(t *testing.T) {
+	r := newTestRouter(&stubService{})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/driver-reports/imported-months", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"data":[]`)
 }

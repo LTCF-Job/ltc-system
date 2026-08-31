@@ -19,6 +19,7 @@ covers: ["apps/web/src/router/index.ts"]
 | `/masters/drivers` | `views/masters/DriverListView.vue` | 全部 | `drivers/*` |
 | `/masters/caregivers` | `views/masters/CaregiverListView.vue` | admin/staff/dispatcher/viewer | `caregivers/*`、`caregivers/import`、`caregivers/template` |
 | `/driver-reports` | `views/driverReports/DriverReportListView.vue` | admin/staff/dispatcher/viewer | `driver-reports`、`driver-reports/:id/import`、`driver-reports/:id/template` |
+| `/driver-reports/batch-import` | `views/driverReports/DriverReportBatchImportView.vue` | admin/staff/dispatcher/viewer | `vehicles`、`driver-reports`、`driver-reports/imported-months`、`driver-reports`（建表）、`driver-reports/:id/import` |
 | `/driver-reports/mappings` | `views/driverReports/FieldMappingView.vue` | admin/staff/dispatcher/viewer | `driver-reports/columns*` |
 | `/rides` | `views/rides/RideCalendarView.vue`（含 `RideManualEntryDialog.vue`） | 全部 | `rides/calendar`、`rides/manual-report` |
 | `/rides/issues` | `views/rides/RideIssuesView.vue`（含 `RideCorrectionDrawer.vue`） | admin/staff/dispatcher/viewer | `rides/issues`、`rides/:id`、`rides/:id/resolve-conflict` |

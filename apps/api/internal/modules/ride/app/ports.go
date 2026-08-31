@@ -59,6 +59,21 @@ type DriverResolver interface {
 	ListDriversForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) ([]DriverRef, error)
 }
 
+// RideSlot 是一筆搭乘紀錄的唯一座標。
+type RideSlot struct {
+	CaseID      uuid.UUID
+	ServiceDate time.Time
+	LegSeq      int16
+}
+
+// ImportedMonth 是某份匯報表在某個月已匯入的提交統計。
+type ImportedMonth struct {
+	FormID          uuid.UUID
+	YearMonth       string
+	SubmissionCount int
+	LastImportedAt  time.Time
+}
+
 // RideSourceRow 是單一 slot 已寫入的一筆回報來源，混車合併以此為輸入。
 type RideSourceRow struct {
 	VehicleID   uuid.UUID
@@ -99,6 +114,10 @@ type RideRecordStore interface {
 	ListRideRecordsInRange(ctx context.Context, start, end time.Time, region, keyword string) ([]RideRecord, error)
 	SaveFormSubmission(ctx context.Context, formID uuid.UUID, serviceDate, submittedAt time.Time, driverNameRaw string, driverID *uuid.UUID, source string, payload map[string]interface{}, issueText string) (uuid.UUID, error)
 	InsertRideSource(ctx context.Context, submissionID, caseID uuid.UUID, serviceDate time.Time, legSeq int16, vehicleID uuid.UUID, driverID *uuid.UUID, reported string, colIdx int) error
+	ListRideSourceSlotsForForm(ctx context.Context, formID uuid.UUID, dates []time.Time) ([]RideSlot, error)
+	DeleteFormSubmissions(ctx context.Context, formID uuid.UUID, dates []time.Time) (int, error)
+	ListImportedMonths(ctx context.Context) ([]ImportedMonth, error)
+	DeleteDerivedRideRecord(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) error
 	GetRideRecordForSlot(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) (*RideRecord, error)
 	UpsertRideRecord(ctx context.Context, rec *RideRecord) error
 	CorrectRideRecord(ctx context.Context, rideID uuid.UUID, effectiveStatus *string, vehicleID, driverID *uuid.UUID, departTimeOverride *string, durationMinOverride *int16, notClaimedAA09 *bool, reason *string, operatorID uuid.UUID) error

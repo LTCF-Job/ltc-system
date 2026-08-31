@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/driverreport/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // ErrNoDatabase 讓離線啟動（本機無 DB）時的寫入回傳明確錯誤，
@@ -42,7 +43,8 @@ func (r *DriverReportRepository) ListForms(ctx context.Context) ([]app.ReportFor
 		return nil, nil
 	}
 
-	rows, err := r.db.Query(ctx, formSelectColumns+" ORDER BY f.created_at ASC")
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, formSelectColumns+" ORDER BY f.created_at ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +67,8 @@ func (r *DriverReportRepository) GetForm(ctx context.Context, formID uuid.UUID) 
 		return nil, nil
 	}
 
-	rows, err := r.db.Query(ctx, formSelectColumns+" WHERE f.id = $1", formID)
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, formSelectColumns+" WHERE f.id = $1", formID)
 	if err != nil {
 		return nil, err
 	}
@@ -91,10 +94,11 @@ func scanReportForm(rows pgx.Rows) (app.ReportForm, error) {
 	return f, err
 }
 
-// CreateForm 建立一台車的匯報表；同車重複建立時只更新名稱。
-func (r *DriverReportRepository) CreateForm(ctx context.Context, id, vehicleID uuid.UUID, title string) error {
+// CreateForm 建立一台車的匯報表並回傳實際的匯報表 ID；同車重複建立時只更新名稱，
+// 回傳的是既有那一份的 ID 而不是傳入的 id。
+func (r *DriverReportRepository) CreateForm(ctx context.Context, id, vehicleID uuid.UUID, title string) (uuid.UUID, error) {
 	if r.db == nil {
-		return ErrNoDatabase
+		return uuid.Nil, ErrNoDatabase
 	}
 
 	query := `
@@ -103,9 +107,13 @@ func (r *DriverReportRepository) CreateForm(ctx context.Context, id, vehicleID u
 		ON CONFLICT (vehicle_id) DO UPDATE
 		SET title = EXCLUDED.title,
 		    updated_at = now()
+		RETURNING id
 	`
-	_, err := r.db.Exec(ctx, query, id, vehicleID, title)
-	return err
+	var formID uuid.UUID
+	if err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, query, id, vehicleID, title).Scan(&formID); err != nil {
+		return uuid.Nil, err
+	}
+	return formID, nil
 }
 
 // DeleteForm 刪除匯報表。
@@ -114,7 +122,7 @@ func (r *DriverReportRepository) DeleteForm(ctx context.Context, formID uuid.UUI
 		return ErrNoDatabase
 	}
 
-	_, err := r.db.Exec(ctx, `DELETE FROM driver_report_forms WHERE id = $1`, formID)
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `DELETE FROM driver_report_forms WHERE id = $1`, formID)
 	return err
 }
 
@@ -138,7 +146,8 @@ func (r *DriverReportRepository) ListColumnsWithMapping(ctx context.Context, for
 		  AND ($2 = '' OR fc.mapping_status = $2)
 		ORDER BY fc.form_id, fc.column_index ASC
 	`
-	rows, err := r.db.Query(ctx, query, formID, mappingStatus)
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, formID, mappingStatus)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +201,7 @@ func (r *DriverReportRepository) UpsertColumns(ctx context.Context, formID uuid.
 		batch.Queue(query, uuid.New(), formID, d.ColumnIndex, d.ColumnHeader, d.CleanedName, d.Kind, d.SuggestedCaseID, d.SuggestionScore)
 	}
 
-	results := r.db.SendBatch(ctx, batch)
+	results := pgxdb.FromContext(ctx, r.db).SendBatch(ctx, batch)
 	defer results.Close()
 	for range drafts {
 		if _, err := results.Exec(); err != nil {
@@ -216,7 +225,7 @@ func (r *DriverReportRepository) UpdateColumnMappingByID(ctx context.Context, co
 		    updated_at = now()
 		WHERE id = $1::uuid
 	`
-	_, err := r.db.Exec(ctx, query, colID, status, caseID, legSeq)
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, query, colID, status, caseID, legSeq)
 	return err
 }
 
@@ -234,7 +243,7 @@ func (r *DriverReportRepository) UpdateColumnMappingByHeader(ctx context.Context
 		    updated_at = now()
 		WHERE form_id = $1 AND column_header = $2
 	`
-	_, err := r.db.Exec(ctx, query, formID, header, status, caseID, legSeq)
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, query, formID, header, status, caseID, legSeq)
 	return err
 }
 
@@ -244,6 +253,6 @@ func (r *DriverReportRepository) MarkImported(ctx context.Context, formID uuid.U
 		return ErrNoDatabase
 	}
 
-	_, err := r.db.Exec(ctx, `UPDATE driver_report_forms SET last_imported_at = $2, updated_at = now() WHERE id = $1`, formID, importedAt)
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `UPDATE driver_report_forms SET last_imported_at = $2, updated_at = now() WHERE id = $1`, formID, importedAt)
 	return err
 }

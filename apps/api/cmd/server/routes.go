@@ -129,6 +129,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 		// 5. 司機接送匯報表與欄位對應
 		apiV1.GET("/driver-reports", auth.RequireRoles("viewer", "staff", "admin"), h.driverReport.ListForms)
 		apiV1.POST("/driver-reports", auth.RequireRoles("staff", "admin"), h.driverReport.CreateForm)
+		apiV1.GET("/driver-reports/imported-months", auth.RequireRoles("viewer", "staff", "admin"), h.driverReport.ListImportedMonths)
 		apiV1.GET("/driver-reports/columns", auth.RequireRoles("viewer", "staff", "admin"), h.driverReport.ListColumns)
 		apiV1.PATCH("/driver-reports/columns/:id/mapping", auth.RequireRoles("staff", "admin"), h.driverReport.UpdateColumnMapping)
 		apiV1.POST("/driver-reports/columns/batch-mapping", auth.RequireRoles("staff", "admin"), h.driverReport.BatchMapping)

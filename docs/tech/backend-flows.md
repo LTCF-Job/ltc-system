@@ -11,7 +11,7 @@
    沒對應過的欄位附上以姓名相似度算出的推薦個案與由 `[去程]／[回程]` 推得的推薦趟次。
 2. 使用者在預覽畫面就地確認欄位對應後，改打 `?dryRun=false`，並以 form field `columnDecisions`
    帶回確認結果。`CommitDriverReport` 先把欄位對應寫回 `form_columns`（以表頭文字為鍵，
-   個案增減造成的欄號位移不會錯配），再逐列交給 ride 模組。
+   個案增減造成的欄號位移不會錯配），清掉本次要覆蓋的既有匯入資料，再逐列交給 ride 模組。
 3. `RideService.IngestSubmission` 把該列原封不動存一筆 `form_submissions`（`source = 'import'`，
    raw payload 方便日後追查），並用 `domain/namenorm.Normalize` 正規化司機姓名比對司機主檔抓
    `driver_id`（配不到就先留空，並在預覽階段以警告提示）。
@@ -26,6 +26,26 @@
 單列日期無法解析時只略過該列並回報原因，其餘日期照常寫入，不會讓一整個月的匯報因為
 一列打錯而全部匯不進來。
 
+### 覆蓋語意與交易邊界
+
+匯入是覆蓋不是疊加：重匯同一份檔案的結果與只匯一次相同。`clearPreviousImport` 在寫入前呼叫
+`RideService.ClearImportedDates` 刪掉這份匯報表在本次涵蓋日期的 `form_submissions`，`ride_sources`
+由 `submission_id` 的 `ON DELETE CASCADE` 連帶清除；只刪本匯報表的提交，其他車輛對同一 slot
+的混車來源不受影響。
+
+清除範圍由選填的 `yearMonth`（`YYYY-MM`）query param 決定：
+
+- 有帶：整個月都被這份檔案覆蓋，且檔案內任一有效列落在該月之外就整份拒絕（dry run 階段就擋）。
+- 未帶：只覆蓋檔案實際涵蓋的日期。
+- 檔案沒有任何可寫入的列時不執行清除，避免傳錯空檔清空整月資料。
+
+來源被清空的 slot 不能靠重算修正，會由 `DeleteDerivedRideRecord` 刪除；帶有 `corrected_at`、
+`conflict_resolved_at` 或 `not_claimed_aa09` 的紀錄一律保留，人工成果不被覆蓋式重匯抹掉。
+
+清除與重寫落在同一個 `pgxdb.TxRunner` 交易內。解析層級的失敗仍逐列略過，但資料庫層級的失敗
+會整份回滾，`last_imported_at` 不更新——先刪後寫若中途失敗而不回滾，該月資料會直接消失。
+`RideRepository` 與 `DriverReportRepository` 因此都改用 `pgxdb.FromContext` 取用外層交易。
+
 ```
 使用者上傳匯報表 .xlsx
    │
@@ -37,6 +57,9 @@ POST /driver-reports/:id/import?dryRun=false + columnDecisions
    │
    ▼
 寫回 form_columns（以表頭文字為鍵）
+   │
+   ▼
+ClearImportedDates（刪本表本月 form_submissions，cascade 清 ride_sources）
    │
    ▼
 存 form_submissions（原始 payload，source = import）

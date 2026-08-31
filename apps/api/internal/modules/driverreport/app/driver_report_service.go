@@ -23,6 +23,7 @@ type DriverReportService struct {
 	driverRepo   DriverResolver
 	rideIngestor RideIngestor
 	auditRepo    AuditWriter
+	txRunner     TxRunner
 }
 
 // NewDriverReportService 建立 DriverReportService 實例。
@@ -34,6 +35,7 @@ func NewDriverReportService(
 	driverRepo DriverResolver,
 	rideIngestor RideIngestor,
 	auditRepo AuditWriter,
+	txRunner TxRunner,
 ) *DriverReportService {
 	return &DriverReportService{
 		repo:         repo,
@@ -43,6 +45,7 @@ func NewDriverReportService(
 		driverRepo:   driverRepo,
 		rideIngestor: rideIngestor,
 		auditRepo:    auditRepo,
+		txRunner:     txRunner,
 	}
 }
 
@@ -58,7 +61,20 @@ func (s *DriverReportService) ListForms(ctx context.Context) ([]ReportForm, erro
 	return forms, nil
 }
 
-// CreateForm 為一台車建立匯報表。
+// ListImportedMonths 查詢每份匯報表已匯入哪些月份、各有多少筆與最後匯入時間，
+// 供批次上傳畫面判斷某台車某個月是否為重傳。
+func (s *DriverReportService) ListImportedMonths(ctx context.Context) ([]ImportedMonth, error) {
+	months, err := s.rideIngestor.ListImportedMonths(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if months == nil {
+		return []ImportedMonth{}, nil
+	}
+	return months, nil
+}
+
+// CreateForm 為一台車建立匯報表；該車已有匯報表時只更新名稱並回傳既有的那一份。
 func (s *DriverReportService) CreateForm(ctx context.Context, vehicleID, title string) (*ReportForm, error) {
 	vehUUID, err := uuid.Parse(strings.TrimSpace(vehicleID))
 	if err != nil {
@@ -68,8 +84,10 @@ func (s *DriverReportService) CreateForm(ctx context.Context, vehicleID, title s
 		return nil, errors.New("匯報表名稱不可為空")
 	}
 
-	formID := uuid.New()
-	if err := s.repo.CreateForm(ctx, formID, vehUUID, strings.TrimSpace(title)); err != nil {
+	// 一台車一份匯報表，重複建立會撞上 uq_driver_report_forms_vehicle；此時要回傳既有那份的
+	// ID，用新產生的 ID 去查會查不到，變成一個沒有原因的 500
+	formID, err := s.repo.CreateForm(ctx, uuid.New(), vehUUID, strings.TrimSpace(title))
+	if err != nil {
 		return nil, err
 	}
 	return s.repo.GetForm(ctx, formID)

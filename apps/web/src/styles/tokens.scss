@@ -1,0 +1,74 @@
+// 設計 token：間距、字級、圓角、語意狀態色、角色色
+// 修改任何 apps/web 的 .vue 前，先查 .agents/skills/ltc-dashboard-visual-language/references/component-contract.md
+// 這裡沒有的值，不要在頁面裡另外硬寫一組
+
+:root {
+  // 間距（4px 級距）
+  --app-space-1: 4px;
+  --app-space-2: 8px;
+  --app-space-3: 12px;
+  --app-space-4: 16px;
+  --app-space-6: 24px;
+  --app-space-8: 32px;
+
+  // 字級
+  --app-font-xs: 12px;
+  --app-font-sm: 13px;
+  --app-font-md: 14px;
+  --app-font-lg: 16px;
+  --app-font-xl: 20px;
+  --app-font-2xl: 24px;
+
+  // 圓角（補上 xs，收斂散落的 6px/4px）
+  --app-radius-xs: 6px;
+
+  // 版面尺寸
+  --app-header-height: 56px;
+  --app-aside-width: 220px;
+  --app-aside-width-collapsed: 68px;
+
+  // 語意狀態色：bg / fg 成對使用，取代各頁各寫一組的硬寫色碼
+  --app-status-success-bg: #e8faf3;
+  --app-status-success-fg: #087d58;
+  --app-status-warning-bg: #fff4dc;
+  --app-status-warning-fg: #996000;
+  --app-status-danger-bg: #ffebef;
+  --app-status-danger-fg: #b51f3c;
+  --app-status-info-bg: #eaf5fb;
+  --app-status-info-fg: #236f9a;
+  --app-status-neutral-bg: #f1f3f4;
+  --app-status-neutral-fg: #586174;
+
+  // 角色色（使用者管理／角色身分管理）
+  --app-role-admin-fg: #be123c;
+  --app-role-admin-dot: #e11d48;
+  --app-role-dispatcher-fg: #1d4ed8;
+  --app-role-dispatcher-dot: #2563eb;
+  --app-role-staff-fg: #15803d;
+  --app-role-staff-dot: #16a34a;
+  --app-role-driver-fg: #b45309;
+  --app-role-driver-dot: #d97706;
+  --app-role-viewer-fg: #475569;
+  --app-role-viewer-dot: #64748b;
+}
+
+// 共用工具類別（原本在 7 個檔案各自重複定義）
+.font-bold {
+  font-weight: 700;
+}
+
+.font-mono {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.text-muted {
+  color: var(--app-text-muted);
+}
+
+.text-secondary {
+  color: var(--app-text-secondary);
+}
+
+.mt-3 {
+  margin-top: var(--app-space-3);
+}

@@ -19,18 +19,34 @@ type slotKey struct {
 // fakeRecordStore 記下寫入的來源列，並在重算時把它們回讀，重現正式流程中
 // InsertRideSource → ListRideSourcesForSlot → UpsertRideRecord 的循環。
 type fakeRecordStore struct {
-	columns    []FormColumn
-	sources    map[slotKey][]RideSourceRow
-	records    map[slotKey]*RideRecord
-	submission uuid.UUID
-	lastSource string
+	columns        []FormColumn
+	sources        map[slotKey][]fakeSource
+	records        map[slotKey]*RideRecord
+	submissions    map[uuid.UUID]submissionKey
+	submission     uuid.UUID
+	lastSource     string
+	importedMonths []ImportedMonth
+	importedErr    error
+}
+
+// submissionKey 讓 fake 能像資料庫一樣依 form 與服務日期刪除提交紀錄。
+type submissionKey struct {
+	formID uuid.UUID
+	date   string
+}
+
+// fakeSource 保留來源列與其所屬提交，重現 ON DELETE CASCADE 的連帶清除。
+type fakeSource struct {
+	submissionID uuid.UUID
+	row          RideSourceRow
 }
 
 func newFakeRecordStore(columns []FormColumn) *fakeRecordStore {
 	return &fakeRecordStore{
-		columns: columns,
-		sources: map[slotKey][]RideSourceRow{},
-		records: map[slotKey]*RideRecord{},
+		columns:     columns,
+		sources:     map[slotKey][]fakeSource{},
+		records:     map[slotKey]*RideRecord{},
+		submissions: map[uuid.UUID]submissionKey{},
 	}
 }
 
@@ -39,7 +55,15 @@ func (f *fakeRecordStore) GetFormColumns(context.Context, uuid.UUID) ([]FormColu
 }
 
 func (f *fakeRecordStore) ListRideSourcesForSlot(_ context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) ([]RideSourceRow, error) {
-	return f.sources[slotKey{caseID, serviceDate.Format("2006-01-02"), legSeq}], nil
+	stored := f.sources[slotKey{caseID, serviceDate.Format("2006-01-02"), legSeq}]
+	if len(stored) == 0 {
+		return nil, nil
+	}
+	out := make([]RideSourceRow, 0, len(stored))
+	for _, src := range stored {
+		out = append(out, src.row)
+	}
+	return out, nil
 }
 
 func (f *fakeRecordStore) ListCalendarCases(context.Context, time.Time, time.Time, string, string) ([]CalendarCase, error) {
@@ -50,20 +74,92 @@ func (f *fakeRecordStore) ListRideRecordsInRange(context.Context, time.Time, tim
 	return nil, nil
 }
 
-func (f *fakeRecordStore) SaveFormSubmission(_ context.Context, _ uuid.UUID, _, _ time.Time, _ string, _ *uuid.UUID, source string, _ map[string]interface{}, _ string) (uuid.UUID, error) {
+func (f *fakeRecordStore) SaveFormSubmission(_ context.Context, formID uuid.UUID, serviceDate, _ time.Time, _ string, _ *uuid.UUID, source string, _ map[string]interface{}, _ string) (uuid.UUID, error) {
 	f.submission = uuid.New()
 	f.lastSource = source
+	f.submissions[f.submission] = submissionKey{formID: formID, date: serviceDate.Format("2006-01-02")}
 	return f.submission, nil
 }
 
-func (f *fakeRecordStore) InsertRideSource(_ context.Context, _, caseID uuid.UUID, serviceDate time.Time, legSeq int16, vehicleID uuid.UUID, driverID *uuid.UUID, reported string, _ int) error {
+func (f *fakeRecordStore) InsertRideSource(_ context.Context, submissionID, caseID uuid.UUID, serviceDate time.Time, legSeq int16, vehicleID uuid.UUID, driverID *uuid.UUID, reported string, _ int) error {
 	key := slotKey{caseID, serviceDate.Format("2006-01-02"), legSeq}
-	f.sources[key] = append(f.sources[key], RideSourceRow{
-		VehicleID:   vehicleID,
-		DriverID:    driverID,
-		Reported:    reported,
-		SubmittedAt: time.Now().UTC(),
+	f.sources[key] = append(f.sources[key], fakeSource{
+		submissionID: submissionID,
+		row: RideSourceRow{
+			VehicleID:   vehicleID,
+			DriverID:    driverID,
+			Reported:    reported,
+			SubmittedAt: time.Now().UTC(),
+		},
 	})
+	return nil
+}
+
+func (f *fakeRecordStore) ListRideSourceSlotsForForm(_ context.Context, formID uuid.UUID, dates []time.Time) ([]RideSlot, error) {
+	wanted := map[string]bool{}
+	for _, d := range dates {
+		wanted[d.Format("2006-01-02")] = true
+	}
+
+	var slots []RideSlot
+	for key, stored := range f.sources {
+		for _, src := range stored {
+			sub := f.submissions[src.submissionID]
+			if sub.formID != formID || !wanted[sub.date] {
+				continue
+			}
+			parsed, _ := time.Parse("2006-01-02", key.date)
+			slots = append(slots, RideSlot{CaseID: key.caseID, ServiceDate: parsed, LegSeq: key.legSeq})
+			break
+		}
+	}
+	return slots, nil
+}
+
+func (f *fakeRecordStore) ListImportedMonths(context.Context) ([]ImportedMonth, error) {
+	return f.importedMonths, f.importedErr
+}
+
+func (f *fakeRecordStore) DeleteFormSubmissions(_ context.Context, formID uuid.UUID, dates []time.Time) (int, error) {
+	wanted := map[string]bool{}
+	for _, d := range dates {
+		wanted[d.Format("2006-01-02")] = true
+	}
+
+	removed := map[uuid.UUID]bool{}
+	for id, sub := range f.submissions {
+		if sub.formID == formID && wanted[sub.date] {
+			removed[id] = true
+			delete(f.submissions, id)
+		}
+	}
+
+	for key, stored := range f.sources {
+		kept := stored[:0]
+		for _, src := range stored {
+			if !removed[src.submissionID] {
+				kept = append(kept, src)
+			}
+		}
+		if len(kept) == 0 {
+			delete(f.sources, key)
+			continue
+		}
+		f.sources[key] = kept
+	}
+	return len(removed), nil
+}
+
+func (f *fakeRecordStore) DeleteDerivedRideRecord(_ context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) error {
+	key := slotKey{caseID, serviceDate.Format("2006-01-02"), legSeq}
+	rec := f.records[key]
+	if rec == nil {
+		return nil
+	}
+	if rec.CorrectedAt != nil || rec.ConflictResolvedAt != nil || rec.NotClaimedAA09 {
+		return nil
+	}
+	delete(f.records, key)
 	return nil
 }
 

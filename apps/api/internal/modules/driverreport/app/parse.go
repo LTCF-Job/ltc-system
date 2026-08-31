@@ -29,11 +29,22 @@ const minReportColumns = 4
 // ErrFormNotFound 代表指定的匯報表不存在。
 var ErrFormNotFound = errors.New("driver report form not found")
 
+// ErrInvalidYearMonth 代表宣告的匯入月份格式不是 YYYY-MM。
+var ErrInvalidYearMonth = errors.New("匯入月份格式錯誤，請使用 YYYY-MM")
+
 // ParseDriverReport 解析上傳的匯報表 .xlsx，產生欄位對應與每日匯報列的預覽。
 //
 // 解析階段不寫入任何資料：未對應的欄位會附上推薦個案與趟次，交由使用者在預覽畫面
 // 就地確認後，才於 CommitDriverReport 一併寫回 form_columns 與搭乘紀錄。
-func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader) (*PreviewResult, error) {
+//
+// yearMonth 為選填的宣告匯入月份（YYYY-MM）。有宣告時，檔案內任一有效列落在該月之外
+// 就整份拒絕；匯入是以月覆蓋，放行等於讓傳錯檔案清空另一個月的資料。
+func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, yearMonth string) (*PreviewResult, error) {
+	monthStart, monthDeclared, err := parseYearMonth(yearMonth)
+	if err != nil {
+		return nil, err
+	}
+
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("讀取上傳檔案失敗: %w", err)
@@ -132,6 +143,12 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 		result.PreviewRows = append(result.PreviewRows, row)
 	}
 
+	if monthDeclared {
+		if err := assertRowsWithinMonth(result.PreviewRows, monthStart); err != nil {
+			return nil, err
+		}
+	}
+
 	for _, c := range columns {
 		if c.MappingStatus == "pending" {
 			result.UnmappedColumns++
@@ -140,6 +157,41 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 	result.Columns = columns
 
 	return result, nil
+}
+
+// parseYearMonth 解析宣告的匯入月份，回傳該月第一天；空字串代表未宣告月份。
+func parseYearMonth(raw string) (time.Time, bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false, nil
+	}
+	start, err := time.Parse("2006-01", raw)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("%w：%s", ErrInvalidYearMonth, raw)
+	}
+	return start, true, nil
+}
+
+// assertRowsWithinMonth 確認所有成功解析日期的列都落在宣告月份內。
+func assertRowsWithinMonth(rows []RowPreview, monthStart time.Time) error {
+	prefix := monthStart.Format("2006-01")
+	for _, row := range rows {
+		if row.ServiceDate == "" || strings.HasPrefix(row.ServiceDate, prefix) {
+			continue
+		}
+		return fmt.Errorf("第 %d 列的日期 %s 不屬於宣告匯入的 %s，請確認上傳的是該月份的檔案", row.RowIndex, row.ServiceDate, prefix)
+	}
+	return nil
+}
+
+// daysInMonth 列出該月的每一天，作為覆蓋式重匯的清除範圍。
+func daysInMonth(monthStart time.Time) []time.Time {
+	next := monthStart.AddDate(0, 1, 0)
+	days := make([]time.Time, 0, 31)
+	for d := monthStart; d.Before(next); d = d.AddDate(0, 0, 1) {
+		days = append(days, d)
+	}
+	return days
 }
 
 // buildColumnPreviews 把檔案表頭與既有 form_columns 對照起來；沒對應過的欄位

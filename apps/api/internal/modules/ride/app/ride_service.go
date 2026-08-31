@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -109,19 +108,75 @@ func (s *RideService) IngestSubmission(ctx context.Context, formID, defaultVehic
 			if err := s.formRepo.InsertRideSource(
 				ctx, submissionID, caseID, req.ServiceDate, legSeq, defaultVehicleID, driverID, reported, col.ColumnIndex,
 			); err != nil {
-				slog.Warn("Failed to insert ride source",
-					slog.String("caseId", caseID.String()),
-					slog.String("serviceDate", req.ServiceDate.Format("2006-01-02")),
-					slog.String("error", err.Error()))
-				continue
+				return 0, fmt.Errorf("failed to insert ride source for case %s on %s: %w",
+					caseID, req.ServiceDate.Format("2006-01-02"), err)
 			}
 
-			s.recalculateRideRecord(ctx, caseID, req.ServiceDate, legSeq, defaultVehicleID, driverID)
+			if err := s.recalculateRideRecord(ctx, caseID, req.ServiceDate, legSeq, defaultVehicleID, driverID); err != nil {
+				return 0, err
+			}
 			written++
 		}
 	}
 
 	return written, nil
+}
+
+// ClearImportedDates 移除指定匯報表在這些服務日期已寫入的匯入資料，讓重匯成為覆蓋而非疊加。
+// 回傳刪除的提交紀錄筆數。
+//
+// 只刪本匯報表產生的 form_submissions，ride_sources 由 ON DELETE CASCADE 連帶清除；
+// 其他車輛對同一 slot 的混車來源保持不動，清除後逐 slot 重算合併結果。
+func (s *RideService) ClearImportedDates(ctx context.Context, formID uuid.UUID, dates []time.Time) (int, error) {
+	if len(dates) == 0 {
+		return 0, nil
+	}
+
+	// 來源列刪除後就查不到受影響的 slot，必須在刪除前收集
+	slots, err := s.formRepo.ListRideSourceSlotsForForm(ctx, formID, dates)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list affected ride slots: %w", err)
+	}
+
+	removed, err := s.formRepo.DeleteFormSubmissions(ctx, formID, dates)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete form submissions: %w", err)
+	}
+
+	for _, slot := range slots {
+		rows, err := s.formRepo.ListRideSourcesForSlot(ctx, slot.CaseID, slot.ServiceDate, slot.LegSeq)
+		if err != nil {
+			return 0, fmt.Errorf("failed to load ride sources for slot: %w", err)
+		}
+		// 來源全部清空的 slot 不能靠重算修正，否則會留下沒有來源支撐的過期紀錄
+		if len(rows) == 0 {
+			if err := s.formRepo.DeleteDerivedRideRecord(ctx, slot.CaseID, slot.ServiceDate, slot.LegSeq); err != nil {
+				return 0, fmt.Errorf("failed to delete derived ride record: %w", err)
+			}
+			continue
+		}
+		// 預設車輛取自剩下的來源，不能沿用剛被移除的那台車：全員回報「沒坐」時
+		// merge 會退回預設值，用已清掉的車輛會把錯誤的車寫進搭乘紀錄
+		if err := s.recalculateRideRecord(ctx, slot.CaseID, slot.ServiceDate, slot.LegSeq, rows[0].VehicleID, nil); err != nil {
+			return 0, err
+		}
+	}
+
+	return removed, nil
+}
+
+// ListImportedMonths 統計每份匯報表各月份已匯入的提交筆數與最後一次匯入時間。
+//
+// 月份不落地成欄位，一律由 form_submissions.service_date 推得，避免統計與實際資料不同步。
+func (s *RideService) ListImportedMonths(ctx context.Context) ([]ImportedMonth, error) {
+	months, err := s.formRepo.ListImportedMonths(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list imported months: %w", err)
+	}
+	if months == nil {
+		return []ImportedMonth{}, nil
+	}
+	return months, nil
 }
 
 // expandLegSeqs 套用四趟展開規則（R4 / §5.5）：表單第 1 趟展開為 1、3 趟；
@@ -141,6 +196,9 @@ func expandLegSeqs(baseLegSeq int16, sched *CaseSchedule) []int16 {
 }
 
 // recalculateRideRecord 重新執行單筆 slot 之混車合併運算並更新主表。
+//
+// 匯入路徑把整段包在同一個交易內，任何一次讀寫失敗都會讓後續語句全部失效，
+// 因此這裡不吞錯誤：錯誤原樣往上傳，讓呼叫端能回報真正的根因並回滾。
 func (s *RideService) recalculateRideRecord(
 	ctx context.Context,
 	caseID uuid.UUID,
@@ -148,9 +206,12 @@ func (s *RideService) recalculateRideRecord(
 	legSeq int16,
 	defaultVehicleID uuid.UUID,
 	defaultDriverID *uuid.UUID,
-) {
+) error {
 	// 查詢既有紀錄以保護人工裁決與更正
-	existingRec, _ := s.formRepo.GetRideRecordForSlot(ctx, caseID, serviceDate, legSeq)
+	existingRec, err := s.formRepo.GetRideRecordForSlot(ctx, caseID, serviceDate, legSeq)
+	if err != nil {
+		return fmt.Errorf("failed to load existing ride record: %w", err)
+	}
 
 	var existingState *merge.ExistingRecordState
 	if existingRec != nil {
@@ -186,14 +247,10 @@ func (s *RideService) recalculateRideRecord(
 	// "boarded" 當唯一來源，會讓匯報「沒坐」的個案在月曆上顯示成有坐。
 	rows, err := s.formRepo.ListRideSourcesForSlot(ctx, caseID, serviceDate, legSeq)
 	if err != nil {
-		slog.Warn("Failed to load ride sources for slot",
-			slog.String("caseId", caseID.String()),
-			slog.String("serviceDate", serviceDate.Format("2006-01-02")),
-			slog.String("error", err.Error()))
-		return
+		return fmt.Errorf("failed to load ride sources for slot: %w", err)
 	}
 	if len(rows) == 0 {
-		return
+		return nil
 	}
 
 	sources := make([]merge.RideSourceInput, 0, len(rows))
@@ -228,7 +285,10 @@ func (s *RideService) recalculateRideRecord(
 		rec.NotClaimedAA09 = existingRec.NotClaimedAA09
 	}
 
-	_ = s.formRepo.UpsertRideRecord(ctx, &rec)
+	if err := s.formRepo.UpsertRideRecord(ctx, &rec); err != nil {
+		return fmt.Errorf("failed to upsert ride record: %w", err)
+	}
+	return nil
 }
 
 // CorrectRideRecordRequest 代表更正搭乘紀錄之請求結構體。

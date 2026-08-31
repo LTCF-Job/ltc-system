@@ -132,6 +132,7 @@ func main() {
 		driverReportDriverResolver{repo: mdDriverRepo},
 		driverReportRideIngestor{svc: rideSvc},
 		driverReportAuditWriter{svc: auditSvc},
+		txRunner,
 	)
 	excelRenderer := reportinfra.NewExcelRenderer()
 	precheckSvc := reportapp.NewPrecheckService(precheckRepo)

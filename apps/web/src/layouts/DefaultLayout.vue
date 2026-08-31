@@ -112,6 +112,10 @@
               <el-icon><Upload /></el-icon>
               <template #title>匯報表管理</template>
             </el-menu-item>
+            <el-menu-item v-if="authStore.hasPermission('driver_reports')" index="/driver-reports/batch-import">
+              <el-icon><UploadFilled /></el-icon>
+              <template #title>批次上傳</template>
+            </el-menu-item>
             <el-menu-item v-if="authStore.hasPermission('driver_report_mappings')" index="/driver-reports/mappings">
               <el-icon><Connection /></el-icon>
               <template #title>欄位對應設定</template>
@@ -249,6 +253,7 @@ import {
   Avatar,
   DocumentCopy,
   Upload,
+  UploadFilled,
   Connection,
   Calendar,
   Grid,

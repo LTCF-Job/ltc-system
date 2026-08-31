@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,23 +13,38 @@ import (
 )
 
 // CommitDriverReport 正式寫入匯報表：先把使用者確認的欄位對應存回 form_columns，
-// 再逐列交給 ride 模組展開為搭乘來源與搭乘紀錄。
+// 清掉這份匯報表在本次涵蓋日期的既有匯入資料，再逐列交給 ride 模組重新展開。
 //
-// 採「逐列略過」而非全有全無：單列日期無法解析時只略過該列並記錄原因，其餘日期
-// 照常寫入，避免一整個月的匯報因為一列打錯而全部匯不進來。
+// 匯入語意是覆蓋而非疊加，重匯同一個月的結果與只匯一次相同。清除與重寫落在同一個
+// 交易內；任何資料庫層級的失敗都整份回滾，避免留下只刪不寫的空月份。
+//
+// 解析層級的失敗仍逐列略過：單列日期打錯只跳過該列，其餘日期照常寫入。
+//
+// yearMonth 為選填的宣告匯入月份（YYYY-MM）。有宣告時清除整個月，未宣告時只清除
+// 檔案實際涵蓋的日期；檔案沒有任何有效列時不執行清除，避免傳錯空檔清空整月資料。
 func (s *DriverReportService) CommitDriverReport(
 	ctx context.Context,
 	formID uuid.UUID,
 	r io.Reader,
 	decisions []ColumnDecision,
+	yearMonth string,
 	actor Actor,
 ) (*CommitResult, error) {
+	if s.txRunner == nil {
+		return nil, errors.New("driver report service: transaction runner not configured")
+	}
+
+	monthStart, monthDeclared, err := parseYearMonth(yearMonth)
+	if err != nil {
+		return nil, err
+	}
+
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("讀取上傳檔案失敗: %w", err)
 	}
 
-	preview, err := s.ParseDriverReport(ctx, formID, bytes.NewReader(data))
+	preview, err := s.ParseDriverReport(ctx, formID, bytes.NewReader(data), yearMonth)
 	if err != nil {
 		return nil, err
 	}
@@ -41,33 +57,83 @@ func (s *DriverReportService) CommitDriverReport(
 		return nil, ErrFormNotFound
 	}
 
-	if err := s.persistColumnDecisions(ctx, formID, preview, decisions); err != nil {
-		return nil, err
-	}
-
-	mapped, err := s.repo.ListColumnsWithMapping(ctx, formID.String(), "mapped")
-	if err != nil {
-		return nil, err
-	}
-
-	result := &CommitResult{
-		MappedColumns: len(mapped),
-		SkippedRows:   []SkippedRow{},
-		Warnings:      []ImportWarningItem{},
-	}
-
-	if len(mapped) == 0 {
-		return nil, fmt.Errorf("尚未有任何欄位對應到個案，請先於預覽畫面完成對應")
-	}
-
 	tables, _, err := s.excel.ReadTables(data)
 	if err != nil {
 		return nil, err
 	}
 	rows := tables[0]
 
-	submittedAt := time.Now().UTC()
-	for _, row := range preview.PreviewRows {
+	result := &CommitResult{
+		SkippedRows: []SkippedRow{},
+		Warnings:    []ImportWarningItem{},
+	}
+	importable := collectImportableRows(preview.PreviewRows, result)
+
+	txErr := s.txRunner.WithTx(ctx, func(txCtx context.Context) error {
+		if err := s.persistColumnDecisions(txCtx, formID, preview, decisions); err != nil {
+			return err
+		}
+
+		mapped, err := s.repo.ListColumnsWithMapping(txCtx, formID.String(), "mapped")
+		if err != nil {
+			return err
+		}
+		if len(mapped) == 0 {
+			return errors.New("尚未有任何欄位對應到個案，請先於預覽畫面完成對應")
+		}
+		result.MappedColumns = len(mapped)
+
+		if err := s.clearPreviousImport(txCtx, formID, importable, monthStart, monthDeclared); err != nil {
+			return err
+		}
+
+		submittedAt := time.Now().UTC()
+		for _, row := range importable {
+			answers := map[string]string{}
+			for _, col := range mapped {
+				answers[col.ColumnHeader] = cellAt(rows[row.preview.RowIndex-1], col.ColumnIndex-1)
+			}
+
+			written, err := s.rideIngestor.IngestSubmission(txCtx, formID, form.VehicleID, Submission{
+				ServiceDate: row.serviceDate,
+				SubmittedAt: submittedAt,
+				DriverRaw:   row.preview.DriverRaw,
+				DriverID:    parseOptionalUUID(row.preview.DriverID),
+				Remark:      row.preview.Remark,
+				Answers:     answers,
+			})
+			if err != nil {
+				return fmt.Errorf("第 %d 列寫入搭乘紀錄失敗：%w", row.preview.RowIndex, err)
+			}
+
+			result.ImportedRows++
+			result.RideRecordRows += written
+			if row.preview.WarningMessage != "" {
+				result.Warnings = append(result.Warnings, ImportWarningItem{RowIndex: row.preview.RowIndex, Message: row.preview.WarningMessage})
+			}
+		}
+
+		return s.repo.MarkImported(txCtx, formID, submittedAt)
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+
+	s.writeImportAudit(ctx, formID, result, actor)
+
+	return result, nil
+}
+
+// importableRow 是一列已確定可寫入的匯報資料，serviceDate 為其解析後的服務日期。
+type importableRow struct {
+	preview     RowPreview
+	serviceDate time.Time
+}
+
+// collectImportableRows 挑出可寫入的列，其餘連同原因記入 result.SkippedRows。
+func collectImportableRows(previewRows []RowPreview, result *CommitResult) []importableRow {
+	out := make([]importableRow, 0, len(previewRows))
+	for _, row := range previewRows {
 		if row.ErrorMessage != "" {
 			result.SkippedRows = append(result.SkippedRows, SkippedRow{
 				RowIndex:   row.RowIndex,
@@ -87,44 +153,44 @@ func (s *DriverReportService) CommitDriverReport(
 			continue
 		}
 
-		answers := map[string]string{}
-		for _, col := range mapped {
-			answers[col.ColumnHeader] = cellAt(rows[row.RowIndex-1], col.ColumnIndex-1)
-		}
+		out = append(out, importableRow{preview: row, serviceDate: serviceDate})
+	}
+	return out
+}
 
-		submission := Submission{
-			ServiceDate: serviceDate,
-			SubmittedAt: submittedAt,
-			DriverRaw:   row.DriverRaw,
-			DriverID:    parseOptionalUUID(row.DriverID),
-			Remark:      row.Remark,
-			Answers:     answers,
-		}
+// clearPreviousImport 清掉本次要覆蓋的既有匯入資料。
+//
+// 沒有任何可寫入的列時不清除：那通常是傳錯檔案，清空整月的代價遠高於少覆蓋一次。
+func (s *DriverReportService) clearPreviousImport(
+	ctx context.Context,
+	formID uuid.UUID,
+	importable []importableRow,
+	monthStart time.Time,
+	monthDeclared bool,
+) error {
+	if len(importable) == 0 {
+		return nil
+	}
 
-		written, err := s.rideIngestor.IngestSubmission(ctx, formID, form.VehicleID, submission)
-		if err != nil {
-			result.SkippedRows = append(result.SkippedRows, SkippedRow{
-				RowIndex:   row.RowIndex,
-				ReportDate: row.ReportDate,
-				Reasons:    []string{"寫入搭乘紀錄失敗：" + err.Error()},
-			})
-			continue
-		}
-
-		result.ImportedRows++
-		result.RideRecordRows += written
-		if row.WarningMessage != "" {
-			result.Warnings = append(result.Warnings, ImportWarningItem{RowIndex: row.RowIndex, Message: row.WarningMessage})
+	var dates []time.Time
+	if monthDeclared {
+		dates = daysInMonth(monthStart)
+	} else {
+		seen := map[string]bool{}
+		for _, row := range importable {
+			key := row.preview.ServiceDate
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			dates = append(dates, row.serviceDate)
 		}
 	}
 
-	if err := s.repo.MarkImported(ctx, formID, submittedAt); err != nil {
-		return nil, err
+	if _, err := s.rideIngestor.ClearImportedDates(ctx, formID, dates); err != nil {
+		return err
 	}
-
-	s.writeImportAudit(ctx, formID, result, actor)
-
-	return result, nil
+	return nil
 }
 
 // writeImportAudit 留下匯入留痕。稽核寫入失敗不推翻已完成的匯入，只記錄於伺服器日誌。

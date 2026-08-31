@@ -407,6 +407,14 @@ export interface CreateDriverReportFormRequest {
   title: string
 }
 
+// 某份匯報表在某個月已匯入的統計；月份由 service_date 推得，不是資料庫欄位
+export interface DriverReportImportedMonthDTO {
+  formId: string
+  yearMonth: string
+  submissionCount: number
+  lastImportedAt: string
+}
+
 export interface DriverReportColumnDTO {
   id: string
   formId: string

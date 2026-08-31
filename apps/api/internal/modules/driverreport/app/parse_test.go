@@ -26,8 +26,10 @@ func (s *stubStore) ListForms(context.Context) ([]ReportForm, error) { return ni
 func (s *stubStore) GetForm(context.Context, uuid.UUID) (*ReportForm, error) {
 	return s.form, nil
 }
-func (s *stubStore) CreateForm(context.Context, uuid.UUID, uuid.UUID, string) error { return nil }
-func (s *stubStore) DeleteForm(context.Context, uuid.UUID) error                    { return nil }
+func (s *stubStore) CreateForm(_ context.Context, id, _ uuid.UUID, _ string) (uuid.UUID, error) {
+	return id, nil
+}
+func (s *stubStore) DeleteForm(context.Context, uuid.UUID) error { return nil }
 func (s *stubStore) ListColumnsWithMapping(_ context.Context, _, mappingStatus string) ([]ColumnMapping, error) {
 	if mappingStatus == "" {
 		return s.existing, nil
@@ -86,6 +88,7 @@ func newTestService(table [][]string, existing []ColumnMapping) *DriverReportSer
 		stubDrivers{known: map[string]DriverRef{"林彥衡": {ID: uuid.New(), Name: "林彥衡"}}},
 		nil,
 		nil,
+		nil,
 	)
 }
 
@@ -132,7 +135,7 @@ func TestParseReportDate(t *testing.T) {
 func TestParseDriverReport_ColumnsAndRows(t *testing.T) {
 	svc := newTestService(sampleTable(), nil)
 
-	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"))
+	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"), "")
 	require.NoError(t, err)
 
 	// 兩個個案趟次欄；第一欄日期、第二欄駕駛人、最後一欄備註都不算欄位對應對象
@@ -175,7 +178,7 @@ func TestParseDriverReport_UnknownDriverIsWarningNotError(t *testing.T) {
 	table[1][1] = "查無此人"
 	svc := newTestService(table, nil)
 
-	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"))
+	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"), "")
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, result.ValidRows)
@@ -197,7 +200,7 @@ func TestParseDriverReport_KeepsExistingMapping(t *testing.T) {
 		LegSeq:        &legSeq,
 	}})
 
-	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"))
+	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"), "")
 	require.NoError(t, err)
 
 	assert.Equal(t, "mapped", result.Columns[0].MappingStatus)
@@ -212,7 +215,70 @@ func TestParseDriverReport_RejectsWrongHeader(t *testing.T) {
 	}
 	svc := newTestService(table, nil)
 
-	_, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"))
+	_, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "找不到匯報表表頭")
+}
+
+func TestParseYearMonth(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		want     string
+		declared bool
+		wantErr  bool
+	}{
+		{name: "正常月份", input: "2026-03", want: "2026-03-01", declared: true},
+		{name: "前後空白", input: " 2026-03 ", want: "2026-03-01", declared: true},
+		{name: "空字串代表未宣告", input: "", declared: false},
+		{name: "月份超出範圍", input: "2026-13", wantErr: true},
+		{name: "月份為零", input: "2026-00", wantErr: true},
+		{name: "月份未補零", input: "2026-3", wantErr: true},
+		{name: "年份位數不足", input: "26-01", wantErr: true},
+		{name: "斜線分隔", input: "2026/03", wantErr: true},
+		{name: "帶到日", input: "2026-03-01", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, declared, err := parseYearMonth(tt.input)
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrInvalidYearMonth)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.declared, declared)
+			if tt.declared {
+				assert.Equal(t, tt.want, got.Format("2006-01-02"))
+			}
+		})
+	}
+}
+
+func TestDaysInMonth(t *testing.T) {
+	tests := []struct {
+		name      string
+		yearMonth string
+		wantCount int
+		wantLast  string
+	}{
+		{name: "閏年二月", yearMonth: "2024-02", wantCount: 29, wantLast: "2024-02-29"},
+		{name: "平年二月", yearMonth: "2026-02", wantCount: 28, wantLast: "2026-02-28"},
+		{name: "三十天的月份", yearMonth: "2026-04", wantCount: 30, wantLast: "2026-04-30"},
+		{name: "十二月不跨年溢位", yearMonth: "2026-12", wantCount: 31, wantLast: "2026-12-31"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			start, declared, err := parseYearMonth(tt.yearMonth)
+			require.NoError(t, err)
+			require.True(t, declared)
+
+			days := daysInMonth(start)
+
+			require.Len(t, days, tt.wantCount)
+			assert.Equal(t, tt.yearMonth+"-01", days[0].Format("2006-01-02"))
+			assert.Equal(t, tt.wantLast, days[len(days)-1].Format("2006-01-02"))
+		})
+	}
 }

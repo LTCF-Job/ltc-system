@@ -11,6 +11,7 @@ import { readXlsxRows } from '../utils/parseImportFile'
 import { createDriverReportTemplateExcelBlob } from '../utils/mockExcel'
 import type {
   DriverReportColumnDTO,
+  DriverReportImportedMonthDTO,
   DriverReportPreviewColumn,
   DriverReportPreviewRow
 } from '@/types/api'
@@ -158,6 +159,70 @@ async function readColumnDecisions(request: Request) {
   return { rows, decisions }
 }
 
+// importedDatesByForm 記錄每份匯報表已匯入的服務日期，讓 mock 與後端一樣是覆蓋而非疊加：
+// 重匯同一份檔案時 submissionCount 不會翻倍。ride 資料本身由 saveRideOverride 以
+// (caseId, serviceDate, legSeq) 為鍵覆寫，本來就冪等。
+const importedDatesByForm = new Map<string, Set<string>>()
+
+// 每個 (匯報表, 月份) 各自的最後匯入時間，對應後端的 max(submitted_at)；
+// 沿用匯報表層級的單一時間戳會讓舊月份顯示成最近一次匯入的時間
+const lastImportByFormMonth = new Map<string, string>()
+
+function formMonthKey(formId: string, yearMonth: string): string {
+  return `${formId}::${yearMonth}`
+}
+
+// forgetImportedDates 對應 form_submissions.form_id 的 ON DELETE CASCADE：
+// 匯報表被刪除時，它的已匯入月份也要一起消失
+function forgetImportedDates(formId: string) {
+  importedDatesByForm.delete(formId)
+  for (const key of [...lastImportByFormMonth.keys()]) {
+    if (key.startsWith(`${formId}::`)) lastImportByFormMonth.delete(key)
+  }
+}
+
+// clearImportedDates 對應後端的 RideService.ClearImportedDates：宣告月份時清整個月，
+// 未宣告時只清本次檔案涵蓋的日期。
+function clearImportedDates(formId: string, dates: string[], yearMonth: string): Set<string> {
+  const known = importedDatesByForm.get(formId) ?? new Set<string>()
+  if (yearMonth) {
+    for (const date of [...known]) {
+      if (date.startsWith(yearMonth)) known.delete(date)
+    }
+  } else {
+    for (const date of dates) known.delete(date)
+  }
+  importedDatesByForm.set(formId, known)
+  return known
+}
+
+// assertRowsWithinMonth 與後端 parse.go 同規則：宣告月份時，任一有效列落在該月之外
+// 就整份拒絕，避免傳錯檔案覆蓋掉別的月份。
+function assertRowsWithinMonth(
+  previewRows: DriverReportPreviewRow[],
+  yearMonth: string
+): string | null {
+  for (const row of previewRows) {
+    if (!row.serviceDate || row.serviceDate.startsWith(yearMonth)) continue
+    return `第 ${row.rowIndex} 列的日期 ${row.serviceDate} 不屬於宣告匯入的 ${yearMonth}，請確認上傳的是該月份的檔案`
+  }
+  return null
+}
+
+// monthRejection 把月份不符的訊息包成與後端一致的錯誤回應。
+function monthRejection(message: string) {
+  return HttpResponse.json(
+    {
+      error: {
+        code: 'DRIVER_REPORT_IMPORT_FAILED',
+        message,
+        details: [{ field: 'file', reason: message }]
+      }
+    },
+    { status: 400 }
+  )
+}
+
 function buildPreview(formId: string, rows: string[][]) {
   const found = findReportHeader(rows)
   if (typeof found === 'string') return found
@@ -274,8 +339,36 @@ export const driverReportsHandlers = [
     return HttpResponse.json(list)
   }),
 
+  // 與後端一樣由已匯入的服務日期分組推導，不另外維護一份月份狀態
+  http.get('/api/v1/driver-reports/imported-months', () => {
+    const items: DriverReportImportedMonthDTO[] = []
+    for (const [formId, dates] of importedDatesByForm) {
+      const countByMonth = new Map<string, number>()
+      for (const date of dates) {
+        const yearMonth = date.slice(0, 7)
+        countByMonth.set(yearMonth, (countByMonth.get(yearMonth) ?? 0) + 1)
+      }
+      for (const [yearMonth, submissionCount] of countByMonth) {
+        items.push({
+          formId,
+          yearMonth,
+          submissionCount,
+          lastImportedAt: lastImportByFormMonth.get(formMonthKey(formId, yearMonth)) ?? ''
+        })
+      }
+    }
+    items.sort((a, b) => a.formId.localeCompare(b.formId) || b.yearMonth.localeCompare(a.yearMonth))
+    return HttpResponse.json(items)
+  }),
+
+  // 比照後端的 ON CONFLICT (vehicle_id)：一台車一份匯報表，重複建立只更新名稱
   http.post('/api/v1/driver-reports', async ({ request }) => {
     const body = (await request.json()) as { vehicleId: string; title: string }
+    const existing = mockDriverReportForms.find((f) => f.vehicleId === body.vehicleId)
+    if (existing) {
+      existing.title = body.title
+      return HttpResponse.json(existing, { status: 201 })
+    }
     const created = {
       id: `form_${Date.now()}`,
       vehicleId: body.vehicleId,
@@ -296,6 +389,7 @@ export const driverReportsHandlers = [
   http.delete('/api/v1/driver-reports/:id', ({ params }) => {
     const idx = mockDriverReportForms.findIndex((f) => f.id === params.id)
     if (idx !== -1) mockDriverReportForms.splice(idx, 1)
+    forgetImportedDates(String(params.id))
     return HttpResponse.json({ success: true })
   }),
 
@@ -318,7 +412,12 @@ export const driverReportsHandlers = [
 
   http.post('/api/v1/driver-reports/:id/import', async ({ params, request }) => {
     const formId = String(params.id)
-    const dryRun = new URL(request.url).searchParams.get('dryRun') !== 'false'
+    const query = new URL(request.url).searchParams
+    const dryRun = query.get('dryRun') !== 'false'
+    const yearMonth = query.get('yearMonth') ?? ''
+    if (yearMonth && !/^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth)) {
+      return monthRejection(`匯入月份格式錯誤，請使用 YYYY-MM：${yearMonth}`)
+    }
 
     if (dryRun) {
       const rows = await readUploadedRows(request)
@@ -340,6 +439,10 @@ export const driverReportsHandlers = [
           },
           { status: 400 }
         )
+      }
+      const monthError = yearMonth ? assertRowsWithinMonth(preview.previewRows, yearMonth) : null
+      if (monthError) {
+        return monthRejection(monthError)
       }
       return HttpResponse.json(preview)
     }
@@ -364,6 +467,11 @@ export const driverReportsHandlers = [
         },
         { status: 400 }
       )
+    }
+
+    const monthError = yearMonth ? assertRowsWithinMonth(preview.previewRows, yearMonth) : null
+    if (monthError) {
+      return monthRejection(monthError)
     }
 
     const mapped = new Map(
@@ -391,6 +499,13 @@ export const driverReportsHandlers = [
     }
 
     const form = mockDriverReportForms.find((f) => f.id === formId)
+    const coveredDates = preview.previewRows
+      .filter((row) => !row.errorMessage && row.serviceDate)
+      .map((row) => row.serviceDate)
+    // 沒有任何可寫入的列時不清除，與後端 clearPreviousImport 一致
+    const importedDates = coveredDates.length
+      ? clearImportedDates(formId, coveredDates, yearMonth)
+      : (importedDatesByForm.get(formId) ?? new Set<string>())
     let rideRecordRows = 0
     const skippedRows: Array<{ rowIndex: number; reportDate: string; reasons: string[] }> = []
     let importedRows = 0
@@ -430,12 +545,20 @@ export const driverReportsHandlers = [
           rideRecordRows++
         }
       }
+      importedDates.add(row.serviceDate)
       importedRows++
+    }
+    importedDatesByForm.set(formId, importedDates)
+
+    // 只更新這次真的寫入的月份；importedDates 還含著其他月份的既有日期
+    const importedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
+    for (const date of coveredDates) {
+      lastImportByFormMonth.set(formMonthKey(formId, date.slice(0, 7)), importedAt)
     }
 
     if (form) {
-      form.lastImportedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
-      form.submissionCount += importedRows
+      form.lastImportedAt = importedAt
+      form.submissionCount = importedDates.size
       form.totalColumns = preview.columns.length
       form.mappedColumns = mapped.size
       form.pendingColumns = preview.columns.length - mapped.size

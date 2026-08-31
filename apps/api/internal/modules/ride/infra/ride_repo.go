@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/ride/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // RideRepository 提供表單、提交紀錄、回報來源與搭乘紀錄之存取。
@@ -31,7 +32,8 @@ func (r *RideRepository) GetFormColumns(ctx context.Context, formID uuid.UUID) (
 		WHERE form_id = $1
 		ORDER BY column_index ASC
 	`
-	rows, err := r.db.Query(ctx, query, formID)
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, formID)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +79,8 @@ func (r *RideRepository) SaveFormSubmission(
 		SET payload = EXCLUDED.payload, issue_text = EXCLUDED.issue_text
 		RETURNING id
 	`
-	err = r.db.QueryRow(ctx, query,
+	db := pgxdb.FromContext(ctx, r.db)
+	err = db.QueryRow(ctx, query,
 		submissionID, formID, serviceDate, submittedAt, driverNameRaw, driverID, source, payloadBytes, issueText,
 	).Scan(&submissionID)
 	if err != nil {
@@ -102,7 +105,8 @@ func (r *RideRepository) InsertRideSource(
 			id, submission_id, case_id, service_date, leg_seq, vehicle_id, driver_id, reported, source_column_index
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
-	_, err := r.db.Exec(ctx, query,
+	db := pgxdb.FromContext(ctx, r.db)
+	_, err := db.Exec(ctx, query,
 		uuid.New(), submissionID, caseID, serviceDate, legSeq, vehicleID, driverID, reported, colIdx,
 	)
 	return err
@@ -120,7 +124,8 @@ func (r *RideRepository) GetRideRecordForSlot(ctx context.Context, caseID uuid.U
 		LIMIT 1
 	`
 	var rec app.RideRecord
-	err := r.db.QueryRow(ctx, query, caseID, serviceDate, legSeq).Scan(
+	db := pgxdb.FromContext(ctx, r.db)
+	err := db.QueryRow(ctx, query, caseID, serviceDate, legSeq).Scan(
 		&rec.ID, &rec.CaseID, &rec.ServiceDate, &rec.LegSeq, &rec.MergedStatus, &rec.EffectiveStatus,
 		&rec.VehicleID, &rec.DriverID, &rec.HasConflict, &rec.ConflictResolvedAt, &rec.ConflictResolvedBy,
 		&rec.DepartTimeOverride, &rec.DurationMinOverride, &rec.NotClaimedAA09,
@@ -166,7 +171,8 @@ func (r *RideRepository) UpsertRideRecord(ctx context.Context, rec *app.RideReco
 	if rec.ID == uuid.Nil {
 		rec.ID = uuid.New()
 	}
-	return r.db.QueryRow(ctx, query,
+	db := pgxdb.FromContext(ctx, r.db)
+	return db.QueryRow(ctx, query,
 		rec.ID, rec.CaseID, rec.ServiceDate, rec.LegSeq, rec.MergedStatus, rec.EffectiveStatus,
 		rec.VehicleID, rec.DriverID, rec.HasConflict, rec.ConflictResolvedAt, rec.ConflictResolvedBy,
 		rec.DepartTimeOverride, rec.DurationMinOverride,
@@ -201,9 +207,107 @@ func (r *RideRepository) CorrectRideRecord(
 		    updated_at = now()
 		WHERE id = $1
 	`
-	_, err := r.db.Exec(ctx, query,
+	db := pgxdb.FromContext(ctx, r.db)
+	_, err := db.Exec(ctx, query,
 		rideID, effectiveStatus, vehicleID, driverID, departTimeOverride,
 		durationMinOverride, notClaimedAA09, reason, operatorID,
 	)
+	return err
+}
+
+// ListRideSourceSlotsForForm 列出指定匯報表在這些服務日期底下，由匯入寫入來源列的搭乘座標。
+//
+// 供覆蓋式重匯先取得受影響 slot：來源列刪除後就查不到它們，必須在刪除前收集。
+// 篩選條件與 DeleteFormSubmissions 一致，兩者的範圍必須永遠相同。
+func (r *RideRepository) ListRideSourceSlotsForForm(ctx context.Context, formID uuid.UUID, dates []time.Time) ([]app.RideSlot, error) {
+	if len(dates) == 0 {
+		return nil, nil
+	}
+	query := `
+		SELECT DISTINCT rs.case_id, rs.service_date, rs.leg_seq
+		FROM ride_sources rs
+		JOIN form_submissions fs ON fs.id = rs.submission_id
+		WHERE fs.form_id = $1 AND fs.service_date = ANY($2::date[]) AND fs.source = 'import'
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, formID, dates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var slots []app.RideSlot
+	for rows.Next() {
+		var slot app.RideSlot
+		if err := rows.Scan(&slot.CaseID, &slot.ServiceDate, &slot.LegSeq); err != nil {
+			return nil, err
+		}
+		slots = append(slots, slot)
+	}
+	return slots, rows.Err()
+}
+
+// DeleteFormSubmissions 刪除指定匯報表在這些服務日期、由匯入產生的提交紀錄，回傳刪除筆數。
+//
+// ride_sources 由 submission_id 的 ON DELETE CASCADE 連帶清除；只影響本匯報表，
+// 其他車輛對同一 slot 的混車來源不受牽連。限定 source = 'import' 是因為覆蓋語意只涵蓋
+// 匯入產生的資料，人工補登的提交不該被下一次重匯抹掉。
+func (r *RideRepository) DeleteFormSubmissions(ctx context.Context, formID uuid.UUID, dates []time.Time) (int, error) {
+	if len(dates) == 0 {
+		return 0, nil
+	}
+	db := pgxdb.FromContext(ctx, r.db)
+	tag, err := db.Exec(ctx, `DELETE FROM form_submissions WHERE form_id = $1 AND service_date = ANY($2::date[]) AND source = 'import'`, formID, dates)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// ListImportedMonths 統計每份匯報表各月份由匯入寫入的提交筆數與最後一次匯入時間。
+//
+// 只算 source = 'import'，與 DeleteFormSubmissions 的覆蓋範圍一致：人工補登的提交不會
+// 被重匯覆蓋，也就不該讓使用者以為那個月是匯入來的。
+func (r *RideRepository) ListImportedMonths(ctx context.Context) ([]app.ImportedMonth, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+	query := `
+		SELECT form_id, to_char(service_date, 'YYYY-MM'), count(*), max(submitted_at)
+		FROM form_submissions
+		WHERE source = 'import'
+		GROUP BY form_id, to_char(service_date, 'YYYY-MM')
+		ORDER BY form_id, 2 DESC
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var months []app.ImportedMonth
+	for rows.Next() {
+		var m app.ImportedMonth
+		if err := rows.Scan(&m.FormID, &m.YearMonth, &m.SubmissionCount, &m.LastImportedAt); err != nil {
+			return nil, err
+		}
+		months = append(months, m)
+	}
+	return months, rows.Err()
+}
+
+// DeleteDerivedRideRecord 刪除純由匯入衍生的搭乘紀錄；帶有人工更正、衝突裁決或
+// 不申報標記的紀錄一律保留，避免覆蓋式重匯抹掉人工成果。
+func (r *RideRepository) DeleteDerivedRideRecord(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) error {
+	query := `
+		DELETE FROM ride_records
+		WHERE case_id = $1 AND service_date = $2 AND leg_seq = $3
+		  AND corrected_at IS NULL
+		  AND conflict_resolved_at IS NULL
+		  AND not_claimed_aa09 = false
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	_, err := db.Exec(ctx, query, caseID, serviceDate, legSeq)
 	return err
 }

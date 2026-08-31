@@ -90,73 +90,12 @@
 
       <el-tabs v-model="activeTab">
         <el-tab-pane name="columns" :label="`欄位對應 (${preview.columns.length})`">
-          <el-table :data="preview.columns" max-height="360" border size="small">
-            <el-table-column prop="columnIndex" label="#" width="50" align="center" />
-            <el-table-column label="匯報表欄位" min-width="220">
-              <template #default="{ row }">
-                <div class="column-cell">
-                  <span class="column-header">{{ row.columnHeader }}</span>
-                  <span class="column-meta">
-                    有坐 {{ row.boardedCount }} 天 / 沒坐 {{ row.absentCount }} 天
-                  </span>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="對應個案" min-width="200">
-              <template #default="{ row }">
-                <el-select
-                  v-model="decisions[row.columnHeader].caseId"
-                  placeholder="選擇個案"
-                  filterable
-                  clearable
-                  style="width: 100%"
-                  @change="onCaseChange(row.columnHeader)"
-                >
-                  <el-option
-                    v-for="c in cases"
-                    :key="c.id"
-                    :label="`${c.name} (${c.code})`"
-                    :value="c.id"
-                  />
-                </el-select>
-              </template>
-            </el-table-column>
-            <el-table-column label="趟次" width="160">
-              <template #default="{ row }">
-                <el-select
-                  v-model="decisions[row.columnHeader].legSeq"
-                  placeholder="選擇趟次"
-                  style="width: 100%"
-                >
-                  <el-option
-                    v-for="leg in LEG_SEQ_OPTIONS"
-                    :key="leg.value"
-                    :value="leg.value"
-                    :label="leg.label"
-                  />
-                </el-select>
-              </template>
-            </el-table-column>
-            <el-table-column label="狀態" width="130" align="center">
-              <template #default="{ row }">
-                <el-tag size="small" :type="statusTagType(decisions[row.columnHeader].mappingStatus)">
-                  {{ MAPPING_STATUS_LABELS[decisions[row.columnHeader].mappingStatus] }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="100" align="center">
-              <template #default="{ row }">
-                <el-button
-                  link
-                  size="small"
-                  :type="decisions[row.columnHeader].mappingStatus === 'ignored' ? 'primary' : 'info'"
-                  @click="toggleIgnore(row.columnHeader)"
-                >
-                  {{ decisions[row.columnHeader].mappingStatus === 'ignored' ? '取消略過' : '略過此欄' }}
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+          <DriverReportColumnMappingTable
+            v-model:decisions="decisions"
+            :columns="preview.columns"
+            :cases="cases"
+            max-height="360"
+          />
         </el-tab-pane>
 
         <el-tab-pane name="rows" :label="`每日匯報 (${preview.previewRows.length})`">
@@ -229,8 +168,13 @@ import {
   downloadDriverReportTemplate
 } from '@/api/driverReports'
 import { listCases } from '@/api/cases'
-import { LEG_SEQ_OPTIONS } from './legOptions'
-import { MAPPING_STATUS_LABELS, type MappingStatus } from '@/types/domain'
+import DriverReportColumnMappingTable from './DriverReportColumnMappingTable.vue'
+import {
+  createColumnDecisions,
+  countByStatus,
+  toColumnDecisionPayload,
+  type ColumnDecisionMap
+} from './columnDecisions'
 import type {
   CaseDTO,
   DriverReportCommitResultDTO,
@@ -239,12 +183,6 @@ import type {
 } from '@/types/api'
 
 const emit = defineEmits<{ (e: 'success'): void }>()
-
-interface ColumnDecisionState {
-  mappingStatus: MappingStatus
-  caseId?: string
-  legSeq?: number
-}
 
 const visible = ref(false)
 const form = ref<DriverReportFormDTO | null>(null)
@@ -257,20 +195,10 @@ const commitResult = ref<DriverReportCommitResultDTO | null>(null)
 const cases = ref<CaseDTO[]>([])
 const activeTab = ref('columns')
 // 以欄位表頭為鍵：欄號會隨個案增減而位移，表頭才是後端認得的穩定識別
-const decisions = ref<Record<string, ColumnDecisionState>>({})
+const decisions = ref<ColumnDecisionMap>({})
 
-const unresolvedColumnCount = computed(
-  () => Object.values(decisions.value).filter((d) => d.mappingStatus === 'pending').length
-)
-const mappedColumnCount = computed(
-  () => Object.values(decisions.value).filter((d) => d.mappingStatus === 'mapped').length
-)
-
-function statusTagType(status: MappingStatus) {
-  if (status === 'mapped') return 'success'
-  if (status === 'pending') return 'warning'
-  return 'info'
-}
+const unresolvedColumnCount = computed(() => countByStatus(decisions.value, 'pending'))
+const mappedColumnCount = computed(() => countByStatus(decisions.value, 'mapped'))
 
 function rowClassName({ row }: { row: { errorMessage?: string; warningMessage?: string } }) {
   if (row.errorMessage) return 'row-error'
@@ -332,16 +260,7 @@ async function startDryRun() {
   try {
     const res = await dryRunImportDriverReport(form.value.id, selectedFile.value)
     preview.value = res
-    decisions.value = Object.fromEntries(
-      res.columns.map((c) => [
-        c.columnHeader,
-        {
-          mappingStatus: c.mappingStatus,
-          caseId: c.caseId || c.suggestedCaseId || undefined,
-          legSeq: c.legSeq || c.suggestedLegSeq || undefined
-        }
-      ])
-    )
+    decisions.value = createColumnDecisions(res.columns)
     activeTab.value = res.unmappedColumns > 0 ? 'columns' : 'rows'
   } catch {
     preview.value = null
@@ -350,41 +269,11 @@ async function startDryRun() {
   }
 }
 
-// 選好個案即視為已對應：趟次留白時沿用推薦值，避免使用者被迫多點一次
-function onCaseChange(columnHeader: string) {
-  const decision = decisions.value[columnHeader]
-  if (!decision) return
-  if (decision.caseId) {
-    decision.mappingStatus = 'mapped'
-    if (!decision.legSeq) {
-      const column = preview.value?.columns.find((c) => c.columnHeader === columnHeader)
-      decision.legSeq = column?.suggestedLegSeq || 1
-    }
-  } else {
-    decision.mappingStatus = 'pending'
-  }
-}
-
-function toggleIgnore(columnHeader: string) {
-  const decision = decisions.value[columnHeader]
-  if (!decision) return
-  if (decision.mappingStatus === 'ignored') {
-    decision.mappingStatus = decision.caseId ? 'mapped' : 'pending'
-  } else {
-    decision.mappingStatus = 'ignored'
-  }
-}
-
 async function confirmImport() {
   if (!selectedFile.value || !form.value) return
   submitting.value = true
   try {
-    const payload = Object.entries(decisions.value).map(([columnHeader, d]) => ({
-      columnHeader,
-      mappingStatus: d.mappingStatus,
-      caseId: d.mappingStatus === 'mapped' ? d.caseId : null,
-      legSeq: d.mappingStatus === 'mapped' ? d.legSeq : null
-    }))
+    const payload = toColumnDecisionPayload(decisions.value)
     const result = await commitImportDriverReport(form.value.id, selectedFile.value, payload)
     commitResult.value = result
     ElMessage.success(`已匯入 ${result.importedRows} 天的接送匯報`)
@@ -422,21 +311,6 @@ defineExpose({ open, close })
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 12px;
-}
-
-.column-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.column-header {
-  font-weight: 500;
-}
-
-.column-meta {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
 }
 
 .ml-1 {

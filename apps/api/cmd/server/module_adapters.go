@@ -169,7 +169,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
-		ServiceCategory: in.ServiceCategory,
+		ServiceCategory:  in.ServiceCategory,
 		ServiceUsageType: in.ServiceUsageType, Status: in.Status, Remarks: in.Remarks,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {
@@ -233,6 +233,27 @@ func (a driverReportRideIngestor) IngestSubmission(ctx context.Context, formID, 
 		Remark:      s.Remark,
 		Answers:     s.Answers,
 	})
+}
+
+func (a driverReportRideIngestor) ClearImportedDates(ctx context.Context, formID uuid.UUID, dates []time.Time) (int, error) {
+	return a.svc.ClearImportedDates(ctx, formID, dates)
+}
+
+func (a driverReportRideIngestor) ListImportedMonths(ctx context.Context) ([]drapp.ImportedMonth, error) {
+	months, err := a.svc.ListImportedMonths(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]drapp.ImportedMonth, 0, len(months))
+	for _, m := range months {
+		out = append(out, drapp.ImportedMonth{
+			FormID:          m.FormID,
+			YearMonth:       m.YearMonth,
+			SubmissionCount: m.SubmissionCount,
+			LastImportedAt:  m.LastImportedAt,
+		})
+	}
+	return out, nil
 }
 
 // caseDuplicateFinder 讓 caseimport 於 dry-run 階段透過 casemgmt 查重。

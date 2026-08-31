@@ -20,14 +20,15 @@ import (
 // DriverReportServiceInterface 定義 DriverReportHandler 所需的業務服務介面。
 type DriverReportServiceInterface interface {
 	ListForms(ctx context.Context) ([]app.ReportForm, error)
+	ListImportedMonths(ctx context.Context) ([]app.ImportedMonth, error)
 	CreateForm(ctx context.Context, vehicleID, title string) (*app.ReportForm, error)
 	DeleteForm(ctx context.Context, formID string) error
 	ListColumns(ctx context.Context, formID, mappingStatus string) ([]app.ColumnMapping, error)
 	UpdateColumnMapping(ctx context.Context, colID, status string, caseID *string, legSeq *int16) error
 	BatchMapping(ctx context.Context, updates []app.ColumnMappingUpdate) (int, error)
 	TemplateExcel(ctx context.Context, formID uuid.UUID) ([]byte, string, error)
-	ParseDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader) (*app.PreviewResult, error)
-	CommitDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, decisions []app.ColumnDecision, actor app.Actor) (*app.CommitResult, error)
+	ParseDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, yearMonth string) (*app.PreviewResult, error)
+	CommitDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, decisions []app.ColumnDecision, yearMonth string, actor app.Actor) (*app.CommitResult, error)
 }
 
 // DriverReportHandler 處理司機接送匯報表的登錄、匯入與欄位對應之 HTTP 請求。
@@ -51,6 +52,21 @@ func (h *DriverReportHandler) ListForms(c *gin.Context) {
 	items := make([]FormListItemDTO, 0, len(forms))
 	for _, f := range forms {
 		items = append(items, toFormListItemDTO(f))
+	}
+	httpx.RespondSuccess(c, http.StatusOK, items, nil)
+}
+
+// ListImportedMonths 取得每份匯報表各月份已匯入的筆數與最後匯入時間。
+func (h *DriverReportHandler) ListImportedMonths(c *gin.Context) {
+	months, err := h.svc.ListImportedMonths(c.Request.Context())
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	items := make([]ImportedMonthDTO, 0, len(months))
+	for _, m := range months {
+		items = append(items, toImportedMonthDTO(m))
 	}
 	httpx.RespondSuccess(c, http.StatusOK, items, nil)
 }
@@ -102,6 +118,9 @@ func (h *DriverReportHandler) DownloadTemplate(c *gin.Context) {
 }
 
 // ImportExcel 上傳匯報表 .xlsx；dryRun=true 回傳預覽，dryRun=false 正式寫入。
+//
+// yearMonth（YYYY-MM）為選填的宣告匯入月份：有帶時整個月會被這份檔案覆蓋，且檔案內
+// 出現該月以外的日期即整份拒絕。未帶時只覆蓋檔案實際涵蓋的日期。
 func (h *DriverReportHandler) ImportExcel(c *gin.Context) {
 	formID, ok := parseFormID(c)
 	if !ok {
@@ -121,6 +140,8 @@ func (h *DriverReportHandler) ImportExcel(c *gin.Context) {
 	}
 	defer f.Close()
 
+	yearMonth := c.Query("yearMonth")
+
 	// 依 dryRun 參數區分預覽或正式寫入
 	if c.DefaultQuery("dryRun", "true") == "false" {
 		decisions, err := parseColumnDecisions(c.PostForm("columnDecisions"))
@@ -129,7 +150,7 @@ func (h *DriverReportHandler) ImportExcel(c *gin.Context) {
 			return
 		}
 
-		result, err := h.svc.CommitDriverReport(c.Request.Context(), formID, f, decisions, app.Actor{
+		result, err := h.svc.CommitDriverReport(c.Request.Context(), formID, f, decisions, yearMonth, app.Actor{
 			ActorID:   auth.GetActorID(c),
 			ActorRole: auth.GetActorRole(c),
 			IPAddress: c.ClientIP(),
@@ -143,7 +164,7 @@ func (h *DriverReportHandler) ImportExcel(c *gin.Context) {
 		return
 	}
 
-	preview, err := h.svc.ParseDriverReport(c.Request.Context(), formID, f)
+	preview, err := h.svc.ParseDriverReport(c.Request.Context(), formID, f, yearMonth)
 	if err != nil {
 		respondReportError(c, err)
 		return

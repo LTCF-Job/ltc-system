@@ -11,7 +11,7 @@ import (
 type FormStore interface {
 	ListForms(ctx context.Context) ([]ReportForm, error)
 	GetForm(ctx context.Context, formID uuid.UUID) (*ReportForm, error)
-	CreateForm(ctx context.Context, id, vehicleID uuid.UUID, title string) error
+	CreateForm(ctx context.Context, id, vehicleID uuid.UUID, title string) (uuid.UUID, error)
 	DeleteForm(ctx context.Context, formID uuid.UUID) error
 	ListColumnsWithMapping(ctx context.Context, formID, mappingStatus string) ([]ColumnMapping, error)
 	UpsertColumns(ctx context.Context, formID uuid.UUID, drafts []ColumnDraft) error
@@ -63,10 +63,25 @@ type Submission struct {
 	Answers     map[string]string
 }
 
-// RideIngestor 把一列匯報展開為搭乘來源與搭乘紀錄，由擁有搭乘紀錄的模組實作。
-// 回傳實際寫入的搭乘紀錄筆數。
+// ImportedMonth 是某份匯報表在某個月已匯入的提交統計。
+type ImportedMonth struct {
+	FormID          uuid.UUID
+	YearMonth       string
+	SubmissionCount int
+	LastImportedAt  time.Time
+}
+
+// RideIngestor 是本模組與搭乘紀錄模組之間的匯報資料邊界，由擁有搭乘紀錄的模組實作。
+// IngestSubmission 回傳實際寫入的搭乘紀錄筆數；ClearImportedDates 回傳清除的提交筆數。
 type RideIngestor interface {
 	IngestSubmission(ctx context.Context, formID, vehicleID uuid.UUID, s Submission) (int, error)
+	ClearImportedDates(ctx context.Context, formID uuid.UUID, dates []time.Time) (int, error)
+	ListImportedMonths(ctx context.Context) ([]ImportedMonth, error)
+}
+
+// TxRunner 讓一次匯入的清除與重寫落在同一個資料庫交易內。
+type TxRunner interface {
+	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 // Actor 代表發動匯入的操作者與來源資訊，供稽核留痕使用。

@@ -39,6 +39,14 @@ type FormColumnDTO struct {
 	SuggestionScore   float64 `json:"suggestionScore"`
 }
 
+// ImportedMonthDTO 是「某份匯報表某個月已匯入多少筆」的 API 回應項目。
+type ImportedMonthDTO struct {
+	FormID          string `json:"formId"`
+	YearMonth       string `json:"yearMonth"`
+	SubmissionCount int    `json:"submissionCount"`
+	LastImportedAt  string `json:"lastImportedAt"`
+}
+
 // CreateFormRequest 是建立車輛匯報表的請求。
 type CreateFormRequest struct {
 	VehicleID string `json:"vehicleId" binding:"required"`
@@ -75,6 +83,15 @@ func toFormListItemDTO(f app.ReportForm) FormListItemDTO {
 		PendingColumns:  f.PendingColumns,
 		SubmissionCount: f.SubmissionCount,
 		Status:          f.Status,
+	}
+}
+
+func toImportedMonthDTO(m app.ImportedMonth) ImportedMonthDTO {
+	return ImportedMonthDTO{
+		FormID:          m.FormID.String(),
+		YearMonth:       m.YearMonth,
+		SubmissionCount: m.SubmissionCount,
+		LastImportedAt:  m.LastImportedAt.Format("2006-01-02 15:04:05"),
 	}
 }
 

@@ -70,6 +70,12 @@ const router = createRouter({
           meta: { title: '匯報表管理', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
         },
         {
+          path: 'driver-reports/batch-import',
+          name: 'DriverReportBatchImport',
+          component: () => import('@/views/driverReports/DriverReportBatchImportView.vue'),
+          meta: { title: '批次上傳', module: 'driver_reports', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+        },
+        {
           path: 'driver-reports/mappings',
           name: 'FieldMapping',
           component: () => import('@/views/driverReports/FieldMappingView.vue'),
