@@ -1,6 +1,6 @@
 # ltc-transport-system
 
-長照交通接送後台系統。前後端分離的 monorepo：Go API + Vue 3 SPA，資料庫用 Supabase（PostgreSQL）。
+好安心關懷協會-後臺系統。前後端分離的 monorepo：Go API + Vue 3 SPA，資料庫用 Supabase（PostgreSQL）。
 
 ```
 apps/api/   Go + Gin 後端 API，見 apps/api/README.md

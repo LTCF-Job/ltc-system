@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AppLogo: typeof import('./components/AppLogo.vue')['default']
     ChangePasswordDialog: typeof import('./components/ChangePasswordDialog.vue')['default']
     DataTablePage: typeof import('./components/DataTablePage.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']

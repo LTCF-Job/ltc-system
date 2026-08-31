@@ -20,6 +20,7 @@ export function isDemoModeActive(): boolean {
 }
 
 async function ensureWorkerStarted() {
+  if (isMockRuntimeEnabled()) return
   if (workerStarted) return
   const { worker } = await import('@/mocks/browser')
   const { onUnhandledRequest } = await import('@/mocks/onUnhandledRequest')
@@ -28,6 +29,7 @@ async function ensureWorkerStarted() {
 }
 
 async function ensureWorkerStopped() {
+  if (isMockRuntimeEnabled()) return
   if (!workerStarted) return
   const { worker } = await import('@/mocks/browser')
   worker.stop()

@@ -13,6 +13,20 @@
       class="aside-menu"
       :class="{ 'is-mobile': isMobile, 'is-mobile-open': isMobileMenuOpen }"
     >
+      <!-- 品牌識別區 -->
+      <router-link
+        to="/"
+        class="sidebar-brand-link"
+        :class="{ 'is-collapsed': isCollapse && !isMobile }"
+        :title="isCollapse && !isMobile ? '好安心關懷協會-後臺系統' : ''"
+      >
+        <AppLogo
+          :size="isCollapse && !isMobile ? 'sm' : 'md'"
+          :collapsed="isCollapse && !isMobile"
+          variant="dark"
+        />
+      </router-link>
+
       <el-scrollbar class="menu-scrollbar">
         <el-menu
           id="primary-navigation"
@@ -183,17 +197,6 @@
         </div>
 
         <div class="header-right">
-          <!-- 展示模式標籤 -->
-          <el-tag
-            v-if="isDemoMode"
-            type="warning"
-            effect="light"
-            size="small"
-            round
-            class="demo-mode-tag"
-          >
-            展示模式 (Mock Data)
-          </el-tag>
           <el-dropdown trigger="click" @command="handleCommand">
             <div class="user-dropdown-link">
               <div class="avatar-box">
@@ -264,13 +267,12 @@ import {
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'
-import { isDemoModeActive } from '@/lib/demoMode'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
+import AppLogo from '@/components/AppLogo.vue'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
-const isDemoMode = computed(() => isDemoModeActive() || !!authStore.token?.startsWith('mock_jwt_'))
 
 const isCollapse = ref(false)
 const isMobile = ref(false)
@@ -396,6 +398,28 @@ async function handleCommand(cmd: string) {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
+
+  .sidebar-brand-link {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    height: 60px;
+    box-sizing: border-box;
+    text-decoration: none;
+    border-bottom: 1px solid #244468;
+    background: #152b42;
+    overflow: hidden;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background: #1b3653;
+    }
+
+    &.is-collapsed {
+      padding: 14px 0;
+      justify-content: center;
+    }
+  }
 
   .menu-scrollbar {
     flex: 1;

@@ -4,8 +4,8 @@ import { loginAs, logout } from './helpers/auth'
 test.describe('01. 認證與權限控制 (Authentication & Authorization)', () => {
   test('登入介面渲染完整且包含展示快速身分切換按鈕', async ({ page }) => {
     await page.goto('/login')
-    await expect(page).toHaveTitle(/長照交通接送/)
-    await expect(page.getByRole('heading', { name: '長照交通接送後台系統' })).toBeVisible()
+    await expect(page).toHaveTitle(/好安心關懷協會-後臺系統/)
+    await expect(page.getByRole('heading', { name: '好安心關懷協會-後臺系統' })).toBeVisible()
     await expect(page.getByPlaceholder('請輸入電子郵件')).toBeVisible()
     await expect(page.getByPlaceholder('請輸入密碼')).toBeVisible()
     await expect(page.getByRole('button', { name: '登入系統' })).toBeVisible()
