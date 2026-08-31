@@ -1,5 +1,6 @@
 <template>
   <div class="role-management-view">
+    <PageHeader title="角色身分管理" />
     <el-alert
       type="info"
       show-icon
@@ -18,9 +19,9 @@
         <el-input
           v-model="searchQuery"
           placeholder="搜尋角色名稱或說明"
-          prefix-icon="Search"
+          :prefix-icon="Search"
           clearable
-          style="width: 280px"
+          style="width: 240px"
         />
         <el-tag type="info" effect="plain" class="total-tag">
           共 {{ filteredRoles.length }} 個角色身分
@@ -28,7 +29,7 @@
       </div>
 
       <div class="toolbar-right">
-        <el-button type="primary" icon="Plus" @click="openCreateDialog">
+        <el-button type="primary" :icon="Plus" @click="openCreateDialog">
           新增自訂角色
         </el-button>
       </div>
@@ -80,10 +81,9 @@
 
           <div class="role-actions" @click.stop>
             <el-button
-              type="success"
+              type="primary"
               link
               size="small"
-              icon="Edit"
               @click="openEditDialog(role)"
             >
               編輯設定
@@ -92,7 +92,6 @@
               type="primary"
               link
               size="small"
-              icon="CopyDocument"
               @click="openCopyDialog(role)"
             >
               複製建立
@@ -107,7 +106,6 @@
                   type="danger"
                   link
                   size="small"
-                  icon="Delete"
                   disabled
                 >
                   刪除
@@ -119,7 +117,6 @@
               type="danger"
               link
               size="small"
-              icon="Delete"
               @click="handleDeleteRole(role)"
             >
               刪除
@@ -143,9 +140,8 @@
               支援 {{ countRolePerms(selectedRole.permissions).views }} 項檢視、{{ countRolePerms(selectedRole.permissions).edits }} 項操作
             </span>
             <el-button
-              type="success"
+              type="primary"
               size="small"
-              icon="Edit"
               plain
               @click="openEditDialog(selectedRole)"
             >
@@ -209,7 +205,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="820px"
+      width="min(820px, calc(100vw - 32px))"
       destroy-on-close
       top="5vh"
     >
@@ -217,7 +213,7 @@
         ref="formRef"
         :model="form"
         :rules="formRules"
-        label-width="100px"
+        label-width="110px"
         label-position="right"
       >
         <el-row :gutter="16">
@@ -326,12 +322,7 @@
       </el-form>
 
       <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="submitting" @click="handleSubmit">
-            儲存角色設定
-          </el-button>
-        </div>
+        <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -339,7 +330,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Check, Close, Plus, Search, Edit, Delete, CopyDocument, Setting } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import { Check, Close, Plus, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import {
@@ -600,7 +593,7 @@ async function handleDeleteRole(role: RoleDTO) {
       `確定要刪除角色「${role.name}」嗎？此操作將同時記錄於系統操作紀錄。`,
       '確認刪除自訂角色',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning'
       }
@@ -708,11 +701,11 @@ onMounted(() => {
         font-size: 15px;
         font-weight: 600;
 
-        &.role-admin { color: #be123c; }
-        &.role-dispatcher { color: #1d4ed8; }
-        &.role-staff { color: #15803d; }
-        &.role-driver { color: #b45309; }
-        &.role-viewer { color: #475569; }
+        &.role-admin { color: var(--app-role-admin-fg); }
+        &.role-dispatcher { color: var(--app-role-dispatcher-fg); }
+        &.role-staff { color: var(--app-role-staff-fg); }
+        &.role-driver { color: var(--app-role-driver-fg); }
+        &.role-viewer { color: var(--app-role-viewer-fg); }
       }
 
       .role-dot {
@@ -721,11 +714,11 @@ onMounted(() => {
         border-radius: 50%;
         display: inline-block;
 
-        &.dot-admin { background-color: #e11d48; }
-        &.dot-dispatcher { background-color: #2563eb; }
-        &.dot-staff { background-color: #16a34a; }
-        &.dot-driver { background-color: #d97706; }
-        &.dot-viewer { background-color: #64748b; }
+        &.dot-admin { background-color: var(--app-role-admin-dot); }
+        &.dot-dispatcher { background-color: var(--app-role-dispatcher-dot); }
+        &.dot-staff { background-color: var(--app-role-staff-dot); }
+        &.dot-driver { background-color: var(--app-role-driver-dot); }
+        &.dot-viewer { background-color: var(--app-role-viewer-dot); }
       }
     }
 

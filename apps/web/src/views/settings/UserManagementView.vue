@@ -1,6 +1,7 @@
 <template>
   <div class="user-management-view">
     <DataTablePage
+      title="使用者管理"
       :loading="loading"
       :total="total"
       :page="page"
@@ -37,12 +38,12 @@
           </el-option>
         </el-select>
 
-        <el-button type="primary" icon="Search" @click="fetchUsers">查詢</el-button>
+        <el-button type="primary" @click="fetchUsers">查詢</el-button>
         <el-button @click="handleReset">重設</el-button>
       </template>
 
       <template #actions>
-        <el-button type="primary" icon="Plus" @click="openCreateDialog">
+        <el-button type="primary" :icon="Plus" @click="openCreateDialog">
           新增使用者
         </el-button>
       </template>
@@ -57,7 +58,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="email" label="電子郵件 / 帳號" min-width="200" />
+          <el-table-column prop="email" label="電子郵件 / 帳號" min-width="200" show-overflow-tooltip />
 
           <el-table-column label="身分角色" width="140" align="center">
             <template #default="{ row }">
@@ -102,22 +103,23 @@
 
           <el-table-column label="操作" width="220" fixed="right" align="center">
             <template #default="{ row }">
-              <el-button link type="success" size="small" :icon="Edit" @click="openEditDialog(row as any)">
-                編輯
-              </el-button>
-              <el-button link type="warning" size="small" :icon="Setting" @click="openPermissionDrawer(row as any)">
-                設定權限
-              </el-button>
-              <el-button
-                v-if="(row as any).id !== currentUserId"
-                link
-                type="danger"
-                size="small"
-                :icon="Delete"
-                @click="handleDelete(row as any)"
-              >
-                刪除
-              </el-button>
+              <TableRowActions>
+                <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
+                  編輯
+                </el-button>
+                <el-button link type="primary" size="small" @click="openPermissionDrawer(row as any)">
+                  設定權限
+                </el-button>
+                <el-button
+                  v-if="(row as any).id !== currentUserId"
+                  link
+                  type="danger"
+                  size="small"
+                  @click="handleDelete(row as any)"
+                >
+                  刪除
+                </el-button>
+              </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
@@ -128,7 +130,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯使用者基本資料' : '新增系統使用者'"
-      width="520px"
+      width="min(480px, calc(100vw - 32px))"
       destroy-on-close
     >
       <el-form
@@ -188,10 +190,7 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          儲存
-        </el-button>
+        <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
       </template>
     </el-dialog>
 
@@ -199,7 +198,7 @@
     <el-drawer
       v-model="drawerVisible"
       title="自訂功能模組權限"
-      size="620px"
+      size="min(620px, 92vw)"
       destroy-on-close
     >
       <div v-if="selectedUser" class="perm-drawer-content">
@@ -261,12 +260,7 @@
       </div>
 
       <template #footer>
-        <div style="display: flex; justify-content: flex-end; gap: 10px">
-          <el-button @click="drawerVisible = false">取消</el-button>
-          <el-button type="primary" :loading="savingPerms" @click="handleSavePermissions">
-            儲存權限設定
-          </el-button>
-        </div>
+        <DialogFooter :loading="savingPerms" @confirm="handleSavePermissions" @cancel="drawerVisible = false" />
       </template>
     </el-drawer>
   </div>
@@ -274,9 +268,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Plus, Search, Edit, Setting, Delete } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import {
   listUsers,
   createUser,
@@ -472,7 +468,7 @@ async function handleDelete(user: UserDTO) {
       `確定要刪除使用者「${user.displayName} (${user.email})」嗎？此動作無法復原。`,
       '確認刪除使用者',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning'
       }
@@ -586,11 +582,11 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 500;
 
-  &.role-admin { color: #be123c; }
-  &.role-dispatcher { color: #1d4ed8; }
-  &.role-staff { color: #15803d; }
-  &.role-driver { color: #b45309; }
-  &.role-viewer { color: #475569; }
+  &.role-admin { color: var(--app-role-admin-fg); }
+  &.role-dispatcher { color: var(--app-role-dispatcher-fg); }
+  &.role-staff { color: var(--app-role-staff-fg); }
+  &.role-driver { color: var(--app-role-driver-fg); }
+  &.role-viewer { color: var(--app-role-viewer-fg); }
 }
 
 .role-dot {
@@ -599,11 +595,11 @@ onMounted(() => {
   border-radius: 50%;
   display: inline-block;
 
-  &.dot-admin { background-color: #e11d48; }
-  &.dot-dispatcher { background-color: #2563eb; }
-  &.dot-staff { background-color: #16a34a; }
-  &.dot-driver { background-color: #d97706; }
-  &.dot-viewer { background-color: #64748b; }
+  &.dot-admin { background-color: var(--app-role-admin-dot); }
+  &.dot-dispatcher { background-color: var(--app-role-dispatcher-dot); }
+  &.dot-staff { background-color: var(--app-role-staff-dot); }
+  &.dot-driver { background-color: var(--app-role-driver-dot); }
+  &.dot-viewer { background-color: var(--app-role-viewer-dot); }
 }
 
 .perm-mode-custom {

@@ -1,65 +1,60 @@
 <template>
   <div class="notification-settings-view">
-    <el-card shadow="never" class="settings-card">
-      <!-- 頂部篩選與操作列 -->
-      <div class="toolbar-wrapper">
-        <div class="filter-wrapper">
-          <el-input
-            v-model="searchQuery"
-            placeholder="搜尋信箱／顯示名稱"
-            clearable
-            style="width: 240px;"
-            @keyup.enter="fetchRecipients"
+    <DataTablePage title="通知收件人管理" :loading="loading">
+      <template #filter>
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜尋信箱／顯示名稱"
+          clearable
+          style="width: 240px;"
+          @keyup.enter="fetchRecipients"
+        />
+
+        <el-select
+          v-model="selectedTopic"
+          placeholder="通知主題篩選"
+          clearable
+          style="width: 180px;"
+          @change="fetchRecipients"
+        >
+          <el-option
+            v-for="(label, key) in NOTIFICATION_TOPIC_LABELS"
+            :key="key"
+            :label="label"
+            :value="key"
           />
+        </el-select>
 
-          <el-select
-            v-model="selectedTopic"
-            placeholder="通知主題篩選"
-            clearable
-            style="width: 180px;"
-            @change="fetchRecipients"
-          >
-            <el-option
-              v-for="(label, key) in NOTIFICATION_TOPIC_LABELS"
-              :key="key"
-              :label="label"
-              :value="key"
-            />
-          </el-select>
+        <el-button type="primary" @click="fetchRecipients">
+          查詢
+        </el-button>
+        <el-button @click="handleReset">
+          重設
+        </el-button>
+      </template>
 
-          <el-button type="primary" icon="Search" @click="fetchRecipients">
-            查詢
-          </el-button>
-          <el-button icon="Refresh" @click="handleReset">
-            重設
-          </el-button>
-        </div>
+      <template #actions>
+        <el-button
+          v-if="authStore.can('admin') && selectedTableRows.length > 0"
+          type="danger"
+          plain
+          @click="handleBatchDelete"
+        >
+          批次刪除 ({{ selectedTableRows.length }})
+        </el-button>
 
-        <div class="actions-wrapper">
-          <el-button
-            v-if="authStore.can('admin') && selectedTableRows.length > 0"
-            type="danger"
-            plain
-            icon="Delete"
-            @click="handleBatchDelete"
-          >
-            批次刪除 ({{ selectedTableRows.length }})
-          </el-button>
+        <el-button
+          v-if="authStore.can('admin')"
+          type="primary"
+          :icon="Plus"
+          @click="openAddDialog"
+        >
+          新增外部信箱
+        </el-button>
+      </template>
 
-          <el-button
-            v-if="authStore.can('admin')"
-            type="primary"
-            icon="Plus"
-            @click="openAddDialog"
-          >
-            新增外部信箱
-          </el-button>
-        </div>
-      </div>
-
-      <!-- 收件人清單表格 -->
+      <template #table>
       <el-table
-        v-loading="loading"
         :data="filteredRecipientList"
         stripe
         border
@@ -79,16 +74,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="email" label="通知電子信箱 (Email)" min-width="240">
+        <el-table-column prop="email" label="通知電子信箱 (Email)" min-width="240" show-overflow-tooltip>
           <template #default="{ row }">
-            <div class="email-cell">
-              <el-icon class="email-icon"><Message /></el-icon>
-              <span class="email-text">{{ row.email }}</span>
-            </div>
+            <span class="email-text">{{ row.email }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="displayName" label="顯示名稱 / 備註" min-width="180">
+        <el-table-column prop="displayName" label="顯示名稱 / 備註" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             <span>{{ row.displayName || '-' }}</span>
           </template>
@@ -118,22 +110,25 @@
           align="center"
         >
           <template #default="{ row }">
-            <el-button type="success" link icon="Edit" @click="openEditDialog(row as any)">
-              編輯
-            </el-button>
-            <el-button type="danger" link icon="Delete" @click="handleDelete(row as any)">
-              刪除
-            </el-button>
+            <TableRowActions>
+              <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
+                編輯
+              </el-button>
+              <el-button link type="danger" size="small" @click="handleDelete(row as any)">
+                刪除
+              </el-button>
+            </TableRowActions>
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+      </template>
+    </DataTablePage>
 
     <!-- 新增外部信箱彈窗（支援多行換行輸入） -->
     <el-dialog
       v-model="addDialogVisible"
       title="新增外部信箱"
-      width="620px"
+      width="min(600px, calc(100vw - 32px))"
       destroy-on-close
       top="6vh"
     >
@@ -215,17 +210,13 @@
       </div>
 
       <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="addDialogVisible = false">取消</el-button>
-          <el-button
-            type="primary"
-            :loading="addSubmitting"
-            :disabled="validParsedEmails.length === 0"
-            @click="handleSaveAdd"
-          >
-            確認新增 (共 {{ validParsedEmails.length }} 筆)
-          </el-button>
-        </div>
+        <DialogFooter
+          :confirm-text="`確認新增 (共 ${validParsedEmails.length} 筆)`"
+          :loading="addSubmitting"
+          :confirm-disabled="validParsedEmails.length === 0"
+          @confirm="handleSaveAdd"
+          @cancel="addDialogVisible = false"
+        />
       </template>
     </el-dialog>
 
@@ -233,7 +224,7 @@
     <el-dialog
       v-model="editDialogVisible"
       title="編輯外部信箱"
-      width="500px"
+      width="min(480px, calc(100vw - 32px))"
       destroy-on-close
     >
       <el-form
@@ -273,10 +264,7 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editSaving" @click="handleSaveEdit">
-          確定存檔
-        </el-button>
+        <DialogFooter :loading="editSaving" @confirm="handleSaveEdit" @cancel="editDialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -284,9 +272,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import DataTablePage from '@/components/DataTablePage.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Message, CircleCheckFilled, CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue'
+import { Plus, CircleCheckFilled, CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
 import {
@@ -534,7 +525,7 @@ async function handleDelete(row: any) {
       `確定刪除通知收件信箱「${row.displayName || row.email}」？刪除後無法復原。`,
       '刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning'
       }
@@ -559,7 +550,7 @@ async function handleBatchDelete() {
       `確定要批次刪除選取的 ${count} 筆通知收件信箱嗎？刪除後無法復原。`,
       '批次刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning'
       }
@@ -589,45 +580,8 @@ onMounted(() => {
   gap: 16px;
 }
 
-.settings-card {
-  border-radius: 8px;
-}
-
-.toolbar-wrapper {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.filter-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.actions-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.email-cell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-
-  .email-icon {
-    color: var(--el-color-primary);
-    font-size: 15px;
-  }
-
-  .email-text {
-    font-weight: 500;
-  }
+.email-text {
+  font-weight: 500;
 }
 
 .font-bold {
@@ -740,9 +694,4 @@ onMounted(() => {
   }
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
 </style>

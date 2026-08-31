@@ -1,78 +1,73 @@
 <template>
   <div class="holiday-calendar-view">
-    <el-card shadow="never">
-      <template #header>
-        <div class="toolbar">
-          <span class="title">政府假日與工作日設定</span>
-          <div class="actions">
-            <el-date-picker
-              v-model="year"
-              type="year"
-              value-format="YYYY"
-              :clearable="false"
-              style="width: 130px"
-            />
-            <el-select
-              v-model="filter"
-              aria-label="行事曆篩選"
-              style="width: 180px"
-            >
-              <el-option label="全部" value="all" />
-              <el-option label="休假日" value="holidays" />
-              <el-option label="手動新增的上班日" value="manual-workdays" />
-            </el-select>
-            <el-button type="primary" :loading="syncing" @click="syncYear">
-              從政府行事曆匯入
-            </el-button>
-            <el-button @click="openCreate">
-              新增休假日／上班日
-            </el-button>
-          </div>
-        </div>
+    <DataTablePage title="政府假日與工作日設定" :loading="loading">
+      <template #filter>
+        <el-date-picker
+          v-model="year"
+          type="year"
+          value-format="YYYY"
+          :clearable="false"
+          style="width: 130px"
+        />
+        <el-select
+          v-model="filter"
+          aria-label="行事曆篩選"
+          style="width: 180px"
+        >
+          <el-option label="全部" value="all" />
+          <el-option label="休假日" value="holidays" />
+          <el-option label="手動新增的上班日" value="manual-workdays" />
+        </el-select>
       </template>
 
-      <el-alert type="info" :closable="false" show-icon>
-        休假日會套用到排班與搭乘月曆；補班日保留在清單中，但不會被視為休假。
-      </el-alert>
+      <template #actions>
+        <el-button plain :loading="syncing" @click="syncYear">
+          從政府行事曆匯入
+        </el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">
+          新增休假日／上班日
+        </el-button>
+      </template>
 
-      <el-table
-        v-loading="loading"
-        :data="filteredHolidays"
-        stripe
-        style="width: 100%; margin-top: 16px"
-      >
-        <el-table-column prop="holidayDate" label="日期" width="150" />
-        <el-table-column prop="name" label="名稱" min-width="180" />
-        <el-table-column label="類型" width="120">
-          <template #default="{ row }">
-            <el-tag :type="row.isDayOff === false ? 'warning' : 'success'">
-              {{ row.isDayOff === false && row.source === 'manual' ? '上班日' : row.isDayOff === false ? '補班日' : '休假日' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="來源" width="140">
-          <template #default="{ row }">
-            {{ sourceLabel(row.source) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="100" align="center">
-          <template #default="{ row }">
-            <el-button link type="danger" @click="removeHoliday(row.holidayDate)">
-              刪除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      <template #table>
+        <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px;">
+          休假日會套用到排班與搭乘月曆；補班日保留在清單中，但不會被視為休假。
+        </el-alert>
+
+        <el-table :data="filteredHolidays" stripe style="width: 100%">
+          <el-table-column prop="holidayDate" label="日期" width="150" />
+          <el-table-column prop="name" label="名稱" min-width="180" show-overflow-tooltip />
+          <el-table-column label="類型" width="120">
+            <template #default="{ row }">
+              <el-tag :type="row.isDayOff === false ? 'warning' : 'success'">
+                {{ row.isDayOff === false && row.source === 'manual' ? '上班日' : row.isDayOff === false ? '補班日' : '休假日' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="來源" width="140">
+            <template #default="{ row }">
+              {{ sourceLabel(row.source) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100" align="center">
+            <template #default="{ row }">
+              <el-button link type="danger" size="small" @click="removeHoliday(row.holidayDate)">
+                刪除
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+    </DataTablePage>
 
     <!-- 新增休假日或上班日 Dialog -->
     <el-dialog
       v-model="createVisible"
       title="新增休假日或上班日"
-      width="480px"
+      width="min(480px, calc(100vw - 32px))"
       destroy-on-close
     >
-      <el-form label-width="80px">
+      <el-form label-width="90px">
         <el-form-item label="日期">
           <el-date-picker
             v-model="form.holidayDate"
@@ -115,10 +110,7 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="create">
-          儲存
-        </el-button>
+        <DialogFooter :loading="saving" @confirm="create" @cancel="createVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -127,6 +119,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
+import DataTablePage from '@/components/DataTablePage.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import {
   createHoliday,
   deleteHoliday,
@@ -240,23 +235,6 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.toolbar,
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.toolbar {
-  justify-content: space-between;
-  flex-wrap: wrap;
-}
-
-.title {
-  font-size: 16px;
-  font-weight: 600;
 }
 
 .quick-names-wrap {

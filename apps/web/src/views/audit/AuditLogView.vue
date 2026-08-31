@@ -1,6 +1,7 @@
 <template>
   <div class="audit-log-view">
     <DataTablePage
+      title="系統操作紀錄"
       :loading="loading"
       :total="total"
       :page="page"
@@ -47,7 +48,7 @@
           />
         </el-select>
 
-        <el-button type="primary" icon="Search" @click="fetchAuditLogs">
+        <el-button type="primary" @click="fetchAuditLogs">
           查詢
         </el-button>
         <el-button @click="handleReset">
@@ -91,9 +92,9 @@
             <template #default="{ row }">
               <el-button
                 v-if="(row as any).beforeData || (row as any).afterData"
-                type="primary"
                 link
-                icon="View"
+                type="primary"
+                size="small"
                 @click="openDetail(row as any)"
               >
                 異動前後
@@ -109,7 +110,7 @@
     <el-dialog
       v-model="detailVisible"
       title="系統操作紀錄異動詳情"
-      width="820px"
+      width="min(820px, calc(100vw - 32px))"
       destroy-on-close
     >
       <div v-if="selectedLog" class="dialog-content">
