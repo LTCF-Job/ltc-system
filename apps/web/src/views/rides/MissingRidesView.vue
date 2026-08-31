@@ -16,7 +16,7 @@
               v-model="missingQuery"
               placeholder="搜尋個案姓名／車輛／司機"
               clearable
-              style="width: 220px;"
+              style="width: 240px;"
               @keyup.enter="fetchMissingRides"
             />
 
@@ -35,7 +35,7 @@
               />
             </el-select>
 
-            <el-button type="primary" icon="Search" @click="fetchMissingRides">
+            <el-button type="primary" @click="fetchMissingRides">
               查詢
             </el-button>
             <el-button @click="handleResetMissing">
@@ -46,7 +46,7 @@
           <template #actions>
             <el-button
               type="warning"
-              icon="Bell"
+              plain
               :loading="triggering"
               @click="handleTriggerNotify"
             >
@@ -60,7 +60,7 @@
               <el-table-column prop="caseName" label="個案姓名" width="120" />
               <el-table-column label="方向 / 趟次" width="130">
                 <template #default="{ row }">
-                  <el-tag :type="row.direction === 'outbound' ? 'primary' : 'success'" size="small">
+                  <el-tag :type="row.direction === 'outbound' ? 'primary' : 'info'" size="small">
                     {{ (DIRECTION_LABELS as any)[row.direction] || row.direction }}
                   </el-tag>
                   <span style="margin-left: 6px; font-size: 13px;">第 {{ row.legSeq }} 趟</span>
@@ -97,9 +97,9 @@
               >
                 <template #default="{ row }">
                   <el-button
-                    type="success"
+                    link
+                    type="primary"
                     size="small"
-                    icon="Edit"
                     @click="openReportDialog(row)"
                   >
                     人工回報
@@ -126,7 +126,7 @@
               v-model="logQuery"
               placeholder="搜尋標題／收件人／來源"
               clearable
-              style="width: 220px;"
+              style="width: 240px;"
               @keyup.enter="fetchNotificationLogs"
             />
 
@@ -145,7 +145,7 @@
               />
             </el-select>
 
-            <el-button type="primary" icon="Search" @click="fetchNotificationLogs">
+            <el-button type="primary" @click="fetchNotificationLogs">
               查詢
             </el-button>
             <el-button @click="handleResetLogs">
@@ -154,7 +154,7 @@
           </template>
 
           <template #actions>
-            <el-button icon="Refresh" @click="fetchNotificationLogs">
+            <el-button plain @click="fetchNotificationLogs">
               重新整理
             </el-button>
           </template>
@@ -189,7 +189,7 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="errorMessage" label="備註 / 失敗原因" min-width="180">
+              <el-table-column prop="errorMessage" label="備註 / 失敗原因" min-width="180" show-overflow-tooltip>
                 <template #default="{ row }">
                   <span v-if="row.errorMessage || row.error" style="color: var(--el-color-danger);">{{ row.errorMessage || row.error }}</span>
                   <span v-else class="text-secondary">{{ row.contentSummary || row.body || '-' }}</span>
@@ -205,15 +205,15 @@
     <el-dialog
       v-model="reportDialogVisible"
       :title="`人工輸入回報 — ${currentReportRow?.caseName || ''} (${currentReportRow?.serviceDate || ''})`"
-      width="560px"
+      width="min(600px, calc(100vw - 32px))"
       destroy-on-close
     >
-      <div v-if="currentReportRow" class="report-dialog-body">
+      <div v-if="currentReportRow" class="report-dialog-body dialog-scroll-form">
         <el-descriptions :column="2" border size="small" class="mb-3">
           <el-descriptions-item label="個案姓名">{{ currentReportRow.caseName }}</el-descriptions-item>
           <el-descriptions-item label="服務日期">{{ currentReportRow.serviceDate }}</el-descriptions-item>
           <el-descriptions-item label="方向與趟次">
-            <el-tag :type="currentReportRow.direction === 'outbound' ? 'primary' : 'success'" size="small">
+            <el-tag :type="currentReportRow.direction === 'outbound' ? 'primary' : 'info'" size="small">
               {{ (DIRECTION_LABELS as any)[currentReportRow.direction] || currentReportRow.direction }}
             </el-tag>
             <span style="margin-left: 6px;">第 {{ currentReportRow.legSeq }} 趟</span>
@@ -224,7 +224,7 @@
         <el-form
           ref="reportFormRef"
           :model="reportForm"
-          label-width="120px"
+          label-width="110px"
           label-position="right"
           style="margin-top: 16px;"
         >
@@ -324,16 +324,7 @@
       </div>
 
       <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="reportDialogVisible = false">取消</el-button>
-          <el-button
-            type="primary"
-            :loading="savingReport"
-            @click="handleSubmitReport"
-          >
-            確認儲存回報
-          </el-button>
-        </div>
+        <DialogFooter :loading="savingReport" @confirm="handleSubmitReport" @cancel="reportDialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -343,6 +334,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import DataTablePage from '@/components/DataTablePage.vue'
 import { formatDateTime } from '@/utils/formatters'
 import { listMissingRides, submitManualRideReport } from '@/api/rides'

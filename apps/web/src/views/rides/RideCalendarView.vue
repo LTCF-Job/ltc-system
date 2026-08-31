@@ -1,5 +1,6 @@
 <template>
   <div class="ride-calendar-view">
+    <PageHeader title="搭乘月曆表" />
     <!-- 篩選與月份切換列 -->
     <el-card shadow="never" class="filter-card">
       <el-row :gutter="16" justify="space-between" align="middle">
@@ -55,16 +56,15 @@
             v-model="searchQuery"
             placeholder="搜尋個案姓名／編號"
             clearable
-            style="width: 200px"
+            style="width: 240px"
             @keyup.enter="fetchMatrix"
           />
 
-          <el-button type="primary" :icon="Search" @click="fetchMatrix">查詢</el-button>
+          <el-button type="primary" @click="fetchMatrix">查詢</el-button>
         </el-col>
 
         <el-col :xs="24" :lg="6" class="actions-col">
           <el-button type="warning" plain @click="$router.push('/rides/issues')">
-            <el-icon><Warning /></el-icon>
             異常集中處理 (衝突/未回報)
           </el-button>
         </el-col>
@@ -239,13 +239,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import PageHeader from '@/components/PageHeader.vue'
 import {
-  Warning,
   WarningFilled,
   Check,
   Close,
   QuestionFilled,
-  Search,
   Plus,
   ArrowLeft,
   ArrowRight

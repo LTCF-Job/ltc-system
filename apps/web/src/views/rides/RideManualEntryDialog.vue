@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     :title="`人工填寫搭乘記錄 — ${caseInfo.caseName} (${caseInfo.serviceDate})`"
-    width="580px"
+    width="min(600px, calc(100vw - 32px))"
     destroy-on-close
     class="manual-entry-dialog"
   >
@@ -22,7 +22,7 @@
       <el-form
         ref="formRef"
         :model="form"
-        label-width="120px"
+        label-width="110px"
         label-position="right"
         style="margin-top: 16px;"
       >
@@ -151,16 +151,7 @@
     </div>
 
     <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="visible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="saving"
-          @click="handleSubmit"
-        >
-          確認儲存
-        </el-button>
-      </div>
+      <DialogFooter :loading="saving" @confirm="handleSubmit" @cancel="visible = false" />
     </template>
   </el-dialog>
 </template>
@@ -169,6 +160,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { submitManualRideReport } from '@/api/rides'
+import DialogFooter from '@/components/DialogFooter.vue'
 import { listVehicles, listDrivers } from '@/api/masters'
 import type { VehicleDTO, DriverDTO, ManualReportRideRequest } from '@/types/api'
 
@@ -394,10 +386,5 @@ defineExpose({
   }
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
 </style>
 

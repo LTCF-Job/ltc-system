@@ -1,5 +1,6 @@
 <template>
   <div class="ride-issues-view">
+    <PageHeader title="異常集中處理" />
     <!-- 篩選列 -->
     <el-card shadow="never" class="filter-card mb-3" style="margin-bottom: 12px;">
       <el-row :gutter="16" align="middle">
@@ -8,10 +9,10 @@
             v-model="issueQuery"
             placeholder="搜尋個案姓名／涉及車輛／說明"
             clearable
-            style="width: 260px;"
+            style="width: 240px;"
             @keyup.enter="fetchIssues"
           />
-          <el-button type="primary" :icon="Search" @click="fetchIssues">
+          <el-button type="primary" @click="fetchIssues">
             查詢
           </el-button>
           <el-button @click="handleReset">
@@ -24,7 +25,9 @@
     <el-tabs v-model="activeTab" type="border-card" class="issues-tabs" @tab-change="fetchIssues">
       <!-- 分頁 1：混車衝突 -->
       <el-tab-pane label="混車衝突待裁決" name="conflict">
-        <el-table :data="issueList" border stripe v-loading="loading">
+        <DataTablePage :loading="loading">
+        <template #table>
+        <el-table :data="issueList" border stripe>
           <el-table-column prop="serviceDate" label="服務日期" width="110" />
           <el-table-column prop="caseName" label="個案姓名" width="120" />
           <el-table-column label="趟次" width="80" align="center">
@@ -32,7 +35,7 @@
               第 {{ row.legSeq }} 趟
             </template>
           </el-table-column>
-          <el-table-column prop="description" label="衝突說明" min-width="260" />
+          <el-table-column prop="description" label="衝突說明" min-width="260" show-overflow-tooltip />
           <el-table-column label="涉及車輛" width="200">
             <template #default="{ row }">
               <span v-for="(v, idx) in row.vehicles" :key="idx" class="vehicle-name">
@@ -48,17 +51,21 @@
             align="center"
           >
             <template #default="{ row }">
-              <el-button type="success" size="small" :icon="Edit" @click="openResolveDialog(row as any)">
+              <el-button link type="primary" size="small" @click="openResolveDialog(row as any)">
                 人工裁決
               </el-button>
             </template>
           </el-table-column>
         </el-table>
+        </template>
+        </DataTablePage>
       </el-tab-pane>
 
       <!-- 分頁 2：未回報清單 -->
       <el-tab-pane label="應搭未回報清單" name="unreported">
-        <el-table :data="issueList" border stripe v-loading="loading">
+        <DataTablePage :loading="loading">
+        <template #table>
+        <el-table :data="issueList" border stripe>
           <el-table-column prop="serviceDate" label="服務日期" width="110" />
           <el-table-column prop="caseName" label="個案姓名" width="120" />
           <el-table-column label="趟次" width="80" align="center">
@@ -78,21 +85,27 @@
             </template>
           </el-table-column>
         </el-table>
+        </template>
+        </DataTablePage>
       </el-tab-pane>
 
       <!-- 分頁 3：表單匯入錯誤 -->
       <el-tab-pane label="表單匯入異常" name="import_error">
-        <el-table :data="issueList" border stripe v-loading="loading">
+        <DataTablePage :loading="loading">
+        <template #table>
+        <el-table :data="issueList" border stripe>
           <el-table-column prop="serviceDate" label="服務日期" width="110" />
           <el-table-column prop="caseName" label="回報文字/欄位" width="180" />
-          <el-table-column prop="description" label="錯誤訊息與原始 Payload" min-width="300" />
+          <el-table-column prop="description" label="錯誤訊息與原始 Payload" min-width="300" show-overflow-tooltip />
         </el-table>
+        </template>
+        </DataTablePage>
       </el-tab-pane>
     </el-tabs>
 
     <!-- 混車衝突人工裁決彈窗 -->
-    <el-dialog v-model="resolveDialogVisible" title="混車衝突裁決" width="500px">
-      <el-form ref="resolveFormRef" :model="resolveForm" label-width="120px">
+    <el-dialog v-model="resolveDialogVisible" title="混車衝突裁決" width="min(480px, calc(100vw - 32px))">
+      <el-form ref="resolveFormRef" :model="resolveForm" label-width="110px">
         <el-form-item label="裁決實際承載車輛">
           <el-select v-model="resolveForm.vehicleId" placeholder="請指定正確認定之車輛" style="width: 100%">
             <el-option
@@ -121,10 +134,12 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="resolveDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleResolveSubmit">
-          確認裁決
-        </el-button>
+        <DialogFooter
+          confirm-text="確認送出"
+          :loading="submitting"
+          @confirm="handleResolveSubmit"
+          @cancel="resolveDialogVisible = false"
+        />
       </template>
     </el-dialog>
   </div>
@@ -132,7 +147,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { Search, Edit } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import DataTablePage from '@/components/DataTablePage.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listIssueRides, resolveConflict } from '@/api/rides'
 import { listVehicles, listDrivers } from '@/api/masters'
@@ -191,7 +208,7 @@ async function handleResolveSubmit() {
     `確定將該搭乘紀錄裁決為指定車輛與司機？`,
     '確認裁決',
     {
-      confirmButtonText: '確認',
+      confirmButtonText: '確認送出',
       cancelButtonText: '取消',
       type: 'warning'
     }

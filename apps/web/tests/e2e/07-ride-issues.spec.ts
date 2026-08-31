@@ -39,7 +39,7 @@ test.describe('07. 異常集中處理與未回報催報 (Ride Issues & Missing R
       await expect(dialog).toBeVisible()
 
       // 送出裁決
-      await dialog.getByRole('button', { name: '確認裁決' }).click()
+      await dialog.getByRole('button', { name: '確認送出' }).click()
       await confirmMessageBox(page)
       await expectElMessage(page, /已裁決/, 'success')
     }

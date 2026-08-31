@@ -2,7 +2,7 @@
   <el-drawer
     v-model="visible"
     :title="`搭乘紀錄更正 — ${record?.caseName || ''} (${record?.serviceDate || ''})`"
-    size="520px"
+    size="min(520px, 92vw)"
     destroy-on-close
   >
     <div v-if="record" class="drawer-content">
@@ -60,7 +60,7 @@
         <el-form
           ref="formRef"
           :model="form"
-          label-width="130px"
+          label-width="140px"
           :disabled="!canEdit"
         >
           <el-form-item label="實際搭乘狀態">
@@ -188,17 +188,12 @@
     </div>
 
     <template #footer>
-      <div class="drawer-footer">
-        <el-button @click="visible = false">取消</el-button>
-        <el-button
-          v-if="canEdit"
-          type="primary"
-          :loading="submitting"
-          @click="handleSubmitCorrection"
-        >
-          儲存更正
-        </el-button>
-      </div>
+      <DialogFooter
+        :show-confirm="canEdit"
+        :loading="submitting"
+        @confirm="handleSubmitCorrection"
+        @cancel="visible = false"
+      />
     </template>
   </el-drawer>
 </template>
@@ -207,6 +202,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { patchRideRecord } from '@/api/rides'
+import DialogFooter from '@/components/DialogFooter.vue'
 import { listVehicles, listDrivers } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
@@ -326,7 +322,7 @@ async function handleSubmitCorrection() {
       `確定更正 ${record.value.serviceDate} 第 ${record.value.legSeq} 趟搭乘紀錄？此操作將記錄於稽核紀錄。`,
       '確認更正紀錄',
       {
-        confirmButtonText: '確認',
+        confirmButtonText: '確認送出',
         cancelButtonText: '取消',
         type: 'warning'
       }
@@ -456,9 +452,4 @@ defineExpose({
   border-radius: 6px;
 }
 
-.drawer-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
 </style>

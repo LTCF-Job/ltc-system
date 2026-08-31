@@ -61,8 +61,8 @@ test.describe('06. 搭乘月曆表與紀錄更正 (Ride Calendar & Correction)',
       await reasonInput.fill('測試 E2E 人工更正')
     }
 
-    // 儲存更正
-    const saveBtn = drawer.getByRole('button', { name: /儲存更正/ })
+    // 儲存
+    const saveBtn = drawer.getByRole('button', { name: /儲存/ })
     if (await saveBtn.isVisible()) {
       await saveBtn.click()
       await confirmMessageBox(page)
