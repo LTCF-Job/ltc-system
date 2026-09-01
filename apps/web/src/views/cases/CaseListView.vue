@@ -200,10 +200,10 @@
     <el-tab-pane label="待維護" name="unresolved">
       <div v-loading="unresolvedLoading" class="pending-panel">
         <el-empty v-if="!unresolvedLoading && unresolvedCases.length === 0" description="目前沒有待維護的個案" />
-        <el-table v-else :data="unresolvedCases" border stripe table-layout="auto" style="width: 100%">
-          <el-table-column prop="code" label="個案編號" width="95" align="center" />
+        <el-table v-else :data="unresolvedCases" border stripe table-layout="auto">
+          <el-table-column prop="code" label="個案編號" width="95" align="center" class-name="unresolved-code-col" />
           <el-table-column prop="name" label="姓名" min-width="90" class-name="unresolved-name-col" />
-          <el-table-column label="據點" min-width="220">
+          <el-table-column label="據點" min-width="220" class-name="unresolved-site-col">
             <template #default="{ row }">
               <div v-if="row.siteNameRaw" class="unresolved-slot">
                 <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
@@ -220,7 +220,7 @@
               <span v-else class="empty-value">-</span>
             </template>
           </el-table-column>
-          <el-table-column label="去程車輛" min-width="220">
+          <el-table-column label="去程車輛" min-width="220" class-name="unresolved-outbound-col">
             <template #default="{ row }">
               <div v-if="row.outboundVehicleNameRaw" class="unresolved-slot">
                 <span class="unresolved-raw-name">原始名稱：{{ row.outboundVehicleNameRaw }}</span>
@@ -237,7 +237,7 @@
               <span v-else class="empty-value">-</span>
             </template>
           </el-table-column>
-          <el-table-column label="回程車輛" min-width="220">
+          <el-table-column label="回程車輛" min-width="220" class-name="unresolved-inbound-col">
             <template #default="{ row }">
               <div v-if="row.inboundVehicleNameRaw" class="unresolved-slot">
                 <span class="unresolved-raw-name">原始名稱：{{ row.inboundVehicleNameRaw }}</span>
@@ -825,9 +825,18 @@ executeFetch()
   border-radius: 8px;
 }
 
+/* overflow-x: auto 讓表格加總寬度超過版面時把捲軸包在面板內，不外溢到整個頁面
+   （這個面板不像 DataTablePage 的 .table-container 內建這條規則，要自己補）。 */
 .pending-panel {
   min-height: 120px;
-  max-width: 970px;
+  overflow-x: auto;
+}
+
+/* table-layout="auto" 底下 el-table 本體內建 width: 100%，即使拿掉 inline style
+   仍會撐滿容器；要顯式蓋成 max-content 才會縮到「各欄寬度加總」，視窗夠寬時
+   不再需要橫向卷軸（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
+.pending-panel :deep(.el-table) {
+  width: max-content;
 }
 
 /* 不用 flex-wrap: wrap，理由同照護人員管理待維護頁籤：欄寬不夠時會把
@@ -852,7 +861,24 @@ executeFetch()
   white-space: nowrap;
 }
 
+/* el-table-column 的 min-width prop 在 table-layout="auto" 底下只會拿去算
+   DataTablePage 外層表格總寬度的預算，不會真的變成該欄的 CSS min-width；
+   欄位當筆若沒有原始名稱（顯示「-」）就會被壓到只剩幾 px，跟其他有內容
+   的欄位比例明顯不一致。要另外用 class-name 補一條 :deep() min-width
+   才是真的鎖住下限（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
 :deep(.unresolved-name-col .cell) {
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+:deep(.unresolved-site-col .cell),
+:deep(.unresolved-outbound-col .cell),
+:deep(.unresolved-inbound-col .cell) {
+  min-width: 220px;
+}
+
+:deep(.unresolved-code-col .cell) {
+  min-width: 95px;
   white-space: nowrap;
 }
 

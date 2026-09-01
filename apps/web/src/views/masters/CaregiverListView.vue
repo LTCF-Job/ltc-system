@@ -103,9 +103,9 @@
       <el-tab-pane label="待維護" name="pending">
         <div v-loading="pendingLoading" class="pending-panel">
           <el-empty v-if="!pendingLoading && pendingCaregivers.length === 0" description="目前沒有待維護的照護人員" />
-          <el-table v-else :data="pendingCaregivers" border stripe table-layout="auto" style="width: 100%">
+          <el-table v-else :data="pendingCaregivers" border stripe table-layout="auto">
             <el-table-column prop="name" label="姓名" min-width="120" class-name="name-col" />
-            <el-table-column label="單位" min-width="220">
+            <el-table-column label="單位" min-width="220" class-name="pending-site-col">
               <template #default="{ row }">
                 <span v-if="row.siteName">{{ row.siteName }}</span>
                 <div v-else-if="row.siteNameRaw" class="unresolved-slot">
@@ -123,22 +123,22 @@
                 <span v-else class="empty-value">-</span>
               </template>
             </el-table-column>
-            <el-table-column label="聯絡方式" min-width="140">
+            <el-table-column label="聯絡方式" min-width="140" class-name="pending-contact-col">
               <template #default="{ row }">
                 <span class="contact-value">{{ row.contact || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="備註" min-width="180" show-overflow-tooltip>
+            <el-table-column label="備註" min-width="180" show-overflow-tooltip class-name="pending-notes-col">
               <template #default="{ row }">
                 <span>{{ row.notes || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="缺少欄位" min-width="160" show-overflow-tooltip>
+            <el-table-column label="缺少欄位" min-width="160" show-overflow-tooltip class-name="pending-missing-col">
               <template #default="{ row }">
                 <span class="missing-fields">缺少：{{ missingFields(row as CaregiverDTO).join('、') }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="100" align="center">
+            <el-table-column label="操作" width="100" align="center" class-name="pending-action-col">
               <template #default="{ row }">
                 <TableRowActions>
                   <el-button link type="primary" size="small" @click="openEditDialog(row)">編輯</el-button>
@@ -550,9 +550,31 @@ executeFetch()
   border-radius: 8px;
 }
 
+/* overflow-x: auto 讓表格加總寬度超過版面時把捲軸包在面板內，不外溢到整個頁面
+   （這個面板不像 DataTablePage 的 .table-container 內建這條規則，要自己補）。 */
 .pending-panel {
   min-height: 120px;
+  overflow-x: auto;
 }
+
+/* table-layout="auto" 底下 el-table 本體內建 width: 100%，即使拿掉 inline style
+   仍會撐滿容器、內容明明很短卻拉滿版面；要顯式蓋成 max-content 才會縮到
+   「各欄寬度加總」（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
+.pending-panel :deep(.el-table) {
+  width: max-content;
+}
+
+/* el-table-column 的 min-width prop 在 table-layout="auto" 底下只會拿去算表格
+   總寬度的預算，不會變成該欄真正的 CSS min-width——欄位當筆內容比 min-width
+   短時（例如單位已直接關聯、不需要顯示原始名稱行內編輯列）欄寬會被壓到只剩
+   內容本身，跟其他撐開的欄位比例不一致。要另外補一條 :deep() min-width 才是
+   真的鎖住下限（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
+.pending-panel :deep(.pending-site-col .cell) { min-width: 220px; }
+.pending-panel :deep(.pending-contact-col .cell) { min-width: 140px; }
+.pending-panel :deep(.pending-action-col .cell) { min-width: 100px; }
+.pending-panel :deep(.pending-notes-col .cell) { min-width: 180px; }
+.pending-panel :deep(.pending-missing-col .cell) { min-width: 160px; }
+.pending-panel :deep(.name-col .cell) { min-width: 120px; }
 
 /* 不用 flex-wrap: wrap——欄寬不夠時會把「選擇既有據點」跟「新增據點」擠成第二行，
    即使頁面還有空間也一樣。改成 nowrap，搭配 el-table 的 table-layout="auto"，

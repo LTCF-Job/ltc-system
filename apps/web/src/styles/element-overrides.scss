@@ -269,6 +269,13 @@ select {
   }
 }
 
+// Element Plus 的 .cell 預設 overflow: hidden（給文字省略號截斷用），操作欄按鈕
+// 沒有這個需求，卻一樣被裁切：hover 的位移／陰影動畫會在列高邊界被硬生生切掉，
+// 看起來像沒完整顯示。操作欄一律不會加 show-overflow-tooltip，直接全域放行 overflow。
+.el-table .cell:has(.table-row-actions) {
+  overflow: visible;
+}
+
 .el-form-item__label,
 .el-breadcrumb__inner,
 .el-pagination,
