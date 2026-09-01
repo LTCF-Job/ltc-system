@@ -1011,60 +1011,77 @@ export const mockPrecheckResult: PrecheckResultDTO = {
   ]
 }
 
-// 匯出工作展示資料：涵蓋所有 4 種報表類型 (gov_claim, trip_summary, hsinchu_schedule, maintenance_blank) 與所有 4 種狀態
+// 匯出工作展示資料：政府申報匯出一律一個個案一個月一份檔案，涵蓋直接下載、壓縮檔與失敗三種情境
 export const mockExportJobs: ExportJobDTO[] = [
   {
-    id: 'job_202607_01',
+    id: 'job_11507_direct',
+    jobType: 'gov_claim',
+    periodYm: '11507',
+    region: 'hsinchu',
+    mode: 'direct',
+    status: 'succeeded',
+    totalCases: 2,
+    totalRows: 78,
+    files: [
+      {
+        caseId: 'case_2',
+        caseCode: 'C0002',
+        caseName: '葉秀珍',
+        region: 'hsinchu',
+        rowCount: 39,
+        fileName: '葉秀珍11507.xlsx',
+        downloadUrl: '/api/v1/exports/job_11507_direct/files/case_2/download'
+      },
+      {
+        caseId: 'case_3',
+        caseCode: 'C0003',
+        caseName: '吳𣵛桂',
+        region: 'hsinchu',
+        rowCount: 39,
+        fileName: '吳𣵛桂11507.xlsx',
+        downloadUrl: '/api/v1/exports/job_11507_direct/files/case_3/download'
+      }
+    ],
+    createdAt: '2026-08-01T10:00:00+08:00',
+    completedAt: '2026-08-01T10:00:15+08:00'
+  },
+  {
+    id: 'job_11507_zip',
     jobType: 'gov_claim',
     periodYm: '11507',
     region: 'miaoli',
-    mode: 'single_multi_case',
+    mode: 'zip',
     status: 'succeeded',
-    totalCases: 42,
-    totalRows: 380,
-    fileName: 'gov-claim-11507-miaoli.xlsx',
-    fileSize: 45200,
-    downloadUrl: 'https://placeholder-download.supabase.co/gov-claim-11507-miaoli.xlsx',
-    createdAt: '2026-08-01 10:00:00',
-    completedAt: '2026-08-01 10:00:15'
+    totalCases: 1,
+    totalRows: 39,
+    files: [
+      {
+        caseId: 'case_1',
+        caseCode: 'C0001',
+        caseName: '蔡曾切',
+        region: 'miaoli',
+        rowCount: 39,
+        fileName: '蔡曾切11507.xlsx',
+        downloadUrl: '/api/v1/exports/job_11507_zip/files/case_1/download'
+      }
+    ],
+    zipFileName: 'gov-claim-miaoli-11507.zip',
+    downloadUrl: '/api/v1/exports/job_11507_zip/download',
+    createdAt: '2026-08-01T10:05:00+08:00',
+    completedAt: '2026-08-01T10:05:08+08:00'
   },
   {
-    id: 'job_202607_02',
-    jobType: 'trip_summary',
-    periodYm: '11507',
-    region: 'hsinchu',
-    mode: 'single_multi_case',
-    status: 'succeeded',
-    totalCases: 38,
-    totalRows: 139,
-    fileName: 'trip-summary-11507-hsinchu.xlsx',
-    fileSize: 32100,
-    downloadUrl: 'https://placeholder-download.supabase.co/trip-summary-11507-hsinchu.xlsx',
-    createdAt: '2026-08-01 10:05:00',
-    completedAt: '2026-08-01 10:05:08'
-  },
-  {
-    id: 'job_202607_03',
-    jobType: 'hsinchu_schedule',
+    id: 'job_11508_failed',
+    jobType: 'gov_claim',
     periodYm: '11508',
     region: 'hsinchu',
-    mode: 'single_multi_case',
-    status: 'running',
-    totalCases: 15,
-    fileName: 'hsinchu-schedule-11508.xlsx',
-    createdAt: '2026-08-25 16:00:00'
-  },
-  {
-    id: 'job_202607_04',
-    jobType: 'maintenance_blank',
-    periodYm: '11508',
-    region: 'hsinchu',
-    mode: 'single_multi_case',
+    mode: 'direct',
     status: 'failed',
-    errorMessage: '模板樣式套用異常：工作表名稱衝突',
-    fileName: 'maintenance-blank-11508.xlsx',
-    createdAt: '2026-08-25 15:45:00',
-    completedAt: '2026-08-25 15:45:04'
+    totalCases: 0,
+    totalRows: 0,
+    errorMessage: '指定條件下沒有可申報的搭乘紀錄',
+    createdAt: '2026-08-25T15:45:00+08:00',
+    completedAt: '2026-08-25T15:45:04+08:00'
   }
 ]
 

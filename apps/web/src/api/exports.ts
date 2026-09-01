@@ -33,10 +33,12 @@ export async function getDashboardStats(): Promise<DashboardStatsDTO> {
   return apiClient.get('/dashboard/stats')
 }
 
-export async function downloadExportFile(url: string): Promise<Blob> {
-  const baseURL = String(apiClient.defaults.baseURL || '')
-  const requestPath = url.startsWith(baseURL) ? url.slice(baseURL.length) : url
-  return apiClient.get(requestPath, {
-    responseType: 'blob'
-  })
+// 逐案下載：一個個案一個月一份工作簿
+export async function downloadExportCaseFile(jobId: string, caseId: string): Promise<Blob> {
+  return apiClient.get(`/exports/${jobId}/files/${caseId}/download`, { responseType: 'blob' })
+}
+
+// 整包下載：僅壓縮檔模式的工作可用
+export async function downloadExportZip(jobId: string): Promise<Blob> {
+  return apiClient.get(`/exports/${jobId}/download`, { responseType: 'blob' })
 }

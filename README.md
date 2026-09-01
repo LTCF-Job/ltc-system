@@ -43,7 +43,7 @@ make test-e2e         # tests/e2e 的瀏覽器測試
 ## 系統長相
 
 - 前端是純靜態 SPA（Vercel 部署），所有資料都透過 REST API 打後端拿。
-- 後端是單一 Go 服務（Cloud Run 部署），沒有拆微服務；另外有一個獨立的 Cloud Run Job（`cmd/exporter`）專門跑政府申報 Excel 的批次匯出。
+- 後端是單一 Go 服務（Cloud Run 部署），沒有拆微服務。政府申報 Excel 由 `POST /exports` 同步產出，沒有另外的批次程式。
 - Auth 交給 Supabase：前端用 Supabase JS SDK 登入拿 JWT，後端只負責驗簽（打 Supabase 的 JWKS endpoint）跟看 JWT 裡帶的角色 claim 做授權，自己不存密碼。
 - 資料庫 schema 是自己手刻 SQL migration（`apps/api/migrations/`，`cmd/migrate` 執行），沒有用 Supabase CLI 那一套 migration 機制，兩者不要混用。
 

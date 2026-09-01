@@ -47,11 +47,12 @@ test.describe('05. 司機接送匯報總覽 (Driver Report Status Overview)', ()
   })
 })
 
-// 批次上傳直接常駐在「批次上傳」頁籤（左側上傳與送出、右側逐檔卡片），待維護資料則是同頁另一個頁籤：
+// 批次上傳直接常駐在「批次上傳」頁籤（上方拖放區內含選擇檔案 CTA、下方逐檔清單），待維護資料則是同頁另一個頁籤：
+// 沒有送出按鈕，整批解析完就自動匯入；命中既有月份時停下等勾選確認風險。
 // 解析後立即匯入，完全比對不到個案的欄位進入待維護頁籤，稍後連結既有個案或建立新個案。
 test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)', () => {
   function rowOf(page: Page, fileName: string) {
-    return page.locator('.file-card').filter({ hasText: fileName }).first()
+    return page.locator('.file-table .el-table__row').filter({ hasText: fileName }).first()
   }
 
   async function uploadFiles(page: Page, files: Array<{ name: string; rows: string[][] }>) {
@@ -85,7 +86,6 @@ test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)'
     await expect(row).toContainText('竹北一車')
     await expect(row).toContainText('2026-03', { timeout: 10000 })
 
-    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
     await expect(row).toContainText('已匯入', { timeout: 10000 })
     await expect(row).toContainText('可匯入 2 天')
     await expect(page.locator('.result-banner')).toContainText('成功 1 個檔案、共 2 天')
@@ -95,7 +95,6 @@ test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)'
     await uploadFiles(page, [
       { name: '苗栗市1車 (回覆).xlsx', rows: [HEADER, ['1150302', '郭澤威', '有坐', '沒坐', '無']] }
     ])
-    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
     await expect(rowOf(page, '苗栗市1車')).toContainText('已匯入', { timeout: 10000 })
     await expect(rowOf(page, '苗栗市1車')).toContainText('可匯入 1 天')
   })
@@ -114,8 +113,6 @@ test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)'
     const row = rowOf(page, '竹北一車.xlsx')
     await expect(row).toContainText('2026-03', { timeout: 10000 })
     await expect(row).toContainText('2026-04')
-
-    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
     await expect(row).toContainText('可匯入 2 天', { timeout: 10000 })
   })
 
@@ -125,14 +122,10 @@ test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)'
     ])
     const row = rowOf(page, 'driver-report.xlsx')
     await expect(row).toContainText('待選車輛')
-    await expect(page.getByRole('button', { name: /開始解析與匯入/ })).toBeDisabled()
 
     await row.locator('.el-select').click()
     await page.locator('.el-select-dropdown__item').filter({ hasText: '竹南1車' }).click()
     await expect(row).toContainText('2026-03', { timeout: 10000 })
-    await expect(page.getByRole('button', { name: /開始解析與匯入/ })).toBeEnabled()
-
-    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
     await expect(row).toContainText('已匯入', { timeout: 10000 })
   })
 
@@ -144,7 +137,6 @@ test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)'
     ]
 
     await uploadFiles(page, [{ name: '竹北一車.xlsx', rows: file }])
-    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
     await expect(rowOf(page, '竹北一車.xlsx')).toContainText('已匯入', { timeout: 10000 })
 
     // 重傳同一份檔案（換個檔名避免被去重擋下）：涵蓋月份標籤變成 warning，就地跳出覆蓋警示
@@ -155,12 +147,10 @@ test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)'
     const overlapAlert = page.locator('.overlap-alert')
     await expect(overlapAlert).toBeVisible()
     await expect(overlapAlert).toContainText('竹北一車')
-    await expect(page.getByRole('button', { name: /開始解析與匯入/ })).toBeDisabled()
+    // 覆蓋警示未確認前不會自動匯入
+    await expect(row).toContainText('待處理')
 
     await overlapAlert.locator('.el-checkbox').click()
-    await expect(page.getByRole('button', { name: /開始解析與匯入/ })).toBeEnabled()
-    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
-
     await expect(row).toContainText('已匯入', { timeout: 10000 })
 
     await page.goto('/driver-reports/status')
@@ -172,7 +162,6 @@ test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)'
     await uploadFiles(page, [
       { name: '竹北二車.xlsx', rows: [HEADER_UNMATCHED, ['1150302', '郭澤威', '有坐', '沒坐', '無']] }
     ])
-    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
     await expect(rowOf(page, '竹北二車.xlsx')).toContainText('已匯入', { timeout: 10000 })
     await expect(rowOf(page, '竹北二車.xlsx')).toContainText('1 欄待維護')
     await expect(page.locator('.result-banner')).toContainText('個欄位找不到對應個案，已進入待維護資料')
@@ -192,8 +181,6 @@ test.describe('05b. 司機接送匯報批次上傳 (Driver Report Batch Import)'
       { name: '竹北一車.xlsx', rows: validFile },
       { name: '竹南1車.xlsx', rows: [['車牌', '備註']] }
     ])
-    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
-
     await expect(rowOf(page, '竹北一車.xlsx')).toContainText('已匯入', { timeout: 10000 })
     await expect(rowOf(page, '竹南1車.xlsx')).toContainText('失敗')
     await expect(rowOf(page, '竹南1車.xlsx')).toContainText('找不到匯報表表頭')
@@ -225,7 +212,6 @@ test.describe('05c. 司機接送匯報待維護資料 (Driver Report Pending Map
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       buffer: buildReportWorkbook([HEADER_UNMATCHED, ['1150302', '郭澤威', '有坐', '沒坐', '無']])
     })
-    await page.getByRole('button', { name: /開始解析與匯入/ }).click()
     await expect(page.locator('.result-banner')).toContainText('1 個欄位找不到對應個案', { timeout: 10000 })
 
     const confirmBox = page.locator('.el-message-box')

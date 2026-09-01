@@ -153,6 +153,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 		apiV1.POST("/exports", auth.RequireRoles("staff", "admin"), h.export.Create)
 		apiV1.GET("/exports/:id", auth.RequireRoles("viewer", "staff", "admin"), h.export.Get)
 		apiV1.GET("/exports/:id/download", auth.RequireRoles("viewer", "staff", "admin"), h.export.Download)
+		apiV1.GET("/exports/:id/files/:caseId/download", auth.RequireRoles("viewer", "staff", "admin"), h.export.DownloadCaseFile)
 
 		// 8. 國定假日與行事曆管理 (B5.1)
 		apiV1.GET("/holidays", auth.RequireRoles("viewer", "staff", "admin"), h.holiday.List)

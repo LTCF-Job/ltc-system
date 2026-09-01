@@ -11,6 +11,7 @@ import type {
   ColumnKind,
   ExportJobType,
   ExportJobStatus,
+  ExportMode,
   ServiceCategory,
   ServiceUsageType,
   NotificationTopic,
@@ -653,11 +654,29 @@ export interface PrecheckResultDTO {
 
 export interface CreateExportJobRequest {
   jobType: ExportJobType
-  periodYm: string // RRR-MM 如 115-07
+  periodYm: string // 民國 5 碼，如 11507
   region?: Region
-  mode: 'single_multi_case' | 'case_per_file'
-  caseIds?: string[]
-  vehicleIds?: string[]
+  mode: ExportMode
+  caseIds: string[]
+}
+
+// 匯出結果中的單一個案工作簿（一個個案一個月一份）
+export interface ExportJobFileDTO {
+  caseId: string
+  caseCode: string
+  caseName: string
+  region?: Region
+  rowCount: number
+  fileName: string
+  downloadUrl: string
+}
+
+// 因資料缺漏未納入申報的趟次統計
+export interface ExportJobSkipDTO {
+  caseId: string
+  caseName: string
+  reason: string
+  count: number
 }
 
 export interface ExportJobDTO {
@@ -665,12 +684,15 @@ export interface ExportJobDTO {
   jobType: ExportJobType
   periodYm: string
   region?: Region
-  mode: 'single_multi_case' | 'case_per_file'
+  mode: ExportMode
   status: ExportJobStatus
   totalCases?: number
   totalRows?: number
-  fileName?: string
-  fileSize?: number
+  files?: ExportJobFileDTO[]
+  // skipped 只在建立當下回傳；跳過統計不落地，歷史查詢不會重現
+  skipped?: ExportJobSkipDTO[]
+  zipFileName?: string
+  // 僅壓縮檔模式有值；逐案下載的連結掛在 files 上
   downloadUrl?: string
   precheck?: PrecheckResultDTO
   errorMessage?: string

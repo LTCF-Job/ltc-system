@@ -259,20 +259,6 @@
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="100" align="center">
-              <template #default="{ row }">
-                <el-button
-                  v-if="row.status === 'succeeded' && row.downloadUrl"
-                  link
-                  type="primary"
-                  size="small"
-                  class="action-download-btn"
-                  @click="downloadFile(row.downloadUrl, row.fileName)"
-                >
-                  下載
-                </el-button>
-              </template>
-            </el-table-column>
           </el-table>
           <el-empty
             v-if="!recentExports || recentExports.length === 0"
@@ -303,9 +289,8 @@ import {
 } from 'echarts/components'
 
 import { getDashboardMetrics } from '@/api/dashboard'
-import { downloadExportFile, getDashboardStats } from '@/api/exports'
+import { getDashboardStats } from '@/api/exports'
 import { formatDateTime } from '@/utils/formatters'
-import { downloadBlob } from '@/utils/download'
 import { REGION_LABELS } from '@/types/domain'
 import type { DashboardMetricsDTO, ExportJobDTO } from '@/types/api'
 
@@ -490,16 +475,6 @@ const attendancePieChartOption = computed(() => {
     ]
   }
 })
-
-async function downloadFile(url: string, filename?: string) {
-  try {
-    const blob = await downloadExportFile(url)
-    downloadBlob(blob, filename || '申報匯出.xlsx')
-    ElMessage.success('申報檔案下載成功')
-  } catch (error: any) {
-    ElMessage.error(error?.message || '下載檔案失敗')
-  }
-}
 
 onMounted(() => {
   fetchDashboardData()
@@ -735,10 +710,6 @@ onMounted(() => {
   .text-muted {
     color: var(--app-text-secondary);
     font-size: 12.5px;
-  }
-
-  .action-download-btn {
-    font-weight: 600;
   }
 }
 

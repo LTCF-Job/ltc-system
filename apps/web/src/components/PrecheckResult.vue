@@ -53,13 +53,23 @@
               <el-table-column v-if="item.details[0].serviceDate" prop="serviceDate" label="服務日期" width="110" />
               <el-table-column v-if="item.details[0].field" prop="field" label="缺漏/問題欄位" width="140" />
               <el-table-column prop="description" label="問題說明" min-width="200" />
-              <el-table-column v-if="item.details[0].caseId" label="操作" width="90" align="center">
+              <el-table-column v-if="item.details[0].caseId" label="操作" width="130" align="center">
                 <template #default="{ row }">
                   <el-button
+                    v-if="item.code === UNREPORTED_CODE"
                     link
                     type="primary"
                     size="small"
-                    @click="$router.push(`/cases/${row.caseId}`)"
+                    @click="goToMissingRides(row)"
+                  >
+                    查看未回報
+                  </el-button>
+                  <el-button
+                    v-else
+                    link
+                    type="primary"
+                    size="small"
+                    @click="router.push(`/cases/${row.caseId}`)"
                   >
                     檢視個案
                   </el-button>
@@ -75,12 +85,22 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { CircleCloseFilled, WarningFilled, SuccessFilled } from '@element-plus/icons-vue'
 import type { PrecheckResultDTO } from '@/types/api'
 
 const props = defineProps<{
   result: PrecheckResultDTO
 }>()
+
+const router = useRouter()
+
+// 未回報項目的處理入口在「未回報清單」而不是個案檔案，帶個案姓名過去讓清單一進去就只剩該個案
+const UNREPORTED_CODE = 'UNREPORTED_EXPECTED_RIDES'
+
+function goToMissingRides(row: { caseName?: string }) {
+  router.push({ path: '/rides/missing', query: row.caseName ? { q: row.caseName } : {} })
+}
 
 // 預設展開所有 error 與 warning 項目
 const activeCollapse = ref<string[]>([])

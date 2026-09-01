@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppLogo: typeof import('./components/AppLogo.vue')['default']
+    CaseSelectDialog: typeof import('./components/CaseSelectDialog.vue')['default']
     ChangePasswordDialog: typeof import('./components/ChangePasswordDialog.vue')['default']
     DataTablePage: typeof import('./components/DataTablePage.vue')['default']
     DialogFooter: typeof import('./components/DialogFooter.vue')['default']
@@ -50,7 +51,6 @@ declare module 'vue' {
     ElMenuItem: typeof import('element-plus/es')['ElMenuItem']
     ElOption: typeof import('element-plus/es')['ElOption']
     ElPagination: typeof import('element-plus/es')['ElPagination']
-    ElProgress: typeof import('element-plus/es')['ElProgress']
     ElRadio: typeof import('element-plus/es')['ElRadio']
     ElRadioButton: typeof import('element-plus/es')['ElRadioButton']
     ElRadioGroup: typeof import('element-plus/es')['ElRadioGroup']

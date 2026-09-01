@@ -186,6 +186,24 @@ export const EXPORT_STATUS_LABELS: Record<ExportJobStatus, string> = {
   failed: '失敗'
 }
 
+export type ExportMode = 'direct' | 'zip'
+
+export const EXPORT_MODE_LABELS: Record<ExportMode, string> = {
+  direct: '直接下載',
+  zip: '壓縮檔'
+}
+
+// 申報列被略過的原因，對應後端 reporting/app 的 SkipReason 常數
+export const EXPORT_SKIP_REASON_LABELS: Record<string, string> = {
+  NO_SCHEDULE_LEG: '找不到對應的排班趟次',
+  NO_DEPART_TIME: '缺少出發時間或服務時長',
+  NO_DRIVER: '缺少司機或司機身分證',
+  NO_SERVICE_USAGE_TYPE: '服務使用類型不在 1~4',
+  NO_UNIT_PRICE: '缺少單價',
+  NO_NATIONAL_ID: '缺少個案身分證',
+  BUILD_ROW_FAILED: '申報列組建失敗'
+}
+
 export type ServiceCategory = 1 | 2
 
 export const SERVICE_CATEGORY_LABELS: Record<ServiceCategory, string> = {

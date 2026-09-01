@@ -37,7 +37,3 @@ HMAC_KEY=<32 bytes base64，不可跟 ENCRYPTION_KEY 一樣>
 ## 測試
 
 測試檔跟被測檔同層放（`internal/modules/ride/app/ride_service_test.go` 緊鄰 `ride_service.go`），用 `testify` 斷言，table-driven 為主。細部慣例看 [`.agents/skills/golang-unit-testing/SKILL.md`](../../.agents/skills/golang-unit-testing/SKILL.md)。CI 實際跑 `go vet ./...` 跟 `go test -race ./...`，本機開發至少跑一次 `-race` 版本再推。
-
-## 匯出 Job（cmd/exporter）
-
-跟 `cmd/server` 共用同一份 `platform/config` 與 `modules/reporting`，是獨立的批次程式，不常駐。本機測試直接 `go run ./cmd/exporter <期別> <地區>`，流程見 [後端核心業務流程](../../docs/tech/backend-flows.md)。

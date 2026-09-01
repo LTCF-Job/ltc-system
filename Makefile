@@ -11,7 +11,6 @@ test-web-e2e:
 
 build:
 	cd apps/api && go build -o bin/server.exe ./cmd/server
-	cd apps/api && go build -o bin/exporter.exe ./cmd/exporter
 	cd apps/api && go build -o bin/migrate.exe ./cmd/migrate
 
 run:

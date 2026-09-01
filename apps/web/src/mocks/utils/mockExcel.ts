@@ -458,3 +458,136 @@ export function createDriverReportTemplateExcelBlob(caseColumns: string[]): Blob
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   })
 }
+
+/**
+ * 政府申報表第 1 列的 33 欄標題，逐字對應後端 apps/api/internal/domain/govform 的 Headers33。
+ * 標題文字含換行字元，是政府端解析檔案的依據，改動任何一字都會讓申報檔被退件。
+ */
+const GOV_CLAIM_HEADERS_33: string[] = [
+  "身分證字號",
+  "服務日期(請輸入7碼)",
+  "服務項目代碼",
+  "服務類別\n1.補助\n2.自費",
+  "數量\n(僅整數)",
+  "單價",
+  "服務人員身分證",
+  "起始時段-小時\n(24小時制)",
+  "起始時段-分鐘",
+  "結束時段-小時\n(24小時制)",
+  "結束時段-分鐘",
+  "備註",
+  "服務人員身分證2",
+  "服務人員身分證3",
+  "服務人員身分證4",
+  "服務人員身分證5",
+  "不申報AA09填1",
+  "訪視未遇填1",
+  "C碼必填-復能目標達成情形\n1.尚未滿服務組數\n2.滿服務組數且已達復能目標\n3.滿服務組數但尚未達復能目標\n4.未滿服務組數已結案，且已達復能目標\n5.未滿服務組數已結案，但未達復能目標",
+  "C碼必填-復能目標",
+  "C碼必填-指導對象",
+  "C碼必填-服務內容",
+  "C碼必填-指導建議摘要",
+  "OT01必填-餐別\n1.早餐\n2.午餐\n3.晚餐",
+  "BD03、DA01使用-出發地",
+  "BD03、DA01使用-目的地",
+  "BD03、DA01使用-出發地(緯度)",
+  "BD03、DA01使用-出發地(經度)",
+  "BD03、DA01使用-目的地(緯度)",
+  "BD03、DA01使用-目的地(經度)",
+  "BD03、DA01使用-里程數(公里)",
+  "BD03、DA01使用-車號",
+  "BD03必填-服務使用類型\n1.社區式長照機構\n2.社區服務據點(不含身障類)\n3.輔具中心\n4.身障日間照顧服務",
+]
+
+const GOV_CLAIM_SHEET_NAME = '工作表1'
+
+/**
+ * 產生政府申報工作簿 Blob，欄位順序與工作表名稱須與後端 RenderGovClaim 一致。
+ * 資料列由呼叫端依 33 欄順序備妥，本函式不重建任何申報規則。
+ */
+export function createGovClaimExcelBlob(rows: (string | number)[][]): Blob {
+  const worksheet = XLSX.utils.aoa_to_sheet([GOV_CLAIM_HEADERS_33, ...rows])
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, GOV_CLAIM_SHEET_NAME)
+  const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+}
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256)
+  for (let i = 0; i < 256; i++) {
+    let value = i
+    for (let bit = 0; bit < 8; bit++) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1
+    }
+    table[i] = value >>> 0
+  }
+  return table
+})()
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff
+  for (let i = 0; i < bytes.length; i++) {
+    crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8)
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+/**
+ * 產生壓縮檔 Blob，對應後端 ZipArchiver 的輸出形式。
+ * 這裡採不壓縮的 store 模式：mock 只需要一個真的能被解壓縮工具開啟的 .zip，
+ * 不需要重現後端的 Deflate 壓縮率。項目名稱一律以 UTF-8 旗標標記，中文檔名才不會亂碼。
+ */
+export function createGovClaimZipBlob(entries: { name: string; content: Blob }[]): Promise<Blob> {
+  const encoder = new TextEncoder()
+  return Promise.all(entries.map((entry) => entry.content.arrayBuffer())).then((buffers) => {
+    const localParts: BlobPart[] = []
+    const centralParts: BlobPart[] = []
+    let offset = 0
+
+    buffers.forEach((buffer, index) => {
+      const data = new Uint8Array(buffer)
+      const nameBytes = encoder.encode(entries[index].name)
+      const checksum = crc32(data)
+
+      const localHeader = new DataView(new ArrayBuffer(30))
+      localHeader.setUint32(0, 0x04034b50, true)
+      localHeader.setUint16(4, 20, true)
+      localHeader.setUint16(6, 0x0800, true) // UTF-8 檔名旗標
+      localHeader.setUint16(8, 0, true) // store，不壓縮
+      localHeader.setUint32(14, checksum, true)
+      localHeader.setUint32(18, data.length, true)
+      localHeader.setUint32(22, data.length, true)
+      localHeader.setUint16(26, nameBytes.length, true)
+      localParts.push(localHeader.buffer, nameBytes, data)
+
+      const centralHeader = new DataView(new ArrayBuffer(46))
+      centralHeader.setUint32(0, 0x02014b50, true)
+      centralHeader.setUint16(4, 20, true)
+      centralHeader.setUint16(6, 20, true)
+      centralHeader.setUint16(8, 0x0800, true)
+      centralHeader.setUint16(10, 0, true)
+      centralHeader.setUint32(16, checksum, true)
+      centralHeader.setUint32(20, data.length, true)
+      centralHeader.setUint32(24, data.length, true)
+      centralHeader.setUint16(28, nameBytes.length, true)
+      centralHeader.setUint32(42, offset, true)
+      centralParts.push(centralHeader.buffer, nameBytes)
+
+      offset += 30 + nameBytes.length + data.length
+    })
+
+    const centralSize = centralParts.reduce(
+      (sum, part) => sum + (part instanceof ArrayBuffer ? part.byteLength : (part as Uint8Array).length),
+      0
+    )
+    const end = new DataView(new ArrayBuffer(22))
+    end.setUint32(0, 0x06054b50, true)
+    end.setUint16(8, entries.length, true)
+    end.setUint16(10, entries.length, true)
+    end.setUint32(12, centralSize, true)
+    end.setUint32(16, offset, true)
+
+    return new Blob([...localParts, ...centralParts, end.buffer], { type: 'application/zip' })
+  })
+}

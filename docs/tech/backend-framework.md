@@ -21,7 +21,6 @@
 ```
 cmd/server    HTTP 服務入口。main.go 只做 dependency wiring，routes.go 放路由表
 cmd/migrate   跑 migration 的 CLI
-cmd/exporter  Cloud Run Job，跑政府申報 Excel 匯出
 
 internal/modules/<capability>/
   transport   解 request、呼叫 app、組 response，是唯一有 binding tag 與 gin 的地方

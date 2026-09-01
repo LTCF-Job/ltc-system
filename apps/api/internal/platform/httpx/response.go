@@ -15,6 +15,7 @@ const (
 	CodeAssignmentOverlap  = "ASSIGNMENT_OVERLAP"
 	CodeExportInProgress   = "EXPORT_IN_PROGRESS"
 	CodePrecheckFailed     = "PRECHECK_FAILED"
+	CodeNoExportData       = "NO_EXPORT_DATA"
 	CodeMappingRequired    = "MAPPING_REQUIRED"
 	CodeReportImportFailed = "DRIVER_REPORT_IMPORT_FAILED"
 	CodeFormMappingFailed  = "FORM_MAPPING_FAILED"
@@ -31,6 +32,7 @@ var codeMessages = map[string]string{
 	CodeAssignmentOverlap:  "該時段已有其他排班，請調整後再試",
 	CodeExportInProgress:   "匯出作業進行中，請稍後再試",
 	CodePrecheckFailed:     "資料檢核未通過，請確認後再試",
+	CodeNoExportData:       "指定條件下沒有可申報的資料",
 	CodeMappingRequired:    "尚未完成欄位對應設定",
 	CodeReportImportFailed: "匯入司機接送匯報失敗，請確認檔案格式後再試",
 	CodeFormMappingFailed:  "更新欄位對應設定失敗，請稍後再試",

@@ -100,6 +100,8 @@ func main() {
 	reportRepo := reportinfra.NewReportRepository(pool)
 	dashboardRepo := reportinfra.NewDashboardRepository(pool)
 	precheckRepo := reportinfra.NewPrecheckRepository(pool)
+	govClaimRepo := reportinfra.NewGovClaimRepository(pool)
+	exportJobRepo := reportinfra.NewExportJobRepository(pool)
 	taskRepo := taskinfra.NewTaskRepository(pool)
 	caregiverRepo := caregiverinfra.NewCaregiverRepository(pool)
 
@@ -136,6 +138,7 @@ func main() {
 	)
 	excelRenderer := reportinfra.NewExcelRenderer()
 	precheckSvc := reportapp.NewPrecheckService(precheckRepo)
+	govClaimSvc := reportapp.NewGovClaimService(cfg, govClaimRepo, exportJobRepo, excelRenderer, reportinfra.NewZipArchiver(), precheckSvc)
 	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, nil)
 	holidayProvider := holidayapp.GovernmentHolidayProvider(&holidayinfra.GovernmentHolidayHTTPClient{
 		Endpoint: holidayinfra.GovernmentHolidayCSVEndpoint,
@@ -161,7 +164,7 @@ func main() {
 		vehicle:      mastertransport.NewVehicleHandler(vehicleSvc),
 		driver:       mastertransport.NewDriverHandler(driverSvc),
 		ride:         ridetransport.NewRideHandler(rideSvc),
-		export:       reporttransport.NewExportHandler(precheckSvc, reportSvc),
+		export:       reporttransport.NewExportHandler(precheckSvc, govClaimSvc),
 		notification: notifytransport.NewNotificationHandler(notificationSvc),
 		holiday:      holidaytransport.NewHolidayHandler(holidaySvc),
 		report:       reporttransport.NewReportHandler(reportSvc),

@@ -104,9 +104,11 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 |---|---|---|---|
 | GET | `/exports/precheck` | staff, admin | 執行匯出前置檢核 |
 | POST | `/exports/precheck` | staff, admin | 同上 |
-| GET | `/exports` | viewer, staff, admin | 匯出工作歷史清單 |
-| POST | `/exports` | staff, admin | 建立匯出工作 |
-| GET | `/exports/:id` | viewer, staff, admin | 單筆匯出工作詳情（狀態、下載連結） |
+| GET | `/exports` | viewer, staff, admin | 匯出工作歷史清單（不含檔案明細與下載連結） |
+| POST | `/exports` | staff, admin | 建立政府申報匯出工作並同步產檔；body 需帶 `periodYm`(民國 5 碼)、`mode`(`direct`\|`zip`)、`caseIds`(至少一筆) |
+| GET | `/exports/:id` | viewer, staff, admin | 單筆匯出工作詳情，含逐案檔案清單 `files` |
+| GET | `/exports/:id/files/:caseId/download` | viewer, staff, admin | 下載單一個案的申報 `.xlsx` |
+| GET | `/exports/:id/download` | viewer, staff, admin | 下載整包 `.zip`；非壓縮檔模式回 400 |
 
 ## 假日主檔 `holidayH`
 

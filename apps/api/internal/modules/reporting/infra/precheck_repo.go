@@ -26,7 +26,7 @@ func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, regi
 	query := `
 		SELECT id, name
 		FROM cases
-		WHERE region = $1 AND status = 'active'
+		WHERE ($1 = '' OR region = $1) AND status = 'active'
 		  AND (COALESCE(home_address, '') = '' OR service_usage_type IS NULL OR COALESCE(national_id_masked, '') = '')
 	`
 	rows, err := r.db.Query(ctx, query, region)
@@ -55,7 +55,7 @@ func (r *PrecheckRepository) FindUnresolvedConflicts(ctx context.Context, region
 		SELECT r.id, c.name, r.service_date
 		FROM ride_records r
 		JOIN cases c ON r.case_id = c.id
-		WHERE c.region = $1 AND r.has_conflict = true AND r.conflict_resolved_at IS NULL
+		WHERE ($1 = '' OR c.region = $1) AND r.has_conflict = true AND r.conflict_resolved_at IS NULL
 	`
 	rows, err := r.db.Query(ctx, query, region)
 	if err != nil {

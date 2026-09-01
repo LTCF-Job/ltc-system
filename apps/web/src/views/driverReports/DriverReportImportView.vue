@@ -2,115 +2,125 @@
   <div class="driver-report-import-view">
     <el-tabs v-model="activeTab" type="border-card" class="import-tabs" @tab-change="handleTabChange">
       <el-tab-pane label="批次上傳" name="upload">
-        <div class="upload-split">
-          <aside class="upload-side">
-            <el-upload
-              drag
-              multiple
-              :auto-upload="false"
-              :show-file-list="false"
-              accept=".xlsx"
-              class="drop-zone"
-              :disabled="running || contextLoading"
-              :on-change="(file: UploadFile) => onFileChange(file)"
-            >
-              <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-              <p class="drop-hint">
-                {{ contextLoading ? '正在載入車輛資料…' : '將 .xlsx 匯報檔拖曳到此，或點選選擇檔案' }}
-              </p>
-              <p class="drop-hint-sub">檔名建議包含車輛名稱（例如「竹南2車 (回覆).xlsx」）</p>
-            </el-upload>
+        <div class="upload-stack">
+          <PageHeader
+            title="批次上傳接送匯報"
+            description="選擇多個 .xlsx 檔案，系統會依檔名自動比對車輛、依內容自動判斷涵蓋月份，解析完成後自動匯入。有系統推薦個案的欄位會自動套用，完全找不到對應個案的欄位會留在「待維護資料」頁籤，稍後逐一連結既有個案或建立新個案。"
+          />
 
-            <div v-if="rows.length" class="file-count-card">
-              <div class="file-count-num">{{ rows.length }}</div>
-              <div class="file-count-label">個檔案待處理</div>
-            </div>
+          <el-upload
+            drag
+            multiple
+            :auto-upload="false"
+            :show-file-list="false"
+            accept=".xlsx"
+            class="drop-zone"
+            :disabled="running || contextLoading"
+            :on-change="(file: UploadFile) => onFileChange(file)"
+          >
+            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+            <!-- 拖放區本身已是 role="button" 的可聚焦控制項，CTA 只做視覺呈現、
+                 不另外包 el-button，避免同一個動作出現兩個 Tab 停留點 -->
+            <span class="drop-cta">{{ ctaLabel }}</span>
+            <p class="drop-hint">或把 .xlsx 匯報檔拖曳到這一塊</p>
+            <p class="drop-hint-sub">檔名建議包含車輛名稱（例如「竹南2車 (回覆).xlsx」）</p>
+          </el-upload>
 
-            <el-alert
-              v-if="overlapRows.length"
-              type="warning"
-              show-icon
-              :closable="false"
-              title="以下車輛涵蓋的月份已有資料，這次會整月覆蓋"
-              class="overlap-alert"
-            >
-              <template #default>
-                <ul class="overlap-list">
-                  <li v-for="row in overlapRows" :key="row.key">
-                    {{ row.vehicleName }}：{{ row.overlapMonths.join('、') }}
-                  </li>
-                </ul>
-                <el-checkbox v-model="overlapAcknowledged">我已確認風險，仍要覆蓋以上月份的既有資料</el-checkbox>
-              </template>
-            </el-alert>
+          <el-alert
+            v-if="overlapRows.length"
+            type="warning"
+            show-icon
+            :closable="false"
+            title="以下車輛涵蓋的月份已有資料，這次會整月覆蓋"
+            class="overlap-alert"
+          >
+            <template #default>
+              <ul class="overlap-list">
+                <li v-for="row in overlapRows" :key="row.key">
+                  {{ row.vehicleName }}：{{ row.overlapMonths.join('、') }}
+                </li>
+              </ul>
+              <el-checkbox v-model="overlapAcknowledged">我已確認風險，仍要覆蓋以上月份的既有資料</el-checkbox>
+            </template>
+          </el-alert>
 
-            <el-button
-              type="primary"
-              class="submit-btn"
-              :loading="running"
-              :disabled="!canImport"
-              @click="runImport"
-            >
-              開始解析與匯入
-            </el-button>
-          </aside>
+          <div v-if="summary" class="result-banner" role="status">
+            成功 {{ summary.succeeded }} 個檔案、共 {{ summary.importedDays }} 天，失敗 {{ summary.failed }} 個檔案
+            <template v-if="summary.pendingColumns > 0">
+              ，{{ summary.pendingColumns }} 個欄位找不到對應個案，已進入待維護資料
+            </template>
+          </div>
 
-          <section class="upload-main">
-            <PageHeader
-              title="批次上傳接送匯報"
-              description="拖曳或選擇多個 .xlsx 檔案，系統會依檔名自動比對車輛、依內容自動判斷涵蓋月份，解析後立即匯入。有系統推薦個案的欄位會自動套用，完全找不到對應個案的欄位會留在「待維護資料」頁籤，稍後逐一連結既有個案或建立新個案。"
-            />
+          <el-empty v-if="!rows.length" description="尚未選擇任何檔案" />
 
-            <div v-if="summary" class="result-banner" role="status">
-              成功 {{ summary.succeeded }} 個檔案、共 {{ summary.importedDays }} 天，失敗 {{ summary.failed }} 個檔案
-              <template v-if="summary.pendingColumns > 0">
-                ，{{ summary.pendingColumns }} 個欄位找不到對應個案，已進入待維護資料
-              </template>
-            </div>
+          <section v-else class="file-panel">
+            <div class="file-panel-head">已選擇 {{ rows.length }} 個檔案</div>
 
-            <el-empty v-if="!rows.length" description="尚未選擇任何檔案" />
-
-            <div v-else class="file-cards">
-              <article v-for="row in rows" :key="row.key" class="file-card">
-                <div class="file-card-head">
+            <el-table :data="rows" row-key="key" table-layout="auto" border class="file-table">
+              <el-table-column label="檔案名稱" min-width="240" class-name="file-name-col">
+                <template #default="{ row }">
                   <span class="file-name">{{ row.file.name }}</span>
+                </template>
+              </el-table-column>
+
+              <el-table-column label="車輛" min-width="200" class-name="vehicle-col">
+                <template #default="{ row }">
+                  <el-select
+                    v-if="row.status === 'needsVehicle'"
+                    :model-value="row.vehicleId || undefined"
+                    placeholder="選擇車輛"
+                    filterable
+                    size="small"
+                    class="vehicle-select"
+                    :aria-label="`${row.file.name} 選擇車輛`"
+                    @change="(vehicleId: string) => onVehiclePicked(row as BatchFileRow, vehicleId)"
+                  >
+                    <el-option v-for="v in vehicles" :key="v.id" :label="v.displayName" :value="v.id" />
+                  </el-select>
+                  <span v-else class="cell-value">{{ row.vehicleName || '-' }}</span>
+                </template>
+              </el-table-column>
+
+              <el-table-column label="涵蓋月份" min-width="170" class-name="months-col">
+                <template #default="{ row }">
+                  <span v-if="row.months.length" class="cell-value">{{ row.months.join('、') }}</span>
+                  <span v-else-if="row.status === 'analyzing'" class="cell-value text-muted">解析中…</span>
+                  <span v-else class="cell-value text-muted">-</span>
+                </template>
+              </el-table-column>
+
+              <el-table-column label="狀態" min-width="110" class-name="status-col">
+                <template #default="{ row }">
                   <StatusTag :status="row.status" preset="driverReportImportStatus" variant="chip" />
-                </div>
+                </template>
+              </el-table-column>
 
-                <el-select
-                  v-if="row.status === 'needsVehicle'"
-                  :model-value="row.vehicleId || undefined"
-                  placeholder="選擇車輛"
-                  filterable
-                  size="small"
-                  :aria-label="`${row.file.name} 選擇車輛`"
-                  @change="(vehicleId: string) => onVehiclePicked(row, vehicleId)"
-                >
-                  <el-option v-for="v in vehicles" :key="v.id" :label="v.displayName" :value="v.id" />
-                </el-select>
-                <div v-else class="file-card-meta">
-                  <span>{{ row.vehicleName }}</span>
-                  <span v-if="row.months.length">{{ row.months.join('、') }}</span>
-                  <span v-else-if="row.status === 'analyzing'" class="text-muted">解析中…</span>
-                </div>
-
-                <div v-if="row.overlapMonths.length" class="file-card-overlap">
-                  將整月覆蓋 {{ row.overlapMonths.join('、') }} 既有資料
-                </div>
-
-                <div v-if="row.status === 'done'" class="file-card-result">
-                  可匯入 {{ row.importedCount }} 天
-                  <span v-if="row.pendingColumnCount > 0" class="text-warning">
-                    · {{ row.pendingColumnCount }} 欄待維護
+              <el-table-column label="說明" min-width="260" class-name="detail-col">
+                <template #default="{ row }">
+                  <span v-if="row.status === 'failed'" class="cell-value text-danger">{{ row.message }}</span>
+                  <span v-else-if="row.status === 'done'" class="cell-value">
+                    可匯入 {{ row.importedCount }} 天
+                    <span v-if="row.pendingColumnCount > 0" class="text-warning">
+                      · {{ row.pendingColumnCount }} 欄待維護
+                    </span>
                   </span>
-                </div>
-                <div v-else-if="row.status === 'failed'" class="file-card-result text-danger">{{ row.message }}</div>
+                  <span v-else-if="row.overlapMonths.length" class="cell-value text-warning">
+                    將整月覆蓋 {{ row.overlapMonths.join('、') }} 既有資料
+                  </span>
+                  <span v-else class="cell-value text-muted">-</span>
+                </template>
+              </el-table-column>
 
-                <button class="file-card-remove" type="button" :disabled="running" @click="removeRow(row)">
-                  移除
-                </button>
-              </article>
-            </div>
+              <el-table-column label="操作" width="100" align="center" fixed="right" class-name="action-col">
+                <template #default="{ row }">
+                  <TableRowActions>
+                    <el-button link type="danger" size="small" :disabled="running" @click="removeRow(row as BatchFileRow)">
+                      移除
+                    </el-button>
+                  </TableRowActions>
+                </template>
+              </el-table-column>
+            </el-table>
           </section>
         </div>
       </el-tab-pane>
@@ -212,7 +222,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import {
@@ -272,18 +282,38 @@ const forms = ref<DriverReportFormDTO[]>([])
 const importedMonths = ref<DriverReportImportedMonthDTO[]>([])
 const summary = ref<{ succeeded: number; failed: number; importedDays: number; pendingColumns: number } | null>(null)
 const overlapAcknowledged = ref(false)
+// 排隊中 + 執行中的解析數，供自動匯入判斷「整批都解析完了沒」
+const analyzePending = ref(0)
 
 let rowSeq = 0
+
+// 拖放區停用時要說明原因，否則使用者只看得到一塊按不動的區域
+const ctaLabel = computed(() => {
+  if (contextLoading.value) return '正在載入車輛資料…'
+  if (running.value) return '正在匯入…'
+  return '選擇 .xlsx 檔案'
+})
 
 const formByVehicle = computed(() => new Map(forms.value.map((f) => [f.vehicleId, f.id])))
 const importedByKey = computed(
   () => new Map(importedMonths.value.map((m) => [`${m.formId}::${m.yearMonth}`, m]))
 )
-const processableRows = computed(() => rows.value.filter((r) => r.vehicleId && r.status !== 'processing' && r.status !== 'analyzing'))
-const overlapRows = computed(() => rows.value.filter((r) => r.overlapMonths.length > 0))
+// 已解析完成、還沒匯入的檔案。已匯入或失敗的列不再納入，否則自動匯入會反覆重跑同一批
+const pendingRows = computed(() => rows.value.filter((r) => r.vehicleId && r.status === 'queued'))
+const overlapRows = computed(() => pendingRows.value.filter((r) => r.overlapMonths.length > 0))
 const canImport = computed(
-  () => !running.value && processableRows.value.length > 0 && (overlapRows.value.length === 0 || overlapAcknowledged.value)
+  () =>
+    !running.value &&
+    analyzePending.value === 0 &&
+    pendingRows.value.length > 0 &&
+    (overlapRows.value.length === 0 || overlapAcknowledged.value)
 )
+
+// 沒有送出按鈕：整批解析完就自動匯入。等 analyzePending 歸零才觸發，讓一次拖入的多個檔案併成一批；
+// 命中既有月份時停在這裡等使用者勾選確認風險，勾完 canImport 再次轉真才續跑。
+watch(canImport, (ready) => {
+  if (ready) void runImport()
+})
 
 function stripExtension(name: string): string {
   return name.replace(/\.[^./\\]+$/, '')
@@ -406,7 +436,9 @@ let activeAnalyses = 0
 const analyzeQueue: BatchFileRow[] = []
 
 function enqueueAnalyze(row: BatchFileRow) {
-  if (!analyzeQueue.includes(row)) analyzeQueue.push(row)
+  if (analyzeQueue.includes(row)) return
+  analyzeQueue.push(row)
+  analyzePending.value++
   pumpAnalyzeQueue()
 }
 
@@ -416,6 +448,7 @@ function pumpAnalyzeQueue() {
     activeAnalyses++
     analyzeRow(row).finally(() => {
       activeAnalyses--
+      analyzePending.value--
       pumpAnalyzeQueue()
     })
   }
@@ -491,7 +524,7 @@ async function runWithLimit<T>(items: T[], handler: (item: T) => Promise<void>) 
 }
 
 async function runImport() {
-  const targets = processableRows.value
+  const targets = pendingRows.value
   if (!targets.length || !canImport.value) return
 
   running.value = true
@@ -637,62 +670,100 @@ onMounted(async () => {
   flex-direction: column;
 }
 
-.upload-split {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: var(--app-space-4);
-  align-items: start;
-}
-
-.upload-side {
-  position: sticky;
-  top: 0;
-  background: var(--app-surface);
-  border: 1px solid var(--app-border-color);
-  border-radius: var(--app-radius-md);
-  box-shadow: var(--app-shadow-sm);
-  padding: var(--app-space-4);
+/* 上傳頁採上下堆疊：拖放區 → 檔案清單。max-width 讓版面不撐滿整頁寬度，靠左對齊 */
+.upload-stack {
+  max-width: 1100px;
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--app-space-3);
+  gap: var(--app-space-4);
 }
 
-.drop-zone :deep(.el-upload) {
-  width: 100%;
-}
-
+.drop-zone :deep(.el-upload),
 .drop-zone :deep(.el-upload-dragger) {
   width: 100%;
-  padding: var(--app-space-4);
+}
+
+/* 整塊拖放區就是這一頁唯一的動作，原本另外擺一顆分離的「選擇檔案」按鈕，
+   使用者看不出兩者是同一件事。改成把 CTA 收進區塊中央，並把邊框加深、
+   補上 hover 與 focus 回饋，讓這塊本身就看得出來可以按 */
+.drop-zone :deep(.el-upload-dragger) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--app-space-8) var(--app-space-4);
+  border-width: 2px;
+  border-color: var(--app-primary);
+  border-color: color-mix(in srgb, var(--app-primary) 32%, var(--app-surface));
+  background: var(--app-surface);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.drop-zone :deep(.el-upload:not(.is-disabled) .el-upload-dragger:hover),
+.drop-zone :deep(.el-upload:not(.is-disabled) .el-upload-dragger.is-dragover) {
+  border-color: var(--app-primary);
+  background: var(--app-primary-light);
+}
+
+.drop-zone :deep(.el-upload:focus-visible) {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+  border-radius: var(--app-radius-md);
+}
+
+.drop-zone :deep(.el-icon--upload) {
+  margin-bottom: var(--app-space-2);
+  color: var(--app-primary);
+}
+
+/* 按鈕外觀但不是可聚焦元素：可點的控制項是外層拖放區，避免同一動作有兩個 Tab 停留點 */
+.drop-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 220px;
+  height: 46px;
+  padding: 0 var(--app-space-6);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-primary);
+  color: var(--el-color-white);
+  font-size: var(--app-font-lg);
+  font-weight: 600;
+  box-shadow: var(--app-shadow-sm);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.drop-zone :deep(.el-upload:not(.is-disabled) .el-upload-dragger:hover) .drop-cta {
+  background: var(--app-primary-dark);
+  transform: translateY(-1px);
+}
+
+.drop-zone :deep(.el-upload.is-disabled) .drop-cta {
+  background: var(--app-text-muted);
+  box-shadow: none;
 }
 
 .drop-hint {
-  margin: 0;
-  font-size: var(--app-font-sm);
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-font-md);
+  color: var(--app-text-regular);
 }
 
 .drop-hint-sub {
   margin: var(--app-space-1) 0 0;
   font-size: var(--app-font-xs);
-  color: var(--app-text-secondary);
+  color: var(--app-text-muted);
 }
 
-.file-count-card {
-  text-align: center;
-  padding: var(--app-space-3);
-  background: var(--app-primary-light);
-  border-radius: var(--app-radius-sm);
-}
+@media (prefers-reduced-motion: reduce) {
+  .drop-zone :deep(.el-upload-dragger),
+  .drop-cta {
+    transition: none;
+  }
 
-.file-count-num {
-  font-size: var(--app-font-2xl);
-  font-weight: 700;
-  color: var(--app-primary-dark);
-}
-
-.file-count-label {
-  font-size: var(--app-font-xs);
-  color: var(--app-primary-dark);
+  .drop-zone :deep(.el-upload:not(.is-disabled) .el-upload-dragger:hover) .drop-cta {
+    transform: none;
+  }
 }
 
 .overlap-alert {
@@ -704,17 +775,6 @@ onMounted(async () => {
   padding-left: var(--app-space-4);
 }
 
-.submit-btn {
-  width: 100%;
-}
-
-.upload-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-4);
-  min-width: 0;
-}
-
 .result-banner {
   padding: var(--app-space-3) var(--app-space-4);
   background: var(--app-status-info-bg);
@@ -724,69 +784,66 @@ onMounted(async () => {
   font-weight: 500;
 }
 
-.file-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--app-space-3);
-}
-
-.file-card {
-  position: relative;
-  background: var(--app-surface);
+/* 這張表格不走 DataTablePage，容器自己補水平捲動，避免內容超寬時撐破整頁 */
+.file-panel {
   border: 1px solid var(--app-border-color);
   border-radius: var(--app-radius-md);
+  background: var(--app-surface);
   box-shadow: var(--app-shadow-sm);
-  padding: var(--app-space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-2);
+  overflow-x: auto;
 }
 
-.file-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--app-space-2);
+.file-panel-head {
+  padding: var(--app-space-3) var(--app-space-4);
+  font-size: var(--app-font-sm);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  border-bottom: 1px solid var(--app-border-color);
+}
+
+/* table-layout="auto" 下每一欄都要自己鎖 nowrap 與 min-width，否則欄寬吃緊時會逐字換行 */
+.file-table :deep(.file-name-col .cell) {
+  white-space: nowrap;
+  min-width: 240px;
+}
+
+.file-table :deep(.vehicle-col .cell) {
+  white-space: nowrap;
+  min-width: 200px;
+}
+
+.file-table :deep(.months-col .cell) {
+  white-space: nowrap;
+  min-width: 170px;
+}
+
+.file-table :deep(.status-col .cell) {
+  white-space: nowrap;
+  min-width: 110px;
+}
+
+.file-table :deep(.detail-col .cell) {
+  white-space: nowrap;
+  min-width: 260px;
+}
+
+.file-table :deep(.action-col .cell) {
+  white-space: nowrap;
+  min-width: 100px;
+}
+
+.cell-value {
+  white-space: nowrap;
 }
 
 .file-name {
-  font-size: var(--app-font-sm);
   font-weight: 500;
   color: var(--app-text-primary);
-  word-break: break-all;
+  white-space: nowrap;
 }
 
-.file-card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: var(--app-font-xs);
-  color: var(--app-text-secondary);
-}
-
-.file-card-overlap {
-  font-size: var(--app-font-xs);
-  color: var(--app-status-warning-fg);
-  font-weight: 600;
-}
-
-.file-card-result {
-  font-size: var(--app-font-xs);
-  color: var(--app-text-secondary);
-}
-
-.file-card-remove {
-  align-self: flex-end;
-  border: none;
-  background: none;
-  color: var(--app-status-danger-fg);
-  font-size: var(--app-font-xs);
-  cursor: pointer;
-}
-
-.file-card-remove:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.vehicle-select {
+  width: 180px;
 }
 
 .small {

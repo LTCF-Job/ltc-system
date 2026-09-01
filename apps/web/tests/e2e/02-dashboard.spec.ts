@@ -45,20 +45,10 @@ test.describe('02. 總覽儀表板 (Dashboard)', () => {
     await expect(page.locator('.recent-exports-card .el-table').first()).toBeVisible()
   })
 
-  test('最近申報匯出紀錄可下載檔案', async ({ page }) => {
+  test('最近申報匯出紀錄不提供下載入口', async ({ page }) => {
     await waitForTableLoaded(page)
-    const downloadPromise = page.waitForEvent('download')
-    await page.locator('.recent-exports-card').getByRole('button', { name: '下載' }).first().click()
-    const download = await downloadPromise
-
-    expect(download.suggestedFilename()).toMatch(/\.xlsx$/)
-
-    const zipHeader = await page.evaluate(async () => {
-      const response = await fetch('/api/v1/exports/job_202607_01/download?jobType=gov_claim&periodYm=115-07&region=hsinchu')
-      const bytes = new Uint8Array(await response.arrayBuffer())
-      return Array.from(bytes.slice(0, 4))
-    })
-    expect(zipHeader).toEqual([80, 75, 3, 4])
+    // 申報檔只從匯出頁取得；儀表板僅呈現摘要，避免出現第二條下載路徑
+    await expect(page.locator('.recent-exports-card').getByRole('button', { name: '下載' })).toHaveCount(0)
   })
 })
 

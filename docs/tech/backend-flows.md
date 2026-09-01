@@ -93,27 +93,36 @@ merge.MergeRideSources（同車取最新、跨車 OR）
 - `MonthEndReminder(ctx, year, month)`：每月 26 日跑，彙整檢核結果並發信提醒。
 - 這兩支都各自有 `POST /tasks/*` 端點，正式環境由 Cloud Scheduler 定期打；本機要測試就直接手動 curl 這兩支。
 
-## 4. 政府申報匯出（`PrecheckService` + `cmd/exporter`）
+## 4. 政府申報匯出（`PrecheckService` + `GovClaimService`）
 
-1. 使用者在「政府申報匯出」頁選期別／地區，先打 `GET/POST /exports/precheck` 跑 `PrecheckService.RunPrecheck`：檢查這個月這個地區的資料是否完整（有沒有未結案的異常、必要欄位是否齊全），回傳 `PrecheckReport`（含每一項檢核的 severity）。
-2. 檢核沒過（`Passed=false`）就不能真的匯出，前端要把 issue 列出來讓使用者回去處理。
-3. 檢核通過後才建立匯出工作（`POST /exports`），實際產檔是由獨立的 Cloud Run Job（`cmd/exporter`）執行：一樣先跑一次 precheck，通過才呼叫 `domain/govform.BuildClaimRow` 組出符合政府 33 欄規格的資料列，`export.GenerateGovClaimExcel` 用 `excelize` 產出 `.xlsx`，並計算 SHA-256 checksum 供事後驗證檔案未被竄改。
+一個個案一個月產一份 `.xlsx`，欄位比照政府範本的 33 欄（`domain/govform.Headers33`，工作表名「工作表1」）。
+
+1. 使用者在「政府申報匯出」頁選申報年月、申報地區、申報個案（可多選）與匯出檔案模式（直接下載／壓縮檔）。
+2. `GET/POST /exports/precheck` 跑 `PrecheckService.RunPrecheck`，回傳 `PrecheckReport`；有 error 就擋住匯出，前端列出 issue 讓使用者回去修。
+3. `POST /exports` 交給 `GovClaimService.CreateGovClaimJob` 同步產檔（專案沒有背景 worker）：
+   - `GovClaimRepository.QueryGovClaimSources` 一次撈齊該月 `effective_status = 'boarded'` 的趟次，join `cases`／`case_schedules`／`schedule_legs`／`sites`／`vehicles`／`drivers`。
+   - 逐筆驗證後呼叫 `domain/govform.BuildClaimRow` 組出 33 欄，再用 `SortClaimRows` 排成「leg1 整月 → leg2 整月」。缺排班趟次、缺司機、缺出發時間等資料的趟次計入 `skipped` 並回報，不套用預設值硬湊。
+   - `ExcelRenderer.RenderGovClaim` 產出每個個案的工作簿位元組；壓縮檔模式再由 `ZipArchiver.BuildZip` 打包。
+   - 單一交易寫入 `export_lines`（申報列快照）、`export_job_files`（逐案檔案中繼資料）與 `export_jobs` 狀態。
+4. 下載時不從物件儲存讀檔（專案沒有 storage adapter），改由 `export_lines.raw_payload` 快照重繪。快照的第 1 欄與第 7 欄（個案／服務人員身分證）一律留空，只存 `driverId`，重繪時才由密文解密補回，明文身分證不落資料庫。
+5. `GET /exports/:id/files/:caseId/download` 取單一個案的 `.xlsx`；`GET /exports/:id/download` 只服務壓縮檔模式的工作。歷史紀錄頁不提供下載，只能用 `GET /exports/:id` 查看該次匯出包含哪些個案。
 
 ```
-使用者選期別/地區
+使用者選年月/地區/個案/模式
    │
    ▼
 GET/POST /exports/precheck ──未通過──► 前端列出 issue，回去修資料
    │ 通過
    ▼
-POST /exports（建立匯出工作）
-   │
+POST /exports（同步產檔）
+   │  QueryGovClaimSources → BuildClaimRow → SortClaimRows → RenderGovClaim（→ BuildZip）
+   │  單一交易寫入 export_lines + export_job_files + export_jobs
    ▼
-Cloud Run Job cmd/exporter：precheck → govform.BuildClaimRow → excelize 產出 .xlsx → SHA-256 checksum
-   │
-   ▼
-GET /exports/:id 輪詢狀態拿下載連結
+逐案下載 GET /exports/:id/files/:caseId/download（由快照重繪）
+或整包下載 GET /exports/:id/download（僅壓縮檔模式）
 ```
+
+目前系統沒有資料、一律留白的欄位：備註、服務人員身分證 2-5、訪視未遇、C 碼五欄、OT01 餐別、出發地／目的地經緯度。里程數目前取自排班層級的 `case_schedules.distance_km`，去回程會是同一個數字。
 
 ## 5. 主檔批次匯入（`ImportService`）
 

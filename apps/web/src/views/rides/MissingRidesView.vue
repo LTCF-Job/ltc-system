@@ -389,6 +389,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
 import DialogFooter from '@/components/DialogFooter.vue'
@@ -403,6 +404,7 @@ import type { MissingRideDTO, NotificationLogDTO, VehicleDTO, DriverDTO, ManualR
 import { DIRECTION_LABELS, NOTIFICATION_TOPIC_LABELS } from '@/types/domain'
 
 const authStore = useAuthStore()
+const route = useRoute()
 const activeTab = ref<'missing' | 'history'>('missing')
 
 // 未回報清單資料
@@ -666,7 +668,11 @@ async function handleTriggerNotify() {
   }
 }
 
+// 前置檢核報告的「查看未回報」會帶 ?q=個案姓名 進來，預填搜尋條件讓清單直接只剩該個案
 onMounted(() => {
+  const q = route.query.q
+  if (typeof q === 'string' && q) missingQuery.value = q
+
   fetchVehicles()
   fetchDrivers()
   fetchMissingRides()

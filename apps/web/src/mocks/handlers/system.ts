@@ -13,11 +13,12 @@ import {
 export const systemHandlers = [
   // 儀表板指標與統計
   http.get('/api/v1/dashboard/stats', () => {
+    // 儀表板只呈現最近匯出的摘要，不再提供下載入口
     const recentExports = mockDashboardStats.recentExports.map((job) => ({
       ...job,
-      downloadUrl: job.downloadUrl?.startsWith('/api/v1/')
-        ? job.downloadUrl
-        : `/api/v1/exports/${job.id}/download?jobType=${job.jobType}&periodYm=${job.periodYm}&region=${job.region || 'hsinchu'}`
+      files: undefined,
+      downloadUrl: undefined,
+      zipFileName: undefined
     }))
     return HttpResponse.json({ ...mockDashboardStats, recentExports })
   }),
