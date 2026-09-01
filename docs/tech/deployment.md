@@ -110,6 +110,17 @@ vercel deploy
 vercel alias set https://ltc-system-<hash>-<team>.vercel.app ltc-system-git-<branch>-<team>.vercel.app
 ```
 
+### 已知坑：`vercel build` 在 CI／本機不會自動把 `node_modules/.bin` 加進 PATH
+
+`vercel build` 在 Vercel 平台上跑時，build container 本身就把 `node_modules/.bin` 放進 PATH；但透過 CLI 在本機或 GitHub Actions 執行 `vercel build`（[`deploy-web.yml`](../../.github/workflows/deploy-web.yml) 就是這樣用），偵測到的 build command（這個專案是 `vite build`）會直接當一般 shell 指令執行，不會像 `npm run build` 那樣自動把 `node_modules/.bin` 加進 PATH，即使 `npm ci` 已經裝好依賴，還是會報：
+
+```
+sh: 1: vite: not found
+Error: Command "vite build" exited with 127
+```
+
+`deploy-web.yml` 已經在呼叫 `vercel build` 前手動 `export PATH="$PWD/node_modules/.bin:$PATH"` 處理這個問題；日後若改寫這段 workflow，記得保留這一行，不要因為「本機測試時 `vite` 是全域指令所以正常」而誤刪。
+
 ## `ltc-api`（Cloud Run）常見部署操作
 
 ### 查目前設定（唯讀）
@@ -161,6 +172,27 @@ gcloud run jobs execute ltc-api-migrate --region=asia-east1 --wait
 ```
 
 這個 job 是為了讓 GitHub Actions 部署流程能在部署新版 API 之前自動跑 migration（見下方），手動 source-based deploy 不會觸發它，需要的話要自己執行。
+
+### 已知坑：migration job 跟 API service 要各自設定同一套 production 必填變數
+
+`cmd/migrate` 跟 `cmd/server`（`ltc-api` 服務本體）共用同一套設定驗證（`internal/platform/config`）：`APP_ENV=production` 時少了 `SUPABASE_JWKS_URL` 或 `ALLOWED_ORIGINS` 任何一個都會直接拒絕啟動。這兩個環境變數（以及 `APP_ENV`、`SUPABASE_PROJECT_REF`）**migration job 跟 API service 是各自獨立的環境變數集合**，只在 `ltc-api` 服務上設定過不代表 `ltc-api-migrate` job 也有——曾經發生過 job 只設了 `DATABASE_URL` 這個 secret，`APP_ENV` 從未設定，實際跑起來因為 `config.LoadFromEnv()` 沒驗證過就直接把整包環境變數丟給 job，結果是不知道哪來的舊設定殘留了 `APP_ENV=develope`（打錯字，不是 `develop` 也不是 `production`），導致 `gcloud run jobs execute` 每次都以 `Failed to load config` 失敗，連帶讓 `deploy-api.yml` 卡在「Run database migrations」那步。
+
+`ALLOWED_ORIGINS` 在 migration job 上只是為了通過設定檢查，job 不會真的處理 HTTP 請求，填什麼網域都不影響功能。用下面指令核對兩邊變數是否一致：
+
+```bash
+gcloud run jobs describe ltc-api-migrate --region=asia-east1 --format="value(spec.template.spec.template.spec.containers[0].env)"
+gcloud run services describe ltc-api --region=asia-east1 --format="value(spec.template.spec.containers[0].env)"
+```
+
+### 已知坑：Windows Git Bash 會把 `--command` 的路徑參數轉換成 Windows 路徑
+
+在 Windows 用 Git Bash 執行 `gcloud run jobs update ltc-api-migrate --command="/app/migrate"` 這類指令時，Git Bash（MSYS）會自動把看起來像 Unix 絕對路徑的參數轉換成 Windows 路徑，實際送給 gcloud 的值會變成 `D:/Program Files/Git/app/migrate` 這種在 Linux 容器裡不存在的路徑，job 執行時會直接 `Application failed to start`，且錯誤訊息完全看不出是路徑被轉換，只會看到 `terminated: Application failed to start`。
+
+```bash
+gcloud run jobs describe ltc-api-migrate --region=asia-east1 --format="value(spec.template.spec.template.spec.containers[0].command)"
+```
+
+查出來若是一串 `D:/...` 就是中招了。解法：把值前面多加一個斜線變成 `--command="//app/migrate"`（雙斜線），Git Bash 就不會轉換；Linux 容器內部會把 `//app/migrate` 正常解析成 `/app/migrate`。改用 PowerShell 或 cmd.exe 執行則不會有這個問題，直接填單斜線即可。
 
 ## GitHub Actions 自動部署（`develop`／`main`）
 

@@ -78,7 +78,13 @@ jobs:
         run: vercel pull --yes --environment="$VERCEL_ENV" --token="$VERCEL_TOKEN"
 
       - name: Build
+        # vercel build 在 Vercel 平台上跑時，build container 本身就把
+        # node_modules/.bin 放進 PATH；在本機／CI 用 CLI 跑 vercel build
+        # 不會這樣做，偵測到的 build command（例如 vite build）會因為
+        # 找不到 vite 執行檔而以 "vite: not found" 失敗，要自己把
+        # node_modules/.bin 加進 PATH。
         run: |
+          export PATH="$PWD/node_modules/.bin:$PATH"
           if [ "$VERCEL_ENV" = "production" ]; then
             vercel build --prod --token="$VERCEL_TOKEN"
           else
