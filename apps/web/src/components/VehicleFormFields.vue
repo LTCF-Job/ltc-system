@@ -2,7 +2,7 @@
   <el-form-item label="車號" prop="plateNo">
     <el-input v-model="form.plateNo" placeholder="如：BZG-7915" />
   </el-form-item>
-  <el-form-item label="顯示車名" prop="displayName">
+  <el-form-item label="代稱" prop="displayName">
     <el-input v-model="form.displayName" placeholder="如：竹北一車、竹南2車" />
   </el-form-item>
   <el-form-item label="所屬單位" prop="siteId">

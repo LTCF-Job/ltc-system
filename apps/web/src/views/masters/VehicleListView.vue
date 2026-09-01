@@ -13,7 +13,7 @@
       <template #filter>
         <el-input
           v-model="filters.q"
-          placeholder="搜尋車牌號碼／顯示車名"
+          placeholder="搜尋車牌號碼／代稱"
           clearable
           style="width: 240px"
           @keyup.enter="handleSearch"
@@ -65,7 +65,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="displayName" label="顯示車名 (表單比對名)" min-width="180" class-name="vehicle-nowrap-col" />
+          <el-table-column prop="displayName" label="代稱" min-width="180" class-name="vehicle-nowrap-col" />
 
           <el-table-column prop="siteName" label="所屬單位" min-width="160" class-name="vehicle-nowrap-col">
             <template #default="{ row }">

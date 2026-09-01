@@ -34,7 +34,7 @@ export const vehicleFormRules = {
     { required: true, message: '請輸入車號', trigger: 'blur' },
     { pattern: /^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/, message: '車號格式錯誤 (例如 BZG-7915)', trigger: 'blur' }
   ],
-  displayName: [{ required: true, message: '請輸入顯示車名', trigger: 'blur' }],
+  displayName: [{ required: true, message: '請輸入代稱', trigger: 'blur' }],
   siteId: [{ required: true, message: '請選擇所屬單位', trigger: 'change' }],
   brand: [{ required: true, message: '請輸入廠牌', trigger: 'blur' }],
   model: [{ required: true, message: '請輸入車型', trigger: 'blur' }],
