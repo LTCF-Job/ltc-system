@@ -67,3 +67,30 @@ ON CONFLICT (id) DO UPDATE SET
     raw_app_meta_data = EXCLUDED.raw_app_meta_data,
     raw_user_meta_data = EXCLUDED.raw_user_meta_data,
     updated_at = now();
+
+-- Supabase Auth（GoTrue）驗證 email/password 登入時，除了 auth.users 還要求
+-- 對應的 auth.identities（provider = 'email'）存在，否則密碼比對正確也會回傳
+-- Invalid login credentials。
+INSERT INTO auth.identities (
+    id,
+    provider_id,
+    user_id,
+    identity_data,
+    provider,
+    last_sign_in_at,
+    created_at,
+    updated_at
+)
+VALUES (
+    '00000000-0000-0000-0000-000000000002',
+    '00000000-0000-0000-0000-000000000002',
+    '00000000-0000-0000-0000-000000000002',
+    '{"sub":"00000000-0000-0000-0000-000000000002","email":"ltcf-admin@ltc.example.com","email_verified":true,"phone_verified":false}'::jsonb,
+    'email',
+    now(),
+    now(),
+    now()
+)
+ON CONFLICT (provider_id, provider) DO UPDATE SET
+    identity_data = EXCLUDED.identity_data,
+    updated_at = now();

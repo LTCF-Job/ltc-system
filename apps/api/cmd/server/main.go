@@ -48,6 +48,7 @@ import (
 	"ltc-system/apps/api/internal/platform/pgxdb"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -190,7 +191,17 @@ func main() {
 
 // connectDatabase 建立連線池並確認可連通；任何一步失敗都回傳 error，交由呼叫端依環境決定是否啟動。
 func connectDatabase(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	// Supabase 的連線池網址走 pgbouncer transaction pooling，同一個 pgxpool 連線
+	// 在不同請求間可能被路由到不同後端連線；pgx 預設會快取 prepared statement 名稱，
+	// 在這種環境下會不定期撞名回傳 "prepared statement already exists"，需改用
+	// simple protocol（見 cmd/migrate/main.go 同樣的修法）。
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse database config: %w", err)
+	}
+	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create database pool: %w", err)
 	}

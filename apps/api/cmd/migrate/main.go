@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/platform/config"
 )
@@ -34,7 +35,18 @@ func main() {
 	}
 
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+
+	// Supabase 的連線池網址走 pgbouncer transaction pooling，各次查詢可能被
+	// 路由到不同後端連線；pgx 預設會快取 prepared statement 名稱，在這種環境下
+	// 會撞名回傳 "prepared statement already exists"，需改用 simple protocol。
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		slog.Error("Failed to parse database config", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		slog.Error("Failed to connect to database", slog.String("error", err.Error()))
 		os.Exit(1)

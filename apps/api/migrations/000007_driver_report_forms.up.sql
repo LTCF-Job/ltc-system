@@ -3,7 +3,7 @@
 
 ALTER TABLE google_forms RENAME TO driver_report_forms;
 
-DROP INDEX IF EXISTS google_forms_sheet_id_key;
+ALTER TABLE driver_report_forms DROP CONSTRAINT IF EXISTS google_forms_sheet_id_key;
 ALTER TABLE driver_report_forms DROP COLUMN IF EXISTS sheet_id;
 ALTER TABLE driver_report_forms DROP COLUMN IF EXISTS ingest_secret_ref;
 ALTER TABLE driver_report_forms RENAME COLUMN last_synced_at TO last_imported_at;

@@ -28,13 +28,14 @@ func NewDriverReportRepository(db *pgxpool.Pool) *DriverReportRepository {
 
 const formSelectColumns = `
 	SELECT f.id, f.vehicle_id, COALESCE(v.display_name, '未知車輛'), f.title,
-	       COALESCE(v.region, 'hsinchu'), f.last_imported_at, f.status,
+	       COALESCE(s.region, 'hsinchu'), f.last_imported_at, f.status,
 	       (SELECT count(*) FROM form_columns fc WHERE fc.form_id = f.id),
 	       (SELECT count(*) FROM form_columns fc WHERE fc.form_id = f.id AND fc.mapping_status = 'mapped'),
 	       (SELECT count(*) FROM form_columns fc WHERE fc.form_id = f.id AND fc.mapping_status = 'pending'),
 	       (SELECT count(*) FROM form_submissions fs WHERE fs.form_id = f.id)
 	FROM driver_report_forms f
 	LEFT JOIN vehicles v ON f.vehicle_id = v.id
+	LEFT JOIN sites s ON v.site_id = s.id
 `
 
 // ListForms 查詢所有匯報表與其對應進度。
