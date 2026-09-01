@@ -49,9 +49,17 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'Production' || 'develop' }}
-    defaults:
-      run:
-        working-directory: apps/web
+    # 注意：這個 job 故意不設 defaults.run.working-directory: apps/web。
+    # Vercel 專案在 dashboard 設定了 Root Directory = apps/web，新版
+    # vercel CLI（59.11+）的 `vercel pull` 會把這個值如實回傳在
+    # .vercel/project.json 裡；vercel CLI 是設計成從「repo 根目錄」執行，
+    # 由它自己套用一次 Root Directory。如果連 CLI 本身都先 cd 進
+    # apps/web 再執行，Root Directory 會被套用兩次，變成去找
+    # apps/web/apps/web，導致 `vite build` 因為找不到 index.html
+    # 而報 [UNRESOLVED_ENTRY] Cannot resolve entry module index.html。
+    # 所以 vercel pull／build／deploy 這三步都要留在 repo 根目錄執行；
+    # 只有 npm ci（跟 apps/web/package.json 綁定）需要用
+    # working-directory 個別指定。
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -69,6 +77,7 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
 
       - name: Install dependencies
+        working-directory: apps/web
         run: npm ci
 
       - name: Install Vercel CLI
@@ -82,9 +91,10 @@ jobs:
         # node_modules/.bin 放進 PATH；在本機／CI 用 CLI 跑 vercel build
         # 不會這樣做，偵測到的 build command（例如 vite build）會因為
         # 找不到 vite 執行檔而以 "vite: not found" 失敗，要自己把
-        # node_modules/.bin 加進 PATH。
+        # apps/web/node_modules/.bin 加進 PATH（這裡在 repo 根目錄執行，
+        # 不能用 $PWD/node_modules/.bin，要指名 apps/web 底下那份）。
         run: |
-          export PATH="$PWD/node_modules/.bin:$PATH"
+          export PATH="$PWD/apps/web/node_modules/.bin:$PATH"
           if [ "$VERCEL_ENV" = "production" ]; then
             vercel build --prod --token="$VERCEL_TOKEN"
           else
