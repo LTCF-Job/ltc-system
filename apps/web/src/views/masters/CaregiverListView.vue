@@ -64,7 +64,7 @@
                   <span v-else class="empty-value">-</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="name" label="姓名" width="120" />
+              <el-table-column prop="name" label="姓名" min-width="120" class-name="name-col" />
               <el-table-column label="聯絡方式" min-width="140">
                 <template #default="{ row }">
                   <span>{{ row.contact || '-' }}</span>
@@ -125,7 +125,7 @@
             </el-table-column>
             <el-table-column label="聯絡方式" min-width="140">
               <template #default="{ row }">
-                <span>{{ row.contact || '-' }}</span>
+                <span class="contact-value">{{ row.contact || '-' }}</span>
               </template>
             </el-table-column>
             <el-table-column label="備註" min-width="180" show-overflow-tooltip>
@@ -552,7 +552,6 @@ executeFetch()
 
 .pending-panel {
   min-height: 120px;
-  max-width: 970px;
 }
 
 /* 不用 flex-wrap: wrap——欄寬不夠時會把「選擇既有據點」跟「新增據點」擠成第二行，
@@ -581,6 +580,11 @@ executeFetch()
 .missing-fields {
   color: var(--el-color-danger);
   font-size: 13px;
+}
+
+/* 同樣道理：span 沒鎖 nowrap，table-layout: auto 也救不了，聯絡方式還是會被壓成多行。 */
+.contact-value {
+  white-space: nowrap;
 }
 
 .empty-value {

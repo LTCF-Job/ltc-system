@@ -621,6 +621,7 @@ export interface IssueRideDTO {
   description: string
   vehicles?: string[]
   sources?: RideSourceDTO[]
+  rawPayload?: string
 }
 
 // 申報匯出

@@ -1445,7 +1445,8 @@ export const mockIssueRides: IssueRideDTO[] = [
     issueType: 'import_error',
     hasConflict: false,
     description: '搭乘欄填寫非標準字串「去程到08/21」，無法自動解析為有坐/沒坐',
-    vehicles: ['竹北一車']
+    vehicles: ['竹北一車'],
+    rawPayload: '{"vehicle":"竹北一車","serviceDate":"2026-08-21","leg":1,"field":"搭乘","rawValue":"去程到08/21","submittedAt":"2026-08-21T08:12:00+08:00"}'
   },
   {
     id: 'err_2',
@@ -1456,7 +1457,8 @@ export const mockIssueRides: IssueRideDTO[] = [
     issueType: 'import_error',
     hasConflict: false,
     description: '回報欄位填入說明文字「家屬臨時改下午一點接」，無法對應標準時間或搭乘狀態欄位',
-    vehicles: ['竹南1車']
+    vehicles: ['竹南1車'],
+    rawPayload: '{"vehicle":"竹南1車","serviceDate":"2026-08-23","leg":2,"field":"回程時間","rawValue":"家屬臨時改下午一點接","submittedAt":"2026-08-23T13:05:00+08:00"}'
   },
   {
     id: 'err_3',
@@ -1467,7 +1469,8 @@ export const mockIssueRides: IssueRideDTO[] = [
     issueType: 'import_error',
     hasConflict: false,
     description: '同一司機於 1 分鐘內重複提交兩次相異狀態表單（第一次勾沒坐，第二次勾有坐）',
-    vehicles: ['竹北一車']
+    vehicles: ['竹北一車'],
+    rawPayload: '[{"submittedAt":"2026-08-24T09:30:00+08:00","status":"沒坐"},{"submittedAt":"2026-08-24T09:31:00+08:00","status":"有坐"}]'
   },
   {
     id: 'err_4',
@@ -1478,7 +1481,8 @@ export const mockIssueRides: IssueRideDTO[] = [
     issueType: 'import_error',
     hasConflict: false,
     description: '表單回報名冊中包含未建檔之個案姓名「王大明」，無法自動關聯個案主檔代碼',
-    vehicles: ['苗栗市1車']
+    vehicles: ['苗栗市1車'],
+    rawPayload: '{"vehicle":"苗栗市1車","serviceDate":"2026-08-25","leg":1,"field":"個案姓名","rawValue":"王大明","submittedAt":"2026-08-25T07:50:00+08:00"}'
   },
   {
     id: 'err_5',
@@ -1489,7 +1493,8 @@ export const mockIssueRides: IssueRideDTO[] = [
     issueType: 'import_error',
     hasConflict: false,
     description: '表單服務日期填寫為「115/8/26 下午」，非標準 ISO 日期格式致系統解析失敗',
-    vehicles: ['竹北二車']
+    vehicles: ['竹北二車'],
+    rawPayload: '{"vehicle":"竹北二車","field":"服務日期","rawValue":"115/8/26 下午","submittedAt":"2026-08-26T10:00:00+08:00"}'
   }
 ]
 

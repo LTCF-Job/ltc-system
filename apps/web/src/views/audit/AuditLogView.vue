@@ -58,12 +58,19 @@
 
       <template #table>
         <el-table :data="auditList" stripe border table-layout="auto">
-          <el-table-column prop="createdAt" label="操作時間" width="165" sortable align="center">
+          <el-table-column
+            prop="createdAt"
+            label="操作時間"
+            min-width="170"
+            sortable
+            align="center"
+            class-name="op-time-col"
+          >
             <template #default="{ row }">
               <span>{{ formatDateTime(row.createdAt) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作者" width="110" align="center">
+          <el-table-column label="操作者" min-width="110" align="center" class-name="op-actor-col">
             <template #default="{ row }">
               <span>{{ getActorDisplayName(row) }}</span>
             </template>
@@ -73,7 +80,7 @@
               <StatusTag :status="(row as any).action" preset="auditAction" variant="chip" />
             </template>
           </el-table-column>
-          <el-table-column label="實體種類" width="110" align="center">
+          <el-table-column label="實體種類" min-width="110" align="center" class-name="entity-type-col">
             <template #default="{ row }">
               <span>{{ (AUDIT_ENTITY_LABELS as any)[(row as any).entityType] || (row as any).entityType }}</span>
             </template>
@@ -621,7 +628,12 @@ onMounted(() => {
    結果欄寬永遠縮到最小、跟內容脫鉤（連頁面還有空間時也一樣，等於本來想要的「有空間就展開」失效）。
    改成只鎖 white-space: nowrap（不換行），不加 overflow: hidden，
    讓瀏覽器照實際文字寬度分配欄寬；真的超出版面時交給外層既有的 overflow-x: auto 水平捲動，不做裁切省略。 */
-.audit-log-view :deep(.entity-col .cell) {
+/* 其餘欄位（操作時間／操作者／實體種類）同理：改用 min-width 搭配 nowrap，
+   讓欄寬依內容自然撐開，不被固定 width 逼換行。 */
+.audit-log-view :deep(.entity-col .cell),
+.audit-log-view :deep(.entity-type-col .cell),
+.audit-log-view :deep(.op-time-col .cell),
+.audit-log-view :deep(.op-actor-col .cell) {
   white-space: nowrap;
 }
 

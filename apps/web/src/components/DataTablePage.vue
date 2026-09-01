@@ -19,7 +19,12 @@
 
     <!-- 資料表格區塊 -->
     <el-card class="table-card" shadow="never">
-      <div v-loading="!!loading" class="table-container" :aria-busy="loading ? 'true' : 'false'">
+      <div
+        v-loading="!!loading"
+        class="table-container"
+        :class="{ 'table-container--capped': !!maxWidth }"
+        :aria-busy="loading ? 'true' : 'false'"
+      >
         <slot name="table" />
       </div>
 
@@ -122,7 +127,11 @@ defineEmits<{
   width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
+}
 
+/* 只有帶 max-width（欄寬已依內容算好）的表格才鎖 min-width:max-content 讓表格內縮版滾動；
+   沒有 max-width 的表格要讓欄位隨版面伸展，鎖住反而會在版面還有空間時擠出多餘的橫向卷軸 */
+.table-container--capped {
   :deep(.el-table) {
     min-width: max-content;
     max-width: none;

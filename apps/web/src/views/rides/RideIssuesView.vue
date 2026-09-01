@@ -24,8 +24,9 @@
 
     <el-tabs v-model="activeTab" type="border-card" class="issues-tabs" @tab-change="fetchIssues">
       <!-- 分頁 1：混車衝突 -->
+      <!-- 說明欄與涉及車輛欄長度不定，不設 max-width 讓表格隨頁面寬度伸展，避免版面有空間時仍卡在固定寬度卡片裡出現卷軸 -->
       <el-tab-pane label="混車衝突待裁決" name="conflict">
-        <DataTablePage :max-width="990" :loading="loading">
+        <DataTablePage :loading="loading">
         <template #table>
         <el-table :data="issueList" border stripe table-layout="auto" style="width: 100%">
           <el-table-column prop="serviceDate" label="服務日期" width="110" />
@@ -65,8 +66,9 @@
       </el-tab-pane>
 
       <!-- 分頁 2：未回報清單 -->
+      <!-- 說明欄長度不定，不設 max-width 讓表格隨頁面寬度伸展，避免版面有空間時仍卡在固定寬度卡片裡出現卷軸或裁行 -->
       <el-tab-pane label="應搭未回報清單" name="unreported">
-        <DataTablePage :max-width="830" :loading="loading">
+        <DataTablePage :loading="loading">
         <template #table>
         <el-table :data="issueList" border stripe table-layout="auto" style="width: 100%">
           <el-table-column prop="serviceDate" label="服務日期" width="110" />
@@ -97,13 +99,23 @@
       </el-tab-pane>
 
       <!-- 分頁 3：表單匯入錯誤 -->
+      <!-- 錯誤訊息與原始 Payload 欄長度不定，不設 max-width 讓表格隨頁面寬度伸展，避免版面有空間時仍卡在固定寬度卡片裡出現卷軸 -->
       <el-tab-pane label="表單匯入異常" name="import_error">
-        <DataTablePage :max-width="650" :loading="loading">
+        <DataTablePage :loading="loading">
         <template #table>
         <el-table :data="issueList" border stripe table-layout="auto" style="width: 100%">
           <el-table-column prop="serviceDate" label="服務日期" width="110" />
           <el-table-column prop="caseName" label="回報文字/欄位" width="180" />
           <el-table-column prop="description" label="錯誤訊息與原始 Payload" min-width="300" show-overflow-tooltip />
+          <el-table-column label="操作" width="100" fixed="right" align="center">
+            <template #default="{ row }">
+              <TableRowActions>
+                <el-button link type="info" size="small" @click="openErrorDetail(row as any)">
+                  查看
+                </el-button>
+              </TableRowActions>
+            </template>
+          </el-table-column>
         </el-table>
         </template>
         </DataTablePage>
@@ -149,6 +161,27 @@
         />
       </template>
     </el-dialog>
+
+    <!-- 表單匯入異常詳情彈窗 -->
+    <el-dialog
+      v-model="errorDetailVisible"
+      title="表單匯入異常詳情"
+      width="min(640px, calc(100vw - 32px))"
+      destroy-on-close
+    >
+      <el-descriptions v-if="selectedError" :column="1" border>
+        <el-descriptions-item label="服務日期">{{ selectedError.serviceDate }}</el-descriptions-item>
+        <el-descriptions-item label="回報文字/欄位">{{ selectedError.caseName }}</el-descriptions-item>
+        <el-descriptions-item label="錯誤訊息">{{ selectedError.description }}</el-descriptions-item>
+        <el-descriptions-item label="原始 Payload">
+          <pre class="raw-payload">{{ selectedError.rawPayload || '（無原始 Payload 紀錄）' }}</pre>
+        </el-descriptions-item>
+      </el-descriptions>
+
+      <template #footer>
+        <el-button @click="errorDetailVisible = false">關閉</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -176,6 +209,9 @@ const allDrivers = ref<DriverDTO[]>([])
 const resolveDialogVisible = ref(false)
 const selectedIssue = ref<IssueRideDTO | null>(null)
 const submitting = ref(false)
+
+const errorDetailVisible = ref(false)
+const selectedError = ref<IssueRideDTO | null>(null)
 
 const resolveForm = reactive({
   vehicleId: '',
@@ -208,6 +244,11 @@ function openResolveDialog(row: any) {
   resolveForm.driverId = allDrivers.value[0]?.id || ''
   resolveForm.reason = '混車確認'
   resolveDialogVisible.value = true
+}
+
+function openErrorDetail(row: IssueRideDTO) {
+  selectedError.value = row
+  errorDetailVisible.value = true
 }
 
 async function handleResolveSubmit() {
@@ -259,6 +300,14 @@ onMounted(async () => {
 
 .vehicle-name { color: var(--el-text-color-regular); }
 .vehicle-separator { color: var(--el-text-color-placeholder); }
+
+.raw-payload {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--el-font-family-mono, monospace);
+  font-size: 13px;
+}
 
 .issue-filter-controls {
   display: flex;

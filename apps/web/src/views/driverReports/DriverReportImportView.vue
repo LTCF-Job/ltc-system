@@ -145,20 +145,24 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="連結既有個案" min-width="280">
+          <!-- 趟次選項文字含「第 X 趟 (去程／回程)」7 個字，120px 會被逼縮寫成省略號，
+               故加寬到 150px 讓文字完全展開；個案選單同步收斂為 170px 維持欄位總寬平衡 -->
+          <el-table-column label="連結既有個案" min-width="340">
             <template #default="{ row }">
               <div class="target-binding-box">
-                <el-select v-model="row.editCaseId" placeholder="搜尋個案" filterable clearable style="width: 220px">
+                <el-select v-model="row.editCaseId" placeholder="搜尋個案" filterable clearable style="width: 170px">
                   <el-option v-for="c in cases" :key="c.id" :label="`${c.name} (${c.code})`" :value="c.id" />
                 </el-select>
-                <el-select v-model="row.editLegSeq" placeholder="趟次" style="width: 120px">
+                <el-select v-model="row.editLegSeq" placeholder="趟次" style="width: 150px">
                   <el-option v-for="leg in LEG_SEQ_OPTIONS" :key="leg.value" :value="leg.value" :label="leg.label" />
                 </el-select>
               </div>
             </template>
           </el-table-column>
 
-          <el-table-column label="操作" width="220" align="center" fixed="right">
+          <!-- 「確認綁定」「新增個案」「略過此欄」三顆各 4 字操作按鈕併排，
+               標準 220px 欄寬會被逼超出版面，故加寬到 300px -->
+          <el-table-column label="操作" width="300" align="center" fixed="right">
             <template #default="{ row }">
               <TableRowActions>
                 <el-button link type="primary" size="small" :disabled="!row.editCaseId" @click="handleBind(row)">
