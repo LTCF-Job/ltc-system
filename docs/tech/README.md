@@ -7,7 +7,7 @@
 | [backend-framework.md](backend-framework.md) | 後端技術棧、分層架構、domain 套件、Auth 機制、response 格式、環境變數 |
 | [backend-api-reference.md](backend-api-reference.md) | 完整 API 路由表（method／path／角色／說明），含前端已預留但後端未實作的缺口 |
 | [backend-flows.md](backend-flows.md) | 後端核心業務流程逐步拆解：表單 ingestion、更正與衝突處理、未回報偵測、政府申報匯出、主檔匯入、通知、稽核留痕 |
-| [backend-business-rules.md](backend-business-rules.md) | 核心演算法與驗證規則的實際判斷邏輯：混車合併、應搭日曆計算、四趟展開、姓名比對評分、身分證驗證與加密、匯出前置檢核項目、申報表排序規則 |
+| [backend-business-rules.md](backend-business-rules.md) | 核心演算法與驗證規則的實際判斷邏輯：混車合併、應搭日曆計算、四趟展開、姓名比對評分、身分證驗證與加密、匯出前置檢核項目、申報表排序規則、申報表尚無資料來源的欄位 |
 | [frontend-framework.md](frontend-framework.md) | 前端技術棧、目錄結構、資料流與 axios 攔截器、路由權限、Mock 邊界、狀態管理原則 |
 | [frontend-pages.md](frontend-pages.md) | 完整頁面對照表：路徑、元件、允許角色、對應打的後端 API |
 | [frontend-flows.md](frontend-flows.md) | 前端核心功能流程：月曆補登、異常處理、未回報清單、表單欄位對應、匯出、批次匯入 |
