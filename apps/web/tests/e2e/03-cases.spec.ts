@@ -33,11 +33,10 @@ test.describe('03. 個案主檔與排班設定 (Cases & Schedules)', () => {
     // 填寫欄位
     await dialog.getByPlaceholder(/請輸入姓名/).fill('林小明')
     await dialog.getByPlaceholder(/1 碼英文/).fill('A123456789')
-    await dialog.getByPlaceholder(/0912345678/).fill('0911222333')
     await dialog.getByPlaceholder(/請輸入住家地址/).fill('新竹市東區中央路 100 號')
 
     // 送出
-    await dialog.getByRole('button', { name: '新增' }).click()
+    await dialog.getByRole('button', { name: '儲存' }).click()
     await expectElMessage(page, /成功/, 'success')
   })
 

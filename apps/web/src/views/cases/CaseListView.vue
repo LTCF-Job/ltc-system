@@ -15,7 +15,7 @@
       <template #filter>
         <el-input
           v-model="filters.q"
-          placeholder="搜尋姓名／編號／身分證／電話／地址"
+          placeholder="搜尋姓名／編號／身分證／地址"
           clearable
           style="width: 240px"
           @keyup.enter="handleSearch"
