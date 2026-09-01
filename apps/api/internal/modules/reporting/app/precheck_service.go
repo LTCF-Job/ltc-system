@@ -69,7 +69,7 @@ func (s *PrecheckService) RunPrecheck(ctx context.Context, periodYM string, regi
 				issues = append(issues, PrecheckIssue{
 					Severity: SeverityError,
 					Code:     "MISSING_CASE_PROFILE",
-					Message:  fmt.Sprintf("個案「%s」缺少身分證、住家地址或服務使用類型", c.Name),
+					Message:  fmt.Sprintf("個案「%s」缺少身分證、住家地址、服務類別或服務使用類型", c.Name),
 					Details: map[string]interface{}{
 						"caseId":   c.ID,
 						"caseName": c.Name,

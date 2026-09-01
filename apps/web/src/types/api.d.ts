@@ -184,8 +184,8 @@ export interface CaseDTO {
   homeAddress?: string
   region?: Region
   ltcLevel?: string
-  serviceCategory: ServiceCategory
-  serviceUsageType: ServiceUsageType
+  serviceCategory?: ServiceCategory
+  serviceUsageType?: ServiceUsageType
   claimEndDate?: string
   status: CaseStatus
   householdType?: string
@@ -215,8 +215,8 @@ export interface CreateCaseRequest {
   homeAddress?: string
   region?: Region
   ltcLevel?: string
-  serviceCategory: ServiceCategory
-  serviceUsageType: ServiceUsageType
+  serviceCategory?: ServiceCategory
+  serviceUsageType?: ServiceUsageType
   claimEndDate?: string
   status?: CaseStatus
   householdType?: string

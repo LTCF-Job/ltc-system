@@ -60,8 +60,8 @@ type CreateCaseRequest struct {
 	HomeAddress       *string
 	Region            *string
 	LTCLevel          *string
-	ServiceCategory   int
-	ServiceUsageType  int
+	ServiceCategory   *int
+	ServiceUsageType  *int
 	ClaimEndDate      *time.Time
 	Status            string
 	Remarks           *string
@@ -92,12 +92,6 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 	normName := namenorm.Normalize(req.Name)
 	if req.Status == "" {
 		req.Status = "active"
-	}
-	if req.ServiceCategory == 0 {
-		req.ServiceCategory = 1
-	}
-	if req.ServiceUsageType == 0 {
-		req.ServiceUsageType = 2
 	}
 
 	entity := Case{
@@ -194,10 +188,10 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 		entity.LTCLevel = in.LTCLevel
 	}
 	if in.ServiceCategory != nil {
-		entity.ServiceCategory = *in.ServiceCategory
+		entity.ServiceCategory = in.ServiceCategory
 	}
 	if in.ServiceUsageType != nil {
-		entity.ServiceUsageType = *in.ServiceUsageType
+		entity.ServiceUsageType = in.ServiceUsageType
 	}
 	if in.Status != nil {
 		entity.Status = *in.Status

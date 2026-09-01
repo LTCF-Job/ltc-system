@@ -222,13 +222,20 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
-		ServiceCategory: in.ServiceCategory,
-		ServiceUsageType: in.ServiceUsageType, Status: in.Status,
+		ServiceCategory: intPointerOrNilForTest(in.ServiceCategory),
+		ServiceUsageType: intPointerOrNilForTest(in.ServiceUsageType), Status: in.Status,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {
 		return uuid.Nil, err
 	}
 	return entity.ID, nil
+}
+
+func intPointerOrNilForTest(v int) *int {
+	if v == 0 {
+		return nil
+	}
+	return &v
 }
 
 func (a caseRegistrar) RecordSkipped(ctx context.Context, row importapp.CaseImportSkippedRow, actor importapp.Actor) {

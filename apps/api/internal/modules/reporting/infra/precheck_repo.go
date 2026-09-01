@@ -17,7 +17,7 @@ func NewPrecheckRepository(db *pgxpool.Pool) *PrecheckRepository {
 	return &PrecheckRepository{db: db}
 }
 
-// FindIncompleteActiveCases 查詢缺少必填資料（身分證、地址或服務類型）的有效個案。
+// FindIncompleteActiveCases 查詢缺少必填資料（身分證、地址、服務類別或服務使用類型）的有效個案。
 func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, region string) ([]app.IncompleteCase, error) {
 	if r.db == nil {
 		return []app.IncompleteCase{}, nil
@@ -27,7 +27,7 @@ func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, regi
 		SELECT id, name
 		FROM cases
 		WHERE ($1 = '' OR region = $1) AND status = 'active'
-		  AND (COALESCE(home_address, '') = '' OR service_usage_type IS NULL OR COALESCE(national_id_masked, '') = '')
+		  AND (COALESCE(home_address, '') = '' OR service_category IS NULL OR service_usage_type IS NULL OR COALESCE(national_id_masked, '') = '')
 	`
 	rows, err := r.db.Query(ctx, query, region)
 	if err != nil {

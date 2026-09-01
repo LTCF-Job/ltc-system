@@ -640,9 +640,7 @@ async function handleQuickCreateAndBind() {
   quickCreating.value = true
   try {
     const created = await createCase({
-      name: quickCreateForm.value.name,
-      serviceCategory: 1,
-      serviceUsageType: 2
+      name: quickCreateForm.value.name
     })
     cases.value = [...cases.value, created]
     await updateColumnMapping(quickCreateForm.value.columnId, {

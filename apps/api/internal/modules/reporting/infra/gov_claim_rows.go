@@ -16,8 +16,8 @@ type govClaimSourceRow struct {
 	CaseNationalIDCipher []byte
 	CaseNationalIDMasked string
 	HomeAddress          string
-	ServiceCategory      int
-	ServiceUsageType     int
+	ServiceCategory      *int
+	ServiceUsageType     *int
 
 	ServiceDate    time.Time
 	LegSeq         int16

@@ -165,8 +165,8 @@ func newSource(t *testing.T, caseID uuid.UUID, caseCode, caseName string, driver
 		CaseNationalIDCipher: mustEncrypt(t, "A202559750"),
 		CaseNationalIDMasked: "A2****9750",
 		HomeAddress:          "新竹縣竹北市光明六路264號",
-		ServiceCategory:      1,
-		ServiceUsageType:     2,
+		ServiceCategory:      intPtr(1),
+		ServiceUsageType:     intPtr(2),
 		ServiceDate:          time.Date(2026, 7, day, 0, 0, 0, 0, time.UTC),
 		LegSeq:               legSeq,
 		Direction:            strPtr(direction),
@@ -294,7 +294,10 @@ func TestCreateGovClaimJob_SkipsIncompleteSources(t *testing.T) {
 		{"沒有出發時間", func(s *app.GovClaimSource) { s.DepartTime = nil }, "NO_DEPART_TIME"},
 		{"沒有服務時長", func(s *app.GovClaimSource) { s.DurationMin = intPtr(0) }, "NO_DEPART_TIME"},
 		{"沒有司機", func(s *app.GovClaimSource) { s.DriverID = nil }, "NO_DRIVER"},
-		{"服務使用類型超出範圍", func(s *app.GovClaimSource) { s.ServiceUsageType = 0 }, "NO_SERVICE_USAGE_TYPE"},
+		{"服務類別未設定", func(s *app.GovClaimSource) { s.ServiceCategory = nil }, "NO_SERVICE_CATEGORY"},
+		{"服務類別超出範圍", func(s *app.GovClaimSource) { s.ServiceCategory = intPtr(9) }, "NO_SERVICE_CATEGORY"},
+		{"服務使用類型未設定", func(s *app.GovClaimSource) { s.ServiceUsageType = nil }, "NO_SERVICE_USAGE_TYPE"},
+		{"服務使用類型超出範圍", func(s *app.GovClaimSource) { s.ServiceUsageType = intPtr(0) }, "NO_SERVICE_USAGE_TYPE"},
 		{"單價為零", func(s *app.GovClaimSource) { s.UnitPrice = 0 }, "NO_UNIT_PRICE"},
 	}
 

@@ -90,7 +90,7 @@
             </el-col>
             <el-col :xs="24" :lg="12">
               <el-form-item label="服務使用類型" prop="serviceUsageType">
-                <el-select v-model="editForm.serviceUsageType" style="width: 100%">
+                <el-select v-model="editForm.serviceUsageType" placeholder="未選擇" clearable style="width: 100%">
                   <el-option :value="1" label="1. 社區式長照機構" />
                   <el-option :value="2" label="2. 社區服務據點(不含身障類)" />
                   <el-option :value="3" label="3. 輔具中心" />
@@ -271,8 +271,8 @@ const editForm = reactive<UpdateCaseRequest>({
   name: '',
   region: 'miaoli',
   homeAddress: '',
-  serviceCategory: 1,
-  serviceUsageType: 2,
+  serviceCategory: undefined,
+  serviceUsageType: undefined,
   claimEndDate: '',
   status: 'active',
   householdType: '',
@@ -316,8 +316,8 @@ async function fetchDetail() {
     editForm.name = res.name || ''
     editForm.region = res.region || 'miaoli'
     editForm.homeAddress = res.homeAddress || ''
-    editForm.serviceCategory = res.serviceCategory || 1
-    editForm.serviceUsageType = res.serviceUsageType || 2
+    editForm.serviceCategory = res.serviceCategory
+    editForm.serviceUsageType = res.serviceUsageType
     editForm.claimEndDate = res.claimEndDate ? String(res.claimEndDate).slice(0, 10) : ''
     editForm.status = res.status || 'active'
     editForm.householdType = res.householdType || ''

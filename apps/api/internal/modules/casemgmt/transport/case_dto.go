@@ -21,8 +21,8 @@ type CreateCaseRequest struct {
 	HomeAddress       *string    `json:"homeAddress"`
 	Region            *string    `json:"region"`
 	LTCLevel          *string    `json:"ltcLevel"`
-	ServiceCategory   int        `json:"serviceCategory"`
-	ServiceUsageType  int        `json:"serviceUsageType"`
+	ServiceCategory   *int       `json:"serviceCategory"`
+	ServiceUsageType  *int       `json:"serviceUsageType"`
 	ClaimEndDate      *time.Time `json:"claimEndDate"`
 	Status            string     `json:"status"`
 	Remarks           *string    `json:"remarks"`
@@ -124,8 +124,8 @@ type CaseResponse struct {
 	HomeAddress       *string    `json:"homeAddress"`
 	Region            *string    `json:"region"`
 	LTCLevel          *string    `json:"ltcLevel"`
-	ServiceCategory   int        `json:"serviceCategory"`
-	ServiceUsageType  int        `json:"serviceUsageType"`
+	ServiceCategory   *int       `json:"serviceCategory"`
+	ServiceUsageType  *int       `json:"serviceUsageType"`
 	ClaimEndDate      *time.Time `json:"claimEndDate"`
 	Status            string     `json:"status"`
 	Remarks           *string    `json:"remarks"`

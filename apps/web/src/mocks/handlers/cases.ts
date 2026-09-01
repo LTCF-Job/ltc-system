@@ -364,8 +364,6 @@ export const casesHandlers = [
         registeredAddress: row.registeredAddress || undefined,
         homeAddress: row.homeAddress || undefined,
         status: 'active',
-        serviceCategory: 1,
-        serviceUsageType: 2,
         remarks: row.remarks || undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()

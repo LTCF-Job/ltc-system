@@ -38,8 +38,8 @@ type Case struct {
 	HomeAddress       *string
 	Region            *string
 	LTCLevel          *string
-	ServiceCategory   int
-	ServiceUsageType  int
+	ServiceCategory   *int
+	ServiceUsageType  *int
 	ClaimEndDate      *time.Time
 	Status            string
 	Remarks           *string

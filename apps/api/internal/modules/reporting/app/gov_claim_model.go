@@ -27,13 +27,14 @@ const (
 // 申報列被跳過的原因代碼。缺資料的趟次寧可跳過並回報，也不讓 govform.BuildClaimRow
 // 的預設值把它補成一列看似正常的申報資料。
 const (
-	SkipReasonNoScheduleLeg  = "NO_SCHEDULE_LEG"
-	SkipReasonNoDepartTime   = "NO_DEPART_TIME"
-	SkipReasonNoDriver       = "NO_DRIVER"
-	SkipReasonNoUsageType    = "NO_SERVICE_USAGE_TYPE"
-	SkipReasonNoUnitPrice    = "NO_UNIT_PRICE"
-	SkipReasonNoNationalID   = "NO_NATIONAL_ID"
-	SkipReasonBuildRowFailed = "BUILD_ROW_FAILED"
+	SkipReasonNoScheduleLeg     = "NO_SCHEDULE_LEG"
+	SkipReasonNoDepartTime      = "NO_DEPART_TIME"
+	SkipReasonNoDriver          = "NO_DRIVER"
+	SkipReasonNoServiceCategory = "NO_SERVICE_CATEGORY"
+	SkipReasonNoUsageType       = "NO_SERVICE_USAGE_TYPE"
+	SkipReasonNoUnitPrice       = "NO_UNIT_PRICE"
+	SkipReasonNoNationalID      = "NO_NATIONAL_ID"
+	SkipReasonBuildRowFailed    = "BUILD_ROW_FAILED"
 )
 
 // GovClaimSource 代表組出單列申報資料所需的原始查詢結果。
@@ -46,8 +47,8 @@ type GovClaimSource struct {
 	CaseNationalIDCipher []byte
 	CaseNationalIDMasked string
 	HomeAddress          string
-	ServiceCategory      int
-	ServiceUsageType     int
+	ServiceCategory      *int
+	ServiceUsageType     *int
 
 	ServiceDate    time.Time
 	LegSeq         int16

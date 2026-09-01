@@ -400,13 +400,13 @@ func newTestSource(caseID uuid.UUID, code, name string, day int, legSeq int16, d
 		CaseNationalIDCipher:   mustEncrypt("A202559750"),
 		CaseNationalIDMasked:   "A2****9750",
 		HomeAddress:            "新竹縣竹北市光明六路264號",
-		ServiceCategory:        1,
-		ServiceUsageType:       2,
+		ServiceCategory:        intPtr(1),
+		ServiceUsageType:       intPtr(2),
 		ServiceDate:            time.Date(2026, 7, day, 0, 0, 0, 0, time.UTC),
 		LegSeq:                 legSeq,
 		Direction:              &direction,
 		DepartTime:             &departTime,
-		DurationMin:            durationPtr(10),
+		DurationMin:            intPtr(10),
 		ServiceCode:            "BD03",
 		UnitPrice:              115,
 		DistanceKM:             5,
@@ -417,7 +417,7 @@ func newTestSource(caseID uuid.UUID, code, name string, day int, legSeq int16, d
 	}
 }
 
-func durationPtr(v int) *int { return &v }
+func intPtr(v int) *int { return &v }
 
 func mustEncrypt(plain string) []byte {
 	cipher, err := crypto.Encrypt(plain, testKey)

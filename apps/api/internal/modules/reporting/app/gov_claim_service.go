@@ -272,7 +272,7 @@ func (s *GovClaimService) buildCaseRows(group caseGroup, skips *skipTally) ([]go
 			NationalIDPlain:  caseNationalID,
 			ServiceDate:      item.ServiceDate,
 			ServiceCode:      item.ServiceCode,
-			ServiceCategory:  item.ServiceCategory,
+			ServiceCategory:  *item.ServiceCategory,
 			UnitPrice:        item.UnitPrice,
 			DriverNationalID: driverNationalID,
 			DepartTime:       departAt,
@@ -284,7 +284,7 @@ func (s *GovClaimService) buildCaseRows(group caseGroup, skips *skipTally) ([]go
 			SiteAddress:      item.SiteAddress,
 			DistanceKM:       item.DistanceKM,
 			PlateNo:          item.PlateNo,
-			ServiceUsageType: item.ServiceUsageType,
+			ServiceUsageType: *item.ServiceUsageType,
 		})
 		if err != nil {
 			skips.add(group, SkipReasonBuildRowFailed, 1)
@@ -378,7 +378,9 @@ func validateSource(item GovClaimSource) (string, bool) {
 		return SkipReasonNoDepartTime, false
 	case item.DriverID == nil || len(item.DriverNationalIDCipher) == 0:
 		return SkipReasonNoDriver, false
-	case item.ServiceUsageType < 1 || item.ServiceUsageType > 4:
+	case item.ServiceCategory == nil || (*item.ServiceCategory != 1 && *item.ServiceCategory != 2):
+		return SkipReasonNoServiceCategory, false
+	case item.ServiceUsageType == nil || *item.ServiceUsageType < 1 || *item.ServiceUsageType > 4:
 		return SkipReasonNoUsageType, false
 	case item.UnitPrice <= 0:
 		return SkipReasonNoUnitPrice, false

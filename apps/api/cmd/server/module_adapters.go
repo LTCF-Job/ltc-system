@@ -170,8 +170,8 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
-		ServiceCategory:  in.ServiceCategory,
-		ServiceUsageType: in.ServiceUsageType, Status: in.Status, Remarks: in.Remarks,
+		ServiceCategory:  intPointerOrNil(in.ServiceCategory),
+		ServiceUsageType: intPointerOrNil(in.ServiceUsageType), Status: in.Status, Remarks: in.Remarks,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {
 		return uuid.Nil, err
@@ -183,6 +183,15 @@ func (a caseRegistrar) RecordSkipped(ctx context.Context, row importapp.CaseImpo
 	a.svc.RecordSkippedCaseImport(ctx, caseapp.CaseImportSkippedRow{
 		RowIndex: row.RowIndex, CaseName: row.CaseName, Reasons: row.Reasons, RawValues: row.RawValues,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
+}
+
+// intPointerOrNil 匯入範本目前沒有服務類別／服務使用類型欄位，一律視為未提供；
+// 0 是 Go 的零值而非使用者填的真實資料，不得當成合法值寫入。
+func intPointerOrNil(v int) *int {
+	if v == 0 {
+		return nil
+	}
+	return &v
 }
 
 // caregiverSiteLookup 讓 caregiver 匯入時以名稱比對單位。
