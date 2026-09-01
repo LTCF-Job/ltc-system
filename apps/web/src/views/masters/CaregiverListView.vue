@@ -104,7 +104,7 @@
         <div v-loading="pendingLoading" class="pending-panel">
           <el-empty v-if="!pendingLoading && pendingCaregivers.length === 0" description="目前沒有待維護的照護人員" />
           <el-table v-else :data="pendingCaregivers" border stripe table-layout="auto" style="width: 100%">
-            <el-table-column prop="name" label="姓名" width="120" />
+            <el-table-column prop="name" label="姓名" min-width="120" class-name="name-col" />
             <el-table-column label="單位" min-width="220">
               <template #default="{ row }">
                 <span v-if="row.siteName">{{ row.siteName }}</span>
@@ -584,6 +584,13 @@ executeFetch()
 
 /* 同樣道理：span 沒鎖 nowrap，table-layout: auto 也救不了，聯絡方式還是會被壓成多行。 */
 .contact-value {
+  white-space: nowrap;
+}
+
+/* 姓名欄沒有自訂 template，只能用 class-name 打進 el-table 內部 cell 鎖 nowrap；
+   table-layout="auto" 底下固定 width 只會鎖死欄寬讓文字換行、不會依內容自動撐開，
+   min-width 欄位沒鎖 nowrap 一樣會被壓成逐字換行（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
+:deep(.name-col .cell) {
   white-space: nowrap;
 }
 
