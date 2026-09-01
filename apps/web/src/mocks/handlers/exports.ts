@@ -5,7 +5,8 @@ import {
   mockCases,
   mockSites,
   mockVehicles,
-  mockDrivers
+  mockDrivers,
+  mockAuditLogs
 } from '../data/mockData'
 import { createGovClaimExcelBlob, createGovClaimZipBlob } from '../utils/mockExcel'
 import { listDemoBoardedRides } from '../utils/demoRides'
@@ -45,6 +46,8 @@ export const exportsHandlers = [
     }
 
     const now = new Date().toISOString()
+    const totalCases = files.length
+    const totalRows = files.reduce((sum, f) => sum + f.rowCount, 0)
     const newJob: ExportJobDTO = {
       id: jobId,
       jobType: 'gov_claim',
@@ -52,15 +55,46 @@ export const exportsHandlers = [
       region: body.region || undefined,
       mode,
       status: 'succeeded',
-      totalCases: files.length,
-      totalRows: files.reduce((sum, f) => sum + f.rowCount, 0),
+      totalCases,
+      totalRows,
       files,
       zipFileName: mode === 'zip' ? `gov-claim-${body.region || 'all'}-${periodYm}.zip` : undefined,
       downloadUrl: mode === 'zip' ? `/api/v1/exports/${jobId}/download` : undefined,
+      createdByName: '當前使用者',
       createdAt: now,
       completedAt: now
     }
     mockExportJobs.unshift(newJob)
+
+    mockAuditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      actorId: 'usr_staff',
+      actorName: '當前使用者',
+      actorRole: 'staff',
+      action: 'export',
+      entityType: 'export_jobs',
+      entityId: jobId,
+      entityName: `政府申報匯出 (${periodYm})`,
+      beforeData: undefined,
+      afterData: {
+        periodYm,
+        region: body.region || '',
+        mode,
+        totalCases,
+        totalRows,
+        cases: files.map((f) => ({
+          caseCode: f.caseCode,
+          caseName: f.caseName,
+          region: f.region,
+          fileName: f.fileName,
+          rowCount: f.rowCount
+        }))
+      },
+      ipAddress: '127.0.0.1',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      createdAt: now
+    })
+
     return HttpResponse.json(newJob, { status: 202 })
   }),
 

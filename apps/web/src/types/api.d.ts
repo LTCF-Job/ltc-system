@@ -722,6 +722,7 @@ export interface ExportJobDTO {
   downloadUrl?: string
   precheck?: PrecheckResultDTO
   errorMessage?: string
+  createdByName?: string
   createdAt: string
   completedAt?: string
 }

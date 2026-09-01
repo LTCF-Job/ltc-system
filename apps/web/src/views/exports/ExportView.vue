@@ -192,6 +192,9 @@
         </el-table-column>
         <el-table-column prop="totalCases" label="個案數" width="90" align="center" />
         <el-table-column prop="totalRows" label="申報行數" width="100" align="center" />
+        <el-table-column prop="createdByName" label="操作人員" width="140" align="center">
+          <template #default="{ row }">{{ row.createdByName || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="createdAt" label="產生時間" width="180" align="center">
           <template #default="{ row }">
             <span>{{ formatDateTime(row.createdAt) }}</span>
