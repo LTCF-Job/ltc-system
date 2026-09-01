@@ -232,15 +232,17 @@ func newTestExportHandler(t *testing.T, mode app.GovClaimMode) (*ExportHandler, 
 		infra.NewExcelRenderer(),
 		infra.NewZipArchiver(),
 		app.NewPrecheckService(stubPrecheckRepo{}),
+		discardAuditWriter{},
 	)
 	h := NewExportHandler(app.NewPrecheckService(stubPrecheckRepo{}), svc)
 
 	job, err := svc.CreateGovClaimJob(context.Background(), app.CreateGovClaimInput{
-		PeriodYM:  "11507",
-		Region:    "hsinchu",
-		CaseIDs:   []uuid.UUID{testCaseID, testCaseID2},
-		Mode:      mode,
-		CreatedBy: uuid.New(),
+		PeriodYM:      "11507",
+		Region:        "hsinchu",
+		CaseIDs:       []uuid.UUID{testCaseID, testCaseID2},
+		Mode:          mode,
+		CreatedBy:     uuid.New(),
+		CreatedByName: "測試操作員",
 	})
 	require.NoError(t, err)
 	return h, job.ID
@@ -258,6 +260,7 @@ func newExportHandlerWithPrecheckFailure(t *testing.T) *ExportHandler {
 		infra.NewExcelRenderer(),
 		infra.NewZipArchiver(),
 		precheck,
+		discardAuditWriter{},
 	)
 	return NewExportHandler(precheck, svc)
 }
@@ -287,6 +290,10 @@ func performRequest(h *ExportHandler, method, path string, body interface{}) *ht
 }
 
 // --- 測試替身 ---
+
+type discardAuditWriter struct{}
+
+func (discardAuditWriter) Write(context.Context, app.AuditEntry) error { return nil }
 
 type stubSourceReader struct {
 	sources []app.GovClaimSource
@@ -325,13 +332,15 @@ func (m *memoryExportStore) CreateJob(_ context.Context, job app.ExportJobCreate
 		mode = app.GovClaimModeZip
 	}
 	m.job = app.GovClaimJob{
-		ID:        uuid.New(),
-		JobType:   job.JobType,
-		PeriodYM:  job.PeriodYM,
-		Region:    job.Region,
-		Mode:      mode,
-		Status:    app.ExportStatusRunning,
-		CreatedAt: time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
+		ID:            uuid.New(),
+		JobType:       job.JobType,
+		PeriodYM:      job.PeriodYM,
+		Region:        job.Region,
+		Mode:          mode,
+		Status:        app.ExportStatusRunning,
+		CreatedBy:     job.CreatedBy,
+		CreatedByName: job.CreatedByName,
+		CreatedAt:     time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
 	}
 	return m.job.ID, nil
 }

@@ -10,6 +10,7 @@ import (
 	masterapp "ltc-system/apps/api/internal/modules/masterdata/app"
 	notifyapp "ltc-system/apps/api/internal/modules/notification/app"
 	opsapp "ltc-system/apps/api/internal/modules/ops/app"
+	reportingapp "ltc-system/apps/api/internal/modules/reporting/app"
 	rideapp "ltc-system/apps/api/internal/modules/ride/app"
 )
 
@@ -81,5 +82,14 @@ func (w opsAuditWriter) Write(ctx context.Context, e opsapp.AuditEntry) error {
 	return w.svc.Write(ctx, auditapp.Entry{
 		ActorID: e.ActorID, ActorRole: e.ActorRole, Action: e.Action, EntityType: e.EntityType,
 		EntityID: e.EntityID, BeforeData: e.BeforeData, AfterData: e.AfterData,
+	})
+}
+
+type reportingAuditWriter struct{ svc *auditapp.Service }
+
+func (w reportingAuditWriter) Write(ctx context.Context, e reportingapp.AuditEntry) error {
+	return w.svc.Write(ctx, auditapp.Entry{
+		ActorID: e.ActorID, ActorRole: e.ActorRole, Action: e.Action, EntityType: e.EntityType,
+		EntityID: e.EntityID, AfterData: e.AfterData,
 	})
 }

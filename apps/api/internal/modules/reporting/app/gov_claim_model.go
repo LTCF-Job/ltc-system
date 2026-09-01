@@ -110,30 +110,64 @@ type ClaimSkip struct {
 // GovClaimJob 代表一次政府申報匯出工作。
 // Skipped 只在建立當下有值，不會寫入資料庫，因此讀取歷史工作時為空。
 type GovClaimJob struct {
-	ID           uuid.UUID
-	JobType      string
-	PeriodYM     string
-	Region       string
-	Mode         GovClaimMode
-	Status       string
-	TotalCases   int
-	TotalRows    int
-	Files        []GovClaimCaseFile
-	Skipped      []ClaimSkip
-	ErrorMessage string
-	CreatedAt    time.Time
-	FinishedAt   *time.Time
+	ID            uuid.UUID
+	JobType       string
+	PeriodYM      string
+	Region        string
+	Mode          GovClaimMode
+	Status        string
+	TotalCases    int
+	TotalRows     int
+	Files         []GovClaimCaseFile
+	Skipped       []ClaimSkip
+	ErrorMessage  string
+	CreatedBy     uuid.UUID
+	CreatedByName string
+	CreatedAt     time.Time
+	FinishedAt    *time.Time
 }
 
 // ExportJobCreate 代表建立匯出工作時要寫入 export_jobs 的欄位。
 type ExportJobCreate struct {
-	JobType   string
-	PeriodYM  string
-	Region    string
-	Format    string
-	CaseIDs   []uuid.UUID
-	Precheck  *PrecheckReport
-	CreatedBy uuid.UUID
+	JobType       string
+	PeriodYM      string
+	Region        string
+	Format        string
+	CaseIDs       []uuid.UUID
+	Precheck      *PrecheckReport
+	CreatedBy     uuid.UUID
+	CreatedByName string
+}
+
+// AuditEntry 代表一筆待寫入的稽核紀錄。AfterData 是會被序列化進 audit_log JSONB 欄位的快照，
+// 其形狀即為稽核紀錄的資料契約。
+type AuditEntry struct {
+	ActorID    *uuid.UUID
+	ActorRole  *string
+	Action     string
+	EntityType string
+	EntityID   *string
+	AfterData  interface{}
+}
+
+// ExportJobAuditSnapshot 是寫入稽核日誌的匯出工作快照，json tag 需與既有稽核紀錄慣例一致。
+// Cases 逐案列出這次實際匯出了哪些個案的哪些檔案，讓稽核紀錄看得出「匯出的內容」而不只是統計數字。
+type ExportJobAuditSnapshot struct {
+	PeriodYM   string                   `json:"periodYm"`
+	Region     string                   `json:"region"`
+	Mode       string                   `json:"mode"`
+	TotalCases int                      `json:"totalCases"`
+	TotalRows  int                      `json:"totalRows"`
+	Cases      []ExportJobAuditCaseFile `json:"cases"`
+}
+
+// ExportJobAuditCaseFile 是稽核快照中單一個案的匯出檔案摘要。
+type ExportJobAuditCaseFile struct {
+	CaseCode string `json:"caseCode"`
+	CaseName string `json:"caseName"`
+	Region   string `json:"region"`
+	FileName string `json:"fileName"`
+	RowCount int    `json:"rowCount"`
 }
 
 // NationalIDCiphers 保存重繪快照時補回身分證欄所需的密文。

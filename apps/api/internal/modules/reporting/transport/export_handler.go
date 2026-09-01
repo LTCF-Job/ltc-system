@@ -106,11 +106,13 @@ func (h *ExportHandler) Create(c *gin.Context) {
 	}
 
 	job, err := h.govClaimService.CreateGovClaimJob(c.Request.Context(), app.CreateGovClaimInput{
-		PeriodYM:  req.PeriodYM,
-		Region:    req.Region,
-		CaseIDs:   caseIDs,
-		Mode:      app.GovClaimMode(req.Mode),
-		CreatedBy: auth.GetActorID(c),
+		PeriodYM:      req.PeriodYM,
+		Region:        req.Region,
+		CaseIDs:       caseIDs,
+		Mode:          app.GovClaimMode(req.Mode),
+		CreatedBy:     auth.GetActorID(c),
+		CreatedByName: auth.GetActorName(c),
+		ActorRole:     auth.GetActorRole(c),
 	})
 	if err != nil {
 		respondExportError(c, err)

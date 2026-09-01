@@ -27,3 +27,8 @@ type ExportJobStore interface {
 type Archiver interface {
 	BuildZip(entries []ZipEntry) ([]byte, error)
 }
+
+// AuditWriter 定義匯出留痕的寫入邊界。
+type AuditWriter interface {
+	Write(ctx context.Context, e AuditEntry) error
+}

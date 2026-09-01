@@ -45,10 +45,10 @@ func (r *ExportJobRepository) CreateJob(ctx context.Context, job app.ExportJobCr
 
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO export_jobs (job_type, period_ym, region, format, filter_case_ids, status, precheck, created_by)
-		VALUES ($1, $2, $3, $4, $5::uuid[], 'running', $6::jsonb, $7)
+		INSERT INTO export_jobs (job_type, period_ym, region, format, filter_case_ids, status, precheck, created_by, created_by_name)
+		VALUES ($1, $2, $3, $4, $5::uuid[], 'running', $6::jsonb, $7, $8)
 		RETURNING id
-	`, job.JobType, job.PeriodYM, job.Region, job.Format, caseIDs, precheckJSON, job.CreatedBy).Scan(&id)
+	`, job.JobType, job.PeriodYM, job.Region, job.Format, caseIDs, precheckJSON, job.CreatedBy, job.CreatedByName).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("insert export job: %w", err)
 	}
@@ -127,11 +127,11 @@ func (r *ExportJobRepository) GetJob(ctx context.Context, jobID uuid.UUID) (app.
 
 	var row exportJobRow
 	err := r.db.QueryRow(ctx, `
-		SELECT id, job_type, period_ym, region, format, status, error_message, created_at, finished_at
+		SELECT id, job_type, period_ym, region, format, status, error_message, created_by, created_by_name, created_at, finished_at
 		FROM export_jobs WHERE id = $1
 	`, jobID).Scan(
 		&row.ID, &row.JobType, &row.PeriodYM, &row.Region, &row.Format,
-		&row.Status, &row.ErrorMessage, &row.CreatedAt, &row.FinishedAt,
+		&row.Status, &row.ErrorMessage, &row.CreatedBy, &row.CreatedByName, &row.CreatedAt, &row.FinishedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return app.GovClaimJob{}, app.ErrExportJobNotFound
@@ -166,7 +166,8 @@ func (r *ExportJobRepository) ListJobs(ctx context.Context, page, pageSize int) 
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT j.id, j.job_type, j.period_ym, j.region, j.format, j.status, j.error_message, j.created_at, j.finished_at,
+		SELECT j.id, j.job_type, j.period_ym, j.region, j.format, j.status, j.error_message,
+		       j.created_by, j.created_by_name, j.created_at, j.finished_at,
 		       COALESCE(f.file_count, 0)::int, COALESCE(f.row_total, 0)::int
 		FROM export_jobs j
 		LEFT JOIN (
@@ -186,7 +187,7 @@ func (r *ExportJobRepository) ListJobs(ctx context.Context, page, pageSize int) 
 		var row exportJobRow
 		if err := rows.Scan(
 			&row.ID, &row.JobType, &row.PeriodYM, &row.Region, &row.Format,
-			&row.Status, &row.ErrorMessage, &row.CreatedAt, &row.FinishedAt,
+			&row.Status, &row.ErrorMessage, &row.CreatedBy, &row.CreatedByName, &row.CreatedAt, &row.FinishedAt,
 			&row.TotalCases, &row.TotalRows,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan export job: %w", err)

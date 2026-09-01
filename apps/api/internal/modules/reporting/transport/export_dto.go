@@ -45,30 +45,32 @@ type exportJobResponse struct {
 	Region       string                  `json:"region"`
 	Mode         string                  `json:"mode"`
 	Status       string                  `json:"status"`
-	TotalCases   int                     `json:"totalCases"`
-	TotalRows    int                     `json:"totalRows"`
-	Files        []exportJobFileResponse `json:"files,omitempty"`
-	Skipped      []exportJobSkipResponse `json:"skipped,omitempty"`
-	ZipFileName  string                  `json:"zipFileName,omitempty"`
-	DownloadURL  string                  `json:"downloadUrl,omitempty"`
-	ErrorMessage string                  `json:"errorMessage,omitempty"`
-	CreatedAt    string                  `json:"createdAt"`
-	CompletedAt  string                  `json:"completedAt,omitempty"`
+	TotalCases    int                     `json:"totalCases"`
+	TotalRows     int                     `json:"totalRows"`
+	Files         []exportJobFileResponse `json:"files,omitempty"`
+	Skipped       []exportJobSkipResponse `json:"skipped,omitempty"`
+	ZipFileName   string                  `json:"zipFileName,omitempty"`
+	DownloadURL   string                  `json:"downloadUrl,omitempty"`
+	ErrorMessage  string                  `json:"errorMessage,omitempty"`
+	CreatedByName string                  `json:"createdByName,omitempty"`
+	CreatedAt     string                  `json:"createdAt"`
+	CompletedAt   string                  `json:"completedAt,omitempty"`
 }
 
 // toExportJobResponse 組出單筆工作的完整回應，含逐案下載連結。
 func toExportJobResponse(job app.GovClaimJob) exportJobResponse {
 	resp := exportJobResponse{
-		ID:           job.ID.String(),
-		JobType:      job.JobType,
-		PeriodYM:     job.PeriodYM,
-		Region:       job.Region,
-		Mode:         string(job.Mode),
-		Status:       job.Status,
-		TotalCases:   job.TotalCases,
-		TotalRows:    job.TotalRows,
-		ErrorMessage: job.ErrorMessage,
-		CreatedAt:    job.CreatedAt.Format(time.RFC3339),
+		ID:            job.ID.String(),
+		JobType:       job.JobType,
+		PeriodYM:      job.PeriodYM,
+		Region:        job.Region,
+		Mode:          string(job.Mode),
+		Status:        job.Status,
+		TotalCases:    job.TotalCases,
+		TotalRows:     job.TotalRows,
+		ErrorMessage:  job.ErrorMessage,
+		CreatedByName: job.CreatedByName,
+		CreatedAt:     job.CreatedAt.Format(time.RFC3339),
 	}
 	if job.FinishedAt != nil {
 		resp.CompletedAt = job.FinishedAt.Format(time.RFC3339)
@@ -109,17 +111,18 @@ func toExportJobListResponse(jobs []app.GovClaimJob) []exportJobResponse {
 	result := make([]exportJobResponse, 0, len(jobs))
 	for _, job := range jobs {
 		result = append(result, exportJobResponse{
-			ID:           job.ID.String(),
-			JobType:      job.JobType,
-			PeriodYM:     job.PeriodYM,
-			Region:       job.Region,
-			Mode:         string(job.Mode),
-			Status:       job.Status,
-			TotalCases:   job.TotalCases,
-			TotalRows:    job.TotalRows,
-			ErrorMessage: job.ErrorMessage,
-			CreatedAt:    job.CreatedAt.Format(time.RFC3339),
-			CompletedAt:  optionalTime(job.FinishedAt),
+			ID:            job.ID.String(),
+			JobType:       job.JobType,
+			PeriodYM:      job.PeriodYM,
+			Region:        job.Region,
+			Mode:          string(job.Mode),
+			Status:        job.Status,
+			TotalCases:    job.TotalCases,
+			TotalRows:     job.TotalRows,
+			ErrorMessage:  job.ErrorMessage,
+			CreatedByName: job.CreatedByName,
+			CreatedAt:     job.CreatedAt.Format(time.RFC3339),
+			CompletedAt:   optionalTime(job.FinishedAt),
 		})
 	}
 	return result

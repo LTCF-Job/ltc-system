@@ -118,6 +118,10 @@ func (a *recordingArchiver) BuildZip(entries []app.ZipEntry) ([]byte, error) {
 	return []byte("PK-zip"), nil
 }
 
+type discardAuditWriter struct{}
+
+func (discardAuditWriter) Write(context.Context, app.AuditEntry) error { return nil }
+
 type stubPrecheckRepo struct {
 	incomplete []app.IncompleteCase
 }
@@ -188,7 +192,7 @@ func newSource(t *testing.T, caseID uuid.UUID, caseCode, caseName string, driver
 
 func newService(reader app.GovClaimSourceReader, store app.ExportJobStore, renderer app.Renderer, archiver app.Archiver, precheckRepo app.PrecheckRepositoryPort) *app.GovClaimService {
 	cfg := &config.Config{EncryptionKey: testEncryptionKey}
-	return app.NewGovClaimService(cfg, reader, store, renderer, archiver, app.NewPrecheckService(precheckRepo))
+	return app.NewGovClaimService(cfg, reader, store, renderer, archiver, app.NewPrecheckService(precheckRepo), discardAuditWriter{})
 }
 
 func newInput(mode app.GovClaimMode, caseIDs ...uuid.UUID) app.CreateGovClaimInput {

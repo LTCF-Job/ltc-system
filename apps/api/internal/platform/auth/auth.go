@@ -18,6 +18,7 @@ const (
 	ContextKeyActorID   = "actor_id"
 	ContextKeyActorRole = "actor_role"
 	ContextKeyUserEmail = "user_email"
+	ContextKeyActorName = "actor_name"
 )
 
 // newSupabaseJWKS 建立向 Supabase JWKS 端點取金鑰並自動輪替的 Keyfunc；未設定 URL 時回傳 nil。
@@ -38,20 +39,33 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
 	}
 
 	role := "viewer"
+	name := ""
 	if userMetadata, ok := claims["user_metadata"].(map[string]interface{}); ok {
 		if r, ok := userMetadata["role"].(string); ok {
 			role = r
+		}
+		if n, ok := userMetadata["display_name"].(string); ok {
+			name = n
 		}
 	} else if appMetadata, ok := claims["app_metadata"].(map[string]interface{}); ok {
 		if r, ok := appMetadata["role"].(string); ok {
 			role = r
 		}
+		if n, ok := appMetadata["display_name"].(string); ok {
+			name = n
+		}
 	} else if r, ok := claims["role"].(string); ok {
 		role = r
+	}
+	if name == "" {
+		if email, ok := claims["email"].(string); ok {
+			name = email
+		}
 	}
 
 	c.Set(ContextKeyActorID, actorID)
 	c.Set(ContextKeyActorRole, role)
+	c.Set(ContextKeyActorName, name)
 }
 
 // Middleware 驗證傳入的 Supabase JWT Token 簽章並將使用者角色與 ID 注入 Gin Context。
@@ -74,6 +88,7 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 				c.Set(ContextKeyActorID, actorID)
 				c.Set(ContextKeyActorRole, mockRole)
 				c.Set(ContextKeyUserEmail, "dev@example.com")
+				c.Set(ContextKeyActorName, "dev@example.com")
 				c.Next()
 				return
 			}
@@ -108,6 +123,7 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 			c.Set(ContextKeyActorID, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
 			c.Set(ContextKeyActorRole, role)
 			c.Set(ContextKeyUserEmail, role+"@example.com")
+			c.Set(ContextKeyActorName, role+"@example.com")
 			c.Next()
 			return
 		}
@@ -120,6 +136,7 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 				c.Set(ContextKeyActorID, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
 				c.Set(ContextKeyActorRole, "admin")
 				c.Set(ContextKeyUserEmail, "admin@example.com")
+				c.Set(ContextKeyActorName, "admin@example.com")
 				c.Next()
 				return
 			}
@@ -186,4 +203,15 @@ func GetActorRole(c *gin.Context) string {
 		}
 	}
 	return "viewer"
+}
+
+// GetActorName 從 Context 取出當前使用者的顯示名稱（來源為 JWT user_metadata.display_name，
+// 缺漏時退回 email）；兩者皆無時回傳空字串，由呼叫端決定顯示預設值。
+func GetActorName(c *gin.Context) string {
+	if val, exists := c.Get(ContextKeyActorName); exists {
+		if n, ok := val.(string); ok {
+			return n
+		}
+	}
+	return ""
 }

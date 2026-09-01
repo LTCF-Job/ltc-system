@@ -24,11 +24,13 @@ var periodYMPattern = regexp.MustCompile(`^\d{5}$`)
 
 // CreateGovClaimInput 代表建立政府申報匯出工作的輸入條件。
 type CreateGovClaimInput struct {
-	PeriodYM  string
-	Region    string
-	CaseIDs   []uuid.UUID
-	Mode      GovClaimMode
-	CreatedBy uuid.UUID
+	PeriodYM      string
+	Region        string
+	CaseIDs       []uuid.UUID
+	Mode          GovClaimMode
+	CreatedBy     uuid.UUID
+	CreatedByName string
+	ActorRole     string
 }
 
 // GovClaimService 產生政府申報工作簿：查詢趟次、組出 33 欄申報列、落地快照並輸出檔案。
@@ -39,6 +41,7 @@ type GovClaimService struct {
 	renderer Renderer
 	archiver Archiver
 	precheck *PrecheckService
+	audit    AuditWriter
 }
 
 // NewGovClaimService 建立 GovClaimService 實例。
@@ -49,6 +52,7 @@ func NewGovClaimService(
 	renderer Renderer,
 	archiver Archiver,
 	precheck *PrecheckService,
+	audit AuditWriter,
 ) *GovClaimService {
 	return &GovClaimService{
 		cfg:      cfg,
@@ -57,6 +61,7 @@ func NewGovClaimService(
 		renderer: renderer,
 		archiver: archiver,
 		precheck: precheck,
+		audit:    audit,
 	}
 }
 
@@ -82,13 +87,14 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 	}
 
 	jobID, err := s.store.CreateJob(ctx, ExportJobCreate{
-		JobType:   govClaimJobType,
-		PeriodYM:  periodYM,
-		Region:    input.Region,
-		Format:    format,
-		CaseIDs:   input.CaseIDs,
-		Precheck:  report,
-		CreatedBy: input.CreatedBy,
+		JobType:       govClaimJobType,
+		PeriodYM:      periodYM,
+		Region:        input.Region,
+		Format:        format,
+		CaseIDs:       input.CaseIDs,
+		Precheck:      report,
+		CreatedBy:     input.CreatedBy,
+		CreatedByName: input.CreatedByName,
 	})
 	if err != nil {
 		return GovClaimJob{}, fmt.Errorf("create export job: %w", err)
@@ -112,7 +118,49 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 		return GovClaimJob{}, fmt.Errorf("reload export job: %w", err)
 	}
 	job.Skipped = skipped
+
+	s.recordExportAudit(ctx, job, input)
 	return job, nil
+}
+
+// recordExportAudit 留下一筆匯出稽核紀錄；稽核寫入失敗不影響已完成的匯出結果，僅盡力而為。
+func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob, input CreateGovClaimInput) {
+	entityID := job.ID.String()
+	var actorID *uuid.UUID
+	if input.CreatedBy != uuid.Nil {
+		actorID = &input.CreatedBy
+	}
+	var actorRole *string
+	if input.ActorRole != "" {
+		actorRole = &input.ActorRole
+	}
+
+	cases := make([]ExportJobAuditCaseFile, 0, len(job.Files))
+	for _, f := range job.Files {
+		cases = append(cases, ExportJobAuditCaseFile{
+			CaseCode: f.CaseCode,
+			CaseName: f.CaseName,
+			Region:   f.Region,
+			FileName: f.FileName,
+			RowCount: f.RowCount,
+		})
+	}
+
+	_ = s.audit.Write(ctx, AuditEntry{
+		ActorID:    actorID,
+		ActorRole:  actorRole,
+		Action:     "export",
+		EntityType: "export_jobs",
+		EntityID:   &entityID,
+		AfterData: ExportJobAuditSnapshot{
+			PeriodYM:   job.PeriodYM,
+			Region:     job.Region,
+			Mode:       string(job.Mode),
+			TotalCases: job.TotalCases,
+			TotalRows:  job.TotalRows,
+			Cases:      cases,
+		},
+	})
 }
 
 // GetGovClaimJob 取得單筆匯出工作與其逐案檔案清單。

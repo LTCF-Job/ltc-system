@@ -139,7 +139,7 @@ func main() {
 	)
 	excelRenderer := reportinfra.NewExcelRenderer()
 	precheckSvc := reportapp.NewPrecheckService(precheckRepo)
-	govClaimSvc := reportapp.NewGovClaimService(cfg, govClaimRepo, exportJobRepo, excelRenderer, reportinfra.NewZipArchiver(), precheckSvc)
+	govClaimSvc := reportapp.NewGovClaimService(cfg, govClaimRepo, exportJobRepo, excelRenderer, reportinfra.NewZipArchiver(), precheckSvc, reportingAuditWriter{svc: auditSvc})
 	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, nil)
 	holidayProvider := holidayapp.GovernmentHolidayProvider(&holidayinfra.GovernmentHolidayHTTPClient{
 		Endpoint: holidayinfra.GovernmentHolidayCSVEndpoint,
