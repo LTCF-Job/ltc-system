@@ -18,7 +18,6 @@ type vehicleRow struct {
 	SiteID                    *uuid.UUID
 	SiteName                  *string
 	SiteRegion                *string
-	OwnerName                 *string
 	Brand                     *string
 	Model                     *string
 	ManufactureYM             *string
@@ -47,7 +46,6 @@ func (r vehicleRow) toApp() app.Vehicle {
 		SiteID:                    r.SiteID,
 		SiteName:                  derefString(r.SiteName),
 		Region:                    derefString(r.SiteRegion),
-		OwnerName:                 derefString(r.OwnerName),
 		Brand:                     derefString(r.Brand),
 		Model:                     derefString(r.Model),
 		ManufactureYM:             derefString(r.ManufactureYM),
@@ -64,7 +62,7 @@ func (r vehicleRow) toApp() app.Vehicle {
 
 const vehicleSelect = `
 	SELECT v.id, v.plate_no, v.display_name, v.site_id, s.name, s.region,
-	       v.owner_name, v.brand, v.model, v.manufacture_ym,
+	       v.brand, v.model, v.manufacture_ym,
 	       v.compulsory_insurance_expiry, v.passenger_insurance_expiry,
 	       v.third_party_insurance_expiry, v.last_inspection_date,
 	       v.wheelchair_accessible, v.status, v.created_at, v.updated_at
@@ -75,7 +73,7 @@ const vehicleSelect = `
 func scanVehicle(dest *vehicleRow) []interface{} {
 	return []interface{}{
 		&dest.ID, &dest.PlateNo, &dest.DisplayName, &dest.SiteID, &dest.SiteName, &dest.SiteRegion,
-		&dest.OwnerName, &dest.Brand, &dest.Model, &dest.ManufactureYM,
+		&dest.Brand, &dest.Model, &dest.ManufactureYM,
 		&dest.CompulsoryInsuranceExpiry, &dest.PassengerInsuranceExpiry,
 		&dest.ThirdPartyInsuranceExpiry, &dest.LastInspectionDate,
 		&dest.WheelchairAccessible, &dest.Status, &dest.CreatedAt, &dest.UpdatedAt,
@@ -156,7 +154,7 @@ func (r *VehicleRepository) getOne(ctx context.Context, query string, arg interf
 func vehicleWriteArgs(v *app.Vehicle) []interface{} {
 	return []interface{}{
 		v.ID, v.PlateNo, v.DisplayName, v.SiteID,
-		nullableText(v.OwnerName), nullableText(v.Brand), nullableText(v.Model), nullableText(v.ManufactureYM),
+		nullableText(v.Brand), nullableText(v.Model), nullableText(v.ManufactureYM),
 		v.CompulsoryInsuranceExpiry, v.PassengerInsuranceExpiry, v.ThirdPartyInsuranceExpiry,
 		v.LastInspectionDate, v.WheelchairAccessible, v.Status,
 	}
@@ -177,11 +175,11 @@ func (r *VehicleRepository) Create(ctx context.Context, v *app.Vehicle) error {
 	}
 	query := `
 		INSERT INTO vehicles (
-			id, plate_no, display_name, site_id, owner_name, brand, model, manufacture_ym,
+			id, plate_no, display_name, site_id, brand, model, manufacture_ym,
 			compulsory_insurance_expiry, passenger_insurance_expiry, third_party_insurance_expiry,
 			last_inspection_date, wheelchair_accessible, status
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING created_at, updated_at
 	`
 	if err := r.db.QueryRow(ctx, query, vehicleWriteArgs(v)...).Scan(&v.CreatedAt, &v.UpdatedAt); err != nil {
@@ -194,10 +192,10 @@ func (r *VehicleRepository) Create(ctx context.Context, v *app.Vehicle) error {
 func (r *VehicleRepository) Update(ctx context.Context, v *app.Vehicle) error {
 	query := `
 		UPDATE vehicles
-		SET plate_no = $2, display_name = $3, site_id = $4, owner_name = $5, brand = $6,
-		    model = $7, manufacture_ym = $8, compulsory_insurance_expiry = $9,
-		    passenger_insurance_expiry = $10, third_party_insurance_expiry = $11,
-		    last_inspection_date = $12, wheelchair_accessible = $13, status = $14,
+		SET plate_no = $2, display_name = $3, site_id = $4, brand = $5,
+		    model = $6, manufacture_ym = $7, compulsory_insurance_expiry = $8,
+		    passenger_insurance_expiry = $9, third_party_insurance_expiry = $10,
+		    last_inspection_date = $11, wheelchair_accessible = $12, status = $13,
 		    updated_at = now()
 		WHERE id = $1
 		RETURNING created_at, updated_at

@@ -51,7 +51,6 @@ type VehicleInput struct {
 	PlateNo                   string
 	DisplayName               string
 	SiteID                    *uuid.UUID
-	OwnerName                 string
 	Brand                     string
 	Model                     string
 	ManufactureYM             string
@@ -67,7 +66,6 @@ func (in VehicleInput) apply(v *Vehicle) {
 	v.PlateNo = in.PlateNo
 	v.DisplayName = in.DisplayName
 	v.SiteID = in.SiteID
-	v.OwnerName = in.OwnerName
 	v.Brand = in.Brand
 	v.Model = in.Model
 	v.ManufactureYM = in.ManufactureYM

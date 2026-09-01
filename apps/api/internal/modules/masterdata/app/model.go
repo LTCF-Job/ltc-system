@@ -31,7 +31,6 @@ type Vehicle struct {
 	SiteName    string
 	// Region 由所屬單位帶出，車輛本身不自存區域；未指定單位時為空字串。
 	Region                    string
-	OwnerName                 string
 	Brand                     string
 	Model                     string
 	ManufactureYM             string

@@ -10,9 +10,6 @@
       <el-option v-for="s in sites" :key="s.id" :label="s.name" :value="s.id" />
     </el-select>
   </el-form-item>
-  <el-form-item label="車主名稱" prop="ownerName">
-    <el-input v-model="form.ownerName" placeholder="如：苗栗縣好安心關懷協會" />
-  </el-form-item>
   <el-form-item label="廠牌" prop="brand">
     <el-input v-model="form.brand" placeholder="如：中華" />
   </el-form-item>

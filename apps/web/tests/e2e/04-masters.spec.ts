@@ -31,7 +31,6 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
 
     // 服務車輛清冊欄位需直接看得到，保險與檢驗日期以民國年呈現
     await expect(table).toContainText('竹北日照中心')
-    await expect(table).toContainText('苗栗縣好安心關懷協會')
     await expect(table).toContainText('DE241LB8')
     await expect(table).toContainText('2013 年 03 月')
     await expect(table).toContainText('114/12/23')
@@ -151,7 +150,6 @@ async function fillVehicleForm(
   await dialog.getByPlaceholder(/竹北一車/).fill(values.displayName)
   await dialog.locator('.el-select').first().click()
   await page.locator('.el-select-dropdown:visible .el-select-dropdown__item').first().click()
-  await dialog.getByPlaceholder(/好安心關懷協會/).fill('測試關懷協會')
   await dialog.getByPlaceholder('如：中華').fill('中華')
   await dialog.getByPlaceholder('如：DE241L8').fill('DE241L8')
 

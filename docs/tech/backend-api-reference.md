@@ -51,7 +51,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
 | GET | `/vehicles` | viewer, staff, admin | 支援 `siteId`、`region`、`q` 篩選；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位），以及所屬單位帶出的 `siteName` 與唯讀 `region` |
-| POST | `/vehicles` | staff, admin | 車籍欄位（`siteId`、`ownerName`、`brand`、`model`、`manufactureYm`、三項保險到期日、`lastInspectionDate`、`wheelchairAccessible`）皆為必填 |
+| POST | `/vehicles` | staff, admin | 車籍欄位（`siteId`、`brand`、`model`、`manufactureYm`、三項保險到期日、`lastInspectionDate`、`wheelchairAccessible`）皆為必填 |
 | PATCH | `/vehicles/:id` | staff, admin | 整筆覆寫，必填欄位同 POST |
 | PUT | `/vehicles/:id/drivers` | staff, admin | 整批設定本車司機：`{ driverIds: string[], effectiveFrom?: date }`；`driverIds` 為空代表清空 |
 

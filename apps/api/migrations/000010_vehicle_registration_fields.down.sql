@@ -21,5 +21,4 @@ ALTER TABLE vehicles
     DROP COLUMN manufacture_ym,
     DROP COLUMN model,
     DROP COLUMN brand,
-    DROP COLUMN owner_name,
     DROP COLUMN site_id;

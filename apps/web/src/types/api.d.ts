@@ -313,7 +313,6 @@ export interface VehicleDTO {
   siteName: string
   // 由所屬單位帶出的唯讀區域，車輛本身不再自存
   region: Region | ''
-  ownerName: string
   brand: string
   model: string
   // 出廠年月，格式為 YYYY-MM
@@ -339,7 +338,6 @@ export interface CreateVehicleRequest {
   plateNo: string
   displayName: string
   siteId: string
-  ownerName: string
   brand: string
   model: string
   manufactureYm: string

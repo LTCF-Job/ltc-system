@@ -74,8 +74,6 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="ownerName" label="車主名稱" min-width="180" class-name="vehicle-nowrap-col" />
-
           <el-table-column prop="brand" label="廠牌" min-width="90" class-name="vehicle-nowrap-col" />
 
           <el-table-column prop="model" label="車型" min-width="120" class-name="vehicle-nowrap-col" />
@@ -389,7 +387,6 @@ function openEditDialog(row: VehicleDTO) {
     plateNo: row.plateNo,
     displayName: row.displayName,
     siteId: row.siteId || '',
-    ownerName: row.ownerName,
     brand: row.brand,
     model: row.model,
     manufactureYm: row.manufactureYm,
@@ -434,7 +431,6 @@ async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
       plateNo: row.plateNo,
       displayName: row.displayName,
       siteId: row.siteId || '',
-      ownerName: row.ownerName,
       brand: row.brand,
       model: row.model,
       manufactureYm: row.manufactureYm,

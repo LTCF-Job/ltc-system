@@ -3,7 +3,6 @@
 
 ALTER TABLE vehicles
     ADD COLUMN site_id UUID REFERENCES sites(id) ON DELETE RESTRICT,
-    ADD COLUMN owner_name TEXT,
     ADD COLUMN brand TEXT,
     ADD COLUMN model TEXT,
     -- 清冊只到年月，格式固定為 YYYY-MM

@@ -78,7 +78,6 @@ type VehicleResponse struct {
 	SiteID                    *uuid.UUID           `json:"siteId"`
 	SiteName                  string               `json:"siteName"`
 	Region                    string               `json:"region"`
-	OwnerName                 string               `json:"ownerName"`
 	Brand                     string               `json:"brand"`
 	Model                     string               `json:"model"`
 	ManufactureYM             string               `json:"manufactureYm"`
@@ -112,7 +111,6 @@ func newVehicleResponse(v app.Vehicle) VehicleResponse {
 		SiteID:                    v.SiteID,
 		SiteName:                  v.SiteName,
 		Region:                    v.Region,
-		OwnerName:                 v.OwnerName,
 		Brand:                     v.Brand,
 		Model:                     v.Model,
 		ManufactureYM:             v.ManufactureYM,
@@ -154,7 +152,6 @@ type VehicleWriteFields struct {
 	PlateNo                   string     `json:"plateNo" binding:"required"`
 	DisplayName               string     `json:"displayName" binding:"required"`
 	SiteID                    *uuid.UUID `json:"siteId" binding:"required"`
-	OwnerName                 string     `json:"ownerName" binding:"required"`
 	Brand                     string     `json:"brand" binding:"required"`
 	Model                     string     `json:"model" binding:"required"`
 	ManufactureYM             string     `json:"manufactureYm" binding:"required"`
@@ -171,7 +168,6 @@ func (f VehicleWriteFields) toInput() app.VehicleInput {
 		PlateNo:                   f.PlateNo,
 		DisplayName:               f.DisplayName,
 		SiteID:                    f.SiteID,
-		OwnerName:                 f.OwnerName,
 		Brand:                     f.Brand,
 		Model:                     f.Model,
 		ManufactureYM:             f.ManufactureYM,
