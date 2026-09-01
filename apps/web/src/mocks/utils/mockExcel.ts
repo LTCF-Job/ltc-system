@@ -84,7 +84,7 @@ const VALID_DEMO_EXCEL_BASE64 =
   '6+O6rQAAAPsBAAAaAAAAAAAAAAAAAACAAbcRAAB4bC9fcmVscy93b3JrYm9vay54bWwucmVsc1BLAQIUABQAAAAIANxuHl2bhkKE' +
   'GwEAANcDAAATAAAAAAAAAAAAAACAAZwSAABbQ29udGVudF9UeXBlc10ueG1sUEsFBgAAAAAJAAkAPgIAAOgTAAAAAA=='
 
-// 個案批次匯入範本專用工作簿：欄位名稱須與個案清單／匯入預覽表格一致（如「戶別」非「家戶類型」），據點與接送車輛皆填中文名稱，非系統編號
+// 個案批次匯入範本專用工作簿：欄位名稱須與個案清單／匯入預覽表格一致（如「戶別」非「家戶類型」），單位與接送車輛皆填中文名稱，非系統編號
 const CASE_IMPORT_TEMPLATE_EXCEL_BASE64 =
   'UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sjJVL' +
   'j5swEIDv/RWW740DNNs0AlabB3lLVV93FoaAFuPIdkJ+fgW7ocyQQ29ov88j8w3a+M83WbIraFOo' +
@@ -414,7 +414,7 @@ function toRocBirthdayAndAge(birthDate?: string): [string, string] {
 export function createCaseProfileExcelBlob(cases: CaseProfileExportRow[]): Blob {
   const headers = [
     '姓名', '戶別', '身分證字號', '性別', '生日', '歲數',
-    '據點', '接送車輛(去)', '接送車輛(回)', '個管or照專', '姓名', '戶籍', '居住地', '備註'
+    '單位', '接送車輛(去)', '接送車輛(回)', '個管or照專', '姓名', '戶籍', '居住地', '備註'
   ]
   const rows = cases.map((item) => {
     const [birthday, age] = toRocBirthdayAndAge(item.birthDate)

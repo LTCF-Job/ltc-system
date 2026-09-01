@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// SiteService 封裝據點主檔業務邏輯。
+// SiteService 封裝單位主檔業務邏輯。
 type SiteService struct {
 	store SiteStore
 }
@@ -16,12 +16,12 @@ func NewSiteService(store SiteStore) *SiteService {
 	return &SiteService{store: store}
 }
 
-// List 查詢據點清單。
+// List 查詢單位清單。
 func (s *SiteService) List(ctx context.Context, region, q string, page, pageSize int) ([]Site, int64, error) {
 	return s.store.List(ctx, region, q, page, pageSize)
 }
 
-// CreateSiteInput 代表新增據點所需之輸入。
+// CreateSiteInput 代表新增單位所需之輸入。
 type CreateSiteInput struct {
 	Code     string
 	Name     string
@@ -31,7 +31,7 @@ type CreateSiteInput struct {
 	Status   string
 }
 
-// Create 新增據點。
+// Create 新增單位。
 func (s *SiteService) Create(ctx context.Context, in CreateSiteInput) (*Site, error) {
 	site := Site{
 		Code:     in.Code,
@@ -47,7 +47,7 @@ func (s *SiteService) Create(ctx context.Context, in CreateSiteInput) (*Site, er
 	return &site, nil
 }
 
-// UpdateSiteInput 代表更新據點所需之輸入。
+// UpdateSiteInput 代表更新單位所需之輸入。
 type UpdateSiteInput struct {
 	Code     string
 	Name     string
@@ -57,7 +57,7 @@ type UpdateSiteInput struct {
 	Status   string
 }
 
-// Update 更新據點。
+// Update 更新單位。
 func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInput) (*Site, error) {
 	site := Site{
 		ID:       id,
@@ -74,7 +74,7 @@ func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInp
 	return &site, nil
 }
 
-// Delete 刪除據點。若該據點仍被個案排班參照，資料庫外鍵限制會回傳錯誤。
+// Delete 刪除單位。若該單位仍被個案排班參照，資料庫外鍵限制會回傳錯誤。
 func (s *SiteService) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.store.Delete(ctx, id)
 }

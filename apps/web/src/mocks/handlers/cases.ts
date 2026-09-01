@@ -163,7 +163,7 @@ export const casesHandlers = [
   }),
 
   // 依實際上傳的 .xlsx 內容解析，邏輯對齊後端 caseimport/app/parse.go 與 commit.go：
-  // 生日／身分證字號格式錯誤整列略過；疑似重複個案預設略過（需勾選才匯入）；據點與去回
+  // 生日／身分證字號格式錯誤整列略過；疑似重複個案預設略過（需勾選才匯入）；單位與去回
   // 程車輛比對不到既有主檔仍建立個案並保留原始名稱待人工關聯。
   http.post('/api/v1/cases/import', async ({ request }) => {
     const url = new URL(request.url)
@@ -230,7 +230,8 @@ export const casesHandlers = [
         const gender = getVal(row, '性別')
         const rawBirth = getVal(row, '生日')
         const birthDate = parseCaseBirthDate(rawBirth)
-        const siteName = getVal(row, '據點')
+        // 舊版範本的欄位標題是「據點」，與後端 parse.go 一樣保留相容讀取
+        const siteName = getVal(row, '單位') || getVal(row, '據點')
         const outboundVehicle = getVal(row, '接送車輛(去)')
         const inboundVehicle = getVal(row, '接送車輛(回)')
         const careContactRole = getVal(row, '個管or照專')
@@ -378,7 +379,7 @@ export const casesHandlers = [
         warnings.push({
           rowIndex: row.rowIndex,
           caseName: row.name,
-          message: `據點「${row.siteName}」未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯`
+          message: `單位「${row.siteName}」未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯`
         })
       }
       if (matchedOutbound) {
@@ -389,7 +390,7 @@ export const casesHandlers = [
         warnings.push({
           rowIndex: row.rowIndex,
           caseName: row.name,
-          message: `接送車輛(去)『${row.outboundVehicle}』未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯`
+          message: `接送車輛(去)『${row.outboundVehicle}』未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯`
         })
       }
       if (matchedInbound) {
@@ -400,7 +401,7 @@ export const casesHandlers = [
         warnings.push({
           rowIndex: row.rowIndex,
           caseName: row.name,
-          message: `接送車輛(回)『${row.inboundVehicle}』未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯`
+          message: `接送車輛(回)『${row.inboundVehicle}』未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯`
         })
       }
 

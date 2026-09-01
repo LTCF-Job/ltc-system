@@ -2,7 +2,6 @@
   <div class="vehicle-list-view">
     <DataTablePage
       title="車輛管理"
-      :max-width="1290"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -21,20 +20,15 @@
         />
 
         <el-select
-          v-model="filters.region"
-          placeholder="全部區域"
+          v-model="filters.siteId"
+          placeholder="全部單位"
           clearable
           filterable
-          style="width: 140px"
+          style="width: 200px"
           @change="handleSearch"
         >
-          <el-option label="全部區域" value="" />
-          <el-option
-            v-for="(label, key) in REGION_LABELS"
-            :key="key"
-            :label="label"
-            :value="key"
-          />
+          <el-option label="全部單位" value="" />
+          <el-option v-for="s in allSites" :key="s.id" :label="s.name" :value="s.id" />
         </el-select>
 
         <el-button type="primary" @click="handleSearch">查詢</el-button>
@@ -61,102 +55,95 @@
           stripe
           table-layout="auto"
           style="width: 100%"
-          :row-class-name="getRowClassName"
           @row-dblclick="(row: any) => handleRowDblClick(row)"
         >
-          <el-table-column prop="displayName" label="顯示車名 (表單比對名)" min-width="180">
+          <el-table-column type="index" label="編號" width="70" align="center" :index="rowIndex" />
+
+          <el-table-column prop="plateNo" label="車號" min-width="120" class-name="vehicle-nowrap-col">
             <template #default="{ row }">
-              <el-input
-                v-if="editingRowId === row.id"
-                v-model="editRowForm.displayName"
-                size="small"
-                placeholder="如：竹北一車"
-                @keyup.enter="saveInlineEdit(row as any)"
-                @keyup.esc="cancelInlineEdit"
-              />
-              <span v-else class="display-name-text">{{ row.displayName }}</span>
+              <span class="font-mono text-id">{{ row.plateNo }}</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="plateNo" label="車牌號碼" width="160">
+          <el-table-column prop="displayName" label="顯示車名 (表單比對名)" min-width="180" class-name="vehicle-nowrap-col" />
+
+          <el-table-column prop="siteName" label="所屬單位" min-width="160" class-name="vehicle-nowrap-col">
             <template #default="{ row }">
-              <el-input
-                v-if="editingRowId === row.id"
-                v-model="editRowForm.plateNo"
-                size="small"
-                placeholder="如：BZG-7915"
-                @keyup.enter="saveInlineEdit(row as any)"
-                @keyup.esc="cancelInlineEdit"
-              />
-              <span v-else class="font-mono text-id">{{ row.plateNo }}</span>
+              <span v-if="row.siteName">{{ row.siteName }}</span>
+              <span v-else class="vehicle-empty-text">未指定</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="region" label="所屬區域" width="130" align="center">
+          <el-table-column prop="ownerName" label="車主名稱" min-width="180" class-name="vehicle-nowrap-col" />
+
+          <el-table-column prop="brand" label="廠牌" min-width="90" class-name="vehicle-nowrap-col" />
+
+          <el-table-column prop="model" label="車型" min-width="120" class-name="vehicle-nowrap-col" />
+
+          <el-table-column label="出廠年月" min-width="120" align="center" class-name="vehicle-nowrap-col">
+            <template #default="{ row }">{{ formatYearMonth(row.manufactureYm) }}</template>
+          </el-table-column>
+
+          <el-table-column label="強制責任險 (年/月/日)" min-width="150" align="center" class-name="vehicle-nowrap-col">
+            <template #default="{ row }">{{ formatRocDate(row.compulsoryInsuranceExpiry) }}</template>
+          </el-table-column>
+
+          <el-table-column label="乘客責任險 (年/月/日)" min-width="150" align="center" class-name="vehicle-nowrap-col">
+            <template #default="{ row }">{{ formatRocDate(row.passengerInsuranceExpiry) }}</template>
+          </el-table-column>
+
+          <el-table-column label="第三人責任險 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col">
+            <template #default="{ row }">{{ formatRocDate(row.thirdPartyInsuranceExpiry) }}</template>
+          </el-table-column>
+
+          <el-table-column label="前次檢驗日期 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col">
+            <template #default="{ row }">{{ formatRocDate(row.lastInspectionDate) }}</template>
+          </el-table-column>
+
+          <el-table-column label="符合輪椅載運規定" min-width="140" align="center" class-name="vehicle-nowrap-col">
             <template #default="{ row }">
-              <el-select
-                v-if="editingRowId === row.id"
-                v-model="editRowForm.region"
+              <el-tag
+                v-if="row.wheelchairAccessible !== null"
                 size="small"
-                filterable
-                style="width: 100%"
+                :type="row.wheelchairAccessible ? 'success' : 'info'"
+                effect="plain"
               >
-                <el-option
-                  v-for="(label, key) in REGION_LABELS"
-                  :key="key"
-                  :label="label"
-                  :value="key"
-                />
-              </el-select>
-              <span v-else>
-                {{ REGION_LABELS[row.region as Region] || row.region }}
-              </span>
+                {{ row.wheelchairAccessible ? '是' : '否' }}
+              </el-tag>
+              <span v-else class="vehicle-empty-text">未填</span>
             </template>
           </el-table-column>
 
           <el-table-column prop="active" label="狀態" width="130" align="center">
             <template #default="{ row }">
-              <template v-if="editingRowId === row.id">
+              <el-tooltip
+                v-if="authStore.can('staff')"
+                :content="row.active ? '目前為服役中，點選切換為已停用' : '目前為已停用，點選切換為服役中'"
+                placement="top"
+                :show-after="300"
+              >
                 <button
                   type="button"
                   class="status-toggle-pill"
-                  :class="editRowForm.active ? 'is-active' : 'is-inactive'"
-                  @click="editRowForm.active = !editRowForm.active"
-                >
-                  <span class="status-indicator-dot"></span>
-                  <span class="status-label-text">{{ editRowForm.active ? '服役中' : '已停用' }}</span>
-                </button>
-              </template>
-              <template v-else>
-                <el-tooltip
-                  v-if="authStore.can('staff')"
-                  :content="row.active ? '目前為服役中，點選切換為已停用' : '目前為已停用，點選切換為服役中'"
-                  placement="top"
-                  :show-after="300"
-                >
-                  <button
-                    type="button"
-                    class="status-toggle-pill"
-                    :class="row.active ? 'is-active' : 'is-inactive'"
-                    @click="handleQuickToggleActive(row as any, !row.active)"
-                  >
-                    <span class="status-indicator-dot"></span>
-                    <span class="status-label-text">{{ row.active ? '服役中' : '已停用' }}</span>
-                  </button>
-                </el-tooltip>
-                <div
-                  v-else
-                  class="status-toggle-pill is-readonly"
                   :class="row.active ? 'is-active' : 'is-inactive'"
+                  @click="handleQuickToggleActive(row as any, !row.active)"
                 >
                   <span class="status-indicator-dot"></span>
                   <span class="status-label-text">{{ row.active ? '服役中' : '已停用' }}</span>
-                </div>
-              </template>
+                </button>
+              </el-tooltip>
+              <div
+                v-else
+                class="status-toggle-pill is-readonly"
+                :class="row.active ? 'is-active' : 'is-inactive'"
+              >
+                <span class="status-indicator-dot"></span>
+                <span class="status-label-text">{{ row.active ? '服役中' : '已停用' }}</span>
+              </div>
             </template>
           </el-table-column>
 
-          <el-table-column label="目前司機" min-width="200">
+          <el-table-column label="目前司機" min-width="160">
             <template #default="{ row }">
               <div v-if="row.drivers && row.drivers.length" class="vehicle-driver-tags">
                 <el-tag
@@ -169,34 +156,24 @@
                   {{ d.name }}
                 </el-tag>
               </div>
-              <span v-else class="vehicle-driver-empty">尚未指派</span>
+              <span v-else class="vehicle-empty-text">尚未指派</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span>{{ formatDateTime(row.createdAt) }}</span>
-            </template>
+          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center" class-name="vehicle-nowrap-col">
+            <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
           </el-table-column>
 
           <el-table-column
             v-if="authStore.can('staff')"
             label="操作"
-            width="220"
+            width="200"
             fixed="right"
             align="center"
           >
             <template #default="{ row }">
-              <TableRowActions v-if="editingRowId === row.id">
-                <el-button type="primary" size="small" :loading="savingRow" @click="saveInlineEdit(row as any)">
-                  儲存
-                </el-button>
-                <el-button size="small" :disabled="savingRow" @click="cancelInlineEdit">
-                  取消
-                </el-button>
-              </TableRowActions>
-              <TableRowActions v-else>
-                <el-button link type="primary" size="small" @click="startInlineEdit(row as any)">
+              <TableRowActions>
+                <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
                   編輯
                 </el-button>
                 <el-button link type="primary" size="small" @click="openDriverDialog(row as any)">
@@ -212,50 +189,14 @@
       </template>
     </DataTablePage>
 
-    <!-- 新增車輛對話框 -->
+    <!-- 新增／編輯車輛對話框 -->
     <el-dialog
       v-model="dialogVisible"
-      title="新增車輛"
-      width="min(480px, calc(100vw - 32px))"
+      :title="editingId ? '編輯車輛' : '新增車輛'"
+      width="min(620px, calc(100vw - 32px))"
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
-        <el-form-item label="顯示車名" prop="displayName">
-          <el-input v-model="form.displayName" placeholder="如：竹北一車、竹南2車" />
-        </el-form-item>
-        <el-form-item label="車牌號碼" prop="plateNo">
-          <el-input v-model="form.plateNo" placeholder="如：BZG-7915" />
-        </el-form-item>
-        <el-form-item label="所屬區域" prop="region">
-          <el-select
-            v-model="form.region"
-            placeholder="請選擇區域"
-            filterable
-            style="width: 100%"
-          >
-            <el-option
-              v-for="(label, key) in REGION_LABELS"
-              :key="key"
-              :label="label"
-              :value="key"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="狀態" prop="active">
-          <el-radio-group v-model="form.active" class="status-radio-group">
-            <el-radio-button :value="true">
-              <div class="radio-pill active-pill">
-                <span class="radio-dot"></span>
-                <span>服役中</span>
-              </div>
-            </el-radio-button>
-            <el-radio-button :value="false">
-              <div class="radio-pill inactive-pill">
-                <span class="radio-dot"></span>
-                <span>已停用</span>
-              </div>
-            </el-radio-button>
-          </el-radio-group>
-        </el-form-item>
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="150px">
+        <VehicleFormFields :form="form" :sites="allSites" show-status />
       </el-form>
       <template #footer>
         <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
@@ -312,17 +253,28 @@ import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
-import { listVehicles, createVehicle, updateVehicle, deleteVehicle, listDrivers, setVehicleDrivers } from '@/api/masters'
+import VehicleFormFields from '@/components/VehicleFormFields.vue'
+import {
+  listVehicles,
+  createVehicle,
+  updateVehicle,
+  deleteVehicle,
+  listDrivers,
+  listSites,
+  setVehicleDrivers
+} from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
-import { formatDateTime } from '@/utils/formatters'
-import { REGION_LABELS, type Region } from '@/types/domain'
-import type { VehicleDTO, CreateVehicleRequest, DriverDTO } from '@/types/api'
+import { formatDateTime, formatRocDate, formatYearMonth } from '@/utils/formatters'
+import { emptyVehicleForm, vehicleFormRules } from '@/utils/vehicleForm'
+import type { VehicleDTO, CreateVehicleRequest, DriverDTO, SiteDTO } from '@/types/api'
 
 const authStore = useAuthStore()
 const vehicles = ref<VehicleDTO[]>([])
 const allDrivers = ref<DriverDTO[]>([])
+const allSites = ref<SiteDTO[]>([])
 const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
 const driverDialogVisible = ref(false)
 const driverDialogVehicle = ref<VehicleDTO | null>(null)
 const savingDrivers = ref(false)
@@ -333,31 +285,9 @@ const driverDialogForm = reactive<{ driverIds: string[]; effectiveFrom: string }
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
 
-// 行內編輯狀態
-const editingRowId = ref<string | null>(null)
-const savingRow = ref(false)
-const editRowForm = reactive<CreateVehicleRequest>({
-  displayName: '',
-  plateNo: '',
-  region: 'miaoli',
-  active: true
-})
+const form = reactive<CreateVehicleRequest>(emptyVehicleForm())
 
-const form = reactive<CreateVehicleRequest>({
-  displayName: '',
-  plateNo: '',
-  region: 'miaoli',
-  active: true
-})
-
-const rules = {
-  displayName: [{ required: true, message: '請輸入顯示車名', trigger: 'blur' }],
-  plateNo: [
-    { required: true, message: '請輸入車牌號碼', trigger: 'blur' },
-    { pattern: /^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/, message: '車牌格式錯誤 (例如 BZG-7915)', trigger: 'blur' }
-  ],
-  region: [{ required: true, message: '請選擇區域', trigger: 'change' }]
-}
+const rules = vehicleFormRules
 
 const {
   page,
@@ -373,19 +303,24 @@ const {
 } = useListQuery({
   defaultFilters: {
     q: '',
-    region: ''
+    siteId: ''
   },
   onFetch: async () => {
     const res = await listVehicles({
       page: page.value,
       pageSize: pageSize.value,
       q: filters.q,
-      region: filters.region
+      siteId: filters.siteId
     })
     vehicles.value = res.data
     total.value = res.meta.total
   }
 })
+
+// 表格「編號」是跨頁連續的清冊序號，不是每頁重新從 1 起算
+function rowIndex(index: number) {
+  return (page.value - 1) * pageSize.value + index + 1
+}
 
 async function loadDrivers() {
   try {
@@ -396,7 +331,19 @@ async function loadDrivers() {
   }
 }
 
-onMounted(loadDrivers)
+async function loadSites() {
+  try {
+    const res = await listSites({ pageSize: 200 })
+    allSites.value = res.data
+  } catch {
+    allSites.value = []
+  }
+}
+
+onMounted(() => {
+  loadDrivers()
+  loadSites()
+})
 
 function openDriverDialog(row: VehicleDTO) {
   driverDialogVehicle.value = row
@@ -423,78 +370,37 @@ async function handleSaveDrivers() {
   }
 }
 
-function getRowClassName({ row }: { row: any }) {
-  return editingRowId.value === row.id ? 'editing-row' : ''
-}
-
 function handleRowDblClick(row: VehicleDTO) {
   if (authStore.can('staff')) {
-    startInlineEdit(row)
-  }
-}
-
-function startInlineEdit(row: VehicleDTO) {
-  editingRowId.value = row.id
-  editRowForm.displayName = row.displayName
-  editRowForm.plateNo = row.plateNo
-  editRowForm.region = row.region
-  editRowForm.active = row.active
-}
-
-function cancelInlineEdit() {
-  editingRowId.value = null
-}
-
-async function saveInlineEdit(row: VehicleDTO) {
-  if (!editRowForm.displayName.trim()) {
-    ElMessage.warning('請輸入顯示車名')
-    return
-  }
-  if (!editRowForm.plateNo.trim()) {
-    ElMessage.warning('請輸入車牌號碼')
-    return
-  }
-  if (!/^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/.test(editRowForm.plateNo.trim())) {
-    ElMessage.warning('車牌格式錯誤 (例如 BZG-7915)')
-    return
-  }
-
-  savingRow.value = true
-  try {
-    await updateVehicle(row.id, {
-      displayName: editRowForm.displayName.trim(),
-      plateNo: editRowForm.plateNo.trim(),
-      region: editRowForm.region,
-      active: editRowForm.active
-    })
-    row.displayName = editRowForm.displayName.trim()
-    row.plateNo = editRowForm.plateNo.trim()
-    row.region = editRowForm.region
-    row.active = Boolean(editRowForm.active)
-    editingRowId.value = null
-    ElMessage.success(`車輛「${row.displayName}」資料已更新`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新車輛資料失敗'))
-  } finally {
-    savingRow.value = false
-  }
-}
-
-async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
-  try {
-    await updateVehicle(row.id, { active: newActive })
-    row.active = newActive
-    ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '服役中' : '已停用'}`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '切換狀態失敗'))
+    openEditDialog(row)
   }
 }
 
 function openCreateDialog() {
-  form.displayName = ''
-  form.plateNo = ''
-  form.region = 'miaoli'
-  form.active = true
+  editingId.value = null
+  Object.assign(form, emptyVehicleForm())
+  formRef.value?.clearValidate()
+  dialogVisible.value = true
+}
+
+function openEditDialog(row: VehicleDTO) {
+  editingId.value = row.id
+  Object.assign(form, emptyVehicleForm(), {
+    plateNo: row.plateNo,
+    displayName: row.displayName,
+    siteId: row.siteId || '',
+    ownerName: row.ownerName,
+    brand: row.brand,
+    model: row.model,
+    manufactureYm: row.manufactureYm,
+    compulsoryInsuranceExpiry: row.compulsoryInsuranceExpiry || '',
+    passengerInsuranceExpiry: row.passengerInsuranceExpiry || '',
+    thirdPartyInsuranceExpiry: row.thirdPartyInsuranceExpiry || '',
+    lastInspectionDate: row.lastInspectionDate || '',
+    wheelchairAccessible: row.wheelchairAccessible ?? true,
+    active: row.active
+  })
+  formRef.value?.clearValidate()
   dialogVisible.value = true
 }
 
@@ -504,14 +410,46 @@ async function handleSubmit() {
     if (!valid) return
     submitting.value = true
     try {
-      await createVehicle(form)
-      ElMessage.success('車輛新增成功')
+      if (editingId.value) {
+        await updateVehicle(editingId.value, { ...form })
+        ElMessage.success(`車輛「${form.displayName}」資料已更新`)
+      } else {
+        await createVehicle({ ...form })
+        ElMessage.success('車輛新增成功')
+      }
       dialogVisible.value = false
       executeFetch()
+    } catch (err: any) {
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存車輛資料失敗'))
     } finally {
       submitting.value = false
     }
   })
+}
+
+// 快速切換狀態仍送出完整車輛內容：更新 API 是整筆覆寫，只送 active 會清掉其餘欄位
+async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
+  try {
+    await updateVehicle(row.id, {
+      plateNo: row.plateNo,
+      displayName: row.displayName,
+      siteId: row.siteId || '',
+      ownerName: row.ownerName,
+      brand: row.brand,
+      model: row.model,
+      manufactureYm: row.manufactureYm,
+      compulsoryInsuranceExpiry: row.compulsoryInsuranceExpiry || '',
+      passengerInsuranceExpiry: row.passengerInsuranceExpiry || '',
+      thirdPartyInsuranceExpiry: row.thirdPartyInsuranceExpiry || '',
+      lastInspectionDate: row.lastInspectionDate || '',
+      wheelchairAccessible: row.wheelchairAccessible ?? true,
+      active: newActive
+    })
+    row.active = newActive
+    ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '服役中' : '已停用'}`)
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '切換狀態失敗'))
+  }
 }
 
 async function handleDeleteVehicle(row: VehicleDTO) {
@@ -547,12 +485,12 @@ executeFetch()
   flex-wrap: wrap;
 }
 
-.vehicle-driver-empty {
+.vehicle-empty-text {
   color: var(--el-text-color-placeholder);
   font-size: 13px;
 }
 
-.display-name-text {
+:deep(.vehicle-nowrap-col .cell) {
   white-space: nowrap;
 }
 
@@ -563,31 +501,4 @@ executeFetch()
   font-size: var(--app-font-xs);
   line-height: 1.6;
 }
-
-:deep(.el-table .editing-row) {
-  background-color: var(--el-color-primary-light-9) !important;
-}
-
-
-/* 對話框內狀態單選群組 */
-.region-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  white-space: nowrap;
-}
-
-.region-label::before {
-  content: '';
-  width: 7px;
-  height: 7px;
-  border: 2px solid var(--el-border-color);
-  border-radius: 50%;
-}
-
-.region-label.region-miaoli::before { border-color: var(--el-color-warning); }
-.region-label.region-hsinchu::before { border-color: var(--el-color-primary); }
 </style>
-

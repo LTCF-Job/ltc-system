@@ -59,7 +59,7 @@ type CaseImportSkippedRow struct {
 }
 
 // CaseImportCommitResult 回傳正式匯入成功與略過的列，供操作人員補正來源資料。
-// Warnings 承載已建立個案但仍需人工處理的提示（如據點/車輛未比對到）。
+// Warnings 承載已建立個案但仍需人工處理的提示（如單位/車輛未比對到）。
 type CaseImportCommitResult struct {
 	ImportedCount int                     `json:"importedCount"`
 	SkippedRows   []CaseImportSkippedRow  `json:"skippedRows"`

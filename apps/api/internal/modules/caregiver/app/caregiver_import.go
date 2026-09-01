@@ -145,7 +145,7 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 				if site, err := s.sites.GetByName(ctx, siteName); err == nil && site != nil {
 					rowRes.SiteID = &site.ID
 				} else {
-					rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, fmt.Sprintf("單位「%s」未於據點管理中找到，已建立資料並保留原始名稱待人工關聯", siteName))
+					rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, fmt.Sprintf("單位「%s」未於單位管理中找到，已建立資料並保留原始名稱待人工關聯", siteName))
 				}
 			}
 			if contact == "" {
@@ -258,7 +258,7 @@ func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *Caregi
 		if row.SiteID == nil && row.SiteName != "" {
 			result.Warnings = append(result.Warnings, CaregiverImportWarningItem{
 				RowIndex: row.RowIndex, Name: row.Name, Field: "site",
-				Message: fmt.Sprintf("單位「%s」未於據點管理中找到，已建立資料並保留原始名稱待人工關聯", row.SiteName),
+				Message: fmt.Sprintf("單位「%s」未於單位管理中找到，已建立資料並保留原始名稱待人工關聯", row.SiteName),
 			})
 		}
 		if row.Contact == "" {

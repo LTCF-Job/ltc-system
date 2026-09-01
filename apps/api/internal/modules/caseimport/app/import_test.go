@@ -35,7 +35,7 @@ func TestGenerateCaseImportTemplateExcel_Structure(t *testing.T) {
 	headerRow := rows[0]
 	assert.Equal(t, "姓名*", headerRow[0])
 	assert.Contains(t, headerRow, "身分證字號")
-	assert.Contains(t, headerRow, "據點")
+	assert.Contains(t, headerRow, "單位")
 	assert.Contains(t, headerRow, "接送車輛(去)")
 	assert.Contains(t, headerRow, "接送車輛(回)")
 	assert.Contains(t, headerRow, "姓名(個管/照專)")
@@ -65,7 +65,7 @@ func TestParseCases_ProfileWorkbook(t *testing.T) {
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
+	headers := []string{"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "單位", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
 	for i, header := range headers {
 		cell, err := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, err)
@@ -101,13 +101,39 @@ func TestParseCases_ProfileWorkbook(t *testing.T) {
 	assert.False(t, got.IsDuplicate)
 }
 
+// TestParseCases_LegacySiteHeader 驗證舊版範本的「據點」欄位標題仍可匯入，
+// 避免文案改名後使用者手上既有的檔案讀不到單位。
+func TestParseCases_LegacySiteHeader(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	sheetName := "進系統個案個資"
+	f.SetSheetName("Sheet1", sheetName)
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點"}
+	for i, header := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		require.NoError(t, f.SetCellValue(sheetName, cell, header))
+	}
+	values := []interface{}{"馮玉英", "", "", "", "", "竹南日照單位"}
+	for i, value := range values {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
+		require.NoError(t, f.SetCellValue(sheetName, cell, value))
+	}
+	buf, err := f.WriteToBuffer()
+	require.NoError(t, err)
+
+	preview, err := NewImportService(nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	require.NoError(t, err)
+	require.Len(t, preview.Rows, 1)
+	assert.Equal(t, "竹南日照單位", preview.Rows[0].SiteName)
+}
+
 // TestParseCases_OnlyNameRequired 驗證除姓名外全部欄位皆選填，缺漏不再擋錯。
 func TestParseCases_OnlyNameRequired(t *testing.T) {
 	f := excelize.NewFile()
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "單位", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
 	for i, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheetName, cell, header))
@@ -135,7 +161,7 @@ func TestParseCases_IgnoresFullyBlankRow(t *testing.T) {
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "單位"}
 	for i, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheetName, cell, header))
@@ -168,7 +194,7 @@ func TestParseCases_ReportsBirthDateFormatError(t *testing.T) {
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "單位", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地"}
 	for i, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheetName, cell, header))

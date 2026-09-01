@@ -82,8 +82,8 @@ func TestParseCaregivers_SkipsRowMissingName(t *testing.T) {
 	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照據點", "", "個管", "0912-000-000", ""},
-		[]string{"竹南日照據點", "王大明", "個管", "0987-000-000", "行動自如"},
+		[]string{"竹南日照單位", "", "個管", "0912-000-000", ""},
+		[]string{"竹南日照單位", "王大明", "個管", "0987-000-000", "行動自如"},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestParseCaregivers_IgnoresFullyBlankRow(t *testing.T) {
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
 		[]string{"", "", "", "", ""},
-		[]string{"竹南日照據點", "王大明", "個管", "0987-000-000", "行動自如"},
+		[]string{"竹南日照單位", "王大明", "個管", "0987-000-000", "行動自如"},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -115,9 +115,9 @@ func TestParseCaregivers_SkipsRowWithMissingOrInvalidType(t *testing.T) {
 	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照據點", "王大明", "", "0987-000-000", "行動自如"},
-		[]string{"竹南日照據點", "陳小華", "居服員", "0987-000-000", ""},
-		[]string{"竹南日照據點", "李美玲", "個管", "0987-000-000", ""},
+		[]string{"竹南日照單位", "王大明", "", "0987-000-000", "行動自如"},
+		[]string{"竹南日照單位", "陳小華", "居服員", "0987-000-000", ""},
+		[]string{"竹南日照單位", "李美玲", "個管", "0987-000-000", ""},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -135,24 +135,24 @@ func TestParseCaregivers_KeepsRawSiteNameWhenSiteNotFound(t *testing.T) {
 	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{byName: map[string]uuid.UUID{}}, testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"查無此據點", "陳小華", "專護", "0912-345-678", "熟悉輪椅移位"},
+		[]string{"查無此單位", "陳小華", "專護", "0912-345-678", "熟悉輪椅移位"},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
 	row := preview.Rows[0]
 	assert.Nil(t, row.SiteID, "單位比對不到時應保留 SiteID 為 nil")
-	assert.Equal(t, "查無此據點", row.SiteName)
+	assert.Equal(t, "查無此單位", row.SiteName)
 	assert.Equal(t, CaregiverTypeSpecialist, row.Type)
 	assert.NotEmpty(t, row.WarningMessage)
 }
 
 func TestParseCaregivers_FlagsMissingContactAndNotesAsWarningNotError(t *testing.T) {
 	siteID := uuid.New()
-	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{byName: map[string]uuid.UUID{"竹南日照據點": siteID}}, testExcelReader{}, nil)
+	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{byName: map[string]uuid.UUID{"竹南日照單位": siteID}}, testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照據點", "王大明", "個管", "", ""},
+		[]string{"竹南日照單位", "王大明", "個管", "", ""},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -166,7 +166,7 @@ func TestParseCaregivers_FlagsMissingContactAndNotesAsWarningNotError(t *testing
 func TestParseCaregivers_RejectsNonExcelUpload(t *testing.T) {
 	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
 
-	_, err := svc.ParseCaregivers(context.Background(), bytes.NewReader([]byte("單位,姓名,類型,聯絡方式,備註\n竹南日照據點,王大明,個管,,")), "upload.csv")
+	_, err := svc.ParseCaregivers(context.Background(), bytes.NewReader([]byte("單位,姓名,類型,聯絡方式,備註\n竹南日照單位,王大明,個管,,")), "upload.csv")
 
 	assert.Error(t, err, "僅支援 .xlsx 匯入，CSV 上傳應回傳錯誤")
 }
@@ -178,7 +178,7 @@ func TestParseCaregivers_FlagsDuplicateByName(t *testing.T) {
 	svc := NewCaregiverService(store, fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照據點", "王大明", "個管", "0987-000-000", "行動自如"},
+		[]string{"竹南日照單位", "王大明", "個管", "0987-000-000", "行動自如"},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -217,7 +217,7 @@ func TestCommitCaregivers_ImportsRowsAndReportsWarningsByField(t *testing.T) {
 
 	preview := &CaregiverImportPreviewResult{
 		Rows: []CaregiverImportRowResult{
-			{RowIndex: 2, Name: "查無單位者", SiteName: "查無此據點", WarningMessage: "單位未比對到"},
+			{RowIndex: 2, Name: "查無單位者", SiteName: "查無此單位", WarningMessage: "單位未比對到"},
 			{RowIndex: 3, Name: "缺聯絡方式者"},
 		},
 		Errors: []CaregiverImportErrorItem{

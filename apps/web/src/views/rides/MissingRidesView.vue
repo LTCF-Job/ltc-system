@@ -4,7 +4,7 @@
       <!-- 分頁一：未回報清單 -->
       <el-tab-pane label="未回報清單" name="missing">
         <DataTablePage
-          :max-width="1090"
+          :max-width="950"
           :loading="loadingMissing"
           :total="missingTotal"
           :page="page"
@@ -58,21 +58,21 @@
           <template #table>
             <el-table :data="missingList" stripe border style="width: 100%;">
               <el-table-column prop="serviceDate" label="服務日期" width="120" sortable />
-              <el-table-column prop="caseName" label="個案姓名" width="120" />
-              <el-table-column label="方向 / 趟次" width="130">
+              <el-table-column prop="caseName" label="個案姓名" width="100" />
+              <el-table-column label="方向 / 趟次" width="120">
                 <template #default="{ row }">
                   <span>{{ (DIRECTION_LABELS as any)[row.direction] || row.direction }}</span>
                   <span style="margin-left: 6px; font-size: 13px;">第 {{ row.legSeq }} 趟</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="departTime" label="排定出發時間" width="130" />
-              <el-table-column prop="vehicleName" label="負責車輛" width="130">
+              <el-table-column prop="departTime" label="排定出發時間" width="120" />
+              <el-table-column prop="vehicleName" label="負責車輛" width="110">
                 <template #default="{ row }">
                   <span>{{ row.vehicleName || '未指定' }}</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="driverName" label="司機" width="120" />
-              <el-table-column label="逾期天數" width="120" align="center">
+              <el-table-column prop="driverName" label="司機" width="100" />
+              <el-table-column label="逾期天數" width="110" align="center">
                 <template #default="{ row }">
                   <span
                     class="overdue-days"

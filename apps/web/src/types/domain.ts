@@ -97,6 +97,16 @@ export const CAREGIVER_TYPE_LABELS: Record<CaregiverType, string> = {
   specialist: '專護'
 }
 
+// 職業駕照類別，對應政府「服務駕駛清冊」的駕照執照類別欄位
+export type DriverLicenseClass = 'sedan' | 'truck' | 'bus' | 'trailer'
+
+export const DRIVER_LICENSE_CLASS_LABELS: Record<DriverLicenseClass, string> = {
+  sedan: '職業小型車',
+  truck: '職業大貨車',
+  bus: '職業大客車',
+  trailer: '職業聯結車'
+}
+
 export type Direction = 'outbound' | 'inbound'
 
 export const DIRECTION_LABELS: Record<Direction, string> = {
@@ -289,7 +299,7 @@ export type AuditEntityType =
 
 export const AUDIT_ENTITY_LABELS: Record<AuditEntityType, string> = {
   cases: '個案主檔',
-  sites: '據點主檔',
+  sites: '單位主檔',
   vehicles: '車輛主檔',
   drivers: '司機主檔',
   regions: '地區主檔',
@@ -338,7 +348,7 @@ export const SYSTEM_MODULES: SystemModuleInfo[] = [
   { id: 'dashboard', name: '總覽儀表板', category: 'overview', categoryName: '首頁儀表' },
   { id: 'masters_regions', name: '地區管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_cases', name: '個案管理', category: 'masters', categoryName: '主檔資料' },
-  { id: 'masters_sites', name: '據點管理', category: 'masters', categoryName: '主檔資料' },
+  { id: 'masters_sites', name: '單位管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_vehicles', name: '車輛管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_drivers', name: '司機管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_caregivers', name: '照護人員管理', category: 'masters', categoryName: '主檔資料' },
@@ -529,10 +539,10 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   case_name: '個案姓名',
   caseCode: '個案編號',
   case_code: '個案編號',
-  siteId: '據點識別碼',
-  site_id: '據點識別碼',
-  siteName: '據點名稱',
-  site_name: '據點名稱',
+  siteId: '單位識別碼',
+  site_id: '單位識別碼',
+  siteName: '單位名稱',
+  site_name: '單位名稱',
   vehicleId: '指派車輛編號',
   vehicle_id: '指派車輛編號',
   vehicleName: '指派車輛名稱',
@@ -663,10 +673,10 @@ export const AUDIT_FIELD_SECTIONS: Record<string, string> = {
   case_name: '個案識別',
   caseCode: '個案識別',
   case_code: '個案識別',
-  siteId: '據點識別',
-  site_id: '據點識別',
-  siteName: '據點識別',
-  site_name: '據點識別',
+  siteId: '單位識別',
+  site_id: '單位識別',
+  siteName: '單位識別',
+  site_name: '單位識別',
   description: '基本資料',
   note: '備註說明',
 

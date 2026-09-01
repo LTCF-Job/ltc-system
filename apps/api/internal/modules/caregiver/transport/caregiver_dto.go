@@ -8,7 +8,7 @@ import (
 )
 
 // CaregiverResponse 代表回傳給前端的照護人員資料。SiteID 為 nil 且 SiteNameRaw 有值
-// 時，代表匯入時的單位名稱尚未關聯既有據點。
+// 時，代表匯入時的單位名稱尚未關聯既有單位。
 type CaregiverResponse struct {
 	ID          uuid.UUID  `json:"id"`
 	SiteID      *uuid.UUID `json:"siteId,omitempty"`
@@ -67,7 +67,7 @@ type UpdateCaregiverRequest struct {
 	Notes   *string    `json:"notes"`
 }
 
-// LinkCaregiverSiteRequest 代表將照護人員關聯至既有據點的請求。
+// LinkCaregiverSiteRequest 代表將照護人員關聯至既有單位的請求。
 type LinkCaregiverSiteRequest struct {
 	SiteID uuid.UUID `json:"siteId" binding:"required"`
 }

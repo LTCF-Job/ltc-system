@@ -1,6 +1,6 @@
 -- Migration: 000004_add_caregivers.up.sql
--- Description: 新增照護人員主檔，單位透過 site_id 關聯既有據點；site_name_raw 保留
--- 匯入時比對不到據點的原始名稱，待人工於「待維護」畫面補建關聯。類型為固定二選一
+-- Description: 新增照護人員主檔，單位透過 site_id 關聯既有單位；site_name_raw 保留
+-- 匯入時比對不到單位的原始名稱，待人工於「待維護」畫面補建關聯。類型為固定二選一
 -- （個管／專護），與姓名同為必填。
 
 CREATE TABLE caregivers (

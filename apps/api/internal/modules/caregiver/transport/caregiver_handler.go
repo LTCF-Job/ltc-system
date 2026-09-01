@@ -112,7 +112,7 @@ func (h *CaregiverHandler) Delete(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
 }
 
-// LinkSite 將單位待關聯的照護人員連結至既有據點。
+// LinkSite 將單位待關聯的照護人員連結至既有單位。
 func (h *CaregiverHandler) LinkSite(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {

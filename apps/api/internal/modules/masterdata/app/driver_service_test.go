@@ -134,7 +134,54 @@ func TestDriverService_Create(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "A123456789", plain)
 	})
+
+	t.Run("license class", func(t *testing.T) {
+		expiry := time.Date(2031, 4, 22, 0, 0, 0, 0, time.UTC)
+		tests := []struct {
+			name         string
+			licenseClass *string
+			wantErr      error
+			wantStored   *string
+		}{
+			{name: "accepts a known class", licenseClass: strPtr("truck"), wantStored: strPtr("truck")},
+			{name: "trims surrounding spaces", licenseClass: strPtr(" bus "), wantStored: strPtr("bus")},
+			{name: "treats empty string as unset", licenseClass: strPtr("  ")},
+			{name: "treats omitted value as unset"},
+			{name: "rejects an unknown class", licenseClass: strPtr("motorcycle"), wantErr: ErrInvalidDriverLicenseClass},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				store := newFakeDriverStore()
+				svc := NewDriverService(store, cfg)
+
+				d, err := svc.Create(context.Background(), CreateDriverInput{
+					Name:              "測試司機",
+					NationalID:        "A123456789",
+					Region:            "hsinchu",
+					LicenseClass:      tt.licenseClass,
+					LicenseExpiryDate: &expiry,
+				})
+
+				if tt.wantErr != nil {
+					assert.ErrorIs(t, err, tt.wantErr)
+					assert.Nil(t, store.lastCreate)
+					return
+				}
+
+				assert.NoError(t, err)
+				if tt.wantStored == nil {
+					assert.Nil(t, d.LicenseClass)
+				} else {
+					assert.Equal(t, *tt.wantStored, *d.LicenseClass)
+				}
+				assert.Equal(t, expiry, *d.LicenseExpiryDate)
+			})
+		}
+	})
 }
+
+func strPtr(v string) *string { return &v }
 
 func TestDriverService_Update(t *testing.T) {
 	cfg := testConfig()
@@ -159,6 +206,53 @@ func TestDriverService_Update(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "新名字", d.Name)
 		assert.Equal(t, "hsinchu", d.Region) // 未提供的欄位保持不變
+	})
+
+	t.Run("updates license class and expiry date", func(t *testing.T) {
+		id := uuid.New()
+		oldExpiry := time.Date(2027, 5, 21, 0, 0, 0, 0, time.UTC)
+		store := newFakeDriverStore()
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active",
+			LicenseClass: strPtr("sedan"), LicenseExpiryDate: &oldExpiry}
+		svc := NewDriverService(store, cfg)
+
+		newExpiry := time.Date(2031, 3, 24, 0, 0, 0, 0, time.UTC)
+		d, err := svc.Update(context.Background(), id, UpdateDriverInput{
+			LicenseClass:      strPtr("trailer"),
+			LicenseExpiryDate: &newExpiry,
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, "trailer", *d.LicenseClass)
+		assert.Equal(t, newExpiry, *d.LicenseExpiryDate)
+	})
+
+	t.Run("rejects an unknown license class", func(t *testing.T) {
+		id := uuid.New()
+		store := newFakeDriverStore()
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active"}
+		svc := NewDriverService(store, cfg)
+
+		_, err := svc.Update(context.Background(), id, UpdateDriverInput{LicenseClass: strPtr("motorcycle")})
+
+		assert.ErrorIs(t, err, ErrInvalidDriverLicenseClass)
+		assert.Nil(t, store.lastUpdate)
+	})
+
+	t.Run("clears the expiry date only when asked", func(t *testing.T) {
+		id := uuid.New()
+		expiry := time.Date(2027, 5, 21, 0, 0, 0, 0, time.UTC)
+		store := newFakeDriverStore()
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active", LicenseExpiryDate: &expiry}
+		svc := NewDriverService(store, cfg)
+
+		d, err := svc.Update(context.Background(), id, UpdateDriverInput{})
+		assert.NoError(t, err)
+		assert.Equal(t, expiry, *d.LicenseExpiryDate)
+
+		d, err = svc.Update(context.Background(), id, UpdateDriverInput{ClearLicenseExpiryDate: true})
+		assert.NoError(t, err)
+		assert.Nil(t, d.LicenseExpiryDate)
 	})
 }
 

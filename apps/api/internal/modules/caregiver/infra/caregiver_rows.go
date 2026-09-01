@@ -7,7 +7,7 @@ import (
 	"ltc-system/apps/api/internal/modules/caregiver/app"
 )
 
-// caregiverRow 是 caregivers 資料表（含 sites 據點名稱）的一列，只在本套件內存在。
+// caregiverRow 是 caregivers 資料表（含 sites 單位名稱）的一列，只在本套件內存在。
 // site_name_raw／contact／notes 皆以 SQL COALESCE 轉為空字串，維持 app.Caregiver 不需
 // 處理 NULL 的簡單型別。
 type caregiverRow struct {

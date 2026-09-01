@@ -65,7 +65,7 @@ func (r ExcelAdapter) RenderCaregiverImportTemplate() ([]byte, error) {
 
 	sampleRows := [][]interface{}{
 		{"個管", "竹北日照中心", "陳小華", "0912-345-678", "熟悉輪椅移位協助"},
-		{"專護", "竹南日照據點", "王大明", "0987-654-321", ""},
+		{"專護", "竹南日照單位", "王大明", "0987-654-321", ""},
 	}
 	for rIdx, rData := range sampleRows {
 		rowNum := rIdx + 2
@@ -79,7 +79,7 @@ func (r ExcelAdapter) RenderCaregiverImportTemplate() ([]byte, error) {
 	// （GetRows 會把任何非空白列都當成候選資料列，寫在表格下方的純文字列會被視為缺漏必填欄位的錯誤列）。
 	_ = f.AddComment(sheetName, excelize.Comment{
 		Cell: "A1",
-		Text: "＊姓名與類型為必填，類型請填寫「個管」或「專護」；單位請填寫既有據點名稱，找不到相符據點時仍會建立資料，匯入後可於「待維護」頁籤補建關聯。",
+		Text: "＊姓名與類型為必填，類型請填寫「個管」或「專護」；單位請填寫既有單位名稱，找不到相符單位時仍會建立資料，匯入後可於「待維護」頁籤補建關聯。",
 	})
 
 	buf, err := f.WriteToBuffer()

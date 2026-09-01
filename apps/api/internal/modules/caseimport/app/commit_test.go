@@ -118,22 +118,22 @@ func TestCommitCases_CreatesCaseWhenSiteAndVehicleNamesDoNotMatch(t *testing.T) 
 	}
 
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
-		{RowIndex: 1, Name: "個案甲", SiteName: "查無此據點", OutboundVehicle: "查無此車", InboundVehicle: "查無此車回"},
+		{RowIndex: 1, Name: "個案甲", SiteName: "查無此單位", OutboundVehicle: "查無此車", InboundVehicle: "查無此車回"},
 	}}
 
 	result, err := svc.CommitCases(context.Background(), preview, nil, Actor{ActorID: uuid.New()})
 
 	require.NoError(t, err)
-	assert.Equal(t, 1, result.ImportedCount, "據點/車輛比對不到仍應建立個案")
+	assert.Equal(t, 1, result.ImportedCount, "單位/車輛比對不到仍應建立個案")
 	assert.Empty(t, result.SkippedRows)
-	require.Len(t, result.Warnings, 3, "據點與去回程車輛各自獨立比對不到，各附一則警示")
+	require.Len(t, result.Warnings, 3, "單位與去回程車輛各自獨立比對不到，各附一則警示")
 
 	require.Len(t, prefWriter.calls, 1)
 	call := prefWriter.calls[0]
 	assert.Nil(t, call.siteID)
 	assert.Nil(t, call.outboundVehicleID)
 	assert.Nil(t, call.inboundVehicleID)
-	assert.Equal(t, "查無此據點", call.siteNameRaw)
+	assert.Equal(t, "查無此單位", call.siteNameRaw)
 	assert.Equal(t, "查無此車", call.outboundNameRaw)
 	assert.Equal(t, "查無此車回", call.inboundNameRaw)
 }
@@ -145,14 +145,14 @@ func TestCommitCases_ResolvesSiteAndVehicleWhenNamesMatch(t *testing.T) {
 	outboundID := uuid.New()
 	svc := &ImportService{
 		cases:       registrar,
-		siteRepo:    fakeSiteLookup{byName: map[string]uuid.UUID{"竹南日照據點": siteID}},
+		siteRepo:    fakeSiteLookup{byName: map[string]uuid.UUID{"竹南日照單位": siteID}},
 		vehicleRepo: fakeVehicleLookup{byName: map[string]uuid.UUID{"竹南1車": outboundID}},
 		prefRepo:    prefWriter,
 		txRunner:    fakeTxRunner{},
 	}
 
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
-		{RowIndex: 1, Name: "個案乙", SiteName: "竹南日照據點", OutboundVehicle: "竹南1車", InboundVehicle: "查無此車回"},
+		{RowIndex: 1, Name: "個案乙", SiteName: "竹南日照單位", OutboundVehicle: "竹南1車", InboundVehicle: "查無此車回"},
 	}}
 
 	result, err := svc.CommitCases(context.Background(), preview, nil, Actor{ActorID: uuid.New()})

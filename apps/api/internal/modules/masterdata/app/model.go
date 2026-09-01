@@ -9,7 +9,7 @@ import (
 // 本檔的型別是 masterdata 的 application model：不帶任何 struct tag，由 infra 自
 // persistence row 轉入、由 transport 轉為 API DTO。
 
-// Site 代表一個服務據點。
+// Site 代表一個服務單位。
 type Site struct {
 	ID        uuid.UUID
 	Code      string
@@ -27,11 +27,30 @@ type Vehicle struct {
 	ID          uuid.UUID
 	PlateNo     string
 	DisplayName string
-	Region      string
-	Status      string
-	Drivers     []VehicleDriver
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	SiteID      *uuid.UUID
+	SiteName    string
+	// Region 由所屬單位帶出，車輛本身不自存區域；未指定單位時為空字串。
+	Region                    string
+	OwnerName                 string
+	Brand                     string
+	Model                     string
+	ManufactureYM             string
+	CompulsoryInsuranceExpiry *time.Time
+	PassengerInsuranceExpiry  *time.Time
+	ThirdPartyInsuranceExpiry *time.Time
+	LastInspectionDate        *time.Time
+	WheelchairAccessible      *bool
+	Status                    string
+	Drivers                   []VehicleDriver
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
+}
+
+// VehicleFilter 是車輛清單的查詢條件，零值欄位代表不篩選。
+type VehicleFilter struct {
+	SiteID *uuid.UUID
+	Region string
+	Q      string
 }
 
 // VehicleDriver 是掛在車輛上的司機摘要，只帶識別用欄位。
@@ -54,8 +73,11 @@ type Driver struct {
 	Email            *string
 	Region           string
 	Status           string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	// LicenseClass 為駕照類別代碼，LicenseExpiryDate 為駕照有效日期；兩者皆可為空，代表尚未補登。
+	LicenseClass      *string
+	LicenseExpiryDate *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // DriverAssignment 代表司機與車輛在一段期間內的指派關係。一位司機同期只會有一台車，

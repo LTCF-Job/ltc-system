@@ -107,7 +107,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 		apiV1.POST("/cases/import", auth.RequireRoles("staff", "admin"), h.caseImport.ImportExcel)
 		apiV1.POST("/masters/import", auth.RequireRoles("staff", "admin"), h.caseImport.ImportExcel)
 
-		// 2. 據點主檔
+		// 2. 單位主檔
 		apiV1.GET("/sites", auth.RequireRoles("viewer", "staff", "admin"), h.site.List)
 		apiV1.POST("/sites", auth.RequireRoles("staff", "admin"), h.site.Create)
 		apiV1.PATCH("/sites/:id", auth.RequireRoles("staff", "admin"), h.site.Update)

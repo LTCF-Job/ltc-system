@@ -19,8 +19,8 @@ func NewVehicleService(store VehicleStore, drivers DriverStore) *VehicleService 
 }
 
 // List 查詢車輛清單，並帶出每台車今日生效的司機。
-func (s *VehicleService) List(ctx context.Context, region, q string, page, pageSize int) ([]Vehicle, int64, error) {
-	list, total, err := s.store.List(ctx, region, q, page, pageSize)
+func (s *VehicleService) List(ctx context.Context, filter VehicleFilter, page, pageSize int) ([]Vehicle, int64, error) {
+	list, total, err := s.store.List(ctx, filter, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -46,46 +46,53 @@ func (s *VehicleService) SetDrivers(ctx context.Context, vehicleID uuid.UUID, dr
 	return s.drivers.ReplaceVehicleDrivers(ctx, vehicleID, driverIDs, effectiveFrom)
 }
 
-// CreateVehicleInput 代表新增車輛所需之輸入。
-type CreateVehicleInput struct {
-	PlateNo     string
-	DisplayName string
-	Region      string
-	Status      string
+// VehicleInput 是新增與更新車輛共用的輸入。Region 不在其中：車輛的區域一律由所屬單位帶出。
+type VehicleInput struct {
+	PlateNo                   string
+	DisplayName               string
+	SiteID                    *uuid.UUID
+	OwnerName                 string
+	Brand                     string
+	Model                     string
+	ManufactureYM             string
+	CompulsoryInsuranceExpiry *time.Time
+	PassengerInsuranceExpiry  *time.Time
+	ThirdPartyInsuranceExpiry *time.Time
+	LastInspectionDate        *time.Time
+	WheelchairAccessible      *bool
+	Status                    string
+}
+
+func (in VehicleInput) apply(v *Vehicle) {
+	v.PlateNo = in.PlateNo
+	v.DisplayName = in.DisplayName
+	v.SiteID = in.SiteID
+	v.OwnerName = in.OwnerName
+	v.Brand = in.Brand
+	v.Model = in.Model
+	v.ManufactureYM = in.ManufactureYM
+	v.CompulsoryInsuranceExpiry = in.CompulsoryInsuranceExpiry
+	v.PassengerInsuranceExpiry = in.PassengerInsuranceExpiry
+	v.ThirdPartyInsuranceExpiry = in.ThirdPartyInsuranceExpiry
+	v.LastInspectionDate = in.LastInspectionDate
+	v.WheelchairAccessible = in.WheelchairAccessible
+	v.Status = in.Status
 }
 
 // Create 新增車輛。
-func (s *VehicleService) Create(ctx context.Context, in CreateVehicleInput) (*Vehicle, error) {
-	v := Vehicle{
-		ID:          uuid.New(),
-		PlateNo:     in.PlateNo,
-		DisplayName: in.DisplayName,
-		Region:      in.Region,
-		Status:      in.Status,
-	}
+func (s *VehicleService) Create(ctx context.Context, in VehicleInput) (*Vehicle, error) {
+	v := Vehicle{ID: uuid.New()}
+	in.apply(&v)
 	if err := s.store.Create(ctx, &v); err != nil {
 		return nil, err
 	}
 	return &v, nil
 }
 
-// UpdateVehicleInput 代表更新車輛所需之輸入。
-type UpdateVehicleInput struct {
-	PlateNo     string
-	DisplayName string
-	Region      string
-	Status      string
-}
-
 // Update 更新車輛。
-func (s *VehicleService) Update(ctx context.Context, id uuid.UUID, in UpdateVehicleInput) (*Vehicle, error) {
-	v := Vehicle{
-		ID:          id,
-		PlateNo:     in.PlateNo,
-		DisplayName: in.DisplayName,
-		Region:      in.Region,
-		Status:      in.Status,
-	}
+func (s *VehicleService) Update(ctx context.Context, id uuid.UUID, in VehicleInput) (*Vehicle, error) {
+	v := Vehicle{ID: id}
+	in.apply(&v)
 	if err := s.store.Update(ctx, &v); err != nil {
 		return nil, err
 	}

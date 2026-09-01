@@ -15,7 +15,7 @@ func (ExcelRenderer) RenderCaseProfileWorkbook(rows []app.CaseProfileRow) ([]byt
 	sheet := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheet)
 	// A 至 N 嚴格沿用來源工作表的表頭與欄位位置。
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "單位", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
 	for i, value := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		_ = f.SetCellValue(sheet, cell, value)

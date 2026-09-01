@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// SiteStore 定義據點主檔的讀寫邊界。
+// SiteStore 定義單位主檔的讀寫邊界。
 type SiteStore interface {
 	List(ctx context.Context, region, q string, page, pageSize int) ([]Site, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Site, error)
@@ -18,7 +18,7 @@ type SiteStore interface {
 
 // VehicleStore 定義車輛主檔的讀寫邊界。
 type VehicleStore interface {
-	List(ctx context.Context, region, q string, page, pageSize int) ([]Vehicle, int64, error)
+	List(ctx context.Context, filter VehicleFilter, page, pageSize int) ([]Vehicle, int64, error)
 	Create(ctx context.Context, v *Vehicle) error
 	Update(ctx context.Context, v *Vehicle) error
 }

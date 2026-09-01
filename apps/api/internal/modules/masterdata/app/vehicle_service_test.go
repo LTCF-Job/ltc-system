@@ -14,7 +14,7 @@ type fakeVehicleStore struct {
 	list []Vehicle
 }
 
-func (f *fakeVehicleStore) List(ctx context.Context, region, q string, page, pageSize int) ([]Vehicle, int64, error) {
+func (f *fakeVehicleStore) List(ctx context.Context, filter VehicleFilter, page, pageSize int) ([]Vehicle, int64, error) {
 	return f.list, int64(len(f.list)), nil
 }
 
@@ -33,7 +33,7 @@ func TestVehicleService_List(t *testing.T) {
 	}
 	svc := NewVehicleService(&fakeVehicleStore{list: []Vehicle{{ID: vehicleA}, {ID: vehicleB}}}, driverStore)
 
-	list, total, err := svc.List(context.Background(), "", "", 1, 20)
+	list, total, err := svc.List(context.Background(), VehicleFilter{}, 1, 20)
 
 	assert.NoError(t, err)
 	assert.Equal(t, int64(2), total)

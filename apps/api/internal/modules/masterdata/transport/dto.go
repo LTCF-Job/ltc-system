@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,7 +12,7 @@ import (
 // repository entity 逐欄一致，搬遷不得改變任何既有回應形狀；轉換函式對 nil
 // slice 回傳 nil，維持清單為空時序列化成 null 的既有行為。
 
-// SiteResponse 代表回傳給前端的據點資料。
+// SiteResponse 代表回傳給前端的單位資料。
 type SiteResponse struct {
 	ID        uuid.UUID `json:"id"`
 	Code      string    `json:"code"`
@@ -49,7 +50,7 @@ func newSiteResponses(list []app.Site) []SiteResponse {
 	return out
 }
 
-// CreateSiteRequest 代表新增據點請求。既有 API 未對任何欄位強制必填，維持不變。
+// CreateSiteRequest 代表新增單位請求。既有 API 未對任何欄位強制必填，維持不變。
 type CreateSiteRequest struct {
 	Code     string  `json:"code"`
 	Name     string  `json:"name"`
@@ -59,7 +60,7 @@ type CreateSiteRequest struct {
 	Status   string  `json:"status"`
 }
 
-// UpdateSiteRequest 代表更新據點請求。
+// UpdateSiteRequest 代表更新單位請求。
 type UpdateSiteRequest struct {
 	Code     string  `json:"code"`
 	Name     string  `json:"name"`
@@ -69,16 +70,27 @@ type UpdateSiteRequest struct {
 	Status   string  `json:"status"`
 }
 
-// VehicleResponse 代表回傳給前端的車輛資料。
+// VehicleResponse 代表回傳給前端的車輛資料。Region 由所屬單位帶出，為唯讀欄位。
 type VehicleResponse struct {
-	ID          uuid.UUID            `json:"id"`
-	PlateNo     string               `json:"plateNo"`
-	DisplayName string               `json:"displayName"`
-	Region      string               `json:"region"`
-	Status      string               `json:"status"`
-	Drivers     []VehicleDriverBrief `json:"drivers"`
-	CreatedAt   time.Time            `json:"createdAt"`
-	UpdatedAt   time.Time            `json:"updatedAt"`
+	ID                        uuid.UUID            `json:"id"`
+	PlateNo                   string               `json:"plateNo"`
+	DisplayName               string               `json:"displayName"`
+	SiteID                    *uuid.UUID           `json:"siteId"`
+	SiteName                  string               `json:"siteName"`
+	Region                    string               `json:"region"`
+	OwnerName                 string               `json:"ownerName"`
+	Brand                     string               `json:"brand"`
+	Model                     string               `json:"model"`
+	ManufactureYM             string               `json:"manufactureYm"`
+	CompulsoryInsuranceExpiry *time.Time           `json:"compulsoryInsuranceExpiry"`
+	PassengerInsuranceExpiry  *time.Time           `json:"passengerInsuranceExpiry"`
+	ThirdPartyInsuranceExpiry *time.Time           `json:"thirdPartyInsuranceExpiry"`
+	LastInspectionDate        *time.Time           `json:"lastInspectionDate"`
+	WheelchairAccessible      *bool                `json:"wheelchairAccessible"`
+	Status                    string               `json:"status"`
+	Drivers                   []VehicleDriverBrief `json:"drivers"`
+	CreatedAt                 time.Time            `json:"createdAt"`
+	UpdatedAt                 time.Time            `json:"updatedAt"`
 }
 
 // VehicleDriverBrief 代表掛在車輛上的司機摘要。
@@ -94,14 +106,25 @@ func newVehicleResponse(v app.Vehicle) VehicleResponse {
 		drivers = append(drivers, VehicleDriverBrief{ID: d.ID, Code: d.Code, Name: d.Name})
 	}
 	return VehicleResponse{
-		ID:          v.ID,
-		PlateNo:     v.PlateNo,
-		DisplayName: v.DisplayName,
-		Region:      v.Region,
-		Status:      v.Status,
-		Drivers:     drivers,
-		CreatedAt:   v.CreatedAt,
-		UpdatedAt:   v.UpdatedAt,
+		ID:                        v.ID,
+		PlateNo:                   v.PlateNo,
+		DisplayName:               v.DisplayName,
+		SiteID:                    v.SiteID,
+		SiteName:                  v.SiteName,
+		Region:                    v.Region,
+		OwnerName:                 v.OwnerName,
+		Brand:                     v.Brand,
+		Model:                     v.Model,
+		ManufactureYM:             v.ManufactureYM,
+		CompulsoryInsuranceExpiry: v.CompulsoryInsuranceExpiry,
+		PassengerInsuranceExpiry:  v.PassengerInsuranceExpiry,
+		ThirdPartyInsuranceExpiry: v.ThirdPartyInsuranceExpiry,
+		LastInspectionDate:        v.LastInspectionDate,
+		WheelchairAccessible:      v.WheelchairAccessible,
+		Status:                    v.Status,
+		Drivers:                   drivers,
+		CreatedAt:                 v.CreatedAt,
+		UpdatedAt:                 v.UpdatedAt,
 	}
 }
 
@@ -118,18 +141,47 @@ func newVehicleResponses(list []app.Vehicle) []VehicleResponse {
 
 // CreateVehicleRequest 代表新增車輛請求。既有 API 未強制任何必填欄位，維持不變。
 type CreateVehicleRequest struct {
-	PlateNo     string `json:"plateNo"`
-	DisplayName string `json:"displayName"`
-	Region      string `json:"region"`
-	Status      string `json:"status"`
+	VehicleWriteFields
 }
 
 // UpdateVehicleRequest 代表更新車輛請求。
 type UpdateVehicleRequest struct {
-	PlateNo     string `json:"plateNo"`
-	DisplayName string `json:"displayName"`
-	Region      string `json:"region"`
-	Status      string `json:"status"`
+	VehicleWriteFields
+}
+
+// VehicleWriteFields 是新增與更新車輛共用的可寫欄位。區域不在其中：車輛的區域由所屬單位決定。
+type VehicleWriteFields struct {
+	PlateNo                   string     `json:"plateNo" binding:"required"`
+	DisplayName               string     `json:"displayName" binding:"required"`
+	SiteID                    *uuid.UUID `json:"siteId" binding:"required"`
+	OwnerName                 string     `json:"ownerName" binding:"required"`
+	Brand                     string     `json:"brand" binding:"required"`
+	Model                     string     `json:"model" binding:"required"`
+	ManufactureYM             string     `json:"manufactureYm" binding:"required"`
+	CompulsoryInsuranceExpiry *time.Time `json:"compulsoryInsuranceExpiry" binding:"required"`
+	PassengerInsuranceExpiry  *time.Time `json:"passengerInsuranceExpiry" binding:"required"`
+	ThirdPartyInsuranceExpiry *time.Time `json:"thirdPartyInsuranceExpiry" binding:"required"`
+	LastInspectionDate        *time.Time `json:"lastInspectionDate" binding:"required"`
+	WheelchairAccessible      *bool      `json:"wheelchairAccessible" binding:"required"`
+	Status                    string     `json:"status"`
+}
+
+func (f VehicleWriteFields) toInput() app.VehicleInput {
+	return app.VehicleInput{
+		PlateNo:                   f.PlateNo,
+		DisplayName:               f.DisplayName,
+		SiteID:                    f.SiteID,
+		OwnerName:                 f.OwnerName,
+		Brand:                     f.Brand,
+		Model:                     f.Model,
+		ManufactureYM:             f.ManufactureYM,
+		CompulsoryInsuranceExpiry: f.CompulsoryInsuranceExpiry,
+		PassengerInsuranceExpiry:  f.PassengerInsuranceExpiry,
+		ThirdPartyInsuranceExpiry: f.ThirdPartyInsuranceExpiry,
+		LastInspectionDate:        f.LastInspectionDate,
+		WheelchairAccessible:      f.WheelchairAccessible,
+		Status:                    f.Status,
+	}
 }
 
 // DriverResponse 代表回傳給前端的司機資料。身分證密文與 HMAC 索引不對外輸出。
@@ -142,22 +194,27 @@ type DriverResponse struct {
 	Email            *string   `json:"email,omitempty"`
 	Region           string    `json:"region"`
 	Status           string    `json:"status"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	// LicenseClass 為駕照類別代碼（sedan／truck／bus／trailer），未補登時為 null。
+	LicenseClass      *string    `json:"licenseClass"`
+	LicenseExpiryDate *time.Time `json:"licenseExpiryDate"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
 }
 
 func newDriverResponse(d app.Driver) DriverResponse {
 	return DriverResponse{
-		ID:               d.ID,
-		Code:             d.Code,
-		Name:             d.Name,
-		NameNormalized:   d.NameNormalized,
-		NationalIDMasked: d.NationalIDMasked,
-		Email:            d.Email,
-		Region:           d.Region,
-		Status:           d.Status,
-		CreatedAt:        d.CreatedAt,
-		UpdatedAt:        d.UpdatedAt,
+		ID:                d.ID,
+		Code:              d.Code,
+		Name:              d.Name,
+		NameNormalized:    d.NameNormalized,
+		NationalIDMasked:  d.NationalIDMasked,
+		Email:             d.Email,
+		Region:            d.Region,
+		Status:            d.Status,
+		LicenseClass:      d.LicenseClass,
+		LicenseExpiryDate: d.LicenseExpiryDate,
+		CreatedAt:         d.CreatedAt,
+		UpdatedAt:         d.UpdatedAt,
 	}
 }
 
@@ -201,19 +258,44 @@ func newDriverAssignmentResponse(a app.DriverAssignment) DriverAssignmentRespons
 
 // CreateDriverRequest 代表新增司機請求。
 type CreateDriverRequest struct {
-	Code       string  `json:"code"`
-	Name       string  `json:"name" binding:"required"`
-	NationalID string  `json:"nationalId" binding:"required"`
-	Email      *string `json:"email"`
-	Region     string  `json:"region" binding:"required"`
+	Code              string     `json:"code"`
+	Name              string     `json:"name" binding:"required"`
+	NationalID        string     `json:"nationalId" binding:"required"`
+	Email             *string    `json:"email"`
+	Region            string     `json:"region" binding:"required"`
+	LicenseClass      *string    `json:"licenseClass"`
+	LicenseExpiryDate *time.Time `json:"licenseExpiryDate"`
 }
 
 // UpdateDriverRequest 代表更新司機請求，欄位為 nil 表示不變更。
 type UpdateDriverRequest struct {
-	Name   *string `json:"name"`
-	Email  *string `json:"email"`
-	Region *string `json:"region"`
-	Status *string `json:"status"`
+	Name              *string      `json:"name"`
+	Email             *string      `json:"email"`
+	Region            *string      `json:"region"`
+	Status            *string      `json:"status"`
+	LicenseClass      *string      `json:"licenseClass"`
+	LicenseExpiryDate nullableTime `json:"licenseExpiryDate"`
+}
+
+// nullableTime 用來區分 JSON 欄位「未提供」與「明確給 null」，後者代表要把日期清空。
+type nullableTime struct {
+	Present bool
+	Value   *time.Time
+}
+
+// UnmarshalJSON 只在 JSON 帶有該欄位時被呼叫，因此可用來標記欄位存在。
+func (n *nullableTime) UnmarshalJSON(data []byte) error {
+	n.Present = true
+	if string(data) == "null" {
+		n.Value = nil
+		return nil
+	}
+	var t time.Time
+	if err := json.Unmarshal(data, &t); err != nil {
+		return err
+	}
+	n.Value = &t
+	return nil
 }
 
 // AssignVehicleRequest 代表指派司機車輛請求。

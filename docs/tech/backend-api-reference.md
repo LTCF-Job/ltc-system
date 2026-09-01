@@ -37,7 +37,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/cases/export?caseIds=` | viewer, staff, admin | 匯出個案彙整表；`caseIds` 為逗號分隔的個案 ID，省略則匯出全部個案 |
 | PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定 |
 
-## 據點主檔 `siteH`
+## 單位主檔 `siteH`
 
 | Method | Path | 角色 |
 |---|---|---|
@@ -50,18 +50,18 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/vehicles` | viewer, staff, admin | 每筆帶 `drivers`（該車今日生效的司機，一台車可有多位） |
-| POST | `/vehicles` | staff, admin | |
-| PATCH | `/vehicles/:id` | staff, admin | |
+| GET | `/vehicles` | viewer, staff, admin | 支援 `siteId`、`region`、`q` 篩選；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位），以及所屬單位帶出的 `siteName` 與唯讀 `region` |
+| POST | `/vehicles` | staff, admin | 車籍欄位（`siteId`、`ownerName`、`brand`、`model`、`manufactureYm`、三項保險到期日、`lastInspectionDate`、`wheelchairAccessible`）皆為必填 |
+| PATCH | `/vehicles/:id` | staff, admin | 整筆覆寫，必填欄位同 POST |
 | PUT | `/vehicles/:id/drivers` | staff, admin | 整批設定本車司機：`{ driverIds: string[], effectiveFrom?: date }`；`driverIds` 為空代表清空 |
 
 ## 司機主檔 `driverH`
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/drivers` | viewer, staff, admin | |
-| POST | `/drivers` | staff, admin | |
-| PATCH | `/drivers/:id` | staff, admin | |
+| GET | `/drivers` | viewer, staff, admin | 每筆帶 `licenseClass`（駕照類別代碼）與 `licenseExpiryDate`（駕照有效日期），未補登為 `null` |
+| POST | `/drivers` | staff, admin | `licenseClass`／`licenseExpiryDate` 選填 |
+| PATCH | `/drivers/:id` | staff, admin | 欄位未提供代表不變更；`licenseExpiryDate` 明確給 `null` 才會清空 |
 | POST | `/drivers/:id/reveal` | staff, admin | 明文顯示司機個資 |
 | POST | `/drivers/:id/assignments` | staff, admin | 指派車輛給司機；一位司機同期只會有一台車，指派新車即取代原本的指派 |
 
@@ -183,13 +183,13 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`unresolvedLink`（單位待關聯既有據點）、`incomplete`（聯絡方式或備註缺漏）篩選 |
+| GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`unresolvedLink`（單位待關聯既有單位）、`incomplete`（聯絡方式或備註缺漏）篩選 |
 | POST | `/caregivers` | staff, admin | 新增照護人員，姓名與類型（`case_manager`＝個管／`specialist`＝專護）皆為必填 |
 | GET | `/caregivers/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
 | POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx）；姓名或類型缺漏（或類型不是個管／專護）略過，單位比對不到或聯絡方式／備註缺漏仍建立資料並附警告 |
 | PATCH | `/caregivers/:id` | staff, admin | |
 | DELETE | `/caregivers/:id` | admin | |
-| PUT | `/caregivers/:id/site` | staff, admin | 將單位待關聯的照護人員連結至既有據點，並清空原始單位名稱 |
+| PUT | `/caregivers/:id/site` | staff, admin | 將單位待關聯的照護人員連結至既有單位，並清空原始單位名稱 |
 
 ## ⚠️ 前端已預留但後端尚未實作
 

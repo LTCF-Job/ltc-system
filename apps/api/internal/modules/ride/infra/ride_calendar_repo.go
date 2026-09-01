@@ -44,7 +44,7 @@ func (r *RideRepository) ListRideSourcesForSlot(
 // ListCalendarCases 取得該月份有生效排班的個案與其趟次時段。
 //
 // effective_range 與查詢區間有交集即納入，個案是否真的要出車由 domain/calendar
-// 依 weekdays 與據點營業日逐日推算。
+// 依 weekdays 與單位營業日逐日推算。
 func (r *RideRepository) ListCalendarCases(
 	ctx context.Context,
 	start, end time.Time,

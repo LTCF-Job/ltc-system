@@ -318,8 +318,8 @@ function getEntityDisplayName(row?: AuditLogDTO | null): string {
 
     case 'sites': {
       const name = data.name || data.siteName || data.site_name
-      if (name) return `${name} (據點)`
-      return '據點主檔'
+      if (name) return `${name} (單位)`
+      return '單位主檔'
     }
 
     case 'regions': {

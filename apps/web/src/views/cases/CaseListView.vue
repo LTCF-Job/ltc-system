@@ -196,26 +196,26 @@
     </DataTablePage>
     </el-tab-pane>
 
-    <!-- 待維護：據點/去程車/回程車比對不到主檔資料的個案，供事後關聯或新增主檔；版面比照照護人員管理的待維護頁籤 -->
+    <!-- 待維護：單位/去程車/回程車比對不到主檔資料的個案，供事後關聯或新增主檔；版面比照照護人員管理的待維護頁籤 -->
     <el-tab-pane label="待維護" name="unresolved">
       <div v-loading="unresolvedLoading" class="pending-panel">
         <el-empty v-if="!unresolvedLoading && unresolvedCases.length === 0" description="目前沒有待維護的個案" />
         <el-table v-else :data="unresolvedCases" border stripe table-layout="auto">
           <el-table-column prop="code" label="個案編號" width="95" align="center" class-name="unresolved-code-col" />
           <el-table-column prop="name" label="姓名" min-width="90" class-name="unresolved-name-col" />
-          <el-table-column label="據點" min-width="220" class-name="unresolved-site-col">
+          <el-table-column label="單位" min-width="220" class-name="unresolved-site-col">
             <template #default="{ row }">
               <div v-if="row.siteNameRaw" class="unresolved-slot">
                 <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
                 <el-select
                   filterable
-                  placeholder="選擇既有據點"
+                  placeholder="選擇既有單位"
                   style="width: 160px"
                   @change="(val: string) => handleLinkSlot(row as CaseDTO, 'site', val)"
                 >
                   <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
                 </el-select>
-                <el-button link type="primary" size="small" @click="openQuickCreate('site', row as CaseDTO)">新增據點</el-button>
+                <el-button link type="primary" size="small" @click="openQuickCreate('site', row as CaseDTO)">新增單位</el-button>
               </div>
               <span v-else class="empty-value">-</span>
             </template>
@@ -259,10 +259,10 @@
     </el-tab-pane>
     </el-tabs>
 
-    <!-- 新增據點/車輛快速建立彈窗 -->
-    <el-dialog v-model="quickCreateVisible" :title="quickCreateKind === 'site' ? '新增據點' : '新增車輛'" width="min(480px, calc(100vw - 32px))">
+    <!-- 新增單位/車輛快速建立彈窗 -->
+    <el-dialog v-model="quickCreateVisible" :title="quickCreateKind === 'site' ? '新增單位' : '新增車輛'" width="min(480px, calc(100vw - 32px))">
       <el-form v-if="quickCreateKind === 'site'" label-width="90px">
-        <el-form-item label="據點名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
+        <el-form-item label="單位名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
         <el-form-item label="區域">
           <el-select v-model="quickCreateSiteForm.region" style="width: 100%">
             <el-option v-for="(label, key) in REGION_LABELS" :key="key" :value="key" :label="label" />
@@ -270,14 +270,14 @@
         </el-form-item>
         <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
       </el-form>
-      <el-form v-else label-width="90px">
-        <el-form-item label="車牌號碼"><el-input v-model="quickCreateVehicleForm.plateNo" /></el-form-item>
-        <el-form-item label="顯示名稱"><el-input v-model="quickCreateVehicleForm.displayName" /></el-form-item>
-        <el-form-item label="區域">
-          <el-select v-model="quickCreateVehicleForm.region" style="width: 100%">
-            <el-option v-for="(label, key) in REGION_LABELS" :key="key" :value="key" :label="label" />
-          </el-select>
-        </el-form-item>
+      <el-form
+        v-else
+        ref="quickCreateVehicleFormRef"
+        :model="quickCreateVehicleForm"
+        :rules="vehicleFormRules"
+        label-width="150px"
+      >
+        <VehicleFormFields :form="quickCreateVehicleForm" :sites="availableSites" />
       </el-form>
       <template #footer>
         <DialogFooter
@@ -304,7 +304,7 @@
         <el-table-column prop="nationalId" label="身分證字號" width="120" />
         <el-table-column prop="gender" label="性別" width="60" />
         <el-table-column prop="birthDate" label="生日" width="100" :formatter="(row: any) => formatRocBirthDate(row.birthDate)" />
-        <el-table-column prop="siteName" label="據點" width="110" />
+        <el-table-column prop="siteName" label="單位" width="110" />
         <el-table-column prop="outboundVehicle" label="去程車" width="100" />
         <el-table-column prop="inboundVehicle" label="回程車" width="100" />
         <el-table-column prop="careContactRole" label="個管or照專" width="100" />
@@ -403,6 +403,7 @@ import TableRowActions from '@/components/TableRowActions.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import CaseSelectDialog from '@/components/CaseSelectDialog.vue'
+import VehicleFormFields from '@/components/VehicleFormFields.vue'
 import {
   listCases,
   createCase,
@@ -418,6 +419,7 @@ import { listSites, listVehicles, createSite, createVehicle } from '@/api/master
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
+import { emptyVehicleForm, vehicleFormRules } from '@/utils/vehicleForm'
 import {
   REGION_LABELS,
   CASE_STATUS_LABELS,
@@ -428,7 +430,7 @@ import {
   type TripPattern,
   type ServiceUsageType
 } from '@/types/domain'
-import type { CaseDTO, CreateCaseRequest, SiteDTO, VehicleDTO } from '@/types/api'
+import type { CaseDTO, CreateCaseRequest, CreateVehicleRequest, SiteDTO, VehicleDTO } from '@/types/api'
 
 // 匯入預覽的生日僅供人工核對，改用民國年顯示；後端仍以西元 ISO 日期解析與儲存
 function formatRocBirthDate(birthDate?: string): string {
@@ -563,12 +565,12 @@ async function handleCommitImport(file: File, includeDuplicateRows: number[]) {
   return commitImportCases(file, includeDuplicateRows)
 }
 
-// 匯入完成後，若有據點/車輛待補建關聯，導引使用者前往「待維護」頁籤處理；
+// 匯入完成後，若有單位/車輛待補建關聯，導引使用者前往「待維護」頁籤處理；
 // 無論點選哪個按鈕都視為使用者已確認匯入結果，一併關閉匯入視窗
 function handleImportSuccess() {
   executeFetch()
   ElMessageBox.confirm(
-    '本次匯入若有據點或去回程車輛未比對到既有主檔，已建立資料並列入「待維護」頁籤，是否立即前往查看？',
+    '本次匯入若有單位或去回程車輛未比對到既有主檔，已建立資料並列入「待維護」頁籤，是否立即前往查看？',
     '匯入完成',
     { confirmButtonText: '前往待維護', cancelButtonText: '稍後再說', type: 'info' }
   )
@@ -684,16 +686,17 @@ async function handleLinkSlot(row: CaseDTO, slot: UnresolvedSlot, entityId: stri
   }
 }
 
-// 新增據點/車輛快速建立彈窗
+// 新增單位/車輛快速建立彈窗
 const quickCreateVisible = ref(false)
 const quickCreateKind = ref<'site' | 'vehicle'>('site')
 const quickCreateSaving = ref(false)
 const quickCreateTargetCase = ref<CaseDTO | null>(null)
 const quickCreateSlot = ref<UnresolvedSlot>('site')
 const quickCreateSiteForm = reactive({ name: '', region: 'miaoli' as Region, address: '', openDays: [1, 2, 3, 4, 5] })
-const quickCreateVehicleForm = reactive({ plateNo: '', displayName: '', region: 'miaoli' as Region })
+const quickCreateVehicleForm = reactive<CreateVehicleRequest>(emptyVehicleForm())
+const quickCreateVehicleFormRef = ref<FormInstance>()
 
-// 據點/車輛名稱預先帶入匯入時的原始名稱，使用者只需確認其餘欄位即可送出，不必重打一次名稱
+// 單位/車輛名稱預先帶入匯入時的原始名稱，使用者只需確認其餘欄位即可送出，不必重打一次名稱
 function openQuickCreate(kind: 'site' | 'vehicle', row: CaseDTO, slot: UnresolvedSlot = 'site') {
   quickCreateKind.value = kind
   quickCreateTargetCase.value = row
@@ -701,9 +704,10 @@ function openQuickCreate(kind: 'site' | 'vehicle', row: CaseDTO, slot: Unresolve
   quickCreateSiteForm.name = kind === 'site' ? row.siteNameRaw || '' : ''
   quickCreateSiteForm.region = 'miaoli'
   quickCreateSiteForm.address = ''
-  quickCreateVehicleForm.plateNo = ''
-  quickCreateVehicleForm.displayName = kind === 'vehicle' ? row[SLOT_RAW_FIELD[slot]] || '' : ''
-  quickCreateVehicleForm.region = 'miaoli'
+  Object.assign(quickCreateVehicleForm, emptyVehicleForm(), {
+    displayName: kind === 'vehicle' ? row[SLOT_RAW_FIELD[slot]] || '' : ''
+  })
+  quickCreateVehicleFormRef.value?.clearValidate()
   quickCreateVisible.value = true
 }
 
@@ -716,7 +720,8 @@ async function handleQuickCreateAndLink() {
       availableSites.value.push(site)
       await handleLinkSlot(quickCreateTargetCase.value, 'site', site.id)
     } else {
-      const vehicle = await createVehicle(quickCreateVehicleForm)
+      if (!(await quickCreateVehicleFormRef.value?.validate().catch(() => false))) return
+      const vehicle = await createVehicle({ ...quickCreateVehicleForm })
       availableVehicles.value.push(vehicle)
       await handleLinkSlot(quickCreateTargetCase.value, quickCreateSlot.value, vehicle.id)
     }
@@ -766,7 +771,7 @@ executeFetch()
 }
 
 /* 不用 flex-wrap: wrap，理由同照護人員管理待維護頁籤：欄寬不夠時會把
-   「選擇既有據點/車輛」跟「新增」按鈕擠成第二行，即使頁面還有空間也一樣。
+   「選擇既有單位/車輛」跟「新增」按鈕擠成第二行，即使頁面還有空間也一樣。
    改成 nowrap + table-layout="auto"，讓欄位依內容自然撐寬、有空間就單行顯示。 */
 .unresolved-slot {
   display: flex;

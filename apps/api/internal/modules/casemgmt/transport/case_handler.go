@@ -226,7 +226,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
 }
 
-// UpdateTransportPreference 更新個案的交通偏好（所屬據點與去回程車輛）。
+// UpdateTransportPreference 更新個案的交通偏好（所屬單位與去回程車輛）。
 func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)

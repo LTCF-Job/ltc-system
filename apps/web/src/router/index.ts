@@ -43,7 +43,7 @@ const router = createRouter({
           path: 'masters/sites',
           name: 'SiteList',
           component: () => import('@/views/masters/SiteListView.vue'),
-          meta: { title: '據點管理', module: 'masters_sites', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
+          meta: { title: '單位管理', module: 'masters_sites', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
         },
         {
           path: 'masters/vehicles',

@@ -19,7 +19,7 @@
 
           <el-select
             v-model="selectedSiteId"
-            placeholder="全部據點"
+            placeholder="全部單位"
             clearable
             style="width: 150px"
             @change="fetchSchedule"
@@ -118,7 +118,7 @@
             {{ row.arriveTime || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="destination" label="目的地 (據點)" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="destination" label="目的地 (單位)" min-width="180" show-overflow-tooltip />
         <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="vehicle-name-col" />
       </el-table>
       <el-empty
@@ -165,7 +165,7 @@
             <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="origin" label="出發地 (據點)" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="origin" label="出發地 (單位)" min-width="180" show-overflow-tooltip />
         <el-table-column prop="arriveTime" label="抵達時間" width="95" align="center">
           <template #default="{ row }">
             {{ row.arriveTime || '-' }}

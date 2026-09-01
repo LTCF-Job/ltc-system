@@ -51,6 +51,7 @@ declare module 'vue' {
     ElMenuItem: typeof import('element-plus/es')['ElMenuItem']
     ElOption: typeof import('element-plus/es')['ElOption']
     ElPagination: typeof import('element-plus/es')['ElPagination']
+    ElProgress: typeof import('element-plus/es')['ElProgress']
     ElRadio: typeof import('element-plus/es')['ElRadio']
     ElRadioButton: typeof import('element-plus/es')['ElRadioButton']
     ElRadioGroup: typeof import('element-plus/es')['ElRadioGroup']
@@ -75,6 +76,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     StatusTag: typeof import('./components/StatusTag.vue')['default']
     TableRowActions: typeof import('./components/TableRowActions.vue')['default']
+    VehicleFormFields: typeof import('./components/VehicleFormFields.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

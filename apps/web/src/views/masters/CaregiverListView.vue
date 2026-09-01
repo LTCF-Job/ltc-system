@@ -53,13 +53,13 @@
                     <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
                     <el-select
                       filterable
-                      placeholder="選擇既有據點"
+                      placeholder="選擇既有單位"
                       style="width: 150px"
                       @change="(val: string) => handleLinkSite(row as CaregiverDTO, val)"
                     >
                       <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
                     </el-select>
-                    <el-button link type="primary" size="small" @click="openQuickCreateSite(row as CaregiverDTO)">新增據點</el-button>
+                    <el-button link type="primary" size="small" @click="openQuickCreateSite(row as CaregiverDTO)">新增單位</el-button>
                   </div>
                   <span v-else class="empty-value">-</span>
                 </template>
@@ -99,7 +99,7 @@
         </DataTablePage>
       </el-tab-pane>
 
-      <!-- 待維護：單位比對不到既有據點、或聯絡方式／備註缺漏的照護人員資料，統一用「缺少欄位」欄提示，不再分組 -->
+      <!-- 待維護：單位名稱比對不到單位主檔、或聯絡方式／備註缺漏的照護人員資料，統一用「缺少欄位」欄提示，不再分組 -->
       <el-tab-pane label="待維護" name="pending">
         <div v-loading="pendingLoading" class="pending-panel">
           <el-empty v-if="!pendingLoading && pendingCaregivers.length === 0" description="目前沒有待維護的照護人員" />
@@ -112,13 +112,13 @@
                   <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
                   <el-select
                     filterable
-                    placeholder="選擇既有據點"
+                    placeholder="選擇既有單位"
                     style="width: 150px"
                     @change="(val: string) => handleLinkSite(row as CaregiverDTO, val)"
                   >
                     <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
                   </el-select>
-                  <el-button link type="primary" size="small" @click="openQuickCreateSite(row as CaregiverDTO)">新增據點</el-button>
+                  <el-button link type="primary" size="small" @click="openQuickCreateSite(row as CaregiverDTO)">新增單位</el-button>
                 </div>
                 <span v-else class="empty-value">-</span>
               </template>
@@ -150,10 +150,10 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 新增據點快速建立對話框 -->
-    <el-dialog v-model="quickCreateSiteVisible" title="新增據點" width="min(480px, calc(100vw - 32px))">
+    <!-- 新增單位快速建立對話框 -->
+    <el-dialog v-model="quickCreateSiteVisible" title="新增單位" width="min(480px, calc(100vw - 32px))">
       <el-form label-width="90px">
-        <el-form-item label="據點名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
+        <el-form-item label="單位名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
         <el-form-item label="區域">
           <el-select v-model="quickCreateSiteForm.region" style="width: 100%">
             <el-option v-for="(label, key) in REGION_LABELS" :key="key" :value="key" :label="label" />
@@ -221,7 +221,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="單位" prop="siteId">
-          <el-select v-model="form.siteId" placeholder="請選擇據點" filterable clearable style="width: 100%">
+          <el-select v-model="form.siteId" placeholder="請選擇單位" filterable clearable style="width: 100%">
             <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
           </el-select>
         </el-form-item>
@@ -348,7 +348,7 @@ async function handleCommitImport(file: File, includeDuplicateRows: number[]): P
 function handleImportSuccess() {
   executeFetch()
   ElMessageBox.confirm(
-    '本次匯入若有單位未比對到既有據點，或聯絡方式／備註未填寫，已建立資料並列入「待維護」頁籤，是否立即前往查看？',
+    '本次匯入若有單位名稱未比對到單位主檔，或聯絡方式／備註未填寫，已建立資料並列入「待維護」頁籤，是否立即前往查看？',
     '匯入完成',
     { confirmButtonText: '前往待維護', cancelButtonText: '稍後再說', type: 'info' }
   )
@@ -459,7 +459,7 @@ async function handleDelete(row: any) {
   }
 }
 
-// 待維護頁籤：單位未比對到既有據點與資料缺漏的照護人員合併為單一清單，用「缺少欄位」呈現而非分組
+// 待維護頁籤：單位名稱未比對到單位主檔與資料缺漏的照護人員合併為單一清單，用「缺少欄位」呈現而非分組
 const pendingLoading = ref(false)
 const pendingCaregivers = ref<CaregiverDTO[]>([])
 
@@ -496,13 +496,13 @@ async function handleLinkSite(row: CaregiverDTO, siteId: string) {
   }
 }
 
-// 新增據點並立即關聯
+// 新增單位並立即關聯
 const quickCreateSiteVisible = ref(false)
 const quickCreateSiteSaving = ref(false)
 const quickCreateTarget = ref<CaregiverDTO | null>(null)
 const quickCreateSiteForm = reactive({ name: '', region: 'miaoli' as Region, address: '', openDays: [1, 2, 3, 4, 5] })
 
-// 據點名稱預先帶入匯入時的原始名稱，使用者只需確認區域與地址即可送出，不必重打一次名稱
+// 單位名稱預先帶入匯入時的原始名稱，使用者只需確認區域與地址即可送出，不必重打一次名稱
 function openQuickCreateSite(row: CaregiverDTO) {
   quickCreateTarget.value = row
   quickCreateSiteForm.name = row.siteNameRaw || ''
@@ -520,7 +520,7 @@ async function handleQuickCreateSiteAndLink() {
     await handleLinkSite(quickCreateTarget.value, site.id)
     quickCreateSiteVisible.value = false
   } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '新增並關聯據點失敗'))
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '新增並關聯單位失敗'))
   } finally {
     quickCreateSiteSaving.value = false
   }
@@ -576,7 +576,7 @@ executeFetch()
 .pending-panel :deep(.pending-missing-col .cell) { min-width: 160px; }
 .pending-panel :deep(.name-col .cell) { min-width: 120px; }
 
-/* 不用 flex-wrap: wrap——欄寬不夠時會把「選擇既有據點」跟「新增據點」擠成第二行，
+/* 不用 flex-wrap: wrap——欄寬不夠時會把「選擇既有單位」跟「新增單位」擠成第二行，
    即使頁面還有空間也一樣。改成 nowrap，搭配 el-table 的 table-layout="auto"，
    讓這欄依這一整行內容自然撐寬，有空間就單行顯示，不主動換行。 */
 .unresolved-slot {

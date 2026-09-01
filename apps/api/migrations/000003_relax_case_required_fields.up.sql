@@ -1,6 +1,6 @@
 -- Migration: 000003_relax_case_required_fields.up.sql
 -- Description: 個案除姓名外全欄位改為選填、移除身分證字號唯一鍵；新增個案備註與
--- 接送車輛/據點比對不到時的原始名稱保留欄位。
+-- 接送車輛/單位比對不到時的原始名稱保留欄位。
 
 ALTER TABLE cases
     ALTER COLUMN national_id_cipher DROP NOT NULL,

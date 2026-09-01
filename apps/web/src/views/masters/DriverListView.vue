@@ -2,7 +2,7 @@
   <div class="driver-list-view">
     <DataTablePage
       title="司機管理"
-      :max-width="1260"
+      :max-width="1520"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -57,6 +57,18 @@
           <el-table-column prop="nationalId" label="身分證字號" width="140" align="center">
             <template #default="{ row }">
               <span class="driver-data font-mono">{{ row.nationalId || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="licenseClass" label="駕照類別" min-width="120" align="center">
+            <template #default="{ row }">
+              <span class="driver-data license-value">
+                {{ licenseClassLabel(row.licenseClass) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="licenseExpiryDate" label="駕照有效日期" min-width="130" align="center">
+            <template #default="{ row }">
+              <span class="driver-data license-value">{{ formatDate(row.licenseExpiryDate) }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="phone" label="聯絡電話" width="130" align="center">
@@ -152,6 +164,30 @@
         <el-form-item label="電子信箱" prop="email">
           <el-input v-model="form.email" placeholder="通知寄送用信箱" />
         </el-form-item>
+        <el-form-item label="駕照類別" prop="licenseClass">
+          <el-select
+            v-model="form.licenseClass"
+            placeholder="請選擇駕照類別"
+            clearable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="(label, value) in DRIVER_LICENSE_CLASS_LABELS"
+              :key="value"
+              :label="label"
+              :value="value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="駕照有效日期" prop="licenseExpiryDate">
+          <el-date-picker
+            v-model="form.licenseExpiryDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="請選擇駕照有效日期"
+            style="width: 100%"
+          />
+        </el-form-item>
         <el-form-item label="狀態" prop="active">
           <el-radio-group v-model="form.active" class="status-radio-group">
             <el-radio-button :value="true">
@@ -235,6 +271,8 @@ import {
 } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
+import { formatDate } from '@/utils/formatters'
+import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass } from '@/types/domain'
 import type { DriverDTO, CreateDriverRequest, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
@@ -265,7 +303,9 @@ const form = reactive<CreateDriverRequest>({
   nationalId: '',
   phone: '',
   email: '',
-  active: true
+  active: true,
+  licenseClass: null,
+  licenseExpiryDate: null
 })
 
 const rules = {
@@ -301,6 +341,10 @@ const {
   }
 })
 
+function licenseClassLabel(value?: DriverLicenseClass | null): string {
+  return value ? DRIVER_LICENSE_CLASS_LABELS[value] : '未補登'
+}
+
 async function handleQuickToggleActive(row: DriverDTO, newActive: boolean) {
   try {
     await updateDriver(row.id, { active: newActive })
@@ -318,6 +362,8 @@ function openCreateDialog() {
   form.phone = ''
   form.email = ''
   form.active = true
+  form.licenseClass = null
+  form.licenseExpiryDate = null
   dialogVisible.value = true
 }
 
@@ -328,6 +374,8 @@ function openEditDialog(row: any) {
   form.phone = row.phone || ''
   form.email = row.email || ''
   form.active = row.active
+  form.licenseClass = row.licenseClass ?? null
+  form.licenseExpiryDate = row.licenseExpiryDate ?? null
   dialogVisible.value = true
 }
 
@@ -448,6 +496,11 @@ executeFetch()
 .driver-data {
   color: var(--el-text-color-regular);
   letter-spacing: 0.01em;
+}
+
+/* table-layout="auto" 下 min-width 欄位需自行鎖 nowrap，否則欄寬吃緊時會逐字換行 */
+.license-value {
+  white-space: nowrap;
 }
 
 .assignment-empty {

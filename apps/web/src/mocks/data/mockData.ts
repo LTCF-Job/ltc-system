@@ -53,24 +53,25 @@ export const mockRegions: RegionDTO[] = [
 ]
 
 
-// 據點主檔展示資料：涵蓋新竹與苗栗、不同機構型態與營業日排程
+// 單位主檔展示資料：涵蓋新竹與苗栗、不同機構型態與營業日排程
 export const mockSites: SiteDTO[] = [
   { id: 'site_1', name: '竹北日照中心', region: 'hsinchu', address: '新竹縣竹北市光明六路100號', openDays: [1, 2, 3, 4, 5], createdAt: '2026-01-01' },
-  { id: 'site_2', name: '竹南日照據點', region: 'miaoli', address: '苗栗縣竹南鎮中正路200號', openDays: [1, 2, 3, 4, 5], createdAt: '2026-01-01' },
-  { id: 'site_3', name: '湖口長照據點', region: 'hsinchu', address: '新竹縣湖口鄉成功路50號', openDays: [1, 3, 5], createdAt: '2026-01-01' },
-  { id: 'site_4', name: '苗栗市社區據點', region: 'miaoli', address: '苗栗縣苗栗市府前路1號', openDays: [1, 2, 3, 4, 5], createdAt: '2026-01-01' },
+  { id: 'site_2', name: '竹南日照單位', region: 'miaoli', address: '苗栗縣竹南鎮中正路200號', openDays: [1, 2, 3, 4, 5], createdAt: '2026-01-01' },
+  { id: 'site_3', name: '湖口長照單位', region: 'hsinchu', address: '新竹縣湖口鄉成功路50號', openDays: [1, 3, 5], createdAt: '2026-01-01' },
+  { id: 'site_4', name: '苗栗市社區單位', region: 'miaoli', address: '苗栗縣苗栗市府前路1號', openDays: [1, 2, 3, 4, 5], createdAt: '2026-01-01' },
   { id: 'site_5', name: '新竹縣輔具資源中心', region: 'hsinchu', address: '新竹縣竹北市光明九路235號', openDays: [1, 2, 3, 4, 5, 6], createdAt: '2026-01-10' },
-  { id: 'site_6', name: '竹南身障日間作業據點', region: 'miaoli', address: '苗栗縣竹南鎮博愛街120號', openDays: [2, 4], createdAt: '2026-02-01' }
+  { id: 'site_6', name: '竹南身障日間作業單位', region: 'miaoli', address: '苗栗縣竹南鎮博愛街120號', openDays: [2, 4], createdAt: '2026-02-01' }
 ]
 
-// 車輛主檔展示資料：涵蓋新竹與苗栗、正常服役與定期維修停用狀態
+// 車輛主檔展示資料：涵蓋新竹與苗栗、正常服役與定期維修停用狀態。
+// region 由所屬單位帶出，GET /vehicles 的 handler 會依 siteId 補上，這裡不預存。
 export const mockVehicles: VehicleDTO[] = [
-  { id: 'veh_1', plateNo: 'BZG-7915', displayName: '竹北一車', region: 'hsinchu', active: true, createdAt: '2026-01-01' },
-  { id: 'veh_2', plateNo: 'ABC-1234', displayName: '竹北二車', region: 'hsinchu', active: true, createdAt: '2026-01-01' },
-  { id: 'veh_3', plateNo: 'DEF-5678', displayName: '竹南1車', region: 'miaoli', active: true, createdAt: '2026-01-01' },
-  { id: 'veh_4', plateNo: 'GHI-9012', displayName: '竹南2車', region: 'miaoli', active: true, createdAt: '2026-01-01' },
-  { id: 'veh_5', plateNo: 'JKL-3456', displayName: '竹東一車', region: 'hsinchu', active: false, createdAt: '2026-02-15' },
-  { id: 'veh_6', plateNo: 'MNO-7890', displayName: '苗栗市1車', region: 'miaoli', active: true, createdAt: '2026-03-01' }
+  { id: 'veh_1', plateNo: 'BZG-7915', displayName: '竹北一車', siteId: 'site_1', siteName: '竹北日照中心', region: 'hsinchu', ownerName: '苗栗縣好安心關懷協會', brand: '中華', model: 'DE241LB8', manufactureYm: '2013-03', compulsoryInsuranceExpiry: '2025-12-23', passengerInsuranceExpiry: '2025-12-30', thirdPartyInsuranceExpiry: '2025-12-30', lastInspectionDate: '2024-12-23', wheelchairAccessible: true, active: true, createdAt: '2026-01-01' },
+  { id: 'veh_2', plateNo: 'ABC-1234', displayName: '竹北二車', siteId: 'site_1', siteName: '竹北日照中心', region: 'hsinchu', ownerName: '苗栗縣好安心關懷協會', brand: '中華', model: 'DE241L8', manufactureYm: '2012-03', compulsoryInsuranceExpiry: '2025-12-23', passengerInsuranceExpiry: '2025-12-30', thirdPartyInsuranceExpiry: '2025-12-30', lastInspectionDate: '2024-12-23', wheelchairAccessible: true, active: true, createdAt: '2026-01-01' },
+  { id: 'veh_3', plateNo: 'DEF-5678', displayName: '竹南1車', siteId: 'site_2', siteName: '竹南日照單位', region: 'miaoli', ownerName: '苗栗縣好安心關懷協會', brand: '中華', model: 'DE241L8', manufactureYm: '2012-05', compulsoryInsuranceExpiry: '2026-01-20', passengerInsuranceExpiry: '2026-01-20', thirdPartyInsuranceExpiry: '2026-01-20', lastInspectionDate: '2025-01-20', wheelchairAccessible: true, active: true, createdAt: '2026-01-01' },
+  { id: 'veh_4', plateNo: 'GHI-9012', displayName: '竹南2車', siteId: 'site_2', siteName: '竹南日照單位', region: 'miaoli', ownerName: '苗栗縣好安心關懷協會', brand: '中華', model: 'DE241L8', manufactureYm: '2011-11', compulsoryInsuranceExpiry: '2026-04-16', passengerInsuranceExpiry: '2026-04-18', thirdPartyInsuranceExpiry: '2026-04-18', lastInspectionDate: '2025-04-16', wheelchairAccessible: false, active: true, createdAt: '2026-01-01' },
+  { id: 'veh_5', plateNo: 'JKL-3456', displayName: '竹東一車', siteId: 'site_3', siteName: '湖口長照單位', region: 'hsinchu', ownerName: '苗栗縣好安心關懷協會', brand: '中華', model: 'DE241L8', manufactureYm: '2010-11', compulsoryInsuranceExpiry: '2026-05-27', passengerInsuranceExpiry: '2026-05-27', thirdPartyInsuranceExpiry: '2026-05-27', lastInspectionDate: '2025-05-27', wheelchairAccessible: true, active: false, createdAt: '2026-02-15' },
+  { id: 'veh_6', plateNo: 'MNO-7890', displayName: '苗栗市1車', siteId: 'site_4', siteName: '苗栗市社區單位', region: 'miaoli', ownerName: '苗栗縣好安心關懷協會', brand: '中華', model: 'DE241L8', manufactureYm: '2011-06', compulsoryInsuranceExpiry: '2025-06-04', passengerInsuranceExpiry: '2025-06-04', thirdPartyInsuranceExpiry: '2025-06-04', lastInspectionDate: '2025-06-04', wheelchairAccessible: false, active: true, createdAt: '2026-03-01' }
 ]
 
 // 司機主檔展示資料：一位司機同期只掛一台車，竹北一車由兩位司機共同駕駛，另涵蓋尚未指派車輛的離職司機
@@ -82,6 +83,8 @@ export const mockDrivers: DriverDTO[] = [
     phone: '0912345678',
     email: 'driver1@ltc.example.com',
     active: true,
+    licenseClass: 'sedan',
+    licenseExpiryDate: '2031-04-22',
     createdAt: '2026-01-01',
     assignments: [
       { id: 'asgn_1', driverId: 'drv_1', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-01-01' }
@@ -94,6 +97,8 @@ export const mockDrivers: DriverDTO[] = [
     phone: '0922111222',
     email: 'driver2@ltc.example.com',
     active: true,
+    licenseClass: 'truck',
+    licenseExpiryDate: '2030-09-23',
     createdAt: '2026-01-01',
     assignments: [
       { id: 'asgn_2', driverId: 'drv_2', vehicleId: 'veh_2', vehicleName: '竹北二車', vehiclePlateNo: 'ABC-1234', plateNo: 'ABC-1234', startDate: '2026-01-01' }
@@ -106,6 +111,8 @@ export const mockDrivers: DriverDTO[] = [
     phone: '0933444555',
     email: 'driver3@ltc.example.com',
     active: true,
+    licenseClass: 'bus',
+    licenseExpiryDate: '2027-05-21',
     createdAt: '2026-01-01',
     assignments: [
       { id: 'asgn_3', driverId: 'drv_3', vehicleId: 'veh_4', vehicleName: '竹南2車', vehiclePlateNo: 'GHI-9012', plateNo: 'GHI-9012', startDate: '2026-01-01' }
@@ -118,6 +125,8 @@ export const mockDrivers: DriverDTO[] = [
     phone: '0955666777',
     email: 'driver4@ltc.example.com',
     active: true,
+    licenseClass: 'trailer',
+    licenseExpiryDate: '2026-11-16',
     createdAt: '2026-02-01',
     assignments: [
       { id: 'asgn_4', driverId: 'drv_4', vehicleId: 'veh_3', vehicleName: '竹南1車', vehiclePlateNo: 'DEF-5678', plateNo: 'DEF-5678', startDate: '2026-02-01' }
@@ -130,6 +139,8 @@ export const mockDrivers: DriverDTO[] = [
     phone: '0966888999',
     email: 'driver5@ltc.example.com',
     active: true,
+    licenseClass: 'sedan',
+    licenseExpiryDate: '2029-01-05',
     createdAt: '2026-03-01',
     assignments: [
       { id: 'asgn_5', driverId: 'drv_5', vehicleId: 'veh_6', vehicleName: '苗栗市1車', vehiclePlateNo: 'MNO-7890', plateNo: 'MNO-7890', startDate: '2026-03-01' }
@@ -142,6 +153,8 @@ export const mockDrivers: DriverDTO[] = [
     phone: '0977123456',
     email: 'driver6@ltc.example.com',
     active: false,
+    licenseClass: null,
+    licenseExpiryDate: null,
     createdAt: '2026-01-15',
     assignments: []
   },
@@ -152,6 +165,8 @@ export const mockDrivers: DriverDTO[] = [
     phone: '0988222333',
     email: 'driver7@ltc.example.com',
     active: true,
+    licenseClass: 'sedan',
+    licenseExpiryDate: '2031-06-23',
     createdAt: '2026-07-01',
     assignments: [
       { id: 'asgn_7', driverId: 'drv_7', vehicleId: 'veh_1', vehicleName: '竹北一車', vehiclePlateNo: 'BZG-7915', plateNo: 'BZG-7915', startDate: '2026-07-01' }
@@ -174,7 +189,7 @@ export const mockCaregivers: CaregiverDTO[] = [
   },
   {
     id: 'caregiver_2',
-    siteNameRaw: '竹北二日照據點',
+    siteNameRaw: '竹北二日照單位',
     name: '王大明',
     type: 'specialist',
     contact: '0987-654-321',
@@ -185,7 +200,7 @@ export const mockCaregivers: CaregiverDTO[] = [
   {
     id: 'caregiver_3',
     siteId: 'site_2',
-    siteName: '竹南日照據點',
+    siteName: '竹南日照單位',
     name: '李美玲',
     type: 'case_manager',
     contact: '',
@@ -197,7 +212,7 @@ export const mockCaregivers: CaregiverDTO[] = [
 
 // 個案主檔展示資料：涵蓋所有個案狀態、服務類別、服務機構類型與趟次型態
 export const mockCases: CaseDTO[] = [
-  // 1. 苗栗 / 補助 / 社區據點 / 2 趟 / 在案
+  // 1. 苗栗 / 補助 / 社區單位 / 2 趟 / 在案
   {
     id: 'case_1',
     code: 'C0001',
@@ -215,7 +230,7 @@ export const mockCases: CaseDTO[] = [
     careContactName: '蔡怡君',
     registeredAddress: '苗栗縣竹南鎮大營路123號',
     siteId: 'site_2',
-    siteName: '竹南日照據點',
+    siteName: '竹南日照單位',
     outboundVehicleId: 'veh_4',
     outboundVehicle: '竹南2車',
     inboundVehicleId: 'veh_4',
@@ -226,7 +241,7 @@ export const mockCases: CaseDTO[] = [
       id: 'sch_1',
       caseId: 'case_1',
       siteId: 'site_2',
-      siteName: '竹南日照據點',
+      siteName: '竹南日照單位',
       effectiveFrom: '2026-07-01',
       weekdays: [1, 2, 3, 4, 5],
       tripPattern: 2,
@@ -299,7 +314,7 @@ export const mockCases: CaseDTO[] = [
       ]
     }
   },
-  // 3. 新竹 / 補助 / 社區據點 / 1 趟 (單向去程) / 在案
+  // 3. 新竹 / 補助 / 社區單位 / 1 趟 (單向去程) / 在案
   {
     id: 'case_3',
     code: 'C0003',
@@ -341,7 +356,7 @@ export const mockCases: CaseDTO[] = [
       ]
     }
   },
-  // 4. 新竹 / 補助 / 社區據點 / 2 趟 / 暫停 (suspended)
+  // 4. 新竹 / 補助 / 社區單位 / 2 趟 / 暫停 (suspended)
   {
     id: 'case_4',
     code: 'C0004',
@@ -488,7 +503,7 @@ export const mockCases: CaseDTO[] = [
     careContactName: '黃淑芬',
     registeredAddress: '苗栗縣竹南鎮延平路66號',
     siteId: 'site_6',
-    siteName: '竹南身障日間作業據點',
+    siteName: '竹南身障日間作業單位',
     outboundVehicleId: 'veh_3',
     outboundVehicle: '竹南1車',
     inboundVehicleId: 'veh_3',
@@ -499,7 +514,7 @@ export const mockCases: CaseDTO[] = [
       id: 'sch_7',
       caseId: 'case_7',
       siteId: 'site_6',
-      siteName: '竹南身障日間作業據點',
+      siteName: '竹南身障日間作業單位',
       effectiveFrom: '2026-07-01',
       weekdays: [1, 2, 3, 4, 5, 6],
       tripPattern: 2,
@@ -531,7 +546,7 @@ export const mockCases: CaseDTO[] = [
     careContactName: '彭美惠',
     registeredAddress: '苗栗縣苗栗市中正路500號',
     siteId: 'site_4',
-    siteName: '苗栗市社區據點',
+    siteName: '苗栗市社區單位',
     outboundVehicleId: 'veh_6',
     outboundVehicle: '苗栗市1車',
     inboundVehicleId: 'veh_6',
@@ -542,7 +557,7 @@ export const mockCases: CaseDTO[] = [
       id: 'sch_8',
       caseId: 'case_8',
       siteId: 'site_4',
-      siteName: '苗栗市社區據點',
+      siteName: '苗栗市社區單位',
       effectiveFrom: '2026-07-01',
       weekdays: [2, 4],
       tripPattern: 4,
@@ -576,7 +591,7 @@ export const mockCases: CaseDTO[] = [
     careContactName: '邱志宏',
     registeredAddress: '新竹縣湖口鄉達生路33號',
     siteId: 'site_3',
-    siteName: '湖口長照據點',
+    siteName: '湖口長照單位',
     outboundVehicleId: 'veh_2',
     outboundVehicle: '竹北二車',
     inboundVehicleId: 'veh_2',
@@ -587,7 +602,7 @@ export const mockCases: CaseDTO[] = [
       id: 'sch_9',
       caseId: 'case_9',
       siteId: 'site_3',
-      siteName: '湖口長照據點',
+      siteName: '湖口長照單位',
       effectiveFrom: '2026-07-01',
       weekdays: [5],
       tripPattern: 1,
@@ -600,7 +615,7 @@ export const mockCases: CaseDTO[] = [
       ]
     }
   },
-  // 10. 苗栗 / 補助 / 社區據點 / 2 趟 / 在案
+  // 10. 苗栗 / 補助 / 社區單位 / 2 趟 / 在案
   {
     id: 'case_10',
     code: 'C0010',
@@ -618,7 +633,7 @@ export const mockCases: CaseDTO[] = [
     careContactName: '林淑娟',
     registeredAddress: '苗栗縣竹南鎮光復路88號',
     siteId: 'site_2',
-    siteName: '竹南日照據點',
+    siteName: '竹南日照單位',
     outboundVehicleId: 'veh_4',
     outboundVehicle: '竹南2車',
     inboundVehicleId: 'veh_4',
@@ -629,7 +644,7 @@ export const mockCases: CaseDTO[] = [
       id: 'sch_10',
       caseId: 'case_10',
       siteId: 'site_2',
-      siteName: '竹南日照據點',
+      siteName: '竹南日照單位',
       effectiveFrom: '2026-07-01',
       weekdays: [1, 2, 3, 4, 5],
       tripPattern: 2,
@@ -653,7 +668,7 @@ export const mockCases: CaseDTO[] = [
       ]
     }
   },
-  // 11. 苗栗 / 匯入資料中據點與去程車輛比對不到主檔，示範「待補建關聯」頁籤
+  // 11. 苗栗 / 匯入資料中單位與去程車輛比對不到主檔，示範「待補建關聯」頁籤
   {
     id: 'case_11',
     code: 'C0011',

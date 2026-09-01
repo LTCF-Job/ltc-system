@@ -78,7 +78,7 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	region := "hsinchu-" + uuid.NewString()[:8]
 	site := masterapp.Site{
 		Code:     "T-" + uuid.NewString()[:8],
-		Name:     "測試據點-" + uuid.NewString()[:8],
+		Name:     "測試單位-" + uuid.NewString()[:8],
 		Address:  "測試地址",
 		Region:   region,
 		OpenDays: []int16{1, 2, 3, 4, 5},

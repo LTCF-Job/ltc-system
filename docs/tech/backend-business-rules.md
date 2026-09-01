@@ -26,11 +26,25 @@
 - 沒有「主要司機」的概念，`is_primary` 已於 migration `000006` 移除——司機唯一的那台車本來就是他的車。
 - 從車輛端整批設定司機（`PUT /vehicles/:id/drivers`）時，被加入本車的司機在其他車上尚未結束的指派，會從生效日起被收掉（`effective_range` 上界收到生效日，尚未生效的指派直接刪除），以維持上面第一條規則。
 
+## 司機駕照類別與有效日期（`drivers.license_class` / `license_expiry_date`）
+
+- 政府「服務駕駛清冊」要逐位駕駛列出駕照類別與有效日期，因此掛在司機主檔而非車輛。
+- `license_class` 只收 `sedan`（職業小型車）、`truck`（職業大貨車）、`bus`（職業大客車）、`trailer`（職業聯結車）四個代碼，由 migration `000009` 的 `chk_driver_license_class` 與 `DriverService` 的 `normalizeLicenseClass` 雙重把關；顯示用的中文標籤放在前端 `DRIVER_LICENSE_CLASS_LABELS`。
+- 兩欄皆可為 `NULL`，代表既有司機尚未補登，不阻擋其他主檔操作。
+
+## 車輛歸屬與服務車輛清冊欄位（`vehicles`）
+
+- 車輛歸屬到單位（`vehicles.site_id` → `sites.id`），不再自存區域。API 回傳的 `region` 是由所屬單位 join 出來的唯讀欄位，`GET /vehicles?region=` 也是走單位的區域比對；未指定單位的車輛 `region` 為空字串，因此不會被任何區域篩選命中。
+- 政府「服務車輛清冊」要逐台列出車主名稱、廠牌、車型、出廠年月、三項責任險到期日、前次檢驗日期與是否符合輪椅載運規定，這些欄位由 migration `000010` 加在車輛主檔。
+- 出廠年月只到年月，以 `YYYY-MM` 字串存放並由 `ck_vehicle_manufacture_ym` 把關格式；四個日期欄位存西元 `DATE`，畫面以民國年呈現。
+- 所有新欄位在資料庫皆可為 `NULL`（既有車輛沒有值），必填規則由 API 的 `VehicleWriteFields` 與前端 `vehicleFormRules` 強制，因此既有車輛在補齊資料前無法透過畫面儲存。
+- `PATCH /vehicles/:id` 是整筆覆寫而非部分更新，呼叫端必須送出完整欄位。
+
 ## 應搭日曆計算（`domain/calendar.CalculateExpectedRides`）
 
 用來回答「這個個案這個月哪幾天、哪幾趟應該要搭車」，是「未回報偵測」跟異常比對的比對基準。對月份內每一天依序檢查（**任一條件不成立就整天跳過，不看後面的條件**）：
 
-1. 當天星期幾同時在「個案排班星期」跟「據點開放星期」的交集內（兩邊都要有才算，只要一邊沒開就跳過）。週日在這裡編碼為 `7`，不是 `0`。
+1. 當天星期幾同時在「個案排班星期」跟「單位開放星期」的交集內（兩邊都要有才算，只要一邊沒開就跳過）。週日在這裡編碼為 `7`，不是 `0`。
 2. 當天要在「個案申報起訖日」區間內（`claim_start_date` ~ `claim_end_date`，對應規格書 R8）。
 3. 當天要在「排班本身的有效區間」內（`effective_from` ~ `effective_to`——排班可以中途換過，新排班生效前用舊排班）。
 4. 當天不是國定假日（`holidays` map 命中就跳過）。

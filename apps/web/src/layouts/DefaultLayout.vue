@@ -87,7 +87,7 @@
             </el-menu-item>
             <el-menu-item v-if="authStore.hasPermission('masters_sites')" index="/masters/sites">
               <el-icon><Location /></el-icon>
-              <template #title>據點管理</template>
+              <template #title>單位管理</template>
             </el-menu-item>
             <el-menu-item v-if="authStore.hasPermission('masters_vehicles')" index="/masters/vehicles">
               <el-icon><Van /></el-icon>

@@ -36,7 +36,7 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 
 | module | 範圍 |
 |---|---|
-| `masterdata` | 據點、車輛、司機、區域主檔 |
+| `masterdata` | 單位、車輛、司機、區域主檔 |
 | `casemgmt` | 個案主檔、排班設定、交通偏好、個案彙整表匯出 |
 | `caseimport` | 個案批次 Excel／CSV 解析、預覽與匯入 |
 | `ride` | 司機接送匯報展開、搭乘紀錄合併與人工更正 |

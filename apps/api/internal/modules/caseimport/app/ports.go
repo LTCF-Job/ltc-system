@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// SiteRef 是匯入比對據點時需要的最小資訊。
+// SiteRef 是匯入比對單位時需要的最小資訊。
 type SiteRef struct {
 	ID   uuid.UUID
 	Name string
@@ -18,7 +18,7 @@ type VehicleRef struct {
 	ID uuid.UUID
 }
 
-// SiteLookup 提供以名稱或區域比對據點的查詢。
+// SiteLookup 提供以名稱或區域比對單位的查詢。
 type SiteLookup interface {
 	GetByName(ctx context.Context, name string) (*SiteRef, error)
 	List(ctx context.Context, region string, page, pageSize int) ([]SiteRef, error)
@@ -29,7 +29,7 @@ type VehicleLookup interface {
 	GetByDisplayName(ctx context.Context, displayName string) (*VehicleRef, error)
 }
 
-// TransportPreferenceWriter 寫入個案的據點與去回程車輛偏好。nil 的 ID 表示該欄位
+// TransportPreferenceWriter 寫入個案的單位與去回程車輛偏好。nil 的 ID 表示該欄位
 // 維持現況，raw name 於對應 ID 為 nil 時保留原始名稱待人工關聯。
 type TransportPreferenceWriter interface {
 	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error

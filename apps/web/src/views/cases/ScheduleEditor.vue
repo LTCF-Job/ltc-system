@@ -39,10 +39,10 @@
 
         <el-row :gutter="16">
           <el-col :xs="24" :lg="12">
-            <el-form-item label="所屬據點" prop="siteId">
+            <el-form-item label="所屬單位" prop="siteId">
               <el-select
                 v-model="formData.siteId"
-                placeholder="請選擇據點"
+                placeholder="請選擇單位"
                 style="width: 100%"
                 filterable
               >
@@ -443,7 +443,7 @@
           <div class="leg-header">
             <span class="leg-label">第 {{ leg.legSeq }} 趟</span>
             <span class="leg-direction">
-              {{ leg.direction === 'outbound' ? '去程 (住家 -> 據點)' : '回程 (據點 -> 住家)' }}
+              {{ leg.direction === 'outbound' ? '去程 (住家 -> 單位)' : '回程 (單位 -> 住家)' }}
             </span>
           </div>
 
@@ -584,7 +584,7 @@ const formData = reactive<CreateScheduleRequest>({
 })
 
 const rules = {
-  siteId: [{ required: true, message: '請選擇據點', trigger: 'change' }],
+  siteId: [{ required: true, message: '請選擇單位', trigger: 'change' }],
   effectiveFrom: [{ required: true, message: '請選擇生效日期', trigger: 'change' }],
   weekdays: [{ type: 'array', required: true, min: 1, message: '請至少選擇一個每週搭乘日', trigger: 'change' }],
   unitPrice: [{ required: true, message: '請輸入單價', trigger: 'blur' }],

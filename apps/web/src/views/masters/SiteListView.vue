@@ -1,7 +1,7 @@
 <template>
   <div class="site-list-view">
     <DataTablePage
-      title="據點管理"
+      title="單位管理"
       :max-width="940"
       v-model:page="page"
       v-model:pageSize="pageSize"
@@ -14,7 +14,7 @@
       <template #filter>
         <el-input
           v-model="filters.q"
-          placeholder="搜尋據點名稱／地址"
+          placeholder="搜尋單位名稱／地址"
           clearable
           style="width: 240px"
           @keyup.enter="handleSearch"
@@ -49,20 +49,20 @@
           @click="openCreateDialog"
         >
           <el-icon><Plus /></el-icon>
-          新增據點
+          新增單位
         </el-button>
       </template>
 
       <!-- 表格 -->
       <template #table>
         <el-table :data="sites" border stripe table-layout="auto" style="width: 100%">
-          <el-table-column prop="name" label="據點名稱" min-width="140" class-name="site-name-col" />
+          <el-table-column prop="name" label="單位名稱" min-width="140" class-name="site-name-col" />
           <el-table-column prop="region" label="區域" width="120" align="center">
             <template #default="{ row }">
               <span>{{ REGION_LABELS[row.region as Region] || row.region }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="address" label="據點地址" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="address" label="單位地址" min-width="180" show-overflow-tooltip />
           <el-table-column label="開放時間" width="260" class-name="open-days-column">
             <template #default="{ row }">
               {{ row.openDays?.map((d: number) => `週${'一二三四五六日'[d-1]}`).join('、') || '未設定' }}
@@ -96,11 +96,11 @@
     <!-- 新增/編輯對話框 -->
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId ? '編輯據點資料' : '新增據點'"
+      :title="editingId ? '編輯單位資料' : '新增單位'"
       width="min(600px, calc(100vw - 32px))"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="110px" class="dialog-scroll-form">
-        <el-form-item label="據點名稱" prop="name">
+        <el-form-item label="單位名稱" prop="name">
           <el-input v-model="form.name" placeholder="如：竹北日照中心" />
         </el-form-item>
         <el-form-item label="所屬區域" prop="region">
@@ -118,7 +118,7 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="據點地址" prop="address">
+        <el-form-item label="單位地址" prop="address">
           <el-input v-model="form.address" placeholder="請輸入完整地址" />
         </el-form-item>
         <el-form-item label="開放星期" prop="openDays">
@@ -172,9 +172,9 @@ const form = reactive<CreateSiteRequest>({
 })
 
 const rules = {
-  name: [{ required: true, message: '請輸入據點名稱', trigger: 'blur' }],
+  name: [{ required: true, message: '請輸入單位名稱', trigger: 'blur' }],
   region: [{ required: true, message: '請選擇區域', trigger: 'change' }],
-  address: [{ required: true, message: '請輸入據點地址', trigger: 'blur' }]
+  address: [{ required: true, message: '請輸入單位地址', trigger: 'blur' }]
 }
 
 const {
@@ -231,10 +231,10 @@ async function handleSubmit() {
     try {
       if (editingId.value) {
         await updateSite(editingId.value, form)
-        ElMessage.success('據點資料已更新')
+        ElMessage.success('單位資料已更新')
       } else {
         await createSite(form)
-        ElMessage.success('據點新增成功')
+        ElMessage.success('單位新增成功')
       }
       dialogVisible.value = false
       executeFetch()
@@ -245,7 +245,7 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: any) {
-  await ElMessageBox.confirm(`確定刪除據點「${row.name}」？此操作無法還原。`, '確認刪除', {
+  await ElMessageBox.confirm(`確定刪除單位「${row.name}」？此操作無法還原。`, '確認刪除', {
     confirmButtonText: '刪除',
     cancelButtonText: '取消',
     type: 'warning',
@@ -253,7 +253,7 @@ async function handleDelete(row: any) {
   })
 
   await deleteSite(row.id)
-  ElMessage.success('據點已刪除')
+  ElMessage.success('單位已刪除')
   executeFetch()
 }
 

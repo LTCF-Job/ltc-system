@@ -12,49 +12,54 @@ import (
 
 // driverRow 是 drivers 資料表的一列。
 type driverRow struct {
-	ID               uuid.UUID
-	Code             string
-	Name             string
-	NameNormalized   string
-	NationalIDCipher []byte
-	NationalIDHMAC   []byte
-	NationalIDMasked string
-	Email            *string
-	Region           string
-	Status           string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                uuid.UUID
+	Code              string
+	Name              string
+	NameNormalized    string
+	NationalIDCipher  []byte
+	NationalIDHMAC    []byte
+	NationalIDMasked  string
+	Email             *string
+	Region            string
+	Status            string
+	LicenseClass      *string
+	LicenseExpiryDate *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 func (r driverRow) toApp() app.Driver {
 	return app.Driver{
-		ID:               r.ID,
-		Code:             r.Code,
-		Name:             r.Name,
-		NameNormalized:   r.NameNormalized,
-		NationalIDCipher: r.NationalIDCipher,
-		NationalIDHMAC:   r.NationalIDHMAC,
-		NationalIDMasked: r.NationalIDMasked,
-		Email:            r.Email,
-		Region:           r.Region,
-		Status:           r.Status,
-		CreatedAt:        r.CreatedAt,
-		UpdatedAt:        r.UpdatedAt,
+		ID:                r.ID,
+		Code:              r.Code,
+		Name:              r.Name,
+		NameNormalized:    r.NameNormalized,
+		NationalIDCipher:  r.NationalIDCipher,
+		NationalIDHMAC:    r.NationalIDHMAC,
+		NationalIDMasked:  r.NationalIDMasked,
+		Email:             r.Email,
+		Region:            r.Region,
+		Status:            r.Status,
+		LicenseClass:      r.LicenseClass,
+		LicenseExpiryDate: r.LicenseExpiryDate,
+		CreatedAt:         r.CreatedAt,
+		UpdatedAt:         r.UpdatedAt,
 	}
 }
 
 func (r *driverRow) scanTargets() []interface{} {
 	return []interface{}{
 		&r.ID, &r.Code, &r.Name, &r.NameNormalized, &r.NationalIDCipher, &r.NationalIDHMAC, &r.NationalIDMasked,
-		&r.Email, &r.Region, &r.Status, &r.CreatedAt, &r.UpdatedAt,
+		&r.Email, &r.Region, &r.Status, &r.LicenseClass, &r.LicenseExpiryDate, &r.CreatedAt, &r.UpdatedAt,
 	}
 }
 
 const driverColumns = `id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-	       email, region, status, created_at, updated_at`
+	       email, region, status, license_class, license_expiry_date, created_at, updated_at`
 
 const driverColumnsWithAlias = `d.id, d.code, d.name, d.name_normalized, d.national_id_cipher, d.national_id_hmac,
-	       d.national_id_masked, d.email, d.region, d.status, d.created_at, d.updated_at`
+	       d.national_id_masked, d.email, d.region, d.status, d.license_class, d.license_expiry_date,
+	       d.created_at, d.updated_at`
 
 // DriverRepository 提供 drivers 與 driver_assignments 資料表之存取操作。
 type DriverRepository struct {
@@ -135,8 +140,8 @@ func (r *DriverRepository) Create(ctx context.Context, d *app.Driver) error {
 	query := `
 		INSERT INTO drivers (
 			id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-			email, region, status
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			email, region, status, license_class, license_expiry_date
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING created_at, updated_at
 	`
 	if d.ID == uuid.Nil {
@@ -144,7 +149,7 @@ func (r *DriverRepository) Create(ctx context.Context, d *app.Driver) error {
 	}
 	return r.db.QueryRow(ctx, query,
 		d.ID, d.Code, d.Name, d.NameNormalized, d.NationalIDCipher, d.NationalIDHMAC, d.NationalIDMasked,
-		d.Email, d.Region, d.Status,
+		d.Email, d.Region, d.Status, d.LicenseClass, d.LicenseExpiryDate,
 	).Scan(&d.CreatedAt, &d.UpdatedAt)
 }
 
@@ -152,11 +157,13 @@ func (r *DriverRepository) Create(ctx context.Context, d *app.Driver) error {
 func (r *DriverRepository) Update(ctx context.Context, d *app.Driver) error {
 	query := `
 		UPDATE drivers
-		SET name = $2, name_normalized = $3, email = $4, region = $5, status = $6, updated_at = now()
+		SET name = $2, name_normalized = $3, email = $4, region = $5, status = $6,
+		    license_class = $7, license_expiry_date = $8, updated_at = now()
 		WHERE id = $1
 		RETURNING updated_at
 	`
-	return r.db.QueryRow(ctx, query, d.ID, d.Name, d.NameNormalized, d.Email, d.Region, d.Status).
+	return r.db.QueryRow(ctx, query, d.ID, d.Name, d.NameNormalized, d.Email, d.Region, d.Status,
+		d.LicenseClass, d.LicenseExpiryDate).
 		Scan(&d.UpdatedAt)
 }
 

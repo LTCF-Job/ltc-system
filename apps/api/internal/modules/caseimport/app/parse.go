@@ -164,7 +164,11 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			householdType := getVal("戶別")
 			gender := getVal("性別")
 			birthDate := parseProfileBirthDate(getVal("生日"))
-			siteName := getVal("據點")
+			// 舊版範本的欄位標題是「據點」，仍要能匯入使用者手上既有的檔案
+			siteName := getVal("單位")
+			if siteName == "" {
+				siteName = getVal("據點")
+			}
 			outboundVehicle := getVal("接送車輛(去)")
 			inboundVehicle := getVal("接送車輛(回)")
 			careContactRole := getVal("個管or照專")

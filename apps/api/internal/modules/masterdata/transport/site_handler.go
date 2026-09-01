@@ -10,7 +10,7 @@ import (
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
-// SiteHandler 處理據點相關請求。
+// SiteHandler 處理單位相關請求。
 type SiteHandler struct {
 	svc *app.SiteService
 }
@@ -20,14 +20,14 @@ func NewSiteHandler(svc *app.SiteService) *SiteHandler {
 	return &SiteHandler{svc: svc}
 }
 
-// List 查詢據點清單。
+// List 查詢單位清單。
 func (h *SiteHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 
 	sites, total, err := h.svc.List(c.Request.Context(), c.Query("region"), c.Query("q"), page, pageSize)
 	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢據點失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢單位失敗", nil)
 		return
 	}
 
@@ -38,7 +38,7 @@ func (h *SiteHandler) List(c *gin.Context) {
 	})
 }
 
-// Create 新增據點。
+// Create 新增單位。
 func (h *SiteHandler) Create(c *gin.Context) {
 	var req CreateSiteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -62,11 +62,11 @@ func (h *SiteHandler) Create(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusCreated, newSiteResponse(*site), nil)
 }
 
-// Update 更新據點。
+// Update 更新單位。
 func (h *SiteHandler) Update(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		respondInvalidID(c, "無效的據點 ID")
+		respondInvalidID(c, "無效的單位 ID")
 		return
 	}
 
@@ -92,11 +92,11 @@ func (h *SiteHandler) Update(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, newSiteResponse(*site), nil)
 }
 
-// Delete 刪除據點。
+// Delete 刪除單位。
 func (h *SiteHandler) Delete(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		respondInvalidID(c, "無效的據點 ID")
+		respondInvalidID(c, "無效的單位 ID")
 		return
 	}
 

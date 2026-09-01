@@ -7,14 +7,14 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
     await loginAs(page, 'admin')
   })
 
-  test('據點管理：清單載入、新增與編輯據點', async ({ page }) => {
+  test('單位管理：清單載入、新增與編輯單位', async ({ page }) => {
     await page.goto('/masters/sites')
     await waitForTableLoaded(page)
     await expect(page.locator('.el-table').first()).toBeVisible()
 
-    // 點選新增據點
-    await page.getByRole('button', { name: '新增據點' }).click()
-    const dialog = page.locator('.el-dialog').filter({ hasText: '新增據點' })
+    // 點選新增單位
+    await page.getByRole('button', { name: '新增單位' }).click()
+    const dialog = page.locator('.el-dialog').filter({ hasText: '新增單位' })
     await expect(dialog).toBeVisible()
 
     await dialog.getByPlaceholder('如：竹北日照中心').fill('測試日照中心')
@@ -23,20 +23,55 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
     await expectElMessage(page, /成功/, 'success')
   })
 
-  test('車輛管理：清單載入、新增與編輯車輛', async ({ page }) => {
+  test('車輛管理：清單顯示車籍與保險欄位，並可新增車輛', async ({ page }) => {
     await page.goto('/masters/vehicles')
     await waitForTableLoaded(page)
-    await expect(page.locator('.el-table').first()).toBeVisible()
+    const table = page.locator('.el-table').first()
+    await expect(table).toBeVisible()
 
-    // 點選新增車輛
+    // 服務車輛清冊欄位需直接看得到，保險與檢驗日期以民國年呈現
+    await expect(table).toContainText('竹北日照中心')
+    await expect(table).toContainText('苗栗縣好安心關懷協會')
+    await expect(table).toContainText('DE241LB8')
+    await expect(table).toContainText('2013 年 03 月')
+    await expect(table).toContainText('114/12/23')
+
     await page.getByRole('button', { name: '新增車輛' }).click()
     const dialog = page.locator('.el-dialog').filter({ hasText: '新增車輛' })
     await expect(dialog).toBeVisible()
 
-    await dialog.getByPlaceholder(/竹北一車/).fill('測試測試車')
-    await dialog.getByPlaceholder(/BZG-7915/).fill('E2E-8888')
+    await fillVehicleForm(page, dialog, { plateNo: 'E2E-8888', displayName: '測試測試車' })
     await dialog.getByRole('button', { name: '儲存' }).click()
     await expectElMessage(page, /成功/, 'success')
+  })
+
+  test('車輛管理：新增車輛缺必填欄位時擋下並提示', async ({ page }) => {
+    await page.goto('/masters/vehicles')
+    await waitForTableLoaded(page)
+
+    await page.getByRole('button', { name: '新增車輛' }).click()
+    const dialog = page.locator('.el-dialog').filter({ hasText: '新增車輛' })
+    await dialog.getByPlaceholder(/BZG-7915/).fill('E2E-7777')
+    await dialog.getByRole('button', { name: '儲存' }).click()
+
+    await expect(dialog.locator('.el-form-item__error').first()).toBeVisible()
+    await expect(dialog).toBeVisible()
+  })
+
+  test('車輛管理：可依所屬單位篩選清單', async ({ page }) => {
+    await page.goto('/masters/vehicles')
+    await waitForTableLoaded(page)
+
+    await page.locator('.el-select').filter({ hasText: '全部單位' }).first().click()
+    await page.locator('.el-select-dropdown:visible .el-select-dropdown__item')
+      .filter({ hasText: '竹北日照中心' })
+      .first()
+      .click()
+    await waitForTableLoaded(page)
+
+    const table = page.locator('.el-table').first()
+    await expect(table).toContainText('竹北一車')
+    await expect(table).not.toContainText('竹南1車')
   })
 
   test('車輛管理：一台車可掛多位司機，維護後清單同步更新', async ({ page }) => {
@@ -63,6 +98,10 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
     await waitForTableLoaded(page)
     await expect(page.locator('.el-table').first()).toBeVisible()
 
+    // 駕照類別與有效日期為政府「服務駕駛清冊」必填，清單需直接看得到
+    await expect(page.locator('.el-table').first()).toContainText('職業小型車')
+    await expect(page.locator('.el-table').first()).toContainText('2031-04-22')
+
     // 點選新增司機
     await page.getByRole('button', { name: '新增司機' }).click()
     const dialog = page.locator('.el-dialog').filter({ hasText: '新增司機' })
@@ -71,6 +110,14 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
     await dialog.getByPlaceholder(/請輸入姓名/).fill('測試司機')
     await dialog.getByPlaceholder(/1 碼英文/).fill('B123456789')
     await dialog.getByPlaceholder(/0912345678/).fill('0988777666')
+    await dialog.locator('.el-select').first().click()
+    await page.locator('.el-select-dropdown:visible .el-select-dropdown__item')
+      .filter({ hasText: '職業大客車' })
+      .first()
+      .click()
+    const expiryInput = dialog.locator('.el-date-editor input')
+    await expiryInput.fill('2030-12-31')
+    await expiryInput.press('Enter')
     await dialog.getByRole('button', { name: '儲存' }).click()
     await expectElMessage(page, /成功/, 'success')
   })
@@ -94,3 +141,28 @@ test.describe('04. 基礎主檔管理 (Master Data Management)', () => {
   })
 })
 
+// 車輛表單所有欄位皆為必填，測試只在意其中一兩個值，其餘欄位統一由這裡補齊
+async function fillVehicleForm(
+  page: import('@playwright/test').Page,
+  dialog: import('@playwright/test').Locator,
+  values: { plateNo: string; displayName: string }
+) {
+  await dialog.getByPlaceholder(/BZG-7915/).fill(values.plateNo)
+  await dialog.getByPlaceholder(/竹北一車/).fill(values.displayName)
+  await dialog.locator('.el-select').first().click()
+  await page.locator('.el-select-dropdown:visible .el-select-dropdown__item').first().click()
+  await dialog.getByPlaceholder(/好安心關懷協會/).fill('測試關懷協會')
+  await dialog.getByPlaceholder('如：中華').fill('中華')
+  await dialog.getByPlaceholder('如：DE241L8').fill('DE241L8')
+
+  const monthInput = dialog.getByPlaceholder('請選擇年月')
+  await monthInput.fill('2013-03')
+  await monthInput.press('Enter')
+
+  const dateInputs = dialog.getByPlaceholder('請選擇日期')
+  for (let i = 0; i < (await dateInputs.count()); i++) {
+    const input = dateInputs.nth(i)
+    await input.fill('2026-12-23')
+    await input.press('Enter')
+  }
+}

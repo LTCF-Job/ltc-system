@@ -90,7 +90,7 @@ func TestCaregiverService_LinkSite_ClearsRawName(t *testing.T) {
 	store := newFakeCaregiverStore()
 	svc := NewCaregiverService(store, nil, nil, nil)
 
-	existing := Caregiver{ID: uuid.New(), Name: "王大明", SiteNameRaw: "竹南日照據點"}
+	existing := Caregiver{ID: uuid.New(), Name: "王大明", SiteNameRaw: "竹南日照單位"}
 	require.NoError(t, store.Create(context.Background(), &existing))
 
 	siteID := uuid.New()
@@ -98,5 +98,5 @@ func TestCaregiverService_LinkSite_ClearsRawName(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, &siteID, updated.SiteID)
-	assert.Empty(t, updated.SiteNameRaw, "手動關聯據點後應清空原始單位名稱")
+	assert.Empty(t, updated.SiteNameRaw, "手動關聯單位後應清空原始單位名稱")
 }

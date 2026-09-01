@@ -1,6 +1,12 @@
 import { http, HttpResponse } from 'msw'
 import { mockRegions, mockSites, mockVehicles, mockDrivers } from '../data/mockData'
 
+// 車輛的區域一律由所屬單位帶出；找不到單位時兩個欄位都留空，與後端 LEFT JOIN 結果一致
+function siteFieldsOf(siteId: string | null | undefined) {
+  const site = siteId ? mockSites.find((s) => s.id === siteId) : undefined
+  return { siteName: site?.name ?? '', region: site?.region ?? '' }
+}
+
 // 車輛的司機由 driver_assignments 反查，與後端 GET /vehicles 帶出 drivers 的契約一致
 function driversOfVehicle(vehicleId: string) {
   return mockDrivers
@@ -83,7 +89,7 @@ export const mastersHandlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
-  // 據點主檔
+  // 單位主檔
   http.get('/api/v1/sites', ({ request }) => {
     const url = new URL(request.url)
     const q = url.searchParams.get('q')?.trim().toLowerCase()
@@ -129,16 +135,21 @@ export const mastersHandlers = [
   http.get('/api/v1/vehicles', ({ request }) => {
     const url = new URL(request.url)
     const q = url.searchParams.get('q')?.trim().toLowerCase()
+    const siteId = url.searchParams.get('siteId')
     const region = url.searchParams.get('region')
     const activeStr = url.searchParams.get('active')
 
-    let filtered = [...mockVehicles]
+    // 單位名稱與區域是 join 出來的欄位，與後端 GET /vehicles 一樣在查詢當下才補上
+    let filtered = mockVehicles.map((v) => ({ ...v, ...siteFieldsOf(v.siteId) }))
     if (q) {
       filtered = filtered.filter(
         (v) =>
           v.plateNo.toLowerCase().includes(q) ||
           v.displayName.toLowerCase().includes(q)
       )
+    }
+    if (siteId) {
+      filtered = filtered.filter((v) => v.siteId === siteId)
     }
     if (region) {
       filtered = filtered.filter((v) => v.region === region)
@@ -186,7 +197,7 @@ export const mastersHandlers = [
 
   http.post('/api/v1/vehicles', async ({ request }) => {
     const body = (await request.json()) as any
-    const newV = { id: `veh_${Date.now()}`, ...body, createdAt: '2026-08-25' }
+    const newV = { id: `veh_${Date.now()}`, ...body, ...siteFieldsOf(body.siteId), createdAt: '2026-08-25' }
     mockVehicles.push(newV)
     return HttpResponse.json(newV)
   }),
@@ -195,7 +206,7 @@ export const mastersHandlers = [
     const v = mockVehicles.find((item) => item.id === params.id)
     if (!v) return new HttpResponse(null, { status: 404 })
     const body = (await request.json()) as any
-    Object.assign(v, body)
+    Object.assign(v, body, siteFieldsOf(body.siteId ?? v.siteId))
     return HttpResponse.json(v)
   }),
 

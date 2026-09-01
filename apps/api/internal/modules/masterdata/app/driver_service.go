@@ -28,13 +28,38 @@ func (s *DriverService) List(ctx context.Context, region, q string, page, pageSi
 	return s.store.List(ctx, region, q, page, pageSize)
 }
 
+// driverLicenseClasses 是允許的駕照類別代碼，與 drivers.license_class 的 CHECK 約束一致。
+var driverLicenseClasses = map[string]bool{
+	"sedan":   true,
+	"truck":   true,
+	"bus":     true,
+	"trailer": true,
+}
+
+// normalizeLicenseClass 將駕照類別正規化；空字串視為未填寫（nil）。
+func normalizeLicenseClass(in *string) (*string, error) {
+	if in == nil {
+		return nil, nil
+	}
+	value := strings.TrimSpace(*in)
+	if value == "" {
+		return nil, nil
+	}
+	if !driverLicenseClasses[value] {
+		return nil, ErrInvalidDriverLicenseClass
+	}
+	return &value, nil
+}
+
 // CreateDriverInput 代表新增司機所需之輸入。
 type CreateDriverInput struct {
-	Code       string
-	Name       string
-	NationalID string
-	Email      *string
-	Region     string
+	Code              string
+	Name              string
+	NationalID        string
+	Email             *string
+	Region            string
+	LicenseClass      *string
+	LicenseExpiryDate *time.Time
 }
 
 // Create 新增司機：驗證身分證檢查碼，寫入加密密文與 HMAC 索引。
@@ -42,6 +67,11 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput) (*Driv
 	nationalID := strings.ToUpper(strings.TrimSpace(in.NationalID))
 	if !crypto.ValidateNationalID(nationalID) {
 		return nil, ErrInvalidDriverNationalID
+	}
+
+	licenseClass, err := normalizeLicenseClass(in.LicenseClass)
+	if err != nil {
+		return nil, err
 	}
 
 	hmacIdx := crypto.Index(nationalID, s.cfg.HMACKey)
@@ -61,6 +91,9 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput) (*Driv
 		Email:            in.Email,
 		Region:           in.Region,
 		Status:           "active",
+
+		LicenseClass:      licenseClass,
+		LicenseExpiryDate: in.LicenseExpiryDate,
 	}
 
 	if err := s.store.Create(ctx, &d); err != nil {
@@ -71,10 +104,14 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput) (*Driv
 
 // UpdateDriverInput 代表更新司機基本資料所需之輸入，欄位為 nil 表示不變更。
 type UpdateDriverInput struct {
-	Name   *string
-	Email  *string
-	Region *string
-	Status *string
+	Name              *string
+	Email             *string
+	Region            *string
+	Status            *string
+	LicenseClass      *string
+	LicenseExpiryDate *time.Time
+	// ClearLicenseExpiryDate 為 true 時把駕照有效日期清空；沒有這個旗標無法區分「不變更」與「清空」。
+	ClearLicenseExpiryDate bool
 }
 
 // Update 更新司機基本資料。
@@ -96,6 +133,18 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 	}
 	if in.Status != nil {
 		existing.Status = *in.Status
+	}
+	if in.LicenseClass != nil {
+		licenseClass, err := normalizeLicenseClass(in.LicenseClass)
+		if err != nil {
+			return nil, err
+		}
+		existing.LicenseClass = licenseClass
+	}
+	if in.LicenseExpiryDate != nil {
+		existing.LicenseExpiryDate = in.LicenseExpiryDate
+	} else if in.ClearLicenseExpiryDate {
+		existing.LicenseExpiryDate = nil
 	}
 
 	if err := s.store.Update(ctx, existing); err != nil {

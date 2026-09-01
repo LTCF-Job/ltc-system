@@ -10,6 +10,7 @@ import (
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
 	caseinfra "ltc-system/apps/api/internal/modules/casemgmt/infra"
 	drapp "ltc-system/apps/api/internal/modules/driverreport/app"
+	masterapp "ltc-system/apps/api/internal/modules/masterdata/app"
 	masterinfra "ltc-system/apps/api/internal/modules/masterdata/infra"
 	opsapp "ltc-system/apps/api/internal/modules/ops/app"
 	rideapp "ltc-system/apps/api/internal/modules/ride/app"
@@ -19,7 +20,7 @@ import (
 // 跨模組協作一律走「消費者宣告 port、composition root 注入」：以下 adapter 把某個
 // 模組的查詢結果轉成消費模組自己的型別，任一模組都不直接 import 另一個模組。
 
-// caseSiteFinder 讓 casemgmt 驗證個案交通偏好的據點是否同區。
+// caseSiteFinder 讓 casemgmt 驗證個案交通偏好的單位是否同區。
 type caseSiteFinder struct{ repo *masterinfra.SiteRepository }
 
 func (a caseSiteFinder) GetByID(ctx context.Context, id uuid.UUID) (*caseapp.SiteRef, error) {
@@ -113,7 +114,7 @@ type opsVehicleLister struct {
 }
 
 func (a opsVehicleLister) List(ctx context.Context, region, q string, page, pageSize int) ([]opsapp.VehicleRef, int64, error) {
-	list, total, err := a.repo.List(ctx, region, q, page, pageSize)
+	list, total, err := a.repo.List(ctx, masterapp.VehicleFilter{Region: region, Q: q}, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -124,7 +125,7 @@ func (a opsVehicleLister) List(ctx context.Context, region, q string, page, page
 	return out, total, nil
 }
 
-// importSiteLookup 讓 caseimport 以名稱或區域比對據點。
+// importSiteLookup 讓 caseimport 以名稱或區域比對單位。
 type importSiteLookup struct{ repo *masterinfra.SiteRepository }
 
 func (a importSiteLookup) GetByName(ctx context.Context, name string) (*importapp.SiteRef, error) {
@@ -184,7 +185,7 @@ func (a caseRegistrar) RecordSkipped(ctx context.Context, row importapp.CaseImpo
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 }
 
-// caregiverSiteLookup 讓 caregiver 匯入時以名稱比對據點。
+// caregiverSiteLookup 讓 caregiver 匯入時以名稱比對單位。
 type caregiverSiteLookup struct{ repo *masterinfra.SiteRepository }
 
 func (a caregiverSiteLookup) GetByName(ctx context.Context, name string) (*caregiverapp.SiteRef, error) {

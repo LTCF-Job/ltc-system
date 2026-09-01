@@ -19,7 +19,7 @@
 
 - `DEFAULT_ROLE_PERMISSIONS.admin`：所有模組 `view/edit` 全部 `true`（用程式產生，不用一個個列）。
 - `DEFAULT_ROLE_PERMISSIONS.dispatcher` / `.staff`：手動列出每個模組的權限，兩者目前設定幾乎一樣（都能看能編大部分業務模組），差異在 `dispatcher`／`staff` 這兩個角色本身在後端 `RequireRoles` 裡是分開判斷的，但前端權限表給的預設值目前相同。
-- `DEFAULT_ROLE_PERMISSIONS.driver`：只能看／編「車輛維修保養」「出勤與油資」跟看「搭乘月曆」「車輛主檔」「司機主檔」，個案、據點、表單、報表、匯出、系統設定全部沒有權限。
+- `DEFAULT_ROLE_PERMISSIONS.driver`：只能看／編「車輛維修保養」「出勤與油資」跟看「搭乘月曆」「車輛主檔」「司機主檔」，個案、單位、表單、報表、匯出、系統設定全部沒有權限。
 - `DEFAULT_ROLE_PERMISSIONS.viewer`：除了 `audit_logs`、`settings_users`、`settings_roles` 這三個系統管理類模組看不到，其他模組都只有 `view`，沒有 `edit`。
 
 加一個新頁面（新模組）時，記得同時做三件事：`SYSTEM_MODULES` 加一筆、每個角色的 `DEFAULT_ROLE_PERMISSIONS` 補上這個模組的 `view/edit`、路由 `meta.module` 指到這個新模組 id——三個地方漏一個都會導致權限判斷不如預期（漏了模組定義會被 `hasPermission` 當成沒權限，因為 `modPerm` 找不到直接回傳 `false`）。

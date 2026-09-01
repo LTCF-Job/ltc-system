@@ -48,15 +48,21 @@ func (h *DriverHandler) Create(c *gin.Context) {
 	}
 
 	d, err := h.svc.Create(c.Request.Context(), app.CreateDriverInput{
-		Code:       req.Code,
-		Name:       req.Name,
-		NationalID: req.NationalID,
-		Email:      req.Email,
-		Region:     req.Region,
+		Code:              req.Code,
+		Name:              req.Name,
+		NationalID:        req.NationalID,
+		Email:             req.Email,
+		Region:            req.Region,
+		LicenseClass:      req.LicenseClass,
+		LicenseExpiryDate: req.LicenseExpiryDate,
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidDriverNationalID) {
 			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "身分證檢查碼錯誤", nil)
+			return
+		}
+		if errors.Is(err, app.ErrInvalidDriverLicenseClass) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "駕照類別不正確", nil)
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
@@ -81,14 +87,21 @@ func (h *DriverHandler) Update(c *gin.Context) {
 	}
 
 	d, err := h.svc.Update(c.Request.Context(), id, app.UpdateDriverInput{
-		Name:   req.Name,
-		Email:  req.Email,
-		Region: req.Region,
-		Status: req.Status,
+		Name:                   req.Name,
+		Email:                  req.Email,
+		Region:                 req.Region,
+		Status:                 req.Status,
+		LicenseClass:           req.LicenseClass,
+		LicenseExpiryDate:      req.LicenseExpiryDate.Value,
+		ClearLicenseExpiryDate: req.LicenseExpiryDate.Present && req.LicenseExpiryDate.Value == nil,
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrDriverNotFound) {
 			respondNotFound(c, "查無司機資料")
+			return
+		}
+		if errors.Is(err, app.ErrInvalidDriverLicenseClass) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "駕照類別不正確", nil)
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)

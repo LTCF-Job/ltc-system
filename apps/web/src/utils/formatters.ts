@@ -34,3 +34,23 @@ export function formatTime(value?: string | number | Date | null, fallback = '-'
   return d.format('HH:mm:ss')
 }
 
+
+/**
+ * 將日期格式化為民國格式「114/12/23」
+ */
+export function formatRocDate(value?: string | number | Date | null, fallback = '-'): string {
+  if (!value) return fallback
+  const d = dayjs(value)
+  if (!d.isValid()) return String(value)
+  return `${d.year() - 1911}/${d.format('MM/DD')}`
+}
+
+/**
+ * 將「YYYY-MM」年月格式化為「2013 年 03 月」
+ */
+export function formatYearMonth(value?: string | null, fallback = '-'): string {
+  if (!value) return fallback
+  const [year, month] = value.split('-')
+  if (!year || !month) return value
+  return `${year} 年 ${month} 月`
+}

@@ -20,7 +20,7 @@ var (
 	ErrLegTimesNotOrdered = errors.New("schedule leg departure times must be strictly increasing")
 )
 
-// CaseService 封裝個案、據點、車輛、司機與排班之業務邏輯。
+// CaseService 封裝個案、單位、車輛、司機與排班之業務邏輯。
 type CaseService struct {
 	cfg       *config.Config
 	caseRepo  CaseStore
@@ -145,7 +145,7 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 }
 
 // ListCases 查詢個案清單（回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳
-// 據點／去回程車輛任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案；
+// 單位／去回程車輛任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案；
 // excludePending 為 true 時排除這類待維護個案。
 func (s *CaseService) ListCases(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
 	return s.caseRepo.List(ctx, region, status, q, page, pageSize, unresolvedLink, excludePending)
@@ -230,7 +230,7 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 	return entity, nil
 }
 
-// UpdateCaseTransportPreference 更新個案的交通偏好（所屬據點與去回程車輛），回傳更新後的個案主檔。
+// UpdateCaseTransportPreference 更新個案的交通偏好（所屬單位與去回程車輛），回傳更新後的個案主檔。
 // 三個 ID 皆為 nil 表示維持現況，僅提供的欄位會被寫入；raw name 字串只在對應 ID
 // 為 nil 且需要保留原始名稱待人工關聯時才有意義。
 func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) (*Case, error) {

@@ -15,13 +15,13 @@ type CaregiverStore interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
-// SiteRef 是匯入或關聯比對據點時需要的最小資訊。
+// SiteRef 是匯入或關聯比對單位時需要的最小資訊。
 type SiteRef struct {
 	ID   uuid.UUID
 	Name string
 }
 
-// SiteLookup 提供以名稱比對據點的查詢，供批次匯入比對「單位」欄位使用。
+// SiteLookup 提供以名稱比對單位的查詢，供批次匯入比對「單位」欄位使用。
 type SiteLookup interface {
 	GetByName(ctx context.Context, name string) (*SiteRef, error)
 }

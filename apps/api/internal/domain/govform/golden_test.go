@@ -12,7 +12,7 @@ func TestGovClaim_TsaiTsengChieh_OutputContract(t *testing.T) {
 	// 模擬蔡曾切 115 年 7 月之資料生成
 	// 個案身分證: A202559750, 服務代碼: BD03, 服務類別: 1, 單價: 115, 時長: 10 分鐘
 	// 司機身分證: K120098177, 車號: BZG-7915, 里程: 5, 使用類型: 2
-	// 戶籍地址: 新竹縣竹北市光明六路264號, 據點地址: 新竹縣竹北市中正西路100號
+	// 戶籍地址: 新竹縣竹北市光明六路264號, 單位地址: 新竹縣竹北市中正西路100號
 
 	var rows []ClaimRow
 
@@ -74,7 +74,7 @@ func TestGovClaim_TsaiTsengChieh_OutputContract(t *testing.T) {
 	assert.Equal(t, "新竹縣竹北市光明六路264號", rows[0].Cells[24])
 	assert.Equal(t, "新竹縣竹北市中正西路100號", rows[0].Cells[25])
 
-	// 第 19 列為回程 -> 出發地為據點
+	// 第 19 列為回程 -> 出發地為單位
 	assert.Equal(t, "新竹縣竹北市中正西路100號", rows[19].Cells[24])
 	assert.Equal(t, "新竹縣竹北市光明六路264號", rows[19].Cells[25])
 

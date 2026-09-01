@@ -476,7 +476,7 @@ async function handleSubmit() {
 async function handleDelete(row: RegionDTO) {
   try {
     await ElMessageBox.confirm(
-      `確定要刪除區域「${row.name}」嗎？若該區域已有綁定個案、車輛或據點，建議優先改為「停用」。`,
+      `確定要刪除區域「${row.name}」嗎？若該區域已有綁定個案、車輛或單位，建議優先改為「停用」。`,
       '刪除確認',
       {
         confirmButtonText: '刪除',

@@ -22,7 +22,7 @@ func NewCaseRepository(db *pgxpool.Pool) *CaseRepository {
 	return &CaseRepository{db: db}
 }
 
-// List 取得個案清單（預設回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳據點／去回程車輛
+// List 取得個案清單（預設回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳單位／去回程車輛
 // 任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案；excludePending 為 true 時排除
 // 這類待維護個案，供主列表與「待補建關聯」分頁互斥呈現。
 func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
@@ -98,7 +98,7 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 	return list, total, nil
 }
 
-// UpsertTransportPreference 寫入個案的據點與去回程車輛偏好。nil 的 ID 以 COALESCE 保留
+// UpsertTransportPreference 寫入個案的單位與去回程車輛偏好。nil 的 ID 以 COALESCE 保留
 // 既有值（避免部分更新把未提供的欄位覆寫為 null）；raw name 隨對應 ID 一併寫入或清空。
 func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
 	db := pgxdb.FromContext(ctx, r.db)

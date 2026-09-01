@@ -180,7 +180,7 @@
         <el-form label-width="140px" :disabled="!authStore.can('staff')">
           <el-row :gutter="16">
             <el-col :xs="24" :sm="12" :lg="8">
-              <el-form-item label="所屬據點">
+              <el-form-item label="所屬單位">
                 <el-select v-model="transportForm.siteId" filterable style="width: 100%">
                   <el-option
                     v-for="site in availableSites"

@@ -18,7 +18,8 @@ import type {
   AuditAction,
   AuditEntityType,
   SystemPermissions,
-  CaregiverType
+  CaregiverType,
+  DriverLicenseClass
 } from './domain'
 
 // 共通分頁與錯誤結構
@@ -260,7 +261,7 @@ export interface CreateScheduleRequest {
   }>
 }
 
-// 主檔：區域、據點、車輛、司機
+// 主檔：區域、單位、車輛、司機
 export interface RegionDTO {
   id: string
   name: string
@@ -308,7 +309,20 @@ export interface VehicleDTO {
   id: string
   plateNo: string
   displayName: string
-  region: Region
+  siteId: string | null
+  siteName: string
+  // 由所屬單位帶出的唯讀區域，車輛本身不再自存
+  region: Region | ''
+  ownerName: string
+  brand: string
+  model: string
+  // 出廠年月，格式為 YYYY-MM
+  manufactureYm: string
+  compulsoryInsuranceExpiry: string | null
+  passengerInsuranceExpiry: string | null
+  thirdPartyInsuranceExpiry: string | null
+  lastInspectionDate: string | null
+  wheelchairAccessible: boolean | null
   active: boolean
   createdAt: string
   drivers?: VehicleDriverDTO[]
@@ -324,7 +338,16 @@ export interface VehicleDriverDTO {
 export interface CreateVehicleRequest {
   plateNo: string
   displayName: string
-  region: Region
+  siteId: string
+  ownerName: string
+  brand: string
+  model: string
+  manufactureYm: string
+  compulsoryInsuranceExpiry: string
+  passengerInsuranceExpiry: string
+  thirdPartyInsuranceExpiry: string
+  lastInspectionDate: string
+  wheelchairAccessible: boolean
   active?: boolean
 }
 
@@ -350,6 +373,9 @@ export interface DriverDTO {
   phone?: string
   email?: string
   active: boolean
+  // 駕照類別與有效日期為選填，未補登時為 null
+  licenseClass?: DriverLicenseClass | null
+  licenseExpiryDate?: string | null
   createdAt: string
   assignments?: DriverAssignmentDTO[]
 }
@@ -360,11 +386,13 @@ export interface CreateDriverRequest {
   phone?: string
   email?: string
   active?: boolean
+  licenseClass?: DriverLicenseClass | null
+  licenseExpiryDate?: string | null
 }
 
 export interface UpdateDriverRequest extends Partial<CreateDriverRequest> { }
 
-// 照護人員：siteId 為空但 siteNameRaw 有值時，代表匯入時的單位名稱尚未關聯既有據點
+// 照護人員：siteId 為空但 siteNameRaw 有值時，代表匯入時的單位名稱尚未關聯既有單位
 export interface CaregiverDTO {
   id: string
   siteId?: string

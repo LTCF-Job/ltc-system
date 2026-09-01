@@ -80,7 +80,7 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 				caseReq.BirthDate = &birthDate
 			}
 		}
-		// 據點／去回程車輛各自獨立比對：比對到則寫入 ID，比對不到但有填名稱則保留
+		// 單位／去回程車輛各自獨立比對：比對到則寫入 ID，比對不到但有填名稱則保留
 		// 原始名稱待人工關聯，兩種情況都不影響個案主檔本身的建立。
 		siteID, siteNameRaw, siteWarning := s.resolveSite(ctx, row.SiteName)
 		outboundID, outboundNameRaw, outboundWarning := s.resolveVehicle(ctx, row.OutboundVehicle, "接送車輛(去)")
@@ -121,14 +121,14 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 	return result, nil
 }
 
-// resolveSite 依名稱比對既有據點；查無資料時回傳空 ID 與原始名稱，並附上待人工關聯的提示。
+// resolveSite 依名稱比對既有單位；查無資料時回傳空 ID 與原始名稱，並附上待人工關聯的提示。
 func (s *ImportService) resolveSite(ctx context.Context, name string) (id *uuid.UUID, nameRaw string, warning string) {
 	if name == "" || s.siteRepo == nil {
 		return nil, "", ""
 	}
 	site, err := s.siteRepo.GetByName(ctx, name)
 	if err != nil || site == nil {
-		return nil, name, fmt.Sprintf("據點「%s」未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯", name)
+		return nil, name, fmt.Sprintf("單位「%s」未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", name)
 	}
 	return &site.ID, "", ""
 }
@@ -140,7 +140,7 @@ func (s *ImportService) resolveVehicle(ctx context.Context, name, fieldLabel str
 	}
 	vehicle, err := s.vehicleRepo.GetByDisplayName(ctx, name)
 	if err != nil || vehicle == nil {
-		return nil, name, fmt.Sprintf("%s『%s』未於車輛/據點管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name)
+		return nil, name, fmt.Sprintf("%s『%s』未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name)
 	}
 	return &vehicle.ID, "", ""
 }

@@ -44,7 +44,7 @@ export async function deleteRegion(id: string): Promise<void> {
 }
 
 
-// 據點 Sites
+// 單位 Sites
 export async function listSites(params?: {
   page?: number
   pageSize?: number
@@ -70,6 +70,7 @@ export async function deleteSite(id: string): Promise<void> {
 export async function listVehicles(params?: {
   page?: number
   pageSize?: number
+  siteId?: string
   region?: string
   active?: boolean
   q?: string

@@ -106,7 +106,7 @@ export const caregiversHandlers = [
   }),
 
   // 依實際上傳的 .xlsx 內容解析，邏輯對齊後端 caregiver_import.go：姓名或類型缺漏／類型
-  // 不是個管／專護的列整列略過；單位比對不到既有據點、聯絡方式或備註缺漏仍建立資料並附警告。
+  // 不是個管／專護的列整列略過；單位比對不到既有單位、聯絡方式或備註缺漏仍建立資料並附警告。
   http.post('/api/v1/caregivers/import', async ({ request }) => {
     const url = new URL(request.url)
     const isDryRun = url.searchParams.get('dryRun') === 'true'
@@ -224,7 +224,7 @@ export const caregiversHandlers = [
           rowIndex: row.rowIndex,
           name: row.name,
           field: 'site',
-          message: `單位「${row.siteName}」未於據點管理中找到，已建立資料並保留原始名稱待人工關聯`
+          message: `單位「${row.siteName}」未於單位管理中找到，已建立資料並保留原始名稱待人工關聯`
         })
       }
       if (!row.contact) {

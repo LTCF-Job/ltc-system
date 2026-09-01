@@ -26,7 +26,17 @@ func (h *VehicleHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 
-	vehicles, total, err := h.svc.List(c.Request.Context(), c.Query("region"), c.Query("q"), page, pageSize)
+	filter := app.VehicleFilter{Region: c.Query("region"), Q: c.Query("q")}
+	if raw := c.Query("siteId"); raw != "" {
+		siteID, err := uuid.Parse(raw)
+		if err != nil {
+			respondInvalidID(c, "無效的單位 ID")
+			return
+		}
+		filter.SiteID = &siteID
+	}
+
+	vehicles, total, err := h.svc.List(c.Request.Context(), filter, page, pageSize)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢車輛失敗", nil)
 		return
@@ -47,12 +57,7 @@ func (h *VehicleHandler) Create(c *gin.Context) {
 		return
 	}
 
-	v, err := h.svc.Create(c.Request.Context(), app.CreateVehicleInput{
-		PlateNo:     req.PlateNo,
-		DisplayName: req.DisplayName,
-		Region:      req.Region,
-		Status:      req.Status,
-	})
+	v, err := h.svc.Create(c.Request.Context(), req.toInput())
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
@@ -75,12 +80,7 @@ func (h *VehicleHandler) Update(c *gin.Context) {
 		return
 	}
 
-	v, err := h.svc.Update(c.Request.Context(), id, app.UpdateVehicleInput{
-		PlateNo:     req.PlateNo,
-		DisplayName: req.DisplayName,
-		Region:      req.Region,
-		Status:      req.Status,
-	})
+	v, err := h.svc.Update(c.Request.Context(), id, req.toInput())
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
