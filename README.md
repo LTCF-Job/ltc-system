@@ -57,4 +57,4 @@ make test-e2e         # tests/e2e 的瀏覽器測試
 
 ## CI/CD
 
-`.github/workflows/` 底下有兩條 pipeline：PR 跑測試／type-check／build；push 到 `main` 才會真的部署（migration → Cloud Run API → Vercel 前端）。部署參數怎麼串（Supabase / Cloud Run / Vercel 三邊環境變數怎麼對應）寫在 [`docs/10-CI-CD部署操作說明.md`](docs/10-CI-CD部署操作說明.md)，那份是操作 SOP，照著設定即可。
+`.github/workflows/` 底下有兩條 pipeline：PR 跑測試／type-check／build；push 到 `main` 才會真的部署（migration → Cloud Run API → Vercel 前端）。部署參數怎麼串（Supabase / Cloud Run / Vercel 三邊環境變數怎麼對應）寫在 [`docs/tech/deployment.md`](docs/tech/deployment.md)，那份是操作 SOP，照著設定即可。

@@ -13,5 +13,7 @@
 | [frontend-flows.md](frontend-flows.md) | 前端核心功能流程：月曆補登、異常處理、未回報清單、表單欄位對應、匯出、批次匯入 |
 | [frontend-permission-logic.md](frontend-permission-logic.md) | 前端權限判斷的實際邏輯：路由守衛判斷順序、模組權限表、個人自訂權限覆蓋規則、角色階層、跟後端授權不對稱的已知落差 |
 | [integration-contract.md](integration-contract.md) | 前後端整合契約：一次 API 呼叫從畫面觸發到顯示錯誤，完整經過的認證、角色檢查、response envelope 解包與錯誤處理關卡 |
+| [deployment.md](deployment.md) | 部署設定：GitHub Actions、Cloud Run、Vercel、Supabase 環境變數怎麼串，與部署時踩過的坑 |
+| [environment-bootstrap.md](environment-bootstrap.md) | 從零把這個專案部署到全新的 Supabase／GCP／Vercel 環境，第一次建置專用 |
 
-部署相關（GitHub Actions、Cloud Run、Vercel、Supabase 參數怎麼串）不重複收錄在這裡，見 [`../10-CI-CD部署操作說明.md`](../10-CI-CD部署操作說明.md)。分層邊界與程式碼風格的權威規則來源是 [`AGENTS.md`](../../AGENTS.md) 底下的 `.agents/skills/`。
+分層邊界與程式碼風格的權威規則來源是 [`AGENTS.md`](../../AGENTS.md) 底下的 `.agents/skills/`。

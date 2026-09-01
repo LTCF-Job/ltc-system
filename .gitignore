@@ -9,3 +9,5 @@ TODO
 *.exe
 bin/
 .claude/*.local.json
+.vercel
+.env*
