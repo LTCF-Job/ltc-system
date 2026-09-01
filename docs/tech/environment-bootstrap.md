@@ -288,6 +288,7 @@ Preview 環境變數要另外設一次，不會沿用 Production 的設定，見
 | `MIGRATION_JOB` | Variable | `ltc-api-migrate` | 同左 |
 | `GCP_WIF_PROVIDER` | Secret | Step 2 產出的 provider 資源名稱 | 同左或另一組 |
 | `GCP_DEPLOY_SA` | Secret | Step 2 產出的 service account email | 同左或另一組 |
+| `VERCEL_ALIAS_DOMAIN` | Variable | Step 5 拿到的 `<project>-git-<branch>-<team>.vercel.app` | `Production` 不需要，`--prod` 部署會自動套用 Production Domains |
 
 若 Step 5 採用 Vercel 頁面版（原生 Git 整合），以上這張表就是這個 GitHub Environment 要設定的**全部**內容，不用再另外處理 Vercel 相關項目。
 
@@ -304,6 +305,7 @@ gh variable set API_SERVICE --env develop --body "ltc-api"
 gh variable set MIGRATION_JOB --env develop --body "ltc-api-migrate"
 gh secret set GCP_WIF_PROVIDER --env develop --body "projects/<GCP_PROJECT_NUMBER>/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
 gh secret set GCP_DEPLOY_SA --env develop --body "github-actions-deployer@<GCP_PROJECT_ID>.iam.gserviceaccount.com"
+gh variable set VERCEL_ALIAS_DOMAIN --env develop --body "<project>-git-develop-<team>.vercel.app"
 ```
 
 `gh api --method PUT repos/.../environments/<name>` 是用來自動建立 Environment 本身（`gh` 沒有專屬的 `gh environment create` 子指令），連「到網頁點 New environment」這一步都省掉；建立後緊接著的 `gh variable set`／`gh secret set` 才是逐項填值。`Production` 環境依樣重複一次（正式環境是否要用獨立的 GCP 專案／Supabase 專案是團隊決定，這份文件不預設答案）。

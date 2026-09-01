@@ -102,9 +102,22 @@ jobs:
           fi
 
       - name: Deploy prebuilt output
+        id: deploy
         run: |
           if [ "$VERCEL_ENV" = "production" ]; then
-            vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+            URL=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
           else
-            vercel deploy --prebuilt --token="$VERCEL_TOKEN"
+            URL=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
           fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Update branch alias
+        # vercel deploy 每次都會產生一個新的隨機雜湊網址；--prod 部署會自動套用
+        # 專案設定的 Production Domains，不用額外處理，但非 production（develop
+        # 分支對應的 preview）沒有這種自動機制——這裡是走 CLI／GitHub Actions
+        # 部署，不是 Vercel 原生 Git 整合，不會自動更新
+        # ltc-system-git-<branch>-<team>.vercel.app 這類固定別名，每次都要
+        # 手動 `vercel alias set` 才會反映在那個大家在測試時使用的固定網址上。
+        # VERCEL_ALIAS_DOMAIN 沒設定時跳過，不影響部署本身成功與否。
+        if: env.VERCEL_ENV != 'production' && vars.VERCEL_ALIAS_DOMAIN != ''
+        run: vercel alias set "${{ steps.deploy.outputs.url }}" "${{ vars.VERCEL_ALIAS_DOMAIN }}" --token="$VERCEL_TOKEN"

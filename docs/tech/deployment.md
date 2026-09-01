@@ -104,7 +104,9 @@ vercel env add VITE_API_BASE_URL preview --no-sensitive --value 'https://<cloud-
 vercel deploy
 ```
 
-但這樣建出來的是一個全新、隨機雜湊網址的 Preview 部署（例如 `ltc-system-<hash>-<team>.vercel.app`），**不會**自動指到 `ltc-system-git-<branch>-<team>.vercel.app` 這個固定的分支別名——那個別名只有透過 GitHub 整合（push 觸發）的部署才會自動更新。要讓 CLI 建出來的新部署套用到分支別名，要手動重新指定：
+但這樣建出來的是一個全新、隨機雜湊網址的 Preview 部署（例如 `ltc-system-<hash>-<team>.vercel.app`），**不會**自動指到 `ltc-system-git-<branch>-<team>.vercel.app` 這個固定的分支別名——那個別名只有透過 GitHub 原生 Git 整合（push 觸發）的部署才會自動更新；這個專案走的是 GitHub Actions＋CLI 部署（不是原生 Git 整合），沒有這個機制。
+
+`deploy-web.yml` 已經處理過這件事：`Deploy prebuilt output` 那步把 `vercel deploy` 印出的網址存成 step output，接著的 `Update branch alias` 步驟會自動 `vercel alias set` 到 GitHub Environment variable `VERCEL_ALIAS_DOMAIN`（`production` 分支走 `--prod`、會自動套用專案設定的 Production Domains，不需要這個變數）。沒設這個變數就跳過，不影響部署本身成功與否。手動用 CLI 部署、或這個自動化本身故障時才需要手動補：
 
 ```bash
 vercel alias set https://ltc-system-<hash>-<team>.vercel.app ltc-system-git-<branch>-<team>.vercel.app
@@ -220,6 +222,7 @@ gcloud run jobs describe ltc-api-migrate --region=asia-east1 --format="value(spe
 | `API_SERVICE`（預設 `ltc-api`）/ `MIGRATION_JOB`（預設 `ltc-api-migrate`） | Variable | Environment | 服務／job 名稱 |
 | `GCP_WIF_PROVIDER` / `GCP_DEPLOY_SA` | Secret | Environment | Workload Identity Federation 部署身分 |
 | `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | Secret | Repo | Vercel CLI 部署憑證 |
+| `VERCEL_ALIAS_DOMAIN` | Variable | Environment | 非 production 分支部署完自動 `vercel alias set` 的目標網域，見下方已知坑；沒設定就跳過這步 |
 
 從零設定這些值（含 GCP service account、Workload Identity Federation、Artifact Registry 怎麼建）見 [`environment-bootstrap.md`](environment-bootstrap.md)。
 
