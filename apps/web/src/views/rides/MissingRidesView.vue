@@ -243,7 +243,19 @@
           <span style="color: var(--el-color-danger);">{{ currentLogRow.errorMessage || (currentLogRow as any).error }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="完整內容">
-          <div style="white-space: pre-wrap;">{{ currentLogRow.contentSummary || (currentLogRow as any).body || '-' }}</div>
+          <div class="log-detail-content" :class="{ 'is-expanded': logContentExpanded }">
+            {{ currentLogRow.contentSummary || (currentLogRow as any).body || '-' }}
+          </div>
+          <el-button
+            v-if="isLogContentLong"
+            link
+            type="primary"
+            size="small"
+            class="log-detail-toggle"
+            @click="logContentExpanded = !logContentExpanded"
+          >
+            {{ logContentExpanded ? '收合' : '展開完整內容' }}
+          </el-button>
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
@@ -469,9 +481,15 @@ const triggering = ref(false)
 // 通知歷史詳情對話框狀態
 const logDetailVisible = ref(false)
 const currentLogRow = ref<NotificationLogDTO | null>(null)
+const logContentExpanded = ref(false)
+const isLogContentLong = computed(() => {
+  const content = currentLogRow.value?.contentSummary || (currentLogRow.value as any)?.body || ''
+  return content.length > 120
+})
 
 function openLogDetail(row: any) {
   currentLogRow.value = row
+  logContentExpanded.value = false
   logDetailVisible.value = true
 }
 
@@ -665,6 +683,21 @@ onMounted(() => {
 
 .log-detail-descriptions :deep(.el-descriptions__body .el-descriptions__table .el-descriptions__cell) {
   font-size: var(--app-font-md);
+}
+
+.log-detail-content {
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-detail-content.is-expanded {
+  max-height: none;
+}
+
+.log-detail-toggle {
+  margin-top: 4px;
 }
 
 .text-secondary {
