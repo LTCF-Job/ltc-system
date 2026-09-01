@@ -141,3 +141,4 @@ Avoid decorative particles, excessive bounce, continuous animation, rotating ele
 - [ ] The implementation stays within the existing project technology stack.
 - [ ] Operational claims, trends, live states, and alerts have a real source or are clearly marked as demo data.
 - [ ] Non-semantic KPI and shortcut elements use the neutral palette.
+- [ ] Every `table-layout="auto"` table column that could wrap has a matching nowrap lock (template span with `white-space: nowrap`, or `class-name="xxx-col"` paired with `:deep(.xxx-col .cell) { white-space: nowrap; }`) — grep the file for each `class-name` you added and confirm its `:deep()` rule exists (see `references/component-contract.md`「表格欄位」).
