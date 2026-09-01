@@ -51,7 +51,7 @@
       <!-- 表格 -->
       <template #table>
         <el-table :data="drivers" border stripe table-layout="auto" style="width: 100%">
-          <el-table-column prop="name" label="司機姓名" width="130" align="center">
+          <el-table-column prop="name" label="司機姓名" min-width="110" align="center">
             <template #default="{ row }"><span class="driver-name">{{ row.name }}</span></template>
           </el-table-column>
           <el-table-column prop="nationalId" label="身分證字號" width="140" align="center">
@@ -442,6 +442,7 @@ executeFetch()
 .vehicle-name {
   font-weight: 650;
   color: var(--el-text-color-primary);
+  white-space: nowrap;
 }
 
 .driver-data {

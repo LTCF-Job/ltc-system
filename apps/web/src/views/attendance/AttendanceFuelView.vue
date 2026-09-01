@@ -292,9 +292,9 @@
                 <span>{{ row.fuelDate?.slice(0, 10) }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="vehicleName" label="車輛名稱" min-width="150" />
+            <el-table-column prop="vehicleName" label="車輛名稱" min-width="120" class-name="fuel-vehicle-col" />
             <el-table-column prop="plateNo" label="車牌號碼" min-width="120" align="center" />
-            <el-table-column prop="driverName" label="加油司機" min-width="120" align="center">
+            <el-table-column prop="driverName" label="加油司機" min-width="100" align="center" class-name="fuel-driver-col">
               <template #default="{ row }">
                 {{ row.driverName || '-' }}
               </template>
@@ -1128,6 +1128,11 @@ onMounted(async () => {
 
 .text-muted {
   color: var(--el-text-color-placeholder);
+}
+
+:deep(.fuel-vehicle-col .cell),
+:deep(.fuel-driver-col .cell) {
+  white-space: nowrap;
 }
 
 .mt-3 {

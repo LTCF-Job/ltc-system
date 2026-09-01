@@ -97,12 +97,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="caseCode" label="個案編號" width="100" />
-        <el-table-column prop="caseName" label="個案姓名" width="120">
+        <el-table-column prop="caseName" label="個案姓名" min-width="110">
           <template #default="{ row }">
             <span class="font-bold">{{ row.caseName }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="note" label="備註" min-width="140">
+        <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.note || '-' }}
           </template>
@@ -119,7 +119,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="destination" label="目的地 (據點)" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="vehicleName" label="承接車輛" width="110" align="center" />
+        <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="vehicle-name-col" />
       </el-table>
       <el-empty
         v-if="!scheduleData?.outbound || scheduleData.outbound.length === 0"
@@ -150,12 +150,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="caseCode" label="個案編號" width="100" />
-        <el-table-column prop="caseName" label="個案姓名" width="120">
+        <el-table-column prop="caseName" label="個案姓名" min-width="110">
           <template #default="{ row }">
             <span class="font-bold">{{ row.caseName }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="note" label="備註" min-width="140">
+        <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.note || '-' }}
           </template>
@@ -172,7 +172,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="destination" label="目的地 (住家)" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="vehicleName" label="承接車輛" width="110" align="center" />
+        <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="vehicle-name-col" />
       </el-table>
       <el-empty
         v-if="!scheduleData?.inbound || scheduleData.inbound.length === 0"
@@ -334,6 +334,11 @@ onMounted(async () => {
 
 .font-bold {
   font-weight: 600;
+  white-space: nowrap;
+}
+
+:deep(.vehicle-name-col .cell) {
+  white-space: nowrap;
 }
 
 .mt-4 {

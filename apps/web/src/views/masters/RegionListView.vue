@@ -507,6 +507,7 @@ onMounted(() => {
 }
 .font-bold {
   font-weight: 600;
+  white-space: nowrap;
 }
 .form-tip {
   font-size: var(--app-font-xs);

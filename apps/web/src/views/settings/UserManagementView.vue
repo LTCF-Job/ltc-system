@@ -565,6 +565,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 
   .user-avatar {
     background-color: var(--el-color-primary-light-8);

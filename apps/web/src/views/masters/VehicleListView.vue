@@ -74,7 +74,7 @@
                 @keyup.enter="saveInlineEdit(row as any)"
                 @keyup.esc="cancelInlineEdit"
               />
-              <span v-else>{{ row.displayName }}</span>
+              <span v-else class="display-name-text">{{ row.displayName }}</span>
             </template>
           </el-table-column>
 
@@ -550,6 +550,10 @@ executeFetch()
 .vehicle-driver-empty {
   color: var(--el-text-color-placeholder);
   font-size: 13px;
+}
+
+.display-name-text {
+  white-space: nowrap;
 }
 
 .driver-dialog-hint {

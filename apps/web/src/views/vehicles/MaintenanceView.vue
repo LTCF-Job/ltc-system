@@ -71,7 +71,7 @@
             <span>{{ row.serviceDate?.slice(0, 10) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="vehicleName" label="車輛名稱" width="120" />
+        <el-table-column prop="vehicleName" label="車輛名稱" min-width="120" class-name="vehicle-name-col" />
         <el-table-column prop="plateNo" label="車牌號碼" width="110" align="center" />
         <el-table-column prop="mileage" label="里程數 (km)" width="120" align="right">
           <template #default="{ row }">
@@ -401,6 +401,10 @@ onMounted(async () => {
 
 .text-muted {
   color: var(--el-text-color-placeholder);
+}
+
+:deep(.vehicle-name-col .cell) {
+  white-space: nowrap;
 }
 
 </style>

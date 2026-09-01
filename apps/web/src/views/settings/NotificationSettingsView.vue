@@ -69,9 +69,9 @@
           align="center"
         />
 
-        <el-table-column label="通知主題" width="160">
+        <el-table-column label="通知主題" min-width="140">
           <template #default="{ row }">
-            <span>{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
+            <span class="topic-label">{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
           </template>
         </el-table-column>
 
@@ -587,6 +587,10 @@ onMounted(() => {
 
 .font-bold {
   font-weight: bold;
+}
+
+.topic-label {
+  white-space: nowrap;
 }
 
 /* 新增外部信箱對話框樣式 */

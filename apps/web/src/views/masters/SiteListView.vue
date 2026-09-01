@@ -56,7 +56,7 @@
       <!-- 表格 -->
       <template #table>
         <el-table :data="sites" border stripe table-layout="auto" style="width: 100%">
-          <el-table-column prop="name" label="據點名稱" width="160" />
+          <el-table-column prop="name" label="據點名稱" min-width="140" class-name="site-name-col" />
           <el-table-column prop="region" label="區域" width="120" align="center">
             <template #default="{ row }">
               <span>{{ REGION_LABELS[row.region as Region] || row.region }}</span>
@@ -282,6 +282,10 @@ executeFetch()
 .region-label.region-hsinchu::before { border-color: var(--el-color-primary); }
 
 :deep(.open-days-column .cell) {
+  white-space: nowrap;
+}
+
+:deep(.site-name-col .cell) {
   white-space: nowrap;
 }
 </style>

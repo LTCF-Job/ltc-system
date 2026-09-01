@@ -202,7 +202,7 @@
         <el-empty v-if="!unresolvedLoading && unresolvedCases.length === 0" description="目前沒有待維護的個案" />
         <el-table v-else :data="unresolvedCases" border stripe table-layout="auto" style="width: 100%">
           <el-table-column prop="code" label="個案編號" width="95" align="center" />
-          <el-table-column prop="name" label="姓名" width="110" />
+          <el-table-column prop="name" label="姓名" min-width="90" class-name="unresolved-name-col" />
           <el-table-column label="據點" min-width="220">
             <template #default="{ row }">
               <div v-if="row.siteNameRaw" class="unresolved-slot">
@@ -849,6 +849,10 @@ executeFetch()
 .unresolved-raw-name {
   color: var(--el-color-warning);
   font-size: 13px;
+  white-space: nowrap;
+}
+
+:deep(.unresolved-name-col .cell) {
   white-space: nowrap;
 }
 

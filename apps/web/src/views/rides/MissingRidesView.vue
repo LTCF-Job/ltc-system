@@ -163,9 +163,9 @@
                   <span>{{ formatDateTime(row.sentAt) }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="主題" width="140">
+              <el-table-column label="主題" min-width="140">
                 <template #default="{ row }">
-                  <span>{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
+                  <span class="topic-label">{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
                 </template>
               </el-table-column>
               <el-table-column prop="subject" label="信件標題" min-width="220" show-overflow-tooltip />
@@ -178,7 +178,7 @@
                   <el-tag v-else type="danger" size="small">無設定收件人</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="triggeredByName" label="觸發來源" width="180" />
+              <el-table-column prop="triggeredByName" label="觸發來源" min-width="140" class-name="trigger-source-col" />
               <el-table-column label="狀態" width="100" align="center">
                 <template #default="{ row }">
                   <el-tag :type="row.status === 'sent' || row.success ? 'success' : 'danger'" size="small">
@@ -703,6 +703,14 @@ onMounted(() => {
 .text-secondary {
   color: var(--el-text-color-secondary);
   font-size: 13px;
+}
+
+.topic-label {
+  white-space: nowrap;
+}
+
+:deep(.trigger-source-col .cell) {
+  white-space: nowrap;
 }
 
 .overdue-days {

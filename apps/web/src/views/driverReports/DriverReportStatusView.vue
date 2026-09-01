@@ -44,7 +44,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="車輛" min-width="160">
+        <el-table-column label="車輛" min-width="140" class-name="vehicle-col">
           <template #default="{ row }">
             {{ row.vehicleName }}
           </template>
@@ -145,6 +145,10 @@ onMounted(fetchForms)
 
 .text-muted {
   color: var(--app-text-muted, var(--el-text-color-secondary));
+}
+
+:deep(.vehicle-col .cell) {
+  white-space: nowrap;
 }
 
 .month-tags {
