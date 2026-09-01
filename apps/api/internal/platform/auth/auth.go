@@ -38,8 +38,14 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
 		actorID = uuid.Nil
 	}
 
+	// role 一律以 app_metadata 為準：這是使用者無法自行編輯的伺服器端欄位，符合 Supabase RBAC 慣例，
+	// 也與 migrations/000002_seed_reference_data.up.sql 寫入 raw_app_meta_data.role 的方式一致；
+	// user_metadata 僅補齊 app_metadata 未提供時的角色與顯示名稱。
 	role := "viewer"
 	name := ""
+	if r, ok := claims["role"].(string); ok {
+		role = r
+	}
 	if userMetadata, ok := claims["user_metadata"].(map[string]interface{}); ok {
 		if r, ok := userMetadata["role"].(string); ok {
 			role = r
@@ -47,15 +53,14 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
 		if n, ok := userMetadata["display_name"].(string); ok {
 			name = n
 		}
-	} else if appMetadata, ok := claims["app_metadata"].(map[string]interface{}); ok {
+	}
+	if appMetadata, ok := claims["app_metadata"].(map[string]interface{}); ok {
 		if r, ok := appMetadata["role"].(string); ok {
 			role = r
 		}
 		if n, ok := appMetadata["display_name"].(string); ok {
 			name = n
 		}
-	} else if r, ok := claims["role"].(string); ok {
-		role = r
 	}
 	if name == "" {
 		if email, ok := claims["email"].(string); ok {
