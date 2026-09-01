@@ -1,15 +1,10 @@
 name: CI
 
+# 只在 PR 上跑：push 到 develop／main 的測試與 build 由 deploy-api.yml／
+# deploy-web.yml 各自的 test job 負責（部署前的必要關卡），避免同一次 push
+# 重複跑兩次測試。
 on:
   pull_request:
-    branches: [develop, main]
-    paths:
-      - 'apps/api/**'
-      - 'apps/web/**'
-      - 'tests/**'
-      - 'docker-compose*.yml'
-      - '.github/workflows/**'
-  push:
     branches: [develop, main]
     paths:
       - 'apps/api/**'

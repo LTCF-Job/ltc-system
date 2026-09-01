@@ -1,9 +1,15 @@
 name: Deploy API to Cloud Run
 
+# push 觸發（而非依賴另一條 workflow 跑完的 workflow_run）：GitHub Actions 的
+# workflow_run 一律讀 default branch 上的工作流程定義檔，不是觸發它的那個分支，
+# 曾經導致 develop 分支上已經修好的部署步驟被 default branch 的舊版蓋掉、每次都失敗。
+# push 觸發則保證用的是「這次要部署的那個 commit」自己的工作流程定義。
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
+    branches: [develop, main]
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/deploy-api.yml'
   workflow_dispatch:
 
 permissions:
@@ -11,7 +17,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: deploy-api-${{ github.event.workflow_run.head_branch || github.ref_name }}
+  group: deploy-api-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -20,23 +26,44 @@ env:
   ARTIFACT_REPOSITORY: ${{ vars.ARTIFACT_REPOSITORY }}
   API_SERVICE: ${{ vars.API_SERVICE || 'ltc-api' }}
   MIGRATION_JOB: ${{ vars.MIGRATION_JOB || 'ltc-api-migrate' }}
-  IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-  deploy:
-    name: Migrate and deploy
-    if: >-
-      (github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      contains(fromJSON('["develop", "main"]'), github.event.workflow_run.head_branch)) ||
-      github.event_name == 'workflow_dispatch'
+  test:
+    name: Test and build
     runs-on: ubuntu-latest
-    environment: ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'production' || 'develop' }}
+    defaults:
+      run:
+        working-directory: apps/api
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          go-version-file: apps/api/go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -race
+
+      - name: Build server and migration binaries
+        run: |
+          go build ./cmd/server
+          go build ./cmd/migrate
+
+  deploy:
+    name: Migrate and deploy
+    needs: test
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'Production' || 'develop' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -51,6 +78,10 @@ jobs:
 
       - name: Build and publish API image
         run: |
+          # --async 送出後改用 gcloud builds log --stream 撈進度：直接呼叫
+          # `gcloud builds submit`（不加 --async）會用 gcloud 內建的即時串流，
+          # 部署用的 service account 沒有專案 Viewer 權限時會直接失敗；
+          # `|| true` 讓撈 log 失敗不影響結果判斷，真正的成功／失敗看下面的 STATUS。
           BUILD_ID=$(gcloud builds submit apps/api \
             --project "$GCP_PROJECT_ID" \
             --tag "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/api:${IMAGE_TAG}" \

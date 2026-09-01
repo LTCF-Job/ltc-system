@@ -1,28 +1,54 @@
 name: Deploy Web to Vercel
 
+# push 觸發，理由同 deploy-api.yml：workflow_run 一律讀 default branch 上的
+# 工作流程定義檔，不是觸發它的那個分支，會讓 develop 分支的修正永遠不生效。
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
+    branches: [develop, main]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/deploy-web.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-web-${{ github.event.workflow_run.head_branch || github.ref_name }}
+  group: deploy-web-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
+  test:
+    name: Type-check and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Build
+        run: npm run build
+
   deploy:
     name: Build and deploy
-    if: >-
-      (github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      contains(fromJSON('["develop", "main"]'), github.event.workflow_run.head_branch)) ||
-      github.event_name == 'workflow_dispatch'
+    needs: test
     runs-on: ubuntu-latest
-    environment: ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'production' || 'develop' }}
+    environment: ${{ github.ref_name == 'main' && 'Production' || 'develop' }}
     defaults:
       run:
         working-directory: apps/web
@@ -30,17 +56,20 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_ENV: ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'production' || 'preview' }}
+      VERCEL_ENV: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Install Vercel CLI
         run: npm install --global vercel
