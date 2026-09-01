@@ -11,15 +11,18 @@ export async function precheckExport(params: {
   periodYm: string
   region?: string
 }): Promise<PrecheckResultDTO> {
-  return apiClient.post('/exports/precheck', params)
+  const res = await apiClient.post('/exports/precheck', params)
+  return (res as any).data ?? (res as any)
 }
 
 export async function createExportJob(data: CreateExportJobRequest): Promise<ExportJobDTO> {
-  return apiClient.post('/exports', data)
+  const res = await apiClient.post('/exports', data)
+  return (res as any).data ?? (res as any)
 }
 
 export async function getExportJob(jobId: string): Promise<ExportJobDTO> {
-  return apiClient.get(`/exports/${jobId}`)
+  const res = await apiClient.get(`/exports/${jobId}`)
+  return (res as any).data ?? (res as any)
 }
 
 export async function listExportJobs(params?: {
@@ -30,7 +33,8 @@ export async function listExportJobs(params?: {
 }
 
 export async function getDashboardStats(): Promise<DashboardStatsDTO> {
-  return apiClient.get('/dashboard/stats')
+  const res = await apiClient.get('/dashboard/stats')
+  return (res as any).data ?? (res as any)
 }
 
 // 逐案下載：一個個案一個月一份工作簿

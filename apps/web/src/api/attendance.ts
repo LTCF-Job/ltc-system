@@ -9,7 +9,8 @@ import type {
 } from '@/types/api'
 
 export async function getMonthAttendance(month?: string, driverId?: string, q?: string): Promise<MonthAttendanceReportDTO> {
-  return apiClient.get('/attendance', { params: { month, driverId, q } })
+  const res = await apiClient.get('/attendance', { params: { month, driverId, q } })
+  return (res as any).data ?? (res as any)
 }
 
 export async function upsertAttendance(data: UpsertAttendanceRequest): Promise<any> {

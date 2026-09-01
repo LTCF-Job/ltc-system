@@ -55,7 +55,8 @@ export async function listSites(params?: {
 }
 
 export async function createSite(data: CreateSiteRequest): Promise<SiteDTO> {
-  return apiClient.post('/sites', data)
+  const res = await apiClient.post('/sites', data)
+  return (res as any).data ?? (res as any)
 }
 
 export async function updateSite(id: string, data: UpdateSiteRequest): Promise<SiteDTO> {
@@ -79,7 +80,8 @@ export async function listVehicles(params?: {
 }
 
 export async function createVehicle(data: CreateVehicleRequest): Promise<VehicleDTO> {
-  return apiClient.post('/vehicles', data)
+  const res = await apiClient.post('/vehicles', data)
+  return (res as any).data ?? (res as any)
 }
 
 export async function updateVehicle(id: string, data: UpdateVehicleRequest): Promise<VehicleDTO> {

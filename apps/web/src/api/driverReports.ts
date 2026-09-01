@@ -12,18 +12,21 @@ import type {
 } from '@/types/api'
 
 export async function listDriverReportForms(params?: { q?: string }): Promise<DriverReportFormDTO[]> {
-  return apiClient.get('/driver-reports', { params })
+  const res = await apiClient.get('/driver-reports', { params })
+  return (res as any).data ?? (res as any)
 }
 
 // listDriverReportImportedMonths 取回每份匯報表各月份已匯入的筆數，供批次上傳判斷重傳。
 export async function listDriverReportImportedMonths(): Promise<DriverReportImportedMonthDTO[]> {
-  return apiClient.get('/driver-reports/imported-months')
+  const res = await apiClient.get('/driver-reports/imported-months')
+  return (res as any).data ?? (res as any)
 }
 
 export async function createDriverReportForm(
   data: CreateDriverReportFormRequest
 ): Promise<DriverReportFormDTO> {
-  return apiClient.post('/driver-reports', data)
+  const res = await apiClient.post('/driver-reports', data)
+  return (res as any).data ?? (res as any)
 }
 
 export async function deleteDriverReportForm(formId: string): Promise<{ success: boolean }> {
@@ -73,7 +76,8 @@ export async function listDriverReportColumns(params?: {
   formId?: string
   mappingStatus?: string
 }): Promise<DriverReportColumnDTO[]> {
-  return apiClient.get('/driver-reports/columns', { params })
+  const res = await apiClient.get('/driver-reports/columns', { params })
+  return (res as any).data ?? (res as any)
 }
 
 export async function updateColumnMapping(
