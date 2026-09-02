@@ -217,7 +217,7 @@
                       style="width: 100%"
                       @change="markDayOverridden(row)"
                     />
-                    <span v-else class="text-muted">-</span>
+                    <span v-else class="text-secondary">-</span>
                   </template>
                 </el-table-column>
 
@@ -232,7 +232,7 @@
                       style="width: 100%"
                       @change="markDayOverridden(row)"
                     />
-                    <span v-else class="text-muted">-</span>
+                    <span v-else class="text-secondary">-</span>
                   </template>
                 </el-table-column>
 
@@ -253,7 +253,7 @@
                         :value="v.id"
                       />
                     </el-select>
-                    <span v-else class="text-muted">-</span>
+                    <span v-else class="text-secondary">-</span>
                   </template>
                 </el-table-column>
 
@@ -279,7 +279,7 @@
                     >
                       恢復預設
                     </el-button>
-                    <span v-else class="text-muted text-xs">已繼承</span>
+                    <span v-else class="text-secondary text-xs">已繼承</span>
                   </template>
                 </el-table-column>
               </el-table>
@@ -325,7 +325,7 @@
                     placeholder="去程 HH:mm"
                     style="width: 100%"
                   />
-                  <span v-else class="text-muted">-</span>
+                  <span v-else class="text-secondary">-</span>
                 </template>
               </el-table-column>
               <el-table-column label="回程出發時間" width="160">
@@ -338,7 +338,7 @@
                     placeholder="回程 HH:mm"
                     style="width: 100%"
                   />
-                  <span v-else class="text-muted">-</span>
+                  <span v-else class="text-secondary">-</span>
                 </template>
               </el-table-column>
               <el-table-column label="預設指派車輛" min-width="160">
@@ -357,7 +357,7 @@
                       :value="v.id"
                     />
                   </el-select>
-                  <span v-else class="text-muted">-</span>
+                  <span v-else class="text-secondary">-</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -499,7 +499,7 @@
             </el-col>
 
             <el-col :xs="24" :sm="12" :lg="6">
-              <el-form-item label="車次序號 (RunNo)">
+              <el-form-item label="車次序號">
                 <el-input-number v-model="leg.runNo" :min="1" :max="20" style="width: 100%" />
               </el-form-item>
             </el-col>
@@ -509,7 +509,7 @@
 
       <!-- 儲存按鈕 -->
       <div v-if="authStore.can('staff')" class="form-actions">
-        <el-button type="primary" size="large" :loading="saving" @click="handleSave">
+        <el-button type="primary" :loading="saving" @click="handleSave">
           儲存排班設定
         </el-button>
       </div>
@@ -981,7 +981,7 @@ async function handleSave() {
 
 .priority-guide-card {
   background: #ffffff;
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--app-border-light);
   border-left: 4px solid #3b82f6;
   border-radius: 8px;
   padding: 12px 16px;
@@ -1071,7 +1071,7 @@ async function handleSave() {
   padding: 12px 16px;
   background-color: #f8fafc;
   border-radius: 8px;
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--app-border-light);
 
   .month-select-group {
     display: flex;
@@ -1082,7 +1082,7 @@ async function handleSave() {
     .toolbar-label {
       font-size: 13px;
       font-weight: 600;
-      color: var(--el-text-color-primary);
+      color: var(--app-text-primary);
     }
   }
 
@@ -1094,14 +1094,14 @@ async function handleSave() {
 
     .stat-chip {
       font-size: var(--app-font-xs);
-      color: var(--el-text-color-secondary);
+      color: var(--app-text-secondary);
       padding: 2px 8px;
       background: #ffffff;
-      border: 1px solid var(--el-border-color-lighter);
+      border: 1px solid var(--app-border-light);
       border-radius: 12px;
 
       strong {
-        color: var(--el-text-color-primary);
+        color: var(--app-text-primary);
       }
 
       &.highlight {
@@ -1228,13 +1228,13 @@ async function handleSave() {
     gap: 4px;
     font-size: 13px;
     font-weight: 600;
-    color: var(--el-text-color-primary);
+    color: var(--app-text-primary);
   }
 
   .weekday-text {
     font-size: var(--app-font-xs);
     font-weight: normal;
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-secondary);
   }
 
   &.is-weekend {
@@ -1256,10 +1256,6 @@ async function handleSave() {
   }
 }
 
-.text-muted {
-  color: var(--el-text-color-secondary);
-}
-
 .text-xs {
   font-size: var(--app-font-xs);
 }
@@ -1267,7 +1263,7 @@ async function handleSave() {
 .month-info,
 .leg-label,
 .leg-direction {
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: var(--app-font-xs);
 }
 
@@ -1278,8 +1274,8 @@ async function handleSave() {
   background: transparent !important; /* 確保無背景底色 */
 
   &.custom {
-    color: var(--el-color-primary) !important;
-    border-color: var(--el-color-primary) !important;
+    color: var(--app-primary) !important;
+    border-color: var(--app-primary) !important;
   }
 
   &.weekly {
@@ -1288,13 +1284,13 @@ async function handleSave() {
   }
 
   &.fixed {
-    color: var(--el-text-color-regular) !important;
-    border-color: var(--el-border-color) !important;
+    color: var(--app-text-regular) !important;
+    border-color: var(--app-border-color) !important;
   }
 }
 
 .leg-label {
-  color: var(--el-text-color-primary);
+  color: var(--app-text-primary);
   font-weight: 600;
 }
 
@@ -1304,7 +1300,7 @@ async function handleSave() {
 
 .leg-row-box {
   padding: 12px 16px;
-  background-color: var(--el-fill-color-light);
+  background-color: var(--app-status-neutral-bg);
   border-radius: 6px;
   margin-bottom: 12px;
 

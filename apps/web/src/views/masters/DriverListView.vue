@@ -28,8 +28,8 @@
           @change="handleSearch"
         >
           <el-option label="全部狀態" value="" />
-          <el-option label="在職中" :value="true" />
-          <el-option label="已離職" :value="false" />
+          <el-option label="啟用" :value="true" />
+          <el-option label="停用" :value="false" />
         </el-select>
 
         <el-button type="primary" @click="handleSearch">查詢</el-button>
@@ -82,7 +82,7 @@
             <template #default="{ row }">
               <el-tooltip
                 v-if="authStore.can('staff')"
-                :content="row.active ? '目前為在職中，點選切換為已離職' : '目前為已離職，點選切換為在職中'"
+                :content="row.active ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
                 placement="top"
                 :show-after="300"
               >
@@ -93,7 +93,7 @@
                   @click="handleQuickToggleActive(row as any, !row.active)"
                 >
                   <span class="status-indicator-dot"></span>
-                  <span class="status-label-text">{{ row.active ? '在職中' : '已離職' }}</span>
+                  <span class="status-label-text">{{ row.active ? '啟用' : '停用' }}</span>
                 </button>
               </el-tooltip>
               <div
@@ -102,7 +102,7 @@
                 :class="row.active ? 'is-active' : 'is-inactive'"
               >
                 <span class="status-indicator-dot"></span>
-                <span class="status-label-text">{{ row.active ? '在職中' : '已離職' }}</span>
+                <span class="status-label-text">{{ row.active ? '啟用' : '停用' }}</span>
               </div>
             </template>
           </el-table-column>
@@ -157,13 +157,13 @@
             <el-radio-button :value="true">
               <div class="radio-pill active-pill">
                 <span class="radio-dot"></span>
-                <span>在職中</span>
+                <span>啟用</span>
               </div>
             </el-radio-button>
             <el-radio-button :value="false">
               <div class="radio-pill inactive-pill">
                 <span class="radio-dot"></span>
-                <span>已離職</span>
+                <span>停用</span>
               </div>
             </el-radio-button>
           </el-radio-group>
@@ -305,7 +305,7 @@ async function handleQuickToggleActive(row: DriverDTO, newActive: boolean) {
   try {
     await updateDriver(row.id, { active: newActive })
     row.active = newActive
-    ElMessage.success(`已將司機「${row.name}」狀態更新為 ${newActive ? '在職' : '離職'}`)
+    ElMessage.success(`已將司機「${row.name}」狀態更新為 ${newActive ? '啟用' : '停用'}`)
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新司機狀態失敗'))
   }
@@ -441,17 +441,17 @@ executeFetch()
 .driver-name,
 .vehicle-name {
   font-weight: 650;
-  color: var(--el-text-color-primary);
+  color: var(--app-text-primary);
   white-space: nowrap;
 }
 
 .driver-data {
-  color: var(--el-text-color-regular);
+  color: var(--app-text-regular);
   letter-spacing: 0.01em;
 }
 
 .assignment-empty {
-  color: var(--el-text-color-placeholder);
+  color: var(--app-text-muted);
   font-size: 13px;
 }
 

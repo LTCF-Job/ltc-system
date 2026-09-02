@@ -15,18 +15,19 @@ Use the project's existing token system when equivalent tokens exist. These are 
 --app-text-secondary: #586174;
 --app-text-muted: #8b94a5;
 
---app-primary: #2f6fed;
---app-primary-dark: #1f55c7;
---app-primary-light: #eaf2ff;
+--app-primary: #0c70ed;
+--app-primary-dark: #0043bc;
+--app-primary-light: #e6f3ff;
 
 --app-status-success-bg: #e8faf3;
---app-status-success-fg: #087d58;
+--app-status-success-fg: #00792b;
 --app-status-warning-bg: #fff4dc;
---app-status-warning-fg: #996000;
+--app-status-warning-fg: #975a00;
 --app-status-danger-bg: #ffebef;
---app-status-danger-fg: #b51f3c;
+--app-status-danger-fg: #bf1943;
+--app-status-danger-border: #ffb3b8;
 --app-status-info-bg: #eaf5fb;
---app-status-info-fg: #236f9a;
+--app-status-info-fg: #00788a;
 --app-status-neutral-bg: #f1f3f4;
 --app-status-neutral-fg: #586174;
 
@@ -35,7 +36,22 @@ Use the project's existing token system when equivalent tokens exist. These are 
 --app-role-staff-fg / -dot
 --app-role-driver-fg / -dot
 --app-role-viewer-fg / -dot
+
+/* 側欄面板（淺色，與主內容以細分隔線區隔） */
+--app-nav-bg: #ffffff;
+--app-nav-border: var(--app-border-color);
+--app-nav-fg: var(--app-text-regular);
+--app-nav-fg-muted: var(--app-text-secondary);
+--app-nav-hover-bg: #f2f5f9;
+--app-nav-active-bg: var(--app-primary-light);
+--app-nav-active-fg: var(--app-primary-dark);
+
+/* 容量長條 */
+--app-bar-track: #eef1f5;
+--app-bar-height: 7px;
 ```
+
+側欄配色一律走 `--app-nav-*`，`DefaultLayout.vue` 不再傳 `background-color`／`text-color` 給 `el-menu`；改由 `.el-menu-vertical` 設定 `--el-menu-bg-color`／`--el-menu-text-color`／`--el-menu-active-color`／`--el-menu-hover-bg-color` 對接。
 
 Use `--app-status-*-bg` for tag/badge backgrounds and `--app-status-*-fg` for their text/dot color. Do not hardcode a new green/red/amber — every status color in the product must resolve to one of these five pairs.
 
@@ -82,12 +98,17 @@ Do not write a new spacing magic number. If none of these fit, that is a signal 
 ## Typography
 
 ```css
---app-font-xs: 12px;
+--app-font-xs: 13px;
 --app-font-sm: 13px;
 --app-font-md: 14px;
 --app-font-lg: 16px;
 --app-font-xl: 20px;
 --app-font-2xl: 24px;
+--app-font-3xl: 34px;
+
+/* 大寫微標籤（KPI 標籤、側欄分組標題） */
+--app-label-size: 11px;
+--app-label-tracking: 0.08em;
 ```
 
 - Page title: `--app-font-xl`, weight `600`

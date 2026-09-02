@@ -748,7 +748,7 @@ executeFetch()
 }
 
 .case-tabs {
-  border-radius: 8px;
+  border-radius: var(--app-radius-md);
 }
 
 /* overflow-x: auto 讓表格加總寬度超過版面時把捲軸包在面板內，不外溢到整個頁面
@@ -782,7 +782,7 @@ executeFetch()
 /* flex-wrap: nowrap 只防止元素被擠到下一行，這個 span 沒有固定寬度時
    文字本身還是會自己換行，要另外鎖 white-space: nowrap 才能維持單行。 */
 .unresolved-raw-name {
-  color: var(--el-color-warning);
+  color: var(--app-status-warning-fg);
   font-size: 13px;
   white-space: nowrap;
 }
@@ -813,23 +813,23 @@ executeFetch()
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--el-text-color-regular);
+  color: var(--app-text-regular);
 }
 
 .inline-value-clickable { cursor: pointer; }
-.inline-value-clickable:hover { color: var(--el-color-primary); }
+.inline-value-clickable:hover { color: var(--app-primary); }
 
 .status-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--el-text-color-placeholder);
+  background: var(--app-text-muted);
 }
 
-.status-dot-active { background: var(--el-color-success); }
-.status-dot-suspended { background: var(--el-color-warning); }
-.status-dot-closed { background: var(--el-text-color-placeholder); }
-.empty-value { color: var(--el-text-color-placeholder); }
+.status-dot-active { background: var(--app-status-success-fg); }
+.status-dot-suspended { background: var(--app-status-warning-fg); }
+.status-dot-closed { background: var(--app-text-muted); }
+.empty-value { color: var(--app-text-muted); }
 
 .export-toolbar {
   display: flex;
@@ -847,7 +847,7 @@ executeFetch()
 }
 
 .export-selected-count {
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 </style>

@@ -1,10 +1,10 @@
 // Element Plus 樣式覆寫與 LTC 營運介面主題變數
 @use './tokens';
-@forward 'element-plus/theme-chalk/src/common/var.scss' with ($colors: ('primary': ('base': #2f6fed),
-    'success': ('base': #16c889),
-    'warning': ('base': #e18a00),
-    'danger': ('base': #ed294b),
-    'info': ('base': #399bd3),
+@forward 'element-plus/theme-chalk/src/common/var.scss' with ($colors: ('primary': ('base': #0c70ed),
+    'success': ('base': #5cc570),
+    'warning': ('base': #d79200),
+    'danger': ('base': #e13c5b),
+    'info': ('base': #00a4b6),
   ),
   $font-family: ('': ('"Noto Sans TC"', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif)));
 
@@ -15,28 +15,28 @@
 }
 
 :root {
-  --app-bg: #f4f7fa;
+  --app-bg: #f5f8fc;
   --app-surface: #ffffff;
   --app-card-bg: #f7f9fa;
   --app-text-primary: #101522;
   --app-text-regular: #303949;
   --app-text-secondary: #586174;
   --app-text-muted: #8b94a5;
-  --app-border-color: #e9edf0;
-  --app-border-light: #f0f2f4;
-  --app-primary: #2f6fed;
-  --app-primary-dark: #1f55c7;
-  --app-primary-light: #eaf2ff;
+  --app-border-color: #e8edf4;
+  --app-border-light: #f1f4f9;
+  --app-primary: #0c70ed;
+  --app-primary-dark: #0043bc;
+  --app-primary-light: #e6f3ff;
   --app-navy-dark: #101522;
   // 舊名相容別名，全部改用 --app-primary* 後即可移除
   --app-orange: var(--app-primary);
   --app-orange-dark: var(--app-primary-dark);
   --app-orange-light: var(--app-primary-light);
-  --app-shadow-sm: 0 1px 2px rgba(16, 21, 34, 0.04);
-  --app-shadow-md: 0 8px 24px rgba(16, 21, 34, 0.07);
-  --app-radius-sm: 9px;
-  --app-radius-md: 14px;
-  --app-radius-lg: 20px;
+  --app-shadow-sm: 0 1px 2px rgba(16, 21, 34, 0.03);
+  --app-shadow-md: 0 6px 20px rgba(16, 21, 34, 0.06);
+  --app-radius-sm: 12px;
+  --app-radius-md: 18px;
+  --app-radius-lg: 28px;
   --app-radius-full: 9999px;
 }
 
@@ -48,7 +48,7 @@ body,
   min-height: 100%;
   font-family: 'Noto Sans TC', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--app-text-primary);
-  background: var(--app-bg);
+  background: var(--app-ground);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -74,8 +74,9 @@ select {
   }
 
   .el-card__header {
-    padding: 16px 18px;
+    padding: 15px 18px;
     border-bottom: 1px solid var(--app-border-light);
+    font-weight: 600;
   }
 
   .el-card__body {
@@ -86,9 +87,13 @@ select {
 .el-button {
   border-radius: var(--app-radius-sm);
   font-weight: 600;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
 
-  &--primary:not(.is-plain):not(.is-link):not(.is-text) {
+  // 頁面主要動作一律全圓角膠囊，跟表格列裡的小按鈕（維持 radius-sm）拉出層級差
+  &--primary:not(.is-plain):not(.is-link):not(.is-text):not(.is-text) {
+    border-radius: var(--app-radius-full);
+    padding-left: 18px;
+    padding-right: 18px;
     background: var(--app-primary);
     border-color: var(--app-primary);
     color: #ffffff;
@@ -98,46 +103,50 @@ select {
       background: var(--app-primary-dark);
       border-color: var(--app-primary-dark);
       color: #ffffff;
-      box-shadow: 0 4px 12px rgba(47, 111, 237, 0.22);
+      transform: scale(1.035);
+    }
+
+    &:active {
+      transform: scale(0.96);
     }
   }
 
   &--primary.is-plain {
-    background: #f0f6ff;
-    border-color: #93c5fd;
-    color: #1d4ed8;
+    background: var(--app-primary-light);
+    border-color: var(--app-status-primary-border);
+    color: var(--app-primary-dark);
 
     &:hover,
     &:focus-visible {
-      background: #dbeafe;
-      border-color: #60a5fa;
-      color: #1e40af;
+      background: #dbe9ff;
+      border-color: var(--app-primary);
+      color: var(--app-primary-dark);
     }
   }
 
   &--warning.is-plain {
-    background: #fffbeb;
-    border-color: #fde68a;
-    color: #b45309;
+    background: var(--app-status-warning-bg);
+    border-color: var(--app-status-warning-border);
+    color: var(--app-status-warning-fg);
 
     &:hover,
     &:focus-visible {
-      background: #fef3c7;
-      border-color: #fcd34d;
-      color: #92400e;
+      background: #ffecc2;
+      border-color: var(--app-status-warning-fg);
+      color: var(--app-status-warning-fg);
     }
   }
 
   &--danger.is-plain {
-    background: #fef2f2;
-    border-color: #fecaca;
-    color: #b91c1c;
+    background: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-border);
+    color: var(--app-status-danger-fg);
 
     &:hover,
     &:focus-visible {
-      background: #fee2e2;
-      border-color: #fca5a5;
-      color: #991b1b;
+      background: #ffdde3;
+      border-color: var(--app-status-danger-fg);
+      color: var(--app-status-danger-fg);
     }
   }
 
@@ -159,7 +168,7 @@ select {
 
     &:hover,
     &:focus-visible {
-      color: #056144;
+      color: #005000;
     }
   }
 
@@ -177,7 +186,7 @@ select {
 
     &:hover,
     &:focus-visible {
-      color: #8f1730;
+      color: #8d001e;
     }
   }
 
@@ -186,7 +195,7 @@ select {
 
     &:hover,
     &:focus-visible {
-      color: #1a5570;
+      color: #004e61;
     }
   }
 
@@ -195,13 +204,13 @@ select {
 
     &:hover,
     &:focus-visible {
-      color: #7a4b00;
+      color: #6b3100;
     }
   }
 
   &:focus-visible,
   &.is-focus {
-    outline: 3px solid rgba(47, 111, 237, 0.24);
+    outline: 3px solid rgba(12, 112, 237, 0.24);
     outline-offset: 1px;
   }
 }
@@ -209,62 +218,79 @@ select {
 // 表格列操作按鈕：link 按鈕本身只有文字顏色，容易被誤認成純文字連結或 tag 而非可點擊按鈕，
 // 這裡疊加淡底色 + 實色邊框 + hover 陰影位移讓它讀起來明確是按鈕，不改 type/size 屬性與既有 e2e 選取器。
 // 上下 padding 從 2px 加到 5px 改善擁擠感；左右維持 10px 不變，操作欄寬度仍依按鈕數固定（見下方按鈕數對照）不會溢出裁切
+// 陰影拿掉後，深度感改用「縮放 + 底色／邊框加深」的組合式微互動來傳達，
+// hover 放大、按下縮小，靠動態本身表現層次，不靠投影
 .table-row-actions .el-button.is-link {
-  padding: 5px 10px;
-  border-radius: var(--app-radius-xs);
+  padding: 5px 12px;
+  border-radius: var(--app-radius-full);
   border: 1px solid transparent;
   background: transparent;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  font-weight: 600;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
 
   &.el-button--primary {
-    background: #f0f6ff;
-    border-color: #60a5fa;
+    background: var(--app-primary-light);
+    border-color: var(--app-status-primary-border);
 
     &:hover,
     &:focus-visible {
-      background: #dbeafe;
+      background: #dbe9ff;
       border-color: var(--app-primary);
-      box-shadow: 0 3px 8px rgba(47, 111, 237, 0.22);
-      transform: translateY(-1px);
+      transform: scale(1.06);
+    }
+
+    // 放在 hover 規則之後，等比選擇器下靠來源順序覆蓋 hover 的縮放，
+    // 確保滑鼠停留時按下仍看得到「按下去」的回饋，不會被 hover 的放大蓋掉
+    &:active {
+      transform: scale(0.94);
     }
   }
 
   &.el-button--danger {
-    background: #fef2f2;
-    border-color: #f87171;
+    background: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-border);
 
     &:hover,
     &:focus-visible {
-      background: #fee2e2;
-      border-color: #dc2626;
-      box-shadow: 0 3px 8px rgba(237, 41, 75, 0.22);
-      transform: translateY(-1px);
+      background: #ffdde3;
+      border-color: var(--app-status-danger-fg);
+      transform: scale(1.06);
+    }
+
+    &:active {
+      transform: scale(0.94);
     }
   }
 
   &.el-button--warning {
-    background: #fffbeb;
-    border-color: #fbbf24;
+    background: var(--app-status-warning-bg);
+    border-color: var(--app-status-warning-border);
 
     &:hover,
     &:focus-visible {
-      background: #fef3c7;
-      border-color: #d97706;
-      box-shadow: 0 3px 8px rgba(225, 138, 0, 0.22);
-      transform: translateY(-1px);
+      background: #ffecc2;
+      border-color: var(--app-status-warning-fg);
+      transform: scale(1.06);
+    }
+
+    &:active {
+      transform: scale(0.94);
     }
   }
 
   &.el-button--info {
-    background: #f8fafc;
-    border-color: #94a3b8;
+    background: var(--app-status-neutral-bg);
+    border-color: #cbd3dd;
 
     &:hover,
     &:focus-visible {
-      background: #f1f5f9;
-      border-color: #64748b;
-      box-shadow: 0 3px 8px rgba(16, 21, 34, 0.12);
-      transform: translateY(-1px);
+      background: #e6e9ee;
+      border-color: var(--app-text-secondary);
+      transform: scale(1.06);
+    }
+
+    &:active {
+      transform: scale(0.94);
     }
   }
 }
@@ -288,53 +314,85 @@ select {
 }
 
 .el-tag {
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--app-radius-full);
-  font-weight: 600;
-  padding: 0 10px;
+  font-weight: 700;
+  padding: 0 11px;
 
   &--primary {
     background: var(--app-primary-light);
+    border-color: var(--app-status-primary-border);
     color: var(--app-primary-dark);
   }
 
   &--success {
     background: var(--app-status-success-bg);
+    border-color: var(--app-status-success-border);
     color: var(--app-status-success-fg);
   }
 
   &--warning {
     background: var(--app-status-warning-bg);
+    border-color: var(--app-status-warning-border);
     color: var(--app-status-warning-fg);
   }
 
   &--danger {
     background: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-border);
     color: var(--app-status-danger-fg);
   }
 
   &--info {
     background: var(--app-status-info-bg);
+    border-color: var(--app-status-info-border);
     color: var(--app-status-info-fg);
   }
 }
 
 .el-table {
   max-width: 100%;
-  --el-table-header-bg-color: #f7f9fa;
+  --el-table-header-bg-color: transparent;
   --el-table-header-text-color: var(--app-text-secondary);
   --el-table-border-color: var(--app-border-light);
-  --el-table-row-hover-bg-color: var(--app-status-neutral-bg);
+  --el-table-row-hover-bg-color: #f4f7fc;
+
+  // 只留橫向細線分列。直向格線把表格切成網格，會跟卡片、面板搶結構感。
+  // Element Plus 的元件樣式是元件載入時才注入，排在這份覆寫之後，必須 !important 才蓋得掉
+  &.el-table--border .el-table__cell,
+  .el-table__cell {
+    border-right: 0 !important;
+  }
+
+  &.el-table--border::after,
+  &.el-table--border::before,
+  &::before {
+    display: none !important;
+  }
+
+  // 表頭不填底色，改用一條比列線重一階的分隔線區隔
+  th.el-table__cell {
+    background: transparent;
+    border-bottom: 1px solid var(--app-border-color);
+  }
+
+  // 斑馬紋壓到幾乎看不見：寬表格仍需要逐列參照，但不該蓋過細線的結構
+  .el-table__row--striped td.el-table__cell {
+    background: #fbfcfe;
+  }
 
   th.el-table__cell {
-    padding: 12px 0;
-    font-size: var(--app-font-xs);
+    padding: 13px 0;
+    font-size: var(--app-label-size);
     font-weight: 700;
+    letter-spacing: var(--app-label-tracking);
   }
 
   td.el-table__cell {
-    padding: 13px 0;
+    padding: 14px 0;
     font-size: 13px;
+    // 數字欄逐列對齊才掃得快，等寬數字是這種營運表格的基本要求
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -349,7 +407,7 @@ select {
   }
 
   &.is-focus {
-    box-shadow: 0 0 0 1px var(--app-primary) inset, 0 0 0 3px rgba(47, 111, 237, 0.12);
+    box-shadow: 0 0 0 1px var(--app-primary) inset, 0 0 0 3px rgba(12, 112, 237, 0.12);
   }
 }
 
@@ -359,7 +417,7 @@ select {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: var(--app-bg);
+  background: var(--app-ground);
 }
 
 .login-card {
@@ -377,18 +435,18 @@ select {
 }
 
 .dot-critical {
-  background: #ed294b;
-  box-shadow: 0 0 0 3px rgba(237, 41, 75, 0.14);
+  background: #e13c5b;
+  box-shadow: 0 0 0 3px rgba(225, 60, 91, 0.14);
 }
 
 .dot-moderate {
-  background: #e18a00;
-  box-shadow: 0 0 0 3px rgba(225, 138, 0, 0.14);
+  background: #d79200;
+  box-shadow: 0 0 0 3px rgba(215, 146, 0, 0.14);
 }
 
 .dot-routine {
-  background: #16c889;
-  box-shadow: 0 0 0 3px rgba(22, 200, 137, 0.14);
+  background: #5cc570;
+  box-shadow: 0 0 0 3px rgba(92, 197, 112, 0.14);
 }
 
 .calendar-cell {
@@ -527,7 +585,7 @@ select {
   padding: 5px 14px;
   border-radius: var(--app-radius-full);
   font-size: var(--app-font-sm);
-  font-weight: 500;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid transparent;
@@ -547,20 +605,27 @@ select {
 
   &.is-active {
     background-color: var(--app-status-success-bg);
+    border-color: var(--app-status-success-border);
     color: var(--app-status-success-fg);
 
     .status-indicator-dot {
       background-color: var(--app-status-success-fg);
+      box-shadow: 0 0 0 3px rgba(8, 125, 88, 0.14);
     }
 
     &:hover {
-      box-shadow: var(--app-shadow-sm);
-      transform: translateY(-1px);
+      background-color: #d3f6e6;
+      transform: scale(1.05);
+    }
+
+    &:active {
+      transform: scale(0.95);
     }
   }
 
   &.is-inactive {
     background-color: var(--app-status-neutral-bg);
+    border-color: #dde2e8;
     color: var(--app-status-neutral-fg);
 
     .status-indicator-dot {
@@ -568,8 +633,12 @@ select {
     }
 
     &:hover {
-      box-shadow: var(--app-shadow-sm);
-      transform: translateY(-1px);
+      background-color: #e6e9ee;
+      transform: scale(1.05);
+    }
+
+    &:active {
+      transform: scale(0.95);
     }
   }
 
@@ -624,4 +693,410 @@ select {
 
 .inactive-pill .radio-dot {
   background-color: var(--app-text-muted);
+}
+
+// ── 營運面板共用樣式（儀表板、清單頁面板共用，勿在各頁另寫一份） ──
+
+// 大寫微標籤：KPI 標籤與側欄分組標題共用。中文字沒有大小寫，靠字距與字重拉出層級
+.app-micro-label {
+  display: block;
+  font-size: var(--app-label-size);
+  font-weight: 700;
+  letter-spacing: var(--app-label-tracking);
+  line-height: 1.4;
+  // 11px 小字用 --app-text-muted 在白底只有 3.05:1，未達 WCAG AA 的 4.5:1
+  color: var(--app-text-secondary);
+  text-transform: uppercase;
+}
+
+// KPI 數值：一張卡只有一個，是卡片裡唯一的強元素
+.app-metric-value {
+  display: block;
+  font-size: var(--app-font-3xl);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+// 容量長條列：標籤 + 軌道 + 右側數值，欄寬固定讓多列數值垂直對齊
+.app-capacity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2.2fr) auto;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-height: 30px;
+}
+
+.app-capacity-label {
+  font-size: var(--app-font-sm);
+  color: var(--app-text-regular);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-capacity-track {
+  // 用 span 承載，必須自行轉成 block，否則 inline 盒子吃不到 height
+  display: block;
+  width: 100%;
+  height: var(--app-bar-height);
+  border-radius: var(--app-radius-full);
+  background: var(--app-bar-track);
+  overflow: hidden;
+}
+
+.app-capacity-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: var(--app-radius-full);
+  background: var(--app-primary);
+  transition: width 0.3s ease-out;
+}
+
+.app-capacity-fill.is-high { background: var(--app-status-danger-fg); }
+.app-capacity-fill.is-mid { background: var(--app-status-warning-fg); }
+.app-capacity-fill.is-low { background: var(--app-status-success-fg); }
+
+.app-capacity-value {
+  font-size: var(--app-font-sm);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+// 面板底部行動：置中、與內容以細線分隔，取代擠在標題列右上的「查看全部」
+.app-panel-footer {
+  margin-top: var(--app-space-4);
+  padding-top: var(--app-space-3);
+  border-top: 1px solid var(--app-border-light);
+  text-align: center;
+}
+
+.app-panel-footer-link {
+  display: inline-block;
+  padding: var(--app-space-1) var(--app-space-3);
+  border-radius: var(--app-radius-xs);
+  font-size: var(--app-label-size);
+  font-weight: 700;
+  letter-spacing: var(--app-label-tracking);
+  text-transform: uppercase;
+  color: var(--app-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+
+  &:hover {
+    background: var(--app-primary-light);
+    color: var(--app-primary-dark);
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgba(12, 112, 237, 0.24);
+    outline-offset: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-capacity-fill { transition: none; }
+}
+
+// ── 全站元件風格：對話框、下拉、切換、選取、輔助元件 ──
+// 延續同一套語言：柔和藍主色、加大圓角、安靜邊框、去除預設的生硬直角與重陰影
+
+// 所有浮層（下拉選單、日期時間選擇器、tooltip）共用同一種懸浮卡片外觀，
+// 不逐一元件分開寫，維持全站浮層質感一致
+.el-popper,
+.el-dropdown-menu,
+.el-select-dropdown,
+.el-picker-panel {
+  border-radius: var(--app-radius-md) !important;
+  border-color: var(--app-border-color) !important;
+  box-shadow: var(--app-shadow-md) !important;
+  overflow: hidden;
+}
+
+.el-dropdown-menu__item {
+  font-size: var(--app-font-sm);
+
+  &:not(.is-disabled):hover,
+  &:not(.is-disabled):focus {
+    background: var(--app-primary-light);
+    color: var(--app-primary-dark);
+  }
+}
+
+.el-select-dropdown__item {
+  &.is-hovering {
+    background: var(--app-primary-light);
+  }
+
+  &.is-selected {
+    color: var(--app-primary);
+    font-weight: 600;
+  }
+}
+
+// 對話框／抽屜：圓角跟卡片同一階，標題加粗跟頁面標題呼應
+.el-dialog {
+  border-radius: var(--app-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--app-shadow-shell);
+
+  .el-dialog__header {
+    padding: 20px 24px 16px;
+    margin-right: 0;
+    border-bottom: 1px solid var(--app-border-light);
+  }
+
+  .el-dialog__title {
+    font-size: var(--app-font-lg);
+    font-weight: 700;
+  }
+
+  .el-dialog__body {
+    padding: 20px 24px;
+  }
+
+  .el-dialog__footer {
+    padding: 16px 24px 20px;
+  }
+
+  .el-dialog__headerbtn {
+    top: 18px;
+    right: 18px;
+
+    .el-dialog__close {
+      border-radius: var(--app-radius-full);
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    &:hover .el-dialog__close {
+      background: var(--app-status-neutral-bg);
+      color: var(--app-text-primary);
+    }
+  }
+}
+
+.el-drawer {
+  box-shadow: var(--app-shadow-shell);
+
+  .el-drawer__header {
+    margin-bottom: 0;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--app-border-light);
+
+    :is(.el-drawer__title) {
+      font-size: var(--app-font-lg);
+      font-weight: 700;
+      color: var(--app-text-primary);
+    }
+  }
+
+  .el-drawer__body {
+    padding: 20px 24px;
+  }
+}
+
+.el-drawer.rtl,
+.el-drawer.ltr {
+  border-radius: var(--app-radius-lg) 0 0 var(--app-radius-lg);
+}
+
+// 頁籤：底線改用主色，選取狀態加粗，未選取項目 hover 給輕量提示
+.el-tabs__header {
+  margin-bottom: var(--app-space-4);
+}
+
+.el-tabs__nav-wrap::after {
+  background-color: var(--app-border-light);
+}
+
+.el-tabs__active-bar {
+  background-color: var(--app-primary);
+  height: 3px;
+  border-radius: var(--app-radius-full);
+}
+
+.el-tabs__item {
+  font-weight: 500;
+  color: var(--app-text-secondary);
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--app-primary);
+  }
+
+  &.is-active {
+    color: var(--app-primary);
+    font-weight: 700;
+  }
+}
+
+// border-card 變體（個案管理「個案清單／待維護」這類頁籤）用不同 DOM，
+// 底線樣式套不上，另外收斂圓角與選取狀態，不維持 Element Plus 預設的方框直角
+.el-tabs--border-card {
+  border: 1px solid var(--app-border-light);
+  border-radius: var(--app-radius-md);
+  box-shadow: none;
+  overflow: hidden;
+
+  > .el-tabs__header {
+    margin: 0;
+    background: var(--app-status-neutral-bg);
+    border-bottom: 1px solid var(--app-border-light);
+
+    .el-tabs__item {
+      border: 0;
+      font-weight: 500;
+
+      &.is-active {
+        background: var(--app-surface);
+        color: var(--app-primary);
+        font-weight: 700;
+      }
+    }
+  }
+
+  > .el-tabs__content {
+    padding: var(--app-space-4);
+  }
+}
+
+// 分頁器：頁碼按鈕改圓角，當頁用實心藍取代預設的方塊選取
+.el-pagination {
+  .btn-prev,
+  .btn-next,
+  .el-pager li {
+    border-radius: var(--app-radius-sm);
+  }
+
+  .el-pager li.is-active {
+    background: var(--app-primary);
+    color: #ffffff;
+    font-weight: 700;
+  }
+
+  .el-select .el-select__wrapper {
+    border-radius: var(--app-radius-sm);
+  }
+}
+
+// 開關：沿用 Element Plus 內建主色，只加大尺寸辨識度並統一 focus 樣式
+.el-switch {
+  --el-switch-on-color: var(--app-primary);
+
+  &:focus-within .el-switch__core {
+    box-shadow: 0 0 0 3px rgba(12, 112, 237, 0.18);
+  }
+}
+
+// 核取方塊／單選鈕：圓角、色彩收斂到主色，跟其餘輸入元件同一套語言
+.el-checkbox__inner {
+  border-radius: 5px;
+  border-color: var(--app-border-color);
+}
+
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-checkbox__input.is-indeterminate .el-checkbox__inner {
+  background-color: var(--app-primary);
+  border-color: var(--app-primary);
+}
+
+.el-radio__inner {
+  border-color: var(--app-border-color);
+}
+
+.el-radio__input.is-checked .el-radio__inner {
+  background-color: var(--app-primary);
+  border-color: var(--app-primary);
+}
+
+.el-checkbox__input.is-focus .el-checkbox__inner,
+.el-radio__input.is-focus .el-radio__inner {
+  box-shadow: 0 0 0 3px rgba(12, 112, 237, 0.18);
+}
+
+// 提示框：跟頁面浮層同一套圓角語言，深色底不吃 .el-popper 的白底覆寫
+.el-tooltip__popper.is-dark {
+  border-radius: var(--app-radius-sm) !important;
+  background: var(--app-text-primary) !important;
+  font-size: var(--app-font-xs);
+  padding: 6px 10px;
+}
+
+// 內嵌提醒：語意色一律取自 status token，不用 Element Plus 內建色階
+.el-alert {
+  border-radius: var(--app-radius-sm);
+  padding: 12px 14px;
+
+  &--success.is-light {
+    background: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
+  }
+
+  &--warning.is-light {
+    background: var(--app-status-warning-bg);
+    color: var(--app-status-warning-fg);
+  }
+
+  &--error.is-light {
+    background: var(--app-status-danger-bg);
+    color: var(--app-status-danger-fg);
+  }
+
+  &--info.is-light {
+    background: var(--app-status-info-bg);
+    color: var(--app-status-info-fg);
+  }
+
+  .el-alert__title {
+    font-weight: 600;
+  }
+}
+
+.el-divider {
+  border-color: var(--app-border-light);
+}
+
+.el-empty__description {
+  color: var(--app-text-muted);
+}
+
+.el-link.el-link--primary:not(.is-underline) {
+  color: var(--app-primary);
+
+  &:hover {
+    color: var(--app-primary-dark);
+  }
+}
+
+.el-collapse {
+  border-color: var(--app-border-light);
+
+  .el-collapse-item__header {
+    font-weight: 600;
+    color: var(--app-text-primary);
+    border-color: var(--app-border-light);
+  }
+
+  .el-collapse-item__wrap {
+    border-color: var(--app-border-light);
+  }
+}
+
+.el-upload-dragger {
+  border-radius: var(--app-radius-md);
+  border: 1px dashed var(--app-border-color);
+  background: var(--app-status-neutral-bg);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+
+  &:hover {
+    border-color: var(--app-primary);
+    background: var(--app-primary-light);
+  }
 }

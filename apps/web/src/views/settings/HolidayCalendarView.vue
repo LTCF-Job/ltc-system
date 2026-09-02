@@ -249,7 +249,7 @@ onMounted(load)
 
 .quick-names-label {
   font-size: var(--app-font-xs);
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
 }
 
 .quick-names-tags {
@@ -264,9 +264,9 @@ onMounted(load)
   transition: all 0.15s ease;
 
   &:hover {
-    color: var(--el-color-primary);
-    border-color: var(--el-color-primary-light-5);
-    background-color: var(--el-color-primary-light-9);
+    color: var(--app-primary);
+    border-color: var(--app-status-primary-border);
+    background-color: var(--app-primary-light);
   }
 }
 </style>

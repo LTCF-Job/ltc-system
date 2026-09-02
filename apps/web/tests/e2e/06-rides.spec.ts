@@ -10,10 +10,10 @@ test.describe('06. 搭乘月曆表與紀錄更正 (Ride Calendar & Correction)',
   test('搭乘月曆表渲染、圖例與日期欄位顯示', async ({ page }) => {
     await waitForTableLoaded(page)
     await expect(page.getByText('搭乘圖例：')).toBeVisible()
-    await expect(page.getByText('有坐 (Boarded)')).toBeVisible()
-    await expect(page.getByText('沒坐 (Absent)')).toBeVisible()
-    await expect(page.getByText('未回報 (Unreported)')).toBeVisible()
-    await expect(page.getByText('混車衝突 (Conflict)')).toBeVisible()
+    await expect(page.getByText('有坐', { exact: true })).toBeVisible()
+    await expect(page.getByText('沒坐', { exact: true })).toBeVisible()
+    await expect(page.getByText('未回報', { exact: true })).toBeVisible()
+    await expect(page.getByText('混車衝突', { exact: true })).toBeVisible()
 
     // 檢查表格與個案姓名欄
     await expect(page.locator('.calendar-table').first()).toBeVisible()

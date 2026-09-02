@@ -99,7 +99,7 @@
         <el-table-column prop="caseCode" label="個案編號" width="100" />
         <el-table-column prop="caseName" label="個案姓名" min-width="110">
           <template #default="{ row }">
-            <span class="font-bold">{{ row.caseName }}</span>
+            <span class="font-bold text-nowrap">{{ row.caseName }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip>
@@ -152,7 +152,7 @@
         <el-table-column prop="caseCode" label="個案編號" width="100" />
         <el-table-column prop="caseName" label="個案姓名" min-width="110">
           <template #default="{ row }">
-            <span class="font-bold">{{ row.caseName }}</span>
+            <span class="font-bold text-nowrap">{{ row.caseName }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip>
@@ -290,13 +290,13 @@ onMounted(async () => {
     .page-title {
       font-size: 18px;
       font-weight: bold;
-      color: var(--el-text-color-primary);
+      color: var(--app-text-primary);
       margin: 0 0 4px 0;
     }
 
     .subtitle {
       font-size: 13px;
-      color: var(--el-text-color-secondary);
+      color: var(--app-text-secondary);
     }
   }
 
@@ -315,12 +315,12 @@ onMounted(async () => {
   border-radius: 6px;
   font-weight: 600;
   font-size: 13.5px;
-  background-color: var(--el-fill-color-light);
-  color: var(--el-text-color-primary);
-  border: 1px solid var(--el-border-color-light);
+  background-color: var(--app-status-neutral-bg);
+  color: var(--app-text-primary);
+  border: 1px solid var(--app-border-light);
 
   &.bg-outbound {
-    border-left: 3px solid var(--el-color-primary);
+    border-left: 3px solid var(--app-primary);
   }
 
   &.bg-inbound {
@@ -332,10 +332,6 @@ onMounted(async () => {
   display: none;
 }
 
-.font-bold {
-  font-weight: 600;
-  white-space: nowrap;
-}
 
 :deep(.vehicle-name-col .cell) {
   white-space: nowrap;

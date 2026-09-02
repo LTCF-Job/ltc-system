@@ -65,12 +65,6 @@
               <el-button size="default" type="danger" plain @click="quickLogin('admin')">
                 系統管理員
               </el-button>
-              <el-button size="default" type="primary" plain @click="quickLogin('dispatcher')">
-                調度員
-              </el-button>
-              <el-button size="default" type="success" plain @click="quickLogin('driver')">
-                司機
-              </el-button>
               <el-button size="default" type="info" plain @click="quickLogin('viewer')">
                 檢視者
               </el-button>
@@ -286,7 +280,7 @@ function quickLogin(role: UserRole) {
   .demo-tip {
     margin: 0 0 12px;
     font-size: var(--app-font-xs);
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-secondary);
     text-align: center;
   }
 

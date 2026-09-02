@@ -58,10 +58,10 @@
     <el-card shadow="never" class="legend-card">
       <div class="legend-items">
         <span class="legend-title">搭乘圖例：</span>
-        <span class="legend-item"><span class="mark status-boarded"><el-icon><Check /></el-icon></span> 有坐 (Boarded)</span>
-        <span class="legend-item"><span class="mark status-absent"><el-icon><Close /></el-icon></span> 沒坐 (Absent)</span>
-        <span class="legend-item"><span class="mark status-unreported"><el-icon><QuestionFilled /></el-icon></span> 未回報 (Unreported)</span>
-        <span class="legend-item"><span class="mark status-conflict"><el-icon><WarningFilled /></el-icon></span> 混車衝突 (Conflict)</span>
+        <span class="legend-item"><span class="mark status-boarded"><el-icon><Check /></el-icon></span> 有坐</span>
+        <span class="legend-item"><span class="mark status-absent"><el-icon><Close /></el-icon></span> 沒坐</span>
+        <span class="legend-item"><span class="mark status-unreported"><el-icon><QuestionFilled /></el-icon></span> 未回報</span>
+        <span class="legend-item"><span class="mark status-conflict"><el-icon><WarningFilled /></el-icon></span> 混車衝突</span>
         <span class="legend-item"><span class="mark is-corrected">●</span> 已人工更正 (帶右上圓點)</span>
         <span class="legend-item"><span class="mark status-non-scheduled"></span> 非應搭日</span>
         <span class="legend-item"><span class="mark mark-holiday">★</span> 假日／國定假日</span>
@@ -409,7 +409,7 @@ onMounted(() => {
 }
 
 .inline-value {
-  color: var(--el-text-color-regular);
+  color: var(--app-text-regular);
 }
 
 .custom-trip-tag {
@@ -418,7 +418,7 @@ onMounted(() => {
 }
 
 .trip-count-text {
-  color: var(--el-text-color-regular);
+  color: var(--app-text-regular);
   font-size: 13px;
 }
 
@@ -461,7 +461,7 @@ onMounted(() => {
 
     .legend-title {
       font-weight: bold;
-      color: var(--el-text-color-primary);
+      color: var(--app-text-primary);
     }
 
     .legend-item {
@@ -519,7 +519,7 @@ onMounted(() => {
 /* 假日欄底色偏灰，需與「非應搭日」空格子的淺灰底拉開對比，避免看不出仍可點擊新增紀錄 */
 .calendar-table :deep(td.day-col--holiday) .calendar-cell.status-non-scheduled {
   background-color: #ffffff;
-  border-color: var(--el-border-color);
+  border-color: var(--app-border-color);
 }
 
 .cell-legs-container {
@@ -541,27 +541,27 @@ onMounted(() => {
   transition: all 0.2s;
 
   &.status-boarded {
-    background-color: var(--el-color-success-light-8);
-    color: var(--el-color-success);
-    border: 1px solid var(--el-color-success-light-5);
+    background-color: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
+    border: 1px solid var(--app-status-success-border);
   }
 
   &.status-absent {
-    background-color: var(--el-color-info-light-8);
-    color: var(--el-text-color-secondary);
-    border: 1px solid var(--el-border-color);
+    background-color: var(--app-status-info-bg);
+    color: var(--app-text-secondary);
+    border: 1px solid var(--app-border-color);
   }
 
   &.status-unreported {
-    background-color: var(--el-color-warning-light-8);
-    color: var(--el-color-warning);
-    border: 1px solid var(--el-color-warning-light-5);
+    background-color: var(--app-status-warning-bg);
+    color: var(--app-status-warning-fg);
+    border: 1px solid var(--app-status-warning-border);
   }
 
   &.status-conflict {
-    background-color: var(--el-color-danger-light-8);
-    color: var(--el-color-danger);
-    border: 1px solid var(--el-color-danger-light-5);
+    background-color: var(--app-status-danger-bg);
+    color: var(--app-status-danger-fg);
+    border: 1px solid var(--app-status-danger-border);
   }
 
   &.is-corrected {
@@ -574,25 +574,25 @@ onMounted(() => {
       width: 5px;
       height: 5px;
       border-radius: 50%;
-      background-color: var(--el-color-primary);
+      background-color: var(--app-primary);
     }
   }
 
   &.status-non-scheduled {
-    background-color: var(--el-fill-color-light);
-    border: 1px dashed var(--el-border-color-lighter);
+    background-color: var(--app-status-neutral-bg);
+    border: 1px dashed var(--app-border-light);
     color: transparent;
 
     .add-icon {
       font-size: 12px;
       opacity: 0;
       transition: opacity 0.2s;
-      color: var(--el-color-primary);
+      color: var(--app-primary);
     }
 
     &:hover {
-      background-color: var(--el-color-primary-light-9);
-      border-color: var(--el-color-primary-light-5);
+      background-color: var(--app-primary-light);
+      border-color: var(--app-status-primary-border);
       .add-icon {
         opacity: 1;
       }

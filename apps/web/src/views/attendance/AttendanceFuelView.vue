@@ -871,9 +871,9 @@ onMounted(async () => {
       gap: 6px;
       padding: 4px 10px;
       border-radius: 6px;
-      background-color: var(--el-fill-color-light);
+      background-color: var(--app-status-neutral-bg);
       font-size: 13px;
-      color: var(--el-text-color-regular);
+      color: var(--app-text-regular);
 
       .dot {
         width: 8px;
@@ -881,16 +881,16 @@ onMounted(async () => {
         border-radius: 50%;
 
         &.dot-work {
-          background-color: var(--el-color-success);
+          background-color: var(--app-status-success-fg);
         }
         &.dot-leave {
-          background-color: var(--el-color-warning);
+          background-color: var(--app-status-warning-fg);
         }
         &.dot-sick {
-          background-color: var(--el-color-danger);
+          background-color: var(--app-status-danger-fg);
         }
         &.dot-off {
-          background-color: var(--el-text-color-placeholder);
+          background-color: var(--app-text-muted);
         }
         &.dot-absent {
           background-color: #f97316;
@@ -902,17 +902,17 @@ onMounted(async () => {
 
       .label {
         font-size: var(--app-font-xs);
-        color: var(--el-text-color-secondary);
+        color: var(--app-text-secondary);
       }
 
       .val {
         font-weight: 600;
-        color: var(--el-text-color-primary);
+        color: var(--app-text-primary);
       }
 
       .unit {
         font-size: var(--app-font-xs);
-        color: var(--el-text-color-placeholder);
+        color: var(--app-text-muted);
       }
 
       &.holiday-pill {
@@ -953,7 +953,7 @@ onMounted(async () => {
 
 .driver-name-text {
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--app-text-primary);
   font-size: 13px;
   display: inline-block;
   width: 100%;
@@ -966,10 +966,10 @@ onMounted(async () => {
   justify-content: center;
   gap: 4px;
   font-size: var(--app-font-xs);
-  color: var(--el-text-color-regular);
+  color: var(--app-text-regular);
 
   .summary-divider {
-    color: var(--el-text-color-placeholder);
+    color: var(--app-text-muted);
   }
 
   .summary-absent {
@@ -990,10 +990,10 @@ onMounted(async () => {
   font-size: var(--app-font-xs);
   transition: all 0.15s ease;
   background-color: transparent;
-  color: var(--el-text-color-regular);
+  color: var(--app-text-regular);
 
   &:hover {
-    background-color: var(--el-fill-color);
+    background-color: var(--app-status-neutral-bg);
   }
 
   .cell-content {
@@ -1046,8 +1046,8 @@ onMounted(async () => {
   }
 
   &.cell-off {
-    background-color: var(--el-fill-color-light);
-    color: var(--el-text-color-placeholder);
+    background-color: var(--app-status-neutral-bg);
+    color: var(--app-text-muted);
   }
 
   &.cell-absent {
@@ -1084,7 +1084,7 @@ onMounted(async () => {
   }
 
   .cell-empty {
-    color: var(--el-text-color-placeholder);
+    color: var(--app-text-muted);
   }
 }
 
@@ -1095,7 +1095,7 @@ onMounted(async () => {
 
 .stat-card {
   border-radius: 6px;
-  border: 1px solid var(--el-border-color-light);
+  border: 1px solid var(--app-border-light);
 
   .stat-inner {
     display: flex;
@@ -1104,30 +1104,22 @@ onMounted(async () => {
 
     .stat-label {
       font-size: 13px;
-      color: var(--el-text-color-secondary);
+      color: var(--app-text-secondary);
     }
 
     .stat-val {
       font-size: 18px;
       font-weight: 700;
-      color: var(--el-text-color-primary);
+      color: var(--app-text-primary);
 
       .unit {
         font-size: 13px;
         font-weight: 400;
-        color: var(--el-text-color-secondary);
+        color: var(--app-text-secondary);
         margin-left: 2px;
       }
     }
   }
-}
-
-.font-bold {
-  font-weight: 600;
-}
-
-.text-muted {
-  color: var(--el-text-color-placeholder);
 }
 
 :deep(.fuel-vehicle-col .cell),

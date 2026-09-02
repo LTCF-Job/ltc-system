@@ -726,7 +726,7 @@ onMounted(async () => {
   padding: 0 var(--app-space-6);
   border-radius: var(--app-radius-sm);
   background: var(--app-primary);
-  color: var(--el-color-white);
+  color: #ffffff;
   font-size: var(--app-font-lg);
   font-weight: 600;
   box-shadow: var(--app-shadow-sm);
@@ -851,12 +851,8 @@ onMounted(async () => {
 }
 
 .text-secondary {
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: 13px;
-}
-
-.text-muted {
-  color: var(--app-text-muted);
 }
 
 .text-warning {

@@ -1,11 +1,9 @@
 import { type Page, expect } from '@playwright/test'
 
-export type TestRole = 'admin' | 'dispatcher' | 'driver' | 'viewer'
+export type TestRole = 'admin' | 'viewer'
 
 export const DEMO_ROLE_LABELS: Record<TestRole, string> = {
   admin: '系統管理員',
-  dispatcher: '調度員',
-  driver: '司機',
   viewer: '檢視者'
 }
 

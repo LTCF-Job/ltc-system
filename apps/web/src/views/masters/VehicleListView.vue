@@ -124,13 +124,13 @@
                   @click="editRowForm.active = !editRowForm.active"
                 >
                   <span class="status-indicator-dot"></span>
-                  <span class="status-label-text">{{ editRowForm.active ? '服役中' : '已停用' }}</span>
+                  <span class="status-label-text">{{ editRowForm.active ? '啟用' : '停用' }}</span>
                 </button>
               </template>
               <template v-else>
                 <el-tooltip
                   v-if="authStore.can('staff')"
-                  :content="row.active ? '目前為服役中，點選切換為已停用' : '目前為已停用，點選切換為服役中'"
+                  :content="row.active ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
                   placement="top"
                   :show-after="300"
                 >
@@ -141,7 +141,7 @@
                     @click="handleQuickToggleActive(row as any, !row.active)"
                   >
                     <span class="status-indicator-dot"></span>
-                    <span class="status-label-text">{{ row.active ? '服役中' : '已停用' }}</span>
+                    <span class="status-label-text">{{ row.active ? '啟用' : '停用' }}</span>
                   </button>
                 </el-tooltip>
                 <div
@@ -150,7 +150,7 @@
                   :class="row.active ? 'is-active' : 'is-inactive'"
                 >
                   <span class="status-indicator-dot"></span>
-                  <span class="status-label-text">{{ row.active ? '服役中' : '已停用' }}</span>
+                  <span class="status-label-text">{{ row.active ? '啟用' : '停用' }}</span>
                 </div>
               </template>
             </template>
@@ -245,13 +245,13 @@
             <el-radio-button :value="true">
               <div class="radio-pill active-pill">
                 <span class="radio-dot"></span>
-                <span>服役中</span>
+                <span>啟用</span>
               </div>
             </el-radio-button>
             <el-radio-button :value="false">
               <div class="radio-pill inactive-pill">
                 <span class="radio-dot"></span>
-                <span>已停用</span>
+                <span>停用</span>
               </div>
             </el-radio-button>
           </el-radio-group>
@@ -484,7 +484,7 @@ async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
   try {
     await updateVehicle(row.id, { active: newActive })
     row.active = newActive
-    ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '服役中' : '已停用'}`)
+    ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '啟用' : '停用'}`)
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '切換狀態失敗'))
   }
@@ -548,7 +548,7 @@ executeFetch()
 }
 
 .vehicle-driver-empty {
-  color: var(--el-text-color-placeholder);
+  color: var(--app-text-muted);
   font-size: 13px;
 }
 
@@ -559,13 +559,13 @@ executeFetch()
 .driver-dialog-hint {
   margin-top: -4px;
   padding-left: 120px;
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: var(--app-font-xs);
   line-height: 1.6;
 }
 
 :deep(.el-table .editing-row) {
-  background-color: var(--el-color-primary-light-9) !important;
+  background-color: var(--app-primary-light) !important;
 }
 
 
@@ -575,7 +575,7 @@ executeFetch()
   align-items: center;
   gap: 7px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--app-text-primary);
   white-space: nowrap;
 }
 
@@ -583,11 +583,11 @@ executeFetch()
   content: '';
   width: 7px;
   height: 7px;
-  border: 2px solid var(--el-border-color);
+  border: 2px solid var(--app-border-color);
   border-radius: 50%;
 }
 
-.region-label.region-miaoli::before { border-color: var(--el-color-warning); }
-.region-label.region-hsinchu::before { border-color: var(--el-color-primary); }
+.region-label.region-miaoli::before { border-color: var(--app-status-warning-fg); }
+.region-label.region-hsinchu::before { border-color: var(--app-primary); }
 </style>
 

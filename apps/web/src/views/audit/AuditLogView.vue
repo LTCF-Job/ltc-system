@@ -156,14 +156,14 @@
                 <span class="field-label">{{ row.label }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="異動前 (Before)" min-width="190">
+            <el-table-column label="異動前" min-width="190">
               <template #default="{ row }">
                 <span :class="['diff-val', row.status === 'deleted' || row.status === 'modified' ? 'diff-old' : '']">
                   {{ row.beforeText }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="異動後 (After)" min-width="190">
+            <el-table-column label="異動後" min-width="190">
               <template #default="{ row }">
                 <span :class="['diff-val', row.status === 'created' || row.status === 'modified' ? 'diff-new' : '']">
                   {{ row.afterText }}
@@ -637,19 +637,15 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.text-muted {
-  color: var(--el-text-color-placeholder);
-}
-
 .entity-badge {
   font-weight: normal;
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   margin-left: 4px;
 }
 
 /* CRUD 文字顏色標示，純文字無額外外框 */
 .crud-create {
-  color: var(--el-color-success);
+  color: var(--app-status-success-fg);
   font-weight: 600;
 }
 
@@ -659,12 +655,12 @@ onMounted(() => {
 }
 
 .crud-delete {
-  color: var(--el-color-danger);
+  color: var(--app-status-danger-fg);
   font-weight: 600;
 }
 
 .crud-read {
-  color: var(--el-color-primary);
+  color: var(--app-primary);
   font-weight: 600;
 }
 
@@ -685,7 +681,7 @@ onMounted(() => {
     .diff-title {
       font-size: 14px;
       font-weight: bold;
-      color: var(--el-text-color-primary);
+      color: var(--app-text-primary);
       display: flex;
       align-items: center;
       gap: 6px;
@@ -695,7 +691,7 @@ onMounted(() => {
 
 .field-label {
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--app-text-primary);
 }
 
 .diff-val {
@@ -705,14 +701,14 @@ onMounted(() => {
 }
 
 .diff-old {
-  color: var(--el-color-danger);
-  border-left: 2px solid var(--el-color-danger);
+  color: var(--app-status-danger-fg);
+  border-left: 2px solid var(--app-status-danger-fg);
   padding-left: 6px;
 }
 
 .diff-new {
-  color: var(--el-color-success);
-  border-left: 2px solid var(--el-color-success);
+  color: var(--app-status-success-fg);
+  border-left: 2px solid var(--app-status-success-fg);
   font-weight: 600;
   padding-left: 6px;
 }

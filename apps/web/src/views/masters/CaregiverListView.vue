@@ -594,13 +594,13 @@ executeFetch()
    這個 span 沒有固定寬度時，文字本身還是會照 flex 容器目前的寬度自己換行——
    要另外鎖 white-space: nowrap 才能讓整段名稱維持單行。 */
 .unresolved-raw-name {
-  color: var(--el-color-warning);
+  color: var(--app-status-warning-fg);
   font-size: 13px;
   white-space: nowrap;
 }
 
 .missing-fields {
-  color: var(--el-color-danger);
+  color: var(--app-status-danger-fg);
   font-size: 13px;
 }
 
@@ -617,6 +617,6 @@ executeFetch()
 }
 
 .empty-value {
-  color: var(--el-text-color-placeholder);
+  color: var(--app-text-muted);
 }
 </style>

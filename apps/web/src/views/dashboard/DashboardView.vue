@@ -122,8 +122,21 @@
               </div>
             </template>
             <p id="trip-trend-description" class="sr-only">{{ tripTrendChartAriaLabel }}</p>
-            <div v-if="metrics && metrics.vehicleTripTrends?.length" class="chart-container" role="img" aria-labelledby="trip-trend-description">
-              <v-chart class="echart" :option="tripTrendChartOption" autoresize />
+            <div
+              v-if="vehicleTripRows.length"
+              class="capacity-list"
+              role="img"
+              aria-labelledby="trip-trend-description"
+            >
+              <div v-for="row in vehicleTripRows" :key="row.plateNo" class="app-capacity-row">
+                <span class="app-capacity-label" :title="`${row.vehicleName}（${row.plateNo}）`">
+                  {{ row.vehicleName }}
+                </span>
+                <span class="app-capacity-track">
+                  <span class="app-capacity-fill" :style="{ width: row.percent + '%' }"></span>
+                </span>
+                <span class="app-capacity-value">{{ row.tripCount }} 趟</span>
+              </div>
             </div>
             <el-empty v-else description="目前沒有接送趟數資料。" />
           </el-card>
@@ -222,9 +235,6 @@
               <div class="header-title-group">
                 <span class="section-title">最近申報匯出紀錄</span>
               </div>
-              <el-link type="primary" :underline="false" class="view-all-link" @click="$router.push('/exports')">
-                查看全部 <el-icon><ArrowRight /></el-icon>
-              </el-link>
             </div>
           </template>
 
@@ -246,7 +256,7 @@
             </el-table-column>
             <el-table-column prop="createdAt" label="匯出時間" width="170" align="center">
               <template #default="{ row }">
-                <span class="text-muted">{{ formatDateTime(row.createdAt) }}</span>
+                <span class="text-secondary">{{ formatDateTime(row.createdAt) }}</span>
               </template>
             </el-table-column>
             <el-table-column label="狀態" width="110" align="center">
@@ -264,6 +274,11 @@
             v-if="!recentExports || recentExports.length === 0"
             description="尚無申報匯出紀錄"
           />
+          <div class="app-panel-footer">
+            <button type="button" class="app-panel-footer-link" @click="$router.push('/exports')">
+              查看全部匯出紀錄
+            </button>
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -273,16 +288,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import {
-  Grid,
-  ArrowRight
-} from '@element-plus/icons-vue'
+import { Grid } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, PieChart } from 'echarts/charts'
+import { PieChart } from 'echarts/charts'
 import {
-  GridComponent,
   TooltipComponent,
   LegendComponent,
   TitleComponent
@@ -297,9 +308,7 @@ import type { DashboardMetricsDTO, ExportJobDTO } from '@/types/api'
 // 註冊 ECharts 核心元件
 use([
   CanvasRenderer,
-  BarChart,
   PieChart,
-  GridComponent,
   TooltipComponent,
   LegendComponent,
   TitleComponent
@@ -355,62 +364,14 @@ const attendancePieChartAriaLabel = computed(() => {
   return `車隊出勤與請假狀態：出勤 ${att.workCount} 人、請假 ${att.leaveCount} 人、病假 ${att.sickCount} 人、休假 ${att.offCount} 人，共 ${attendanceTotal.value} 人。`
 })
 
-// 車輛趟數長條圖設定
-const tripTrendChartOption = computed(() => {
+// 車輛趟數容量列：長條寬度是相對「最忙的一台車」的比例，不是達成率，右側數值才是實際趟數
+const vehicleTripRows = computed(() => {
   const trends = metrics.value?.vehicleTripTrends || []
-  const categories = trends.map(t => t.vehicleName)
-  const data = trends.map(t => t.tripCount)
-
-  return {
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: 'rgba(15, 23, 42, 0.9)',
-      borderColor: '#334155',
-      textStyle: { color: '#ffffff', fontSize: 12 },
-      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(255, 90, 95, 0.06)' } },
-      padding: [10, 14],
-      borderRadius: 8
-    },
-    grid: {
-      left: '2%',
-      right: '2%',
-      bottom: '6%',
-      top: '12%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      data: categories,
-      axisLine: { lineStyle: { color: '#e2e8f0' } },
-      axisTick: { show: false },
-      axisLabel: { interval: 0, rotate: 15, color: '#64748b', fontSize: 11.5, fontWeight: 500 }
-    },
-    yAxis: {
-      type: 'value',
-      name: '趟數',
-      nameTextStyle: { color: '#94a3b8', fontSize: 11 },
-      axisLine: { show: false },
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-      axisLabel: { color: '#94a3b8', fontSize: 11 }
-    },
-    series: [
-      {
-        name: '搭乘趟數',
-            type: 'bar',
-        barWidth: '34%',
-        data: data,
-        itemStyle: {
-          color: '#2f6fed',
-          borderRadius: [6, 6, 0, 0]
-        },
-        emphasis: {
-          itemStyle: {
-            color: '#1f55c7'
-          }
-        }
-      }
-    ]
-  }
+  const max = Math.max(...trends.map(t => t.tripCount), 0)
+  return trends.map(t => ({
+    ...t,
+    percent: max > 0 ? Math.round((t.tripCount / max) * 100) : 0
+  }))
 })
 
 // 出勤請假環形圖設定
@@ -513,7 +474,7 @@ onMounted(() => {
 .metric-card {
   border-radius: var(--app-radius-md);
   border: 1px solid var(--app-border-color);
-  background-color: #ffffff;
+  background-color: var(--app-surface);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 
@@ -524,7 +485,7 @@ onMounted(() => {
   }
 
   &.is-urgent {
-    border-color: #fecaca;
+    border-color: var(--app-status-danger-border);
     background: var(--app-status-danger-bg);
   }
 
@@ -539,10 +500,10 @@ onMounted(() => {
     margin-bottom: 10px;
 
     .metric-label {
-      font-size: var(--app-font-xs);
+      font-size: var(--app-label-size);
       font-weight: 700;
       color: var(--app-text-secondary);
-      letter-spacing: 0.05em;
+      letter-spacing: var(--app-label-tracking);
       text-transform: uppercase;
     }
 
@@ -559,11 +520,12 @@ onMounted(() => {
       justify-content: space-between;
 
       .metric-value {
-        font-size: 24px;
-        font-weight: 700;
+        font-size: var(--app-font-3xl);
+        font-weight: 600;
         color: var(--app-text-primary);
-        letter-spacing: -0.02em;
-        line-height: 1;
+        letter-spacing: -0.015em;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
 
         &.text-danger {
           color: var(--app-status-danger-fg);
@@ -580,19 +542,22 @@ onMounted(() => {
 
 .status-badge {
   font-size: var(--app-font-xs);
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 9999px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: var(--app-radius-full);
+  border: 1px solid transparent;
   display: inline-flex;
   align-items: center;
 
   &.badge-critical {
     background-color: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-border);
     color: var(--app-status-danger-fg);
   }
 
   &.badge-routine {
     background-color: var(--app-status-success-bg);
+    border-color: var(--app-status-success-border);
     color: var(--app-status-success-fg);
   }
 }
@@ -616,16 +581,6 @@ onMounted(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-  }
-
-  .chart-container {
-    height: 270px;
-    width: 100%;
-
-    .echart {
-      height: 100%;
-      width: 100%;
-    }
   }
 
   .chart-container-donut {
@@ -687,12 +642,10 @@ onMounted(() => {
   }
 }
 
-.view-all-link {
-  font-size: 12.5px;
-  font-weight: 600;
+.capacity-list {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  gap: var(--app-space-2);
 }
 
 .modern-table {
@@ -707,10 +660,6 @@ onMounted(() => {
     color: var(--app-text-primary);
   }
 
-  .text-muted {
-    color: var(--app-text-secondary);
-    font-size: 12.5px;
-  }
 }
 
 @media (max-width: 640px) {
