@@ -158,7 +158,7 @@
       </el-table>
 
       <div v-else class="zip-download">
-        <el-button type="success" size="large" :loading="downloadingZip" @click="handleDownloadZip">
+        <el-button type="success" :loading="downloadingZip" @click="handleDownloadZip">
           <el-icon><Download /></el-icon>
           下載壓縮檔 ({{ currentJob.zipFileName }})
         </el-button>
@@ -259,6 +259,10 @@
         <el-table-column prop="rowCount" label="申報行數" width="100" align="center" />
         <el-table-column prop="fileName" label="檔案名稱" min-width="180" show-overflow-tooltip />
       </el-table>
+
+      <template #footer>
+        <el-button @click="historyDetailVisible = false">關閉</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -485,7 +489,7 @@ onMounted(() => {
 .card-title {
   font-size: 16px;
   font-weight: bold;
-  color: var(--el-color-primary);
+  color: var(--app-primary);
 }
 
 .roc-month-picker {
@@ -495,7 +499,7 @@ onMounted(() => {
 
   .roc-label {
     font-weight: bold;
-    color: var(--el-color-primary);
+    color: var(--app-primary);
   }
 }
 
@@ -505,7 +509,7 @@ onMounted(() => {
   gap: 10px;
 
   .case-picker-summary {
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-secondary);
     font-size: 13px;
   }
 }
@@ -553,7 +557,7 @@ onMounted(() => {
   gap: 20px;
   flex-wrap: wrap;
   margin-bottom: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 

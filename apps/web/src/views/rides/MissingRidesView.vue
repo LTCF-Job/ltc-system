@@ -188,7 +188,7 @@
               </el-table-column>
               <el-table-column prop="errorMessage" label="備註 / 失敗原因" min-width="180" show-overflow-tooltip>
                 <template #default="{ row }">
-                  <span v-if="row.errorMessage || row.error" style="color: var(--el-color-danger);">{{ row.errorMessage || row.error }}</span>
+                  <span v-if="row.errorMessage || row.error" style="color: var(--app-status-danger-fg);">{{ row.errorMessage || row.error }}</span>
                   <span v-else class="text-secondary">{{ row.contentSummary || row.body || '-' }}</span>
                 </template>
               </el-table-column>
@@ -240,7 +240,7 @@
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item v-if="currentLogRow.errorMessage || (currentLogRow as any).error" label="失敗原因">
-          <span style="color: var(--el-color-danger);">{{ currentLogRow.errorMessage || (currentLogRow as any).error }}</span>
+          <span style="color: var(--app-status-danger-fg);">{{ currentLogRow.errorMessage || (currentLogRow as any).error }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="完整內容">
           <div class="log-detail-content" :class="{ 'is-expanded': logContentExpanded }">
@@ -707,7 +707,7 @@ onMounted(() => {
 }
 
 .text-secondary {
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 
@@ -748,7 +748,7 @@ onMounted(() => {
   cursor: pointer;
   user-select: none;
   &:hover {
-    background-color: var(--el-color-primary-light-9);
+    background-color: var(--app-primary-light);
   }
 }
 

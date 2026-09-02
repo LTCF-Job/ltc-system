@@ -43,8 +43,8 @@
 
         <el-form-item label="實際搭乘狀態" required>
           <el-radio-group v-model="form.effectiveStatus">
-            <el-radio value="boarded">有坐 (Boarded)</el-radio>
-            <el-radio value="absent">沒坐 (Absent)</el-radio>
+            <el-radio value="boarded">有坐</el-radio>
+            <el-radio value="absent">沒坐</el-radio>
           </el-radio-group>
         </el-form-item>
 
@@ -381,7 +381,7 @@ defineExpose({
   .quick-reason-tag {
     cursor: pointer;
     &:hover {
-      background-color: var(--el-color-primary-light-9);
+      background-color: var(--app-primary-light);
     }
   }
 }

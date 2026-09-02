@@ -248,23 +248,23 @@ onMounted(() => {
   border-radius: 8px;
   text-align: center;
   padding: 12px 0;
-  border: 1px solid var(--el-border-color-light);
+  border: 1px solid var(--app-border-light);
 
   .stat-title {
     font-size: 13px;
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-secondary);
     margin-bottom: 8px;
   }
 
   .stat-number {
     font-size: 26px;
     font-weight: 700;
-    color: var(--el-text-color-primary);
+    color: var(--app-text-primary);
 
     span {
       font-size: 13px;
       font-weight: normal;
-      color: var(--el-text-color-secondary);
+      color: var(--app-text-secondary);
       margin-left: 4px;
     }
   }
@@ -294,26 +294,26 @@ onMounted(() => {
       gap: 10px;
       font-size: 16px;
       font-weight: bold;
-      color: var(--el-text-color-primary);
+      color: var(--app-text-primary);
 
       .veh-plate {
         font-size: var(--app-font-md);
         font-weight: normal;
-        color: var(--el-text-color-secondary);
+        color: var(--app-text-secondary);
         font-family: var(--el-font-family);
       }
 
       .veh-driver {
         font-size: 13px;
         font-weight: normal;
-        color: var(--el-text-color-secondary);
+        color: var(--app-text-secondary);
         margin-left: 8px;
       }
     }
 
     .veh-subtotal {
       font-size: 14px;
-      color: var(--el-text-color-regular);
+      color: var(--app-text-regular);
     }
   }
 }

@@ -78,15 +78,17 @@ const tagType = computed(() => (entry.value.variant === 'neutral' ? 'info' : ent
   color: var(--app-status-neutral-fg) !important;
 }
 
-/* chip：淡色圓角底 + 小圓點，用於表格狀態欄但不想要 el-tag 的邊框／方角觀感 */
+/* chip：淡色圓角底 + 小圓點，用於表格狀態欄但不想要 el-tag 的方角觀感；
+   邊框跟 el-tag／status-toggle-pill 用同一套淡色描邊語言，三者觀感統一 */
 .status-chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 2px 9px;
   border-radius: var(--app-radius-full);
+  border: 1px solid transparent;
   font-size: var(--app-font-xs);
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.6;
   white-space: nowrap;
 }
@@ -98,26 +100,31 @@ const tagType = computed(() => (entry.value.variant === 'neutral' ? 'info' : ent
 
 .status-chip-success {
   background: var(--app-status-success-bg);
+  border-color: #a8e6cd;
   color: var(--app-status-success-fg);
 }
 
 .status-chip-warning {
   background: var(--app-status-warning-bg);
+  border-color: #f0cf8e;
   color: var(--app-status-warning-fg);
 }
 
 .status-chip-danger {
   background: var(--app-status-danger-bg);
+  border-color: #f3a8b6;
   color: var(--app-status-danger-fg);
 }
 
 .status-chip-info {
   background: var(--app-status-info-bg);
+  border-color: #a9d3e8;
   color: var(--app-status-info-fg);
 }
 
 .status-chip-neutral {
   background: var(--app-status-neutral-bg);
+  border-color: #dde2e8;
   color: var(--app-status-neutral-fg);
 }
 </style>

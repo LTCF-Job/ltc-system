@@ -65,13 +65,34 @@ Token 定義在 `apps/web/src/styles/tokens.scss`；共用元件在 `apps/web/sr
 
 ```css
 --app-space-1..8      /* 4/8/12/16/24/32px */
---app-font-xs..2xl    /* 12/13/14/16/20/24px */
+--app-font-xs..3xl    /* 13/13/14/16/20/24/34px */
+--app-label-size / --app-label-tracking   /* 11px / 0.08em，大寫微標籤 */
 --app-radius-xs/sm/md/lg/full
 --app-header-height   /* 56px */
 --app-aside-width / -collapsed
+--app-nav-*           /* 側欄淺色面板 */
+--app-bar-track / --app-bar-height        /* 容量長條 */
 ```
 
 新增樣式前先看這份清單有沒有合用的值，不要另外寫 magic number。
+
+## 營運面板樣式（`element-overrides.scss`）
+
+儀表板與清單頁的面板共用這組 class，不要在頁面裡重刻一份。
+
+| Class | 用途 |
+|---|---|
+| `.app-micro-label` | 大寫微標籤。KPI 標籤與側欄分組標題共用，色為 `--app-text-secondary`（11px 小字用 `--app-text-muted` 只有 3.05:1，不符 WCAG AA） |
+| `.app-metric-value` | KPI 數值。一張卡只放一個，是卡片裡唯一的強元素 |
+| `.app-capacity-row` | 容量列外框，`grid` 三欄：標籤 / 軌道 / 右對齊數值 |
+| `.app-capacity-track` + `.app-capacity-fill` | 長條軌道與填色。兩者都已設 `display: block`，用 `<span>` 承載時不必另外處理 |
+| `.app-panel-footer` + `.app-panel-footer-link` | 面板底部行動（如「查看全部」）。置中、大寫、與內容以細線分隔 |
+
+規則：
+
+- 長條填色寬度用 inline `style="width: N%"` 綁定，比例基準要在程式碼註解裡寫清楚是「相對什麼」。目前儀表板車輛趟數是相對最忙的一台車，不是達成率——右側數值才是實際值。
+- 填色預設 `--app-primary`。趟數、件數這類非風險語意的量值一律留在藍色；只有真正代表風險分級時才加 `.is-high` / `.is-mid` / `.is-low`。
+- 「查看全部」放面板底部，不放標題列右上。
 
 ## 共用元件
 

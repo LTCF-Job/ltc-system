@@ -75,7 +75,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="email" label="通知電子信箱 (Email)" min-width="240" show-overflow-tooltip>
+        <el-table-column prop="email" label="通知電子信箱" min-width="240" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="email-text">{{ row.email }}</span>
           </template>
@@ -585,10 +585,6 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.font-bold {
-  font-weight: bold;
-}
-
 .topic-label {
   white-space: nowrap;
 }
@@ -612,8 +608,8 @@ onMounted(() => {
 }
 
 .preview-panel {
-  border: 1px solid var(--el-border-color-light);
-  background-color: var(--el-fill-color-lighter);
+  border: 1px solid var(--app-border-light);
+  background-color: var(--app-status-neutral-bg);
   border-radius: 6px;
   padding: 12px;
   display: flex;
@@ -629,7 +625,7 @@ onMounted(() => {
   .preview-title {
     font-size: 13px;
     font-weight: 600;
-    color: var(--el-text-color-primary);
+    color: var(--app-text-primary);
   }
 
   .preview-counts {
@@ -651,8 +647,8 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background-color: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-extra-light);
+  background-color: var(--app-surface);
+  border: 1px solid var(--app-border-light);
   border-radius: 4px;
   font-size: 13px;
 
@@ -660,28 +656,28 @@ onMounted(() => {
     font-size: 14px;
 
     &.success {
-      color: var(--el-color-success);
+      color: var(--app-status-success-fg);
     }
     &.warning {
-      color: var(--el-color-warning);
+      color: var(--app-status-warning-fg);
     }
     &.danger {
-      color: var(--el-color-danger);
+      color: var(--app-status-danger-fg);
     }
   }
 
   .parsed-name {
-    color: var(--el-text-color-primary);
+    color: var(--app-text-primary);
   }
 
   .parsed-email {
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-secondary);
     font-family: 'Consolas', monospace;
     font-size: var(--app-font-xs);
   }
 
   .parsed-raw {
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-secondary);
   }
 
   .badge-tag {
@@ -689,13 +685,13 @@ onMounted(() => {
   }
 
   &.is-invalid {
-    background-color: var(--el-color-danger-light-9);
-    border-color: var(--el-color-danger-light-7);
+    background-color: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-border);
   }
 
   &.is-duplicate {
-    background-color: var(--el-color-warning-light-9);
-    border-color: var(--el-color-warning-light-7);
+    background-color: var(--app-status-warning-bg);
+    border-color: var(--app-status-warning-border);
   }
 }
 

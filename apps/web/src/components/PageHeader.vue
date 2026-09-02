@@ -32,8 +32,9 @@ defineProps<{
 }
 
 .page-header-title {
-  font-size: var(--app-font-xl);
-  font-weight: 600;
+  font-size: var(--app-font-2xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--app-text-primary);
 }
 

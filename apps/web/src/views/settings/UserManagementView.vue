@@ -184,7 +184,7 @@
 
         <el-form-item label="帳號狀態" prop="status">
           <el-radio-group v-model="form.status">
-            <el-radio value="active">啟用中</el-radio>
+            <el-radio value="active">啟用</el-radio>
             <el-radio value="inactive">停用</el-radio>
           </el-radio-group>
         </el-form-item>
@@ -568,13 +568,9 @@ onMounted(() => {
   white-space: nowrap;
 
   .user-avatar {
-    background-color: var(--el-color-primary-light-8);
-    color: var(--el-color-primary);
+    background-color: var(--app-primary-light);
+    color: var(--app-primary);
   }
-}
-
-.font-bold {
-  font-weight: bold;
 }
 
 .role-text {
@@ -611,7 +607,7 @@ onMounted(() => {
 }
 
 .perm-mode-default {
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 
@@ -626,18 +622,18 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background-color: var(--el-fill-color-light);
+  background-color: var(--app-status-neutral-bg);
   border-radius: 6px;
 
   .perm-user-name {
     font-size: 15px;
     font-weight: bold;
-    color: var(--el-text-color-primary);
+    color: var(--app-text-primary);
   }
 
   .perm-user-email {
     font-size: 13px;
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-secondary);
     margin-left: 6px;
   }
 }

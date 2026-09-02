@@ -266,7 +266,7 @@ executeFetch()
   align-items: center;
   gap: 7px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--app-text-primary);
   white-space: nowrap;
 }
 
@@ -274,12 +274,12 @@ executeFetch()
   content: '';
   width: 7px;
   height: 7px;
-  border: 2px solid var(--el-border-color);
+  border: 2px solid var(--app-border-color);
   border-radius: 50%;
 }
 
-.region-label.region-miaoli::before { border-color: var(--el-color-warning); }
-.region-label.region-hsinchu::before { border-color: var(--el-color-primary); }
+.region-label.region-miaoli::before { border-color: var(--app-status-warning-fg); }
+.region-label.region-hsinchu::before { border-color: var(--app-primary); }
 
 :deep(.open-days-column .cell) {
   white-space: nowrap;

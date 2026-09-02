@@ -139,12 +139,8 @@ onMounted(fetchForms)
 }
 
 .text-secondary {
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: 13px;
-}
-
-.text-muted {
-  color: var(--app-text-muted, var(--el-text-color-secondary));
 }
 
 :deep(.vehicle-col .cell) {
@@ -175,7 +171,7 @@ onMounted(fetchForms)
 }
 
 .month-count {
-  color: var(--el-color-success);
+  color: var(--app-status-success-fg);
 }
 
 .empty-state {

@@ -381,7 +381,7 @@ defineExpose({
 
 .card-title {
   font-weight: bold;
-  color: var(--el-color-primary);
+  color: var(--app-primary);
 }
 
 .sources-list {
@@ -391,7 +391,7 @@ defineExpose({
 
   .source-item {
     padding: 8px 12px;
-    background-color: var(--el-fill-color-light);
+    background-color: var(--app-status-neutral-bg);
     border-radius: 6px;
 
     .source-main {
@@ -404,7 +404,7 @@ defineExpose({
     .source-sub {
       margin-top: 4px;
       font-size: var(--app-font-xs);
-      color: var(--el-text-color-secondary);
+      color: var(--app-text-secondary);
     }
   }
 }
@@ -412,7 +412,7 @@ defineExpose({
 .empty-source {
   padding: 12px;
   text-align: center;
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 
@@ -428,26 +428,26 @@ defineExpose({
   .quick-reason-tag {
     cursor: pointer;
     &:hover {
-      background-color: var(--el-color-primary-light-9);
+      background-color: var(--app-primary-light);
     }
   }
 }
 
 .field-hint {
   font-size: var(--app-font-xs);
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   margin-top: 2px;
 
   .diff-tag {
-    color: var(--el-color-warning);
+    color: var(--app-status-warning-fg);
     font-weight: bold;
   }
 }
 
 .audit-hint {
   font-size: var(--app-font-xs);
-  color: var(--el-text-color-secondary);
-  background-color: var(--el-fill-color-light);
+  color: var(--app-text-secondary);
+  background-color: var(--app-status-neutral-bg);
   padding: 8px 12px;
   border-radius: 6px;
 }

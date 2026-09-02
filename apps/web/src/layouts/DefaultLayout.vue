@@ -23,7 +23,7 @@
         <AppLogo
           :size="isCollapse && !isMobile ? 'sm' : 'md'"
           :collapsed="isCollapse && !isMobile"
-          variant="dark"
+          variant="light"
         />
       </router-link>
 
@@ -34,15 +34,18 @@
             :collapse="!isMobile && isCollapse"
           router
           class="el-menu-vertical"
-          background-color="#19324d"
-          text-color="#d2deea"
-          active-text-color="#ffffff"
         >
+          <el-menu-item-group>
+            <template #title><span class="nav-group-label">總覽</span></template>
           <el-menu-item index="/">
             <el-icon><Odometer /></el-icon>
             <template #title>總覽儀表板</template>
           </el-menu-item>
 
+          </el-menu-item-group>
+
+          <el-menu-item-group>
+            <template #title><span class="nav-group-label">營運作業</span></template>
           <el-sub-menu v-if="authStore.hasPermission('rides_calendar') || authStore.hasPermission('rides_issues') || authStore.hasPermission('rides_missing')" index="rides">
             <template #title>
               <el-icon><Calendar /></el-icon>
@@ -72,37 +75,10 @@
             <template #title>車輛維修保養</template>
           </el-menu-item>
 
-          <el-sub-menu v-if="authStore.hasPermission('masters_regions') || authStore.hasPermission('masters_cases') || authStore.hasPermission('masters_sites') || authStore.hasPermission('masters_vehicles') || authStore.hasPermission('masters_drivers') || authStore.hasPermission('masters_caregivers')" index="masters">
-            <template #title>
-              <el-icon><Folder /></el-icon>
-              <span>主檔資料</span>
-            </template>
-            <el-menu-item v-if="authStore.hasPermission('masters_regions')" index="/masters/regions">
-              <el-icon><MapLocation /></el-icon>
-              <template #title>地區管理</template>
-            </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('masters_cases')" index="/cases">
-              <el-icon><User /></el-icon>
-              <template #title>個案管理</template>
-            </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('masters_sites')" index="/masters/sites">
-              <el-icon><Location /></el-icon>
-              <template #title>單位管理</template>
-            </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('masters_vehicles')" index="/masters/vehicles">
-              <el-icon><Van /></el-icon>
-              <template #title>車輛管理</template>
-            </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('masters_drivers')" index="/masters/drivers">
-              <el-icon><Avatar /></el-icon>
-              <template #title>司機管理</template>
-            </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('masters_caregivers')" index="/masters/caregivers">
-              <el-icon><UserFilled /></el-icon>
-              <template #title>照護人員管理</template>
-            </el-menu-item>
-          </el-sub-menu>
+          </el-menu-item-group>
 
+          <el-menu-item-group>
+            <template #title><span class="nav-group-label">報表與申報</span></template>
           <el-sub-menu v-if="authStore.hasPermission('driver_reports') || authStore.hasPermission('driver_report_mappings')" index="driver-reports">
             <template #title>
               <el-icon><DocumentCopy /></el-icon>
@@ -141,6 +117,45 @@
             <template #title>政府申報匯出</template>
           </el-menu-item>
 
+          </el-menu-item-group>
+
+          <el-menu-item-group>
+            <template #title><span class="nav-group-label">資料管理</span></template>
+          <el-sub-menu v-if="authStore.hasPermission('masters_regions') || authStore.hasPermission('masters_cases') || authStore.hasPermission('masters_sites') || authStore.hasPermission('masters_vehicles') || authStore.hasPermission('masters_drivers') || authStore.hasPermission('masters_caregivers')" index="masters">
+            <template #title>
+              <el-icon><Folder /></el-icon>
+              <span>主檔資料</span>
+            </template>
+            <el-menu-item v-if="authStore.hasPermission('masters_regions')" index="/masters/regions">
+              <el-icon><MapLocation /></el-icon>
+              <template #title>地區管理</template>
+            </el-menu-item>
+            <el-menu-item v-if="authStore.hasPermission('masters_cases')" index="/cases">
+              <el-icon><User /></el-icon>
+              <template #title>個案管理</template>
+            </el-menu-item>
+            <el-menu-item v-if="authStore.hasPermission('masters_sites')" index="/masters/sites">
+              <el-icon><Location /></el-icon>
+              <template #title>單位管理</template>
+            </el-menu-item>
+            <el-menu-item v-if="authStore.hasPermission('masters_vehicles')" index="/masters/vehicles">
+              <el-icon><Van /></el-icon>
+              <template #title>車輛管理</template>
+            </el-menu-item>
+            <el-menu-item v-if="authStore.hasPermission('masters_drivers')" index="/masters/drivers">
+              <el-icon><Avatar /></el-icon>
+              <template #title>司機管理</template>
+            </el-menu-item>
+            <el-menu-item v-if="authStore.hasPermission('masters_caregivers')" index="/masters/caregivers">
+              <el-icon><UserFilled /></el-icon>
+              <template #title>照護人員管理</template>
+            </el-menu-item>
+          </el-sub-menu>
+
+          </el-menu-item-group>
+
+          <el-menu-item-group>
+            <template #title><span class="nav-group-label">系統</span></template>
           <el-menu-item v-if="authStore.hasPermission('audit_logs')" index="/audit">
             <el-icon><Notebook /></el-icon>
             <template #title>系統操作紀錄</template>
@@ -168,6 +183,7 @@
               <template #title>政府假日與工作日設定</template>
             </el-menu-item>
           </el-sub-menu>
+          </el-menu-item-group>
         </el-menu>
       </el-scrollbar>
 
@@ -291,8 +307,9 @@ const isMobileMenuOpen = ref(false)
 const userToggledCollapse = ref(false)
 const changePasswordDialogRef = ref<InstanceType<typeof ChangePasswordDialog>>()
 
-// 側邊欄展開寬度為固定值，取代原本依選單文字逐字估算寬度的作法
-const expandedAsideWidth = '220px'
+// 側邊欄展開寬度為固定值，取代原本依選單文字逐字估算寬度的作法；
+// 數值需跟 tokens.scss 的 --app-aside-width 同步，這裡是 JS 綁定 el-aside :width，CSS token 改了這裡也要一起改
+const expandedAsideWidth = '240px'
 
 const activeRoute = computed(() => {
   const path = route.path
@@ -305,7 +322,7 @@ const isNavigationOpen = computed(() => isMobile.value ? isMobileMenuOpen.value 
 function updateViewportMode() {
   isMobile.value = window.matchMedia('(max-width: 640px)').matches
   if (!isMobile.value) isMobileMenuOpen.value = false
-  // 900px 到 640px 之間側欄若不自動收合，220px 側欄會壓縮主內容區
+  // 900px 到 640px 之間側欄若不自動收合，240px 側欄會壓縮主內容區
   if (!userToggledCollapse.value) {
     isCollapse.value = window.matchMedia('(max-width: 1024px)').matches
   }
@@ -365,17 +382,25 @@ async function handleCommand(cmd: string) {
 
 .skip-link:focus-visible {
   transform: translateY(0);
-  outline: 3px solid var(--app-orange);
+  outline: 3px solid var(--app-primary);
   outline-offset: 2px;
 }
 
-.layout-container { height: 100vh; min-height: 0; background: var(--app-bg); overflow: hidden; }
+.layout-container {
+  height: calc(100vh - var(--app-shell-inset-y) * 2);
+  min-height: 0;
+  margin: var(--app-shell-inset-y) var(--app-shell-inset-x);
+  background: var(--app-surface);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-shell);
+  overflow: hidden;
+}
 
 .aside-menu {
-  background: #19324d;
-  border-right: 1px solid #294766;
-  height: 100vh;
-  min-height: 100vh;
+  background: var(--app-nav-bg);
+  border-right: 1px solid var(--app-nav-border);
+  height: 100%;
+  min-height: 0;
   transition: width 0.25s ease;
   overflow: hidden;
   display: flex;
@@ -389,13 +414,13 @@ async function handleCommand(cmd: string) {
     height: 60px;
     box-sizing: border-box;
     text-decoration: none;
-    border-bottom: 1px solid #244468;
-    background: #152b42;
+    border-bottom: 1px solid var(--app-nav-border);
+    background: var(--app-nav-bg);
     overflow: hidden;
     transition: background-color 0.2s ease;
 
     &:hover {
-      background: #1b3653;
+      background: var(--app-nav-hover-bg);
     }
 
     &.is-collapsed {
@@ -414,9 +439,34 @@ async function handleCommand(cmd: string) {
   }
 
   .el-menu-vertical {
-    background-color: #19324d !important;
+    /* Element Plus 的選單配色一律由這組變數驅動，template 不再傳色碼 prop */
+    --el-menu-bg-color: var(--app-nav-bg);
+    --el-menu-text-color: var(--app-nav-fg);
+    --el-menu-active-color: var(--app-nav-active-fg);
+    --el-menu-hover-bg-color: var(--app-nav-hover-bg);
+    background-color: var(--app-nav-bg) !important;
     border-right: none;
     padding: 6px 8px;
+
+    /* 導覽分組標題：淺色側欄靠字距與字重分段，不再加分隔線 */
+    :deep(.el-menu-item-group__title) {
+      padding: 14px 10px 6px;
+    }
+
+    .nav-group-label {
+      display: block;
+      font-size: var(--app-label-size);
+      font-weight: 700;
+      letter-spacing: var(--app-label-tracking);
+      text-transform: uppercase;
+      color: var(--app-nav-fg-muted);
+      white-space: nowrap;
+    }
+
+    /* 收合時側欄只剩圖示，分組標題會變成截斷的碎字，直接隱藏 */
+    &.el-menu--collapse :deep(.el-menu-item-group__title) {
+      display: none;
+    }
 
     :deep(.el-menu-item),
     :deep(.el-sub-menu__title) {
@@ -431,12 +481,12 @@ async function handleCommand(cmd: string) {
       line-height: 40px;
       font-size: 13px;
       font-weight: 500;
-      color: #d2deea;
+      color: var(--app-nav-fg);
       transition: transform 0.18s ease-out, background-color 0.18s ease-out, color 0.18s ease-out;
 
       &:hover {
-        background-color: #244d71 !important;
-        color: #ffffff !important;
+        background-color: var(--app-nav-hover-bg) !important;
+        color: var(--app-text-primary) !important;
         transform: translateX(2px);
       }
 
@@ -444,7 +494,7 @@ async function handleCommand(cmd: string) {
         flex: 0 0 auto;
         font-size: 17px;
         margin-right: 8px;
-        color: #9ab0c4;
+        color: var(--app-nav-fg-muted);
       }
     }
 
@@ -455,12 +505,12 @@ async function handleCommand(cmd: string) {
     }
 
     :deep(.el-menu-item.is-active) {
-      background: #2d6593 !important;
-      color: #ffffff !important;
+      background: var(--app-nav-active-bg) !important;
+      color: var(--app-nav-active-fg) !important;
       font-weight: 600;
 
       .el-icon {
-        color: #ffffff !important;
+        color: var(--app-nav-active-fg) !important;
       }
 
       &::before {
@@ -471,13 +521,13 @@ async function handleCommand(cmd: string) {
         bottom: 8px;
         width: 3px;
         border-radius: 0 4px 4px 0;
-        background-color: #79c7e8;
+        background-color: var(--app-primary);
         animation: nav-indicator-in 0.2s ease-out;
       }
     }
 
     :deep(.el-sub-menu .el-menu) {
-      background-color: #19324d !important;
+      background-color: var(--app-nav-bg) !important;
       padding: 4px 0 4px 8px;
       border-radius: 8px;
     }
@@ -497,7 +547,7 @@ async function handleCommand(cmd: string) {
   justify-content: space-between;
   align-items: center;
   padding: 0 22px;
-  box-shadow: var(--app-shadow-sm);
+  flex: 0 0 auto;
 
   .header-left {
     display: flex;
@@ -521,21 +571,31 @@ async function handleCommand(cmd: string) {
     align-items: center;
     gap: 14px;
 
+    /* 使用者資訊常態就是一個淡底膠囊，不是只有 hover 才浮現背景——
+       跟頂部列其他互動元件（切換側欄、通知）的「按了才有反饋」語彙不同，
+       這是身分識別區，常態可見的邊界能讓使用者一眼找到帳號入口 */
     .user-dropdown-link {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 9px;
       cursor: pointer;
       font-size: 13.5px;
-      font-weight: 500;
+      font-weight: 600;
       color: var(--app-text-primary);
-      padding: 4px 8px;
-      border-radius: 8px;
-      transition: background-color 0.15s ease;
+      padding: 5px 14px 5px 6px;
+      border-radius: var(--app-radius-full);
+      background-color: var(--app-status-neutral-bg);
+      border: 1px solid var(--app-border-light);
+      transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 
       &:hover {
-        background-color: var(--app-status-neutral-bg);
-        transform: translateY(-1px);
+        background-color: var(--app-primary-light);
+        border-color: #c3d9fc;
+        transform: scale(1.03);
+      }
+
+      &:active {
+        transform: scale(0.97);
       }
 
       .avatar-box {
@@ -544,18 +604,19 @@ async function handleCommand(cmd: string) {
         align-items: center;
 
         .user-avatar {
-          background-color: var(--app-orange);
+          background-color: var(--app-primary);
+          box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px var(--app-primary-light);
         }
 
         .avatar-online-dot {
           position: absolute;
           bottom: -1px;
           right: -1px;
-          width: 8px;
-          height: 8px;
+          width: 9px;
+          height: 9px;
           border-radius: 50%;
-          background-color: #16c889;
-          border: 1.5px solid #ffffff;
+          background-color: var(--app-status-success-fg);
+          border: 2px solid #ffffff;
         }
       }
 
@@ -568,7 +629,12 @@ async function handleCommand(cmd: string) {
 
       .dropdown-arrow {
         font-size: 12px;
-        color: var(--app-text-muted);
+        color: var(--app-text-secondary);
+        transition: transform 0.15s ease;
+      }
+
+      &:hover .dropdown-arrow {
+        transform: translateY(1px);
       }
     }
   }
@@ -577,9 +643,9 @@ async function handleCommand(cmd: string) {
 .layout-main {
   background-color: var(--app-bg);
   padding: 24px;
-  min-height: calc(100vh - var(--app-header-height));
+  min-height: 0;
   min-width: 0;
-  height: calc(100vh - var(--app-header-height));
+  height: calc(100% - var(--app-header-height));
   overflow: auto;
 }
 
@@ -597,6 +663,13 @@ async function handleCommand(cmd: string) {
 @media (max-width: 900px) {
   .layout-header { padding: 0 16px; }
   .layout-main { padding: 18px; }
+  /* 窄螢幕留白比可視面積值錢，應用殼改貼齊視窗 */
+  .layout-container {
+    height: 100vh;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
 }
 
 @media (max-width: 640px) {

@@ -763,31 +763,6 @@ export const mockUsers: UserDTO[] = [
     createdAt: '2026-01-01 08:00:00'
   },
   {
-    id: 'usr_dispatcher_1',
-    email: 'dispatcher@ltc.example.com',
-    displayName: '調度員 (李調度)',
-    role: 'dispatcher',
-    phone: '0922-333-444',
-    status: 'active',
-    customPermissions: null,
-    lastLoginAt: '2026-08-26 08:45:00',
-    createdAt: '2026-01-10 09:00:00'
-  },
-  {
-    id: 'usr_driver_1',
-    email: 'driver@ltc.example.com',
-    displayName: '司機 (張司機)',
-    role: 'driver',
-    phone: '0933-555-666',
-    status: 'active',
-    customPermissions: {
-      attendance_fuel: { view: true, edit: true },
-      vehicles_maintenance: { view: true, edit: true }
-    },
-    lastLoginAt: '2026-08-25 17:30:00',
-    createdAt: '2026-02-01 08:30:00'
-  },
-  {
     id: 'usr_viewer_1',
     email: 'viewer@ltc.example.com',
     displayName: '主管檢視者 (林督導)',
@@ -810,39 +785,6 @@ export const mockRoles: RoleDTO[] = [
     tagType: 'danger',
     isSystem: true,
     permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS.admin)),
-    createdAt: '2026-01-01 00:00:00',
-    updatedAt: '2026-01-01 00:00:00'
-  },
-  {
-    id: 'role_dispatcher',
-    key: 'dispatcher',
-    name: '調度員',
-    description: '負責日常派車、個案管理、搭乘月曆排程、異常處理、司機接送匯報與申報資料匯出。',
-    tagType: 'primary',
-    isSystem: true,
-    permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS.dispatcher)),
-    createdAt: '2026-01-01 00:00:00',
-    updatedAt: '2026-01-01 00:00:00'
-  },
-  {
-    id: 'role_driver',
-    key: 'driver',
-    name: '司機',
-    description: '負責每日出勤登錄、車輛維修紀錄填寫與個人接送趟次狀況檢視。',
-    tagType: 'success',
-    isSystem: true,
-    permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS.driver)),
-    createdAt: '2026-01-01 00:00:00',
-    updatedAt: '2026-01-01 00:00:00'
-  },
-  {
-    id: 'role_staff',
-    key: 'staff',
-    name: '行政人員',
-    description: '負責行政文書、主檔維護、搭乘資料校對及一般報表產出。',
-    tagType: 'primary',
-    isSystem: true,
-    permissions: JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS.staff)),
     createdAt: '2026-01-01 00:00:00',
     updatedAt: '2026-01-01 00:00:00'
   },

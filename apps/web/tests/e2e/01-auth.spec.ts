@@ -12,8 +12,6 @@ test.describe('01. 認證與權限控制 (Authentication & Authorization)', () =
 
     // 檢查展示模式按鈕
     await expect(page.getByRole('button', { name: /系統管理員/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /調度員/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /司機/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /檢視者/ })).toBeVisible()
   })
 

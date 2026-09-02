@@ -28,8 +28,8 @@
           @change="handleSearch"
         >
           <el-option label="全部狀態" value="" />
-          <el-option label="啟用中" value="active" />
-          <el-option label="已停用" value="inactive" />
+          <el-option label="啟用" value="active" />
+          <el-option label="停用" value="inactive" />
         </el-select>
 
         <el-button type="primary" @click="handleSearch">查詢</el-button>
@@ -97,7 +97,7 @@
 
           <el-table-column prop="name" label="地區名稱" min-width="150" align="center">
             <template #default="{ row }">
-              <span class="font-bold text-gray-800">{{ row.name }}</span>
+              <span class="font-bold text-nowrap">{{ row.name }}</span>
             </template>
           </el-table-column>
 
@@ -111,7 +111,7 @@
             <template #default="{ row }">
               <el-tooltip
                 v-if="authStore.can('staff')"
-                :content="row.status === 'active' ? '目前為啟用中，點選切換為停用' : '目前為已停用，點選切換為啟用'"
+                :content="row.status === 'active' ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
                 placement="top"
                 :show-after="300"
               >
@@ -122,7 +122,7 @@
                   @click="handleToggleStatus(row as any, row.status !== 'active')"
                 >
                   <span class="status-indicator-dot"></span>
-                  <span class="status-label-text">{{ row.status === 'active' ? '啟用中' : '已停用' }}</span>
+                  <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
                 </button>
               </el-tooltip>
               <div
@@ -131,7 +131,7 @@
                 :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
               >
                 <span class="status-indicator-dot"></span>
-                <span class="status-label-text">{{ row.status === 'active' ? '啟用中' : '已停用' }}</span>
+                <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
               </div>
             </template>
           </el-table-column>
@@ -192,13 +192,13 @@
             <el-radio-button value="active">
               <div class="radio-pill active-pill">
                 <span class="radio-dot"></span>
-                <span>啟用中</span>
+                <span>啟用</span>
               </div>
             </el-radio-button>
             <el-radio-button value="inactive">
               <div class="radio-pill inactive-pill">
                 <span class="radio-dot"></span>
-                <span>已停用</span>
+                <span>停用</span>
               </div>
             </el-radio-button>
           </el-radio-group>
@@ -432,7 +432,7 @@ async function handleToggleStatus(row: RegionDTO, newActive: boolean) {
   try {
     await updateRegion(row.id, { status: newStatus })
     row.status = newStatus
-    ElMessage.success(`已將「${row.name}」切換為 ${newActive ? '啟用中' : '已停用'}`)
+    ElMessage.success(`已將「${row.name}」切換為 ${newActive ? '啟用' : '停用'}`)
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
   }
@@ -501,13 +501,6 @@ onMounted(() => {
 <style scoped>
 .region-list-view {
   padding: 0;
-}
-.font-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-.font-bold {
-  font-weight: 600;
-  white-space: nowrap;
 }
 .form-tip {
   font-size: var(--app-font-xs);

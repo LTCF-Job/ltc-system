@@ -116,7 +116,7 @@
             <template #default="{ row }">
               <el-tooltip
                 v-if="authStore.can('staff')"
-                :content="row.active ? '目前為服役中，點選切換為已停用' : '目前為已停用，點選切換為服役中'"
+                :content="row.active ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
                 placement="top"
                 :show-after="300"
               >
@@ -127,7 +127,7 @@
                   @click="handleQuickToggleActive(row as any, !row.active)"
                 >
                   <span class="status-indicator-dot"></span>
-                  <span class="status-label-text">{{ row.active ? '服役中' : '已停用' }}</span>
+                  <span class="status-label-text">{{ row.active ? '啟用' : '停用' }}</span>
                 </button>
               </el-tooltip>
               <div
@@ -136,7 +136,7 @@
                 :class="row.active ? 'is-active' : 'is-inactive'"
               >
                 <span class="status-indicator-dot"></span>
-                <span class="status-label-text">{{ row.active ? '服役中' : '已停用' }}</span>
+                <span class="status-label-text">{{ row.active ? '啟用' : '停用' }}</span>
               </div>
             </template>
           </el-table-column>
@@ -442,7 +442,7 @@ async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
       active: newActive
     })
     row.active = newActive
-    ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '服役中' : '已停用'}`)
+    ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '啟用' : '停用'}`)
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '切換狀態失敗'))
   }
@@ -482,7 +482,7 @@ executeFetch()
 }
 
 .vehicle-empty-text {
-  color: var(--el-text-color-placeholder);
+  color: var(--app-text-muted);
   font-size: 13px;
 }
 
@@ -493,7 +493,7 @@ executeFetch()
 .driver-dialog-hint {
   margin-top: -4px;
   padding-left: 120px;
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: var(--app-font-xs);
   line-height: 1.6;
 }

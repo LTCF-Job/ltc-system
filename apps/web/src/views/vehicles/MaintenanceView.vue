@@ -395,14 +395,6 @@ onMounted(async () => {
   gap: 16px;
 }
 
-.font-bold {
-  font-weight: 600;
-}
-
-.text-muted {
-  color: var(--el-text-color-placeholder);
-}
-
 :deep(.vehicle-name-col .cell) {
   white-space: nowrap;
 }

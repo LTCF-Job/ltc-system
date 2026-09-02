@@ -307,8 +307,8 @@ onMounted(async () => {
   width: max-content;
 }
 
-.vehicle-name { color: var(--el-text-color-regular); white-space: nowrap; }
-.vehicle-separator { color: var(--el-text-color-placeholder); }
+.vehicle-name { color: var(--app-text-regular); white-space: nowrap; }
+.vehicle-separator { color: var(--app-text-muted); }
 
 :deep(.case-name-col .cell),
 :deep(.description-col .cell),
