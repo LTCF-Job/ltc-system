@@ -33,9 +33,9 @@
 
 - 先讀 `AGENTS.md`、相關 skills 與目前工作樹狀態。
 - 使用目前分支的原始碼作為現況證據，保留既有未提交修改。
-- 修改 application source code 前，先完成相關架構 skill 的邊界判斷；以最小功能切片實作，避免一次進行全專案搬遷。
-- 前端修改完成後，執行對應的 `npm run test:e2e:<feature>`（共 12 組功能模組），改動範圍不明確時跑 `npm run test:e2e`，確保未破壞既有功能。
-- 測試執行原則：只有在修改應用程式原始碼（application source code logic）時才執行測試（如前端 `npm run test:e2e:changed` 或後端 Go tests）；文件、指令、測試檔案、註解、設定檔等與程式碼無關的任務一律不跑測試。
+- 測試執行原則：
+  - 不主動執行 E2E 測試：嚴禁主動執行 E2E 測試（如 Playwright、`npm run test:e2e*`），只有在使用者明確指示或要求時才執行。平時前端驗證以 `npm run type-check`、`npm run build` 或單元測試為主。
+  - 只有在修改應用程式原始碼（application source code logic）時才執行對應的單元測試（如後端 Go tests）；文件、指令、測試檔案、註解、設定檔等與程式碼無關的任務一律不跑測試。
 - mock、demo、seed 與 production behavior 必須標示清楚的啟用條件。
 - 不自行 commit、push、rebase、merge 或重設使用者修改。
 - 回報驗證結果時區分 static inspection、automated test、build/type-check 與 runtime proof。

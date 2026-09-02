@@ -36,11 +36,10 @@
 ## Change boundaries
 
 - 先檢查 `git status`，不覆寫、刪除或重設未被要求處理的修改。
-- application source code logic 變更前，讀取相關架構 skill，並依目前專案的 workflow／註解規則執行。
-- 前端修改完成後，一律執行對應功能模組的 E2E 測試（改動範圍不明確時跑 `npm run test:e2e`），確保修改未破壞既有功能。
 - **測試執行原則**：
-  - 只有在修改應用程式原始碼（application source code logic）時，才執行對應的測試（如前端 `npm run test:e2e:changed` 或後端 `go test`）。
-  - 文件、指令、測試檔案（test code）、註解、設定檔、script、除錯、規劃等與原始碼業務邏輯無關的任務，一律不跑測試。
+  - **不主動執行 E2E 測試**：嚴禁主動執行 E2E 測試（如 Playwright、`npm run test:e2e*`），只有在使用者明確指示或要求時才執行。平時前端以 `npm run type-check`、`npm run build` 或單元測試進行驗證。
+  - **執行測試時機**：只有在修改應用程式原始碼（application source code logic）時，才執行對應的單元測試或相關測試（如後端 `go test`）；嚴禁無差別執行全量測試。
+  - **略過測試時機**：文件、指令、測試檔案（test code）、註解、設定檔、script、除錯、規劃等與原始碼業務邏輯無關的任務，一律不跑測試。
 - 任何 UI/UX 修改前，一律先讀取 `.agents/skills/ltc-dashboard-visual-language/SKILL.md`，並依其視覺、互動與資訊真實性規則執行。
 - 文件與 agent 規則修改應保持最小範圍；不因新增入口而複製完整 skill 內容。
 - 不自行 commit、push、rebase、merge 或執行破壞性 Git 操作。
