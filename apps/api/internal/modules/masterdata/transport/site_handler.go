@@ -47,7 +47,6 @@ func (h *SiteHandler) Create(c *gin.Context) {
 	}
 
 	site, err := h.svc.Create(c.Request.Context(), app.CreateSiteInput{
-		Code:     req.Code,
 		Name:     req.Name,
 		Address:  req.Address,
 		Region:   req.Region,
@@ -77,7 +76,6 @@ func (h *SiteHandler) Update(c *gin.Context) {
 	}
 
 	site, err := h.svc.Update(c.Request.Context(), id, app.UpdateSiteInput{
-		Code:     req.Code,
 		Name:     req.Name,
 		Address:  req.Address,
 		Region:   req.Region,

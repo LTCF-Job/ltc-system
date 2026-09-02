@@ -13,7 +13,6 @@ import (
 // siteRow 是 sites 資料表的一列，只在本套件內存在。
 type siteRow struct {
 	ID        uuid.UUID
-	Code      string
 	Name      string
 	Address   string
 	Region    string
@@ -26,7 +25,6 @@ type siteRow struct {
 func (r siteRow) toApp() app.Site {
 	return app.Site{
 		ID:        r.ID,
-		Code:      r.Code,
 		Name:      r.Name,
 		Address:   r.Address,
 		Region:    r.Region,
@@ -37,7 +35,7 @@ func (r siteRow) toApp() app.Site {
 	}
 }
 
-const siteColumns = `id, code, name, address, region, open_days, status, created_at, updated_at`
+const siteColumns = `id, name, address, region, open_days, status, created_at, updated_at`
 
 // SiteRepository 提供 sites 資料表之存取操作。
 type SiteRepository struct {
@@ -57,7 +55,7 @@ func (r *SiteRepository) List(ctx context.Context, region, q string, page, pageS
 		FROM sites
 		WHERE ($1 = '' OR region = $1)
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR address ILIKE '%' || $2 || '%')
-		ORDER BY code ASC
+		ORDER BY name ASC
 		LIMIT $3 OFFSET $4
 	`
 	rows, err := r.db.Query(ctx, query, region, q, pageSize, offset)
@@ -69,7 +67,7 @@ func (r *SiteRepository) List(ctx context.Context, region, q string, page, pageS
 	var sites []app.Site
 	for rows.Next() {
 		var s siteRow
-		if err := rows.Scan(&s.ID, &s.Code, &s.Name, &s.Address, &s.Region, &s.OpenDays, &s.Status, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.OpenDays, &s.Status, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, 0, err
 		}
 		sites = append(sites, s.toApp())
@@ -99,7 +97,7 @@ func (r *SiteRepository) GetByName(ctx context.Context, name string) (*app.Site,
 func (r *SiteRepository) getOne(ctx context.Context, query string, arg interface{}) (*app.Site, error) {
 	var s siteRow
 	err := r.db.QueryRow(ctx, query, arg).
-		Scan(&s.ID, &s.Code, &s.Name, &s.Address, &s.Region, &s.OpenDays, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+		Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.OpenDays, &s.Status, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -110,14 +108,14 @@ func (r *SiteRepository) getOne(ctx context.Context, query string, arg interface
 // Create 新增單位。
 func (r *SiteRepository) Create(ctx context.Context, s *app.Site) error {
 	query := `
-		INSERT INTO sites (id, code, name, address, region, open_days, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO sites (id, name, address, region, open_days, status)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING created_at, updated_at
 	`
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
 	}
-	return r.db.QueryRow(ctx, query, s.ID, s.Code, s.Name, s.Address, s.Region, s.OpenDays, s.Status).
+	return r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.OpenDays, s.Status).
 		Scan(&s.CreatedAt, &s.UpdatedAt)
 }
 

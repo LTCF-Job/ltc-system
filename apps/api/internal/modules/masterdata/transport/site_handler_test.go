@@ -58,7 +58,7 @@ func TestSiteHandler_Create_BindsDTOAndPersists(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	body := `{"code":"S01","name":"竹北站","address":"竹北市文興路一段1號","region":"hsinchu","status":"active"}`
+	body := `{"name":"竹北站","address":"竹北市文興路一段1號","region":"hsinchu","status":"active"}`
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/sites", strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
@@ -66,7 +66,6 @@ func TestSiteHandler_Create_BindsDTOAndPersists(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, w.Code)
 	require.NotNil(t, store.created, "Create must actually call the store, not just echo the request")
-	assert.Equal(t, "S01", store.created.Code)
 	assert.Equal(t, "竹北站", store.created.Name)
 	assert.Equal(t, "hsinchu", store.created.Region)
 }
@@ -79,7 +78,7 @@ func TestSiteHandler_Update_PersistsChange(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	body := `{"code":"S01","name":"竹北站(更新)","address":"竹北市文興路一段1號","region":"hsinchu","status":"active"}`
+	body := `{"name":"竹北站(更新)","address":"竹北市文興路一段1號","region":"hsinchu","status":"active"}`
 	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/sites/"+id.String(), strings.NewReader(body))
 	c.Params = gin.Params{{Key: "id", Value: id.String()}}
 
@@ -124,15 +123,14 @@ func TestSiteHandler_Delete_PropagatesStoreError(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-// TestSiteHandler_Create_ResponseShape 鎖定搬遷前後的 JSON 欄位契約：模組化不得
-// 改變任何既有回應欄位名稱。
+// TestSiteHandler_Create_ResponseShape 鎖定回應的 JSON 欄位契約。
 func TestSiteHandler_Create_ResponseShape(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h := newTestSiteHandler(&fakeSiteStore{})
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	body := `{"code":"S01","name":"竹北站","address":"文興路","region":"hsinchu","openDays":[1,2],"status":"active"}`
+	body := `{"name":"竹北站","address":"文興路","region":"hsinchu","openDays":[1,2],"status":"active"}`
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/sites", strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
@@ -143,9 +141,9 @@ func TestSiteHandler_Create_ResponseShape(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
 
-	for _, field := range []string{"id", "code", "name", "address", "region", "openDays", "status", "createdAt", "updatedAt"} {
+	for _, field := range []string{"id", "name", "address", "region", "openDays", "status", "createdAt", "updatedAt"} {
 		_, ok := envelope.Data[field]
 		assert.Truef(t, ok, "response must keep field %q", field)
 	}
-	assert.Len(t, envelope.Data, 9, "response must not gain or lose fields")
+	assert.Len(t, envelope.Data, 8, "response must not gain or lose fields")
 }

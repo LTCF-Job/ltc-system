@@ -12,7 +12,6 @@ import (
 // Site 代表一個服務單位。
 type Site struct {
 	ID        uuid.UUID
-	Code      string
 	Name      string
 	Address   string
 	Region    string

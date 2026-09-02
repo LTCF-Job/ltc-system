@@ -15,7 +15,7 @@
             :show-file-list="false"
             accept=".xlsx"
             class="drop-zone"
-            :disabled="running || contextLoading"
+            :disabled="dropDisabled"
             :on-change="(file: UploadFile) => onFileChange(file)"
           >
             <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
@@ -25,6 +25,23 @@
             <p class="drop-hint">或把 .xlsx 匯報檔拖曳到這一塊</p>
             <p class="drop-hint-sub">檔名建議包含車輛名稱（例如「竹南2車 (回覆).xlsx」）</p>
           </el-upload>
+
+          <el-alert
+            v-if="contextLoadFailed"
+            type="error"
+            show-icon
+            :closable="false"
+            title="車輛與匯報表資料載入失敗，請重新整理頁面再試"
+          />
+
+          <el-alert v-else-if="hasNoVehicles" type="warning" show-icon :closable="false" title="尚未建立任何車輛">
+            <template #default>
+              <p class="no-vehicles-hint">批次上傳需要先有車輛才能比對匯報表，請先新增車輛。</p>
+              <el-button type="warning" size="small" plain @click="router.push({ name: 'VehicleList' })">
+                前往車輛管理
+              </el-button>
+            </template>
+          </el-alert>
 
           <el-alert
             v-if="overlapRows.length"
@@ -225,6 +242,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
+import { useRouter } from 'vue-router'
 import {
   createDriverReportForm,
   commitImportDriverReport,
@@ -240,6 +258,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import { toColumnDecisionPayload, type ColumnDecisionMap } from './columnDecisions'
 import { LEG_SEQ_OPTIONS } from './legOptions'
 import type {
@@ -252,7 +271,12 @@ import type {
 
 type EditableColumn = DriverReportColumnDTO & { editCaseId?: string; editLegSeq?: number }
 
+const router = useRouter()
 const activeTab = ref<'upload' | 'pending'>('upload')
+
+function apiErrorCode(error: unknown): string | undefined {
+  return (error as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code
+}
 
 // ---- 批次上傳 ----
 
@@ -276,6 +300,7 @@ const MAX_CONCURRENT = 3
 
 const running = ref(false)
 const contextLoading = ref(true)
+const contextLoadFailed = ref(false)
 const rows = ref<BatchFileRow[]>([])
 const vehicles = ref<VehicleDTO[]>([])
 const forms = ref<DriverReportFormDTO[]>([])
@@ -289,10 +314,20 @@ let rowSeq = 0
 
 // 拖放區停用時要說明原因，否則使用者只看得到一塊按不動的區域
 const ctaLabel = computed(() => {
+  if (contextLoadFailed.value) return '車輛資料載入失敗'
   if (contextLoading.value) return '正在載入車輛資料…'
   if (running.value) return '正在匯入…'
+  if (vehicles.value.length === 0) return '尚未建立車輛'
   return '選擇 .xlsx 檔案'
 })
+const dropDisabled = computed(
+  () => running.value || contextLoading.value || contextLoadFailed.value || vehicles.value.length === 0
+)
+// 資料真的載入成功、只是車輛清單為空時，要跟「還在載入」「載入失敗」分開提示，
+// 否則使用者只會看到一塊選不出任何選項的下拉選單、不知道該去哪裡處理
+const hasNoVehicles = computed(
+  () => !contextLoading.value && !contextLoadFailed.value && vehicles.value.length === 0
+)
 
 const formByVehicle = computed(() => new Map(forms.value.map((f) => [f.vehicleId, f.id])))
 const importedByKey = computed(
@@ -548,7 +583,9 @@ async function runImport() {
   }
 }
 
-// 拖曳區在資料載完前停用，避免車輛清單還是空的時就跑自動比對而誤判成「待選車輛」
+// 拖曳區在資料載完前停用，避免車輛清單還是空的時就跑自動比對而誤判成「待選車輛」。
+// 分頁端點（vehicles）在 0 筆結果時後端回傳 data: null，這裡一律預設空陣列，
+// 避免後續 detectVehicle 等處的 .filter／.map 對 null 直接丟出未捕捉例外。
 async function loadUploadContext() {
   try {
     const [vehiclePage, formList, months] = await Promise.all([
@@ -556,11 +593,23 @@ async function loadUploadContext() {
       listDriverReportForms(),
       listDriverReportImportedMonths()
     ])
-    vehicles.value = vehiclePage.data
-    forms.value = formList
-    importedMonths.value = months
+    vehicles.value = vehiclePage.data ?? []
+    forms.value = formList ?? []
+    importedMonths.value = months ?? []
+  } catch (error) {
+    contextLoadFailed.value = true
+    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入車輛與匯報表資料失敗，請重新整理頁面再試'))
   } finally {
     contextLoading.value = false
+  }
+}
+
+async function loadCases() {
+  try {
+    const res = await listCases({ pageSize: 200 })
+    cases.value = res.data ?? []
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入個案清單失敗，請重新整理頁面再試'))
   }
 }
 
@@ -656,9 +705,9 @@ async function handleQuickCreateAndBind() {
   }
 }
 
-onMounted(async () => {
-  const [res] = await Promise.all([listCases({ pageSize: 200 }), loadUploadContext()])
-  cases.value = res.data
+onMounted(() => {
+  void loadCases()
+  void loadUploadContext()
 })
 </script>
 
@@ -766,6 +815,10 @@ onMounted(async () => {
 
 .overlap-alert {
   margin: 0;
+}
+
+.no-vehicles-hint {
+  margin: 0 0 var(--app-space-2);
 }
 
 .overlap-list {

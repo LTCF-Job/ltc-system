@@ -23,7 +23,6 @@ func (s *SiteService) List(ctx context.Context, region, q string, page, pageSize
 
 // CreateSiteInput 代表新增單位所需之輸入。
 type CreateSiteInput struct {
-	Code     string
 	Name     string
 	Address  string
 	Region   string
@@ -34,7 +33,6 @@ type CreateSiteInput struct {
 // Create 新增單位。
 func (s *SiteService) Create(ctx context.Context, in CreateSiteInput) (*Site, error) {
 	site := Site{
-		Code:     in.Code,
 		Name:     in.Name,
 		Address:  in.Address,
 		Region:   in.Region,
@@ -49,7 +47,6 @@ func (s *SiteService) Create(ctx context.Context, in CreateSiteInput) (*Site, er
 
 // UpdateSiteInput 代表更新單位所需之輸入。
 type UpdateSiteInput struct {
-	Code     string
 	Name     string
 	Address  string
 	Region   string
@@ -61,7 +58,6 @@ type UpdateSiteInput struct {
 func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInput) (*Site, error) {
 	site := Site{
 		ID:       id,
-		Code:     in.Code,
 		Name:     in.Name,
 		Address:  in.Address,
 		Region:   in.Region,

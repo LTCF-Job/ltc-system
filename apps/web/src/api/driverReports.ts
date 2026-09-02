@@ -13,13 +13,13 @@ import type {
 
 export async function listDriverReportForms(params?: { q?: string }): Promise<DriverReportFormDTO[]> {
   const res = await apiClient.get('/driver-reports', { params })
-  return (res as any).data ?? (res as any)
+  return (res as any)?.data ?? []
 }
 
 // listDriverReportImportedMonths 取回每份匯報表各月份已匯入的筆數，供批次上傳判斷重傳。
 export async function listDriverReportImportedMonths(): Promise<DriverReportImportedMonthDTO[]> {
   const res = await apiClient.get('/driver-reports/imported-months')
-  return (res as any).data ?? (res as any)
+  return (res as any)?.data ?? []
 }
 
 export async function createDriverReportForm(
@@ -77,7 +77,7 @@ export async function listDriverReportColumns(params?: {
   mappingStatus?: string
 }): Promise<DriverReportColumnDTO[]> {
   const res = await apiClient.get('/driver-reports/columns', { params })
-  return (res as any).data ?? (res as any)
+  return (res as any)?.data ?? []
 }
 
 export async function updateColumnMapping(

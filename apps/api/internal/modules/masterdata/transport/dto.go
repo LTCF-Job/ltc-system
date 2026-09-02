@@ -15,7 +15,6 @@ import (
 // SiteResponse 代表回傳給前端的單位資料。
 type SiteResponse struct {
 	ID        uuid.UUID `json:"id"`
-	Code      string    `json:"code"`
 	Name      string    `json:"name"`
 	Address   string    `json:"address"`
 	Region    string    `json:"region"`
@@ -28,7 +27,6 @@ type SiteResponse struct {
 func newSiteResponse(s app.Site) SiteResponse {
 	return SiteResponse{
 		ID:        s.ID,
-		Code:      s.Code,
 		Name:      s.Name,
 		Address:   s.Address,
 		Region:    s.Region,
@@ -52,7 +50,6 @@ func newSiteResponses(list []app.Site) []SiteResponse {
 
 // CreateSiteRequest 代表新增單位請求。既有 API 未對任何欄位強制必填，維持不變。
 type CreateSiteRequest struct {
-	Code     string  `json:"code"`
 	Name     string  `json:"name"`
 	Address  string  `json:"address"`
 	Region   string  `json:"region"`
@@ -62,7 +59,6 @@ type CreateSiteRequest struct {
 
 // UpdateSiteRequest 代表更新單位請求。
 type UpdateSiteRequest struct {
-	Code     string  `json:"code"`
 	Name     string  `json:"name"`
 	Address  string  `json:"address"`
 	Region   string  `json:"region"`
