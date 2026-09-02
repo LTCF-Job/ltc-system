@@ -576,6 +576,7 @@ const formData = reactive<CreateScheduleRequest>({
   unitPrice: 115,
   distanceKm: 5,
   serviceDurationMin: 10,
+  serviceCode: 'BD03',
   scheduleMode: 'monthly',
   legs: [
     { legSeq: 1, direction: 'outbound', departTime: '09:00', runNo: 1, vehicleId: '' },

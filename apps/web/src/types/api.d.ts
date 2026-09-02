@@ -247,7 +247,7 @@ export interface CreateScheduleRequest {
   unitPrice: number
   distanceKm: number
   serviceDurationMin: number
-  serviceCode?: string
+  serviceCode: string
   note?: string
   scheduleMode?: ScheduleMode
   weeklyConfigs?: WeekdayScheduleConfig[]
