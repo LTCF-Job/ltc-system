@@ -234,6 +234,10 @@
                   <el-icon><Lock /></el-icon>
                   修改個人密碼
                 </el-dropdown-item>
+                <el-dropdown-item v-if="authStore.user?.dataPlane === 'demo'" divided command="demo-reset">
+                  <el-icon><RefreshLeft /></el-icon>
+                  重置 Demo 資料
+                </el-dropdown-item>
                 <el-dropdown-item divided command="logout">
                   登出系統
                 </el-dropdown-item>
@@ -290,10 +294,14 @@ import {
   Folder,
   Postcard,
   Medal,
-  Message
+  Message,
+  RefreshLeft
 } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { useAuthStore } from '@/stores/auth'
+import { apiClient } from '@/api/client'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import AppLogo from '@/components/AppLogo.vue'
 
@@ -361,6 +369,33 @@ async function handleCommand(cmd: string) {
     router.push('/login')
   } else if (cmd === 'change-password') {
     changePasswordDialogRef.value?.open()
+  } else if (cmd === 'demo-reset') {
+    await handleDemoReset()
+  }
+}
+
+async function handleDemoReset() {
+  try {
+    await ElMessageBox.confirm(
+      '這會清空並重新載入 Demo 的所有資料，會影響所有正在使用 Demo 的人，且無法復原。確定要重置嗎？',
+      '重置 Demo 資料',
+      {
+        confirmButtonText: '確認送出',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+  } catch {
+    return
+  }
+
+  try {
+    await apiClient.post('/demo/reset')
+    ElMessage.success('Demo 資料已重置，頁面即將重新整理')
+    window.location.reload()
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '重置 Demo 資料失敗'))
   }
 }
 </script>

@@ -14,10 +14,14 @@ export const apiClient = axios.create({
   }
 })
 
-// 請求攔截器：附加 JWT Token 與 Mock 身分標頭；展示模式下確保附加 Mock 標籤
+// 請求攔截器：附加 JWT Token 與 Mock 身分標頭
 apiClient.interceptors.request.use(
   (config) => {
     const authStore = useAuthStore()
+    // Demo 帳號的請求一律轉送到獨立的 Demo API，避免與正式環境共用同一個後端
+    if (authStore.user?.dataPlane === 'demo' && import.meta.env.VITE_DEMO_API_BASE_URL) {
+      config.baseURL = import.meta.env.VITE_DEMO_API_BASE_URL
+    }
     if (authStore.token) {
       config.headers.Authorization = `Bearer ${authStore.token}`
     }

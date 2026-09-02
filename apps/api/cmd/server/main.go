@@ -20,6 +20,9 @@ import (
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
 	caseinfra "ltc-system/apps/api/internal/modules/casemgmt/infra"
 	casetransport "ltc-system/apps/api/internal/modules/casemgmt/transport"
+	demoapp "ltc-system/apps/api/internal/modules/demo/app"
+	demoinfra "ltc-system/apps/api/internal/modules/demo/infra"
+	demotransport "ltc-system/apps/api/internal/modules/demo/transport"
 	drapp "ltc-system/apps/api/internal/modules/driverreport/app"
 	drinfra "ltc-system/apps/api/internal/modules/driverreport/infra"
 	drtransport "ltc-system/apps/api/internal/modules/driverreport/transport"
@@ -164,6 +167,18 @@ func main() {
 	adminClient := identityinfra.NewSupabaseAdminClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, &http.Client{Timeout: cfg.SupabaseAdminTimeout})
 	roleSvc := identityapp.NewRoleService(roleRepo, adminClient, identityAudit, txRunner)
 	userSvc := identityapp.NewUserService(adminClient, roleRepo, identityAudit)
+	// Demo data-plane 專屬：重置端點與一般請求互斥的鎖只在 DATA_PLANE=demo 時建立，正式環境完全不掛載。
+	var demoGuard *demoapp.ConcurrencyGuard
+	var demoHandler *demotransport.ResetHandler
+	if cfg.DataPlane == "demo" {
+		demoResetRepo, err := demoinfra.NewResetRepository(pool, cfg)
+		if err != nil {
+			slog.Error("Failed to initialize demo reset repository", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		demoGuard = demoapp.NewConcurrencyGuard()
+		demoHandler = demotransport.NewResetHandler(demoapp.NewResetService(demoResetRepo, demoGuard))
+	}
 
 	// 初始化 Handlers
 	h := handlers{
@@ -188,9 +203,10 @@ func main() {
 		caregiver:    caregivertransport.NewCaregiverHandler(caregiverSvc),
 		role:         identitytransport.NewRoleHandler(roleSvc),
 		identity:     identitytransport.NewIdentityHandler(userSvc),
+		demo:         demoHandler,
 	}
 
-	r := newRouter(cfg, pool, h)
+	r := newRouter(cfg, pool, h, demoGuard)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	slog.Info("Starting LTC API Server", slog.String("addr", addr), slog.String("env", cfg.AppEnv))

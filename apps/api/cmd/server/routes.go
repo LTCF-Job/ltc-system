@@ -9,6 +9,8 @@ import (
 	caregivertransport "ltc-system/apps/api/internal/modules/caregiver/transport"
 	importtransport "ltc-system/apps/api/internal/modules/caseimport/transport"
 	casetransport "ltc-system/apps/api/internal/modules/casemgmt/transport"
+	demoapp "ltc-system/apps/api/internal/modules/demo/app"
+	demotransport "ltc-system/apps/api/internal/modules/demo/transport"
 	drtransport "ltc-system/apps/api/internal/modules/driverreport/transport"
 	holidaytransport "ltc-system/apps/api/internal/modules/holiday/transport"
 	identitytransport "ltc-system/apps/api/internal/modules/identity/transport"
@@ -50,10 +52,11 @@ type handlers struct {
 	caregiver    *caregivertransport.CaregiverHandler
 	role         *identitytransport.RoleHandler
 	identity     *identitytransport.IdentityHandler
+	demo         *demotransport.ResetHandler
 }
 
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
-func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
+func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *demoapp.ConcurrencyGuard) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logging.Middleware())
@@ -86,6 +89,15 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 	// 需要 JWT 認證之 API 群組
 	apiV1 := r.Group("/api/v1")
 	apiV1.Use(auth.Middleware(cfg))
+
+	// demo/reset 本身需要獨佔鎖，必須在 ConcurrencyGuardMiddleware 掛載前註冊，
+	// 否則這個請求會先卡在自己持有的共享鎖，永遠等不到獨佔鎖（自我死結）。
+	if h.demo != nil {
+		apiV1.POST("/demo/reset", auth.RequireRoles("viewer", "staff", "admin"), h.demo.Reset)
+	}
+	if cfg.DataPlane == "demo" && demoGuard != nil {
+		apiV1.Use(demotransport.ConcurrencyGuardMiddleware(demoGuard))
+	}
 	{
 		// 0. 區域主檔
 		apiV1.GET("/regions", auth.RequireRoles("viewer", "staff", "admin"), h.region.List)

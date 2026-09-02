@@ -8,6 +8,7 @@ import { reportsHandlers } from './reports'
 import { operationsHandlers } from './operations'
 import { holidaysHandlers } from './holidays'
 import { systemHandlers } from './system'
+import { supabaseAuthHandlers } from './supabaseAuth'
 
 export const handlers = [
   ...casesHandlers,
@@ -19,5 +20,6 @@ export const handlers = [
   ...reportsHandlers,
   ...operationsHandlers,
   ...holidaysHandlers,
-  ...systemHandlers
+  ...systemHandlers,
+  ...supabaseAuthHandlers
 ]

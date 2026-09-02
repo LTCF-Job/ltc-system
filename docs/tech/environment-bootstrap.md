@@ -61,6 +61,21 @@ DATABASE_URL="剛剛記下的資料庫連線字串" APP_ENV=local go run ./cmd/m
 
 不管用哪種做法，這一步都會順便建立一組系統預設的管理員登入帳號（帳號 `ltcf-admin@ltc.example.com`）。之後想換成自己的帳密，最簡單的做法是到 Supabase Dashboard 的「Authentication → Users」畫面另外新增一個使用者；只是要注意：新增使用者時 Supabase 通常會自動幫你把登入所需的兩份資料都建好，如果之後登入時卡在「帳號密碼錯誤」，先確認新帳號的認證方式（Providers）裡有勾選「Email」，這是最常見的漏設原因。
 
+### 如果還要建一個 Demo 環境（選用）
+
+只有需要另外開一個「給人試用、不影響正式資料」的 Demo 站台時才需要這一段；一般情況跳過即可。
+
+Demo 環境跟正式環境共用同一個 Supabase 專案，但用另一個獨立的資料庫存資料，彼此在 Postgres 權限層級互相隔離，不會互相讀寫到對方的資料：
+
+1. 到 Supabase Dashboard 的「SQL Editor」，先確認目前連線的是預設的 `postgres` 資料庫，執行 `CREATE DATABASE ltc_demo;`（`CREATE DATABASE` 不能在交易裡執行，也不能對自己所在的資料庫下達，所以要先連在 `postgres` 上才能建立 `ltc_demo`）。
+2. 建好之後，把 SQL Editor 的連線切到剛剛新建的 `ltc_demo` 資料庫，貼上 [`../../apps/api/ops/demo-db-roles.sql`](../../apps/api/ops/demo-db-roles.sql) 整份內容執行一次。這支腳本會建立 Demo 專用的資料庫連線角色（`ltc_demo_app`），只給它 `ltc_demo` 這個資料庫的讀寫權限，並且擋掉它連到正式 `postgres` 資料庫的權限，這就是「Demo 站台碰不到正式資料」的實際防線。腳本裡有 `CHANGE ME` 標記的地方是佔位密碼，執行完之後記得立刻在 Supabase Dashboard 或用 `ALTER ROLE` 換成一組真正的密碼。
+3. 比照步驟三、四另外建立一個 Cloud Run 服務（例如取名 `ltc-api-demo`），設定值大致跟正式服務一樣，但有三個地方要不一樣：
+   - `DATABASE_URL` 密鑰要用剛剛的 `ltc_demo_app` 角色、指向 `ltc_demo` 資料庫的連線字串，而不是正式服務用的那組。
+   - `DB_MAX_OPEN_CONNS`／`DB_MAX_IDLE_CONNS` 建議設得比正式服務小（例如各設 `2`／`1`）。這兩個資料庫是同一個 Supabase 專案共用同一份運算資源與連線數上限，Demo 站台把連線池開太大，會排擠到正式服務可用的連線額度。
+   - 環境變數要多加一筆 `DATA_PLANE=demo`（跟 `APP_ENV=production` 是兩個獨立的設定：`APP_ENV` 決定要不要放行開發用的檢查捷徑，`DATA_PLANE` 決定這個服務只認 Demo 帳號的登入憑證、不接受正式帳號的憑證，兩個都要設，缺一個效果都不對）。
+4. 比照「工作三：`ltc-api-migrate`」再建一個 Cloud Run 工作（例如取名 `ltc-api-demo-migrate`），指令與引數都跟正式的那個一樣（`/app/migrate` + `up`），只是密鑰要換成 `ltc_demo_app` 那組 `DATABASE_URL`。
+5. 建好以上兩個 Demo 用的 Cloud Run 資源後，`.github/workflows/deploy-api.yml` 會自動把它們接進部署流程：每次 push 都先建置一次 image，接著 migration／部署 Demo，跑一輪對 Demo 的真實 E2E 測試（[`apps/web/tests/e2e-live/`](../../apps/web/tests/e2e-live/)，直接打真正的 Supabase 與 Demo API，不透過 MSW），測試沒過就不會繼續 migration／部署正式環境。這一段需要在 GitHub 該環境（`develop` 或 `Production`）多設幾個變數與密鑰，見步驟六最後的「Demo／Live E2E 專用設定」。
+
 ## 步驟二：建立 Google Cloud 專案
 
 1. 到 [Google Cloud Console](https://console.cloud.google.com)，右上角選單新增一個專案，取個名字。
@@ -207,7 +222,34 @@ Console →「Cloud Run」→「服務」→ 點進 `ltc-api` →「編輯並部
      - `GCP_DEPLOY_SA` = 步驟二最後記下的服務帳戶信箱
 3. `Production` 這個 Environment 重複填一次一樣的內容（正式環境要不要另外用一個獨立的 Google Cloud 專案是你自己的選擇，這份教學不預設答案；不確定的話先填一樣的值也可以）。
 
-> 如果步驟五你是照建議做法（Vercel 內建 Git 整合），到這裡整個建置流程就完成了，可以直接跳到步驟七驗證。
+> 如果步驟五你是照建議做法（Vercel 內建 Git 整合），且沒有建立步驟一的「如果還要建一個 Demo 環境（選用）」，到這裡整個建置流程就完成了，可以直接跳到步驟七驗證。
+
+### Demo／Live E2E 專用設定（只有建了 Demo 環境才需要）
+
+沒有照步驟一建立 Demo 環境的話可以跳過這一段；`.github/workflows/deploy-api.yml` 在偵測不到這些設定時仍會嘗試部署 Demo 相關資源，缺這些變數與密鑰會讓「Live E2E against Demo」這個 job 直接失敗，擋住後面正式環境的部署，此時只能先補齊設定或暫時 revert 這次修改。同樣在 `develop` 與 `Production` 兩個 Environment 各自新增：
+
+- 「Environment variables」再加四筆：
+  - `DEMO_API_SERVICE` = `ltc-api-demo`（跟步驟一建立 Cloud Run 服務時取的名字一致）
+  - `DEMO_MIGRATION_JOB` = `ltc-api-demo-migrate`
+  - `LIVE_SUPABASE_URL` = 步驟一記下的 Project URL（跟 Vercel 環境變數 `VITE_SUPABASE_URL` 同一個值）
+  - `LIVE_SUPABASE_ANON_KEY` = 步驟一記下的 anon public 金鑰
+- 「Environment secrets」再加一筆：
+  - `LIVE_DEMO_TEST_PASSWORD` = Demo 測試帳號（`demo@ltc.example.com`）的登入密碼
+- 另外在 Supabase Dashboard 的「Authentication → Users」手動建立這個 Demo 測試帳號，並把它的 `app_metadata` 設成 `{"role":"admin","data_plane":"demo"}`（`app_metadata` 只能透過 Dashboard 或 Admin API 設定，使用者自己登入後改不動，這是 [`internal/platform/auth/auth.go`](../../apps/api/internal/platform/auth/auth.go) 判斷 data plane 的唯一依據）。
+
+以下為選用：想讓 Live E2E 順便驗證「正式帳號的憑證會被 Demo API 拒絕、Demo 帳號的憑證會被正式 API 拒絕」這組矩陣，再加：
+
+- 「Environment variables」：`LIVE_PROD_API_BASE_URL`（正式 API 的網址 + `/api/v1`）、`LIVE_PROD_TEST_EMAIL`（一個正式環境的真實帳號信箱）
+- 「Environment secrets」：`LIVE_PROD_TEST_PASSWORD`
+
+缺這組選用設定時，對應的測試會自動跳過，不影響其餘部署流程。
+
+想在部署正式環境前額外擋一層「正式與 Demo 資料庫 schema 是否一致」的檢查（[`apps/api/ops/compare-demo-prod-schema.sh`](../../apps/api/ops/compare-demo-prod-schema.sh)），再加兩筆「Environment secrets」：
+
+- `SCHEMA_CHECK_PROD_DATABASE_URL` = 正式資料庫的連線字串
+- `SCHEMA_CHECK_DEMO_DATABASE_URL` = `ltc_demo` 資料庫的連線字串
+
+沒設這兩個密鑰時這一步會直接失敗並擋住部署，等於強制要求設定；如果暫時不想要這層防護，需要自行修改 `deploy-api.yml` 拿掉這個步驟。
 
 ## 步驟七：實際測試一次
 
@@ -238,6 +280,7 @@ git push origin develop
 - [ ] Vercel 的 Production／Preview（正式／測試）環境變數都各自設過一次 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY`／`VITE_API_BASE_URL`（不會互相沿用）
 - [ ] GitHub `develop`／`Production` 兩個 Environment 名稱一字不差，且各自有五個一般設定與兩個機密設定
 - [ ] 上傳一次空白紀錄到 `develop` 分支，能在 Actions 分頁看到 `Deploy API to Cloud Run` 成功、Vercel Deployments 頁面看到新的部署
+- [ ] 有建立 Demo 環境的話，`develop`／`Production` 兩個 Environment 都補齊「Demo／Live E2E 專用設定」列出的變數與密鑰，否則部署會卡在 `Live E2E against Demo` 這個 job
 
 ---
 

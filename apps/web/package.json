@@ -21,7 +21,8 @@
     "test:e2e:operations": "playwright test tests/e2e/09-operations.spec.ts",
     "test:e2e:settings": "playwright test tests/e2e/10-settings-and-audit.spec.ts",
     "test:e2e:exports": "playwright test tests/e2e/11-exports.spec.ts",
-    "test:e2e:responsive": "playwright test tests/e2e/12-responsive-layout.spec.ts"
+    "test:e2e:responsive": "playwright test tests/e2e/12-responsive-layout.spec.ts",
+    "test:e2e:live": "playwright test --config=playwright.config.live.ts"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

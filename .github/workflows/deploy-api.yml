@@ -26,6 +26,8 @@ env:
   ARTIFACT_REPOSITORY: ${{ vars.ARTIFACT_REPOSITORY }}
   API_SERVICE: ${{ vars.API_SERVICE || 'ltc-api' }}
   MIGRATION_JOB: ${{ vars.MIGRATION_JOB || 'ltc-api-migrate' }}
+  DEMO_API_SERVICE: ${{ vars.DEMO_API_SERVICE || 'ltc-api-demo' }}
+  DEMO_MIGRATION_JOB: ${{ vars.DEMO_MIGRATION_JOB || 'ltc-api-demo-migrate' }}
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -56,8 +58,8 @@ jobs:
           go build ./cmd/server
           go build ./cmd/migrate
 
-  deploy:
-    name: Migrate and deploy
+  build-image:
+    name: Build image once
     needs: test
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'Production' || 'develop' }}
@@ -91,6 +93,114 @@ jobs:
           STATUS=$(gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format="value(status)")
           echo "Build $BUILD_ID finished with status: $STATUS"
           [ "$STATUS" = "SUCCESS" ]
+
+  deploy-demo:
+    name: Migrate and deploy Demo
+    needs: build-image
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'Production' || 'develop' }}
+    outputs:
+      demo_api_url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Update Demo migration job image
+        run: |
+          gcloud run jobs update "$DEMO_MIGRATION_JOB" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --image "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/api:${IMAGE_TAG}"
+
+      - name: Run Demo database migrations
+        run: |
+          gcloud run jobs execute "$DEMO_MIGRATION_JOB" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --wait
+
+      - name: Deploy Demo API service
+        id: deploy
+        run: |
+          gcloud run deploy "$DEMO_API_SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --image "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/api:${IMAGE_TAG}" \
+            --platform managed
+          URL=$(gcloud run services describe "$DEMO_API_SERVICE" \
+            --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format="value(status.url)")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+  e2e-demo:
+    name: Live E2E against Demo
+    needs: deploy-demo
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'Production' || 'develop' }}
+    env:
+      LIVE_SUPABASE_URL: ${{ vars.LIVE_SUPABASE_URL }}
+      LIVE_SUPABASE_ANON_KEY: ${{ vars.LIVE_SUPABASE_ANON_KEY }}
+      LIVE_DEMO_API_BASE_URL: ${{ needs.deploy-demo.outputs.demo_api_url }}/api/v1
+      LIVE_DEMO_TEST_EMAIL: ${{ vars.LIVE_DEMO_TEST_EMAIL }}
+      LIVE_DEMO_TEST_PASSWORD: ${{ secrets.LIVE_DEMO_TEST_PASSWORD }}
+      LIVE_PROD_API_BASE_URL: ${{ vars.LIVE_PROD_API_BASE_URL }}
+      LIVE_PROD_TEST_EMAIL: ${{ vars.LIVE_PROD_TEST_EMAIL }}
+      LIVE_PROD_TEST_PASSWORD: ${{ secrets.LIVE_PROD_TEST_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run live Demo E2E
+        working-directory: apps/web
+        run: npm run test:e2e:live
+
+  deploy-prod:
+    name: Migrate and deploy Production
+    needs: e2e-demo
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'Production' || 'develop' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Compare Demo/Production schema before touching Production
+        env:
+          DATABASE_URL: ${{ secrets.SCHEMA_CHECK_PROD_DATABASE_URL }}
+          DEMO_DATABASE_URL: ${{ secrets.SCHEMA_CHECK_DEMO_DATABASE_URL }}
+        run: bash apps/api/ops/compare-demo-prod-schema.sh
 
       - name: Update migration job image
         run: |

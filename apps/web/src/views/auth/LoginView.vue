@@ -84,7 +84,7 @@ import { ElMessage, type FormInstance } from 'element-plus'
 import AppLogo from '@/components/AppLogo.vue'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
-import { isDemoCredentials, enterDemoMode, exitDemoModeIfActive, isMockRuntimeEnabled } from '@/lib/demoMode'
+import { isDemoCredentials, exitDemoModeIfActive, isMockRuntimeEnabled } from '@/lib/demoMode'
 import { ROLE_LABELS, type UserRole } from '@/types/domain'
 
 const router = useRouter()
@@ -110,32 +110,19 @@ async function handleLogin() {
   await formRef.value.validate(async (valid) => {
     if (!valid) return
 
-    // 帳號密碼皆為 demo：略過真實 Supabase 登入，直接進展示模式
-    if (isDemoCredentials(form.email, form.password)) {
-      loading.value = true
-      try {
-        await enterDemoMode()
-        authStore.setSession('mock_jwt_demo', {
-          id: 'usr_demo',
-          email: 'demo',
-          displayName: '展示帳號',
-          role: 'admin'
-        })
-        ElMessage.success('已進入展示模式')
-        router.push((route.query.redirect as string) || '/')
-      } finally {
-        loading.value = false
-      }
-      return
-    }
-
     if (!supabase) {
       ElMessage.error('帳號密碼錯誤或無此使用者')
       return
     }
     loading.value = true
     try {
-      const authEmail = form.email === 'ltcf-admin' ? 'ltcf-admin@ltc.example.com' : form.email
+      // "demo" 帳號代稱固定對應到 Supabase 上的 Demo 測試帳號，密碼仍走真實驗證，不再略過 Supabase
+      const usesDemoAlias = isDemoCredentials(form.email, form.password)
+      const authEmail = usesDemoAlias
+        ? 'demo@ltc.example.com'
+        : form.email === 'ltcf-admin'
+          ? 'ltcf-admin@ltc.example.com'
+          : form.email
       const { data, error } = await supabase.auth.signInWithPassword({
         email: authEmail,
         password: form.password
@@ -145,12 +132,14 @@ async function handleLogin() {
         return
       }
 
-      const role = (data.user.user_metadata?.role ?? data.user.app_metadata?.role ?? 'viewer') as UserRole
+      const role = (data.user.app_metadata?.role ?? data.user.user_metadata?.role ?? 'viewer') as UserRole
+      const dataPlane = (data.user.app_metadata?.data_plane ?? 'production') as 'production' | 'demo'
       authStore.setSession(data.session.access_token, {
         id: data.user.id,
         email: data.user.email || form.email,
         displayName: data.user.user_metadata?.display_name || data.user.email || form.email,
-        role
+        role,
+        dataPlane
       })
       // 確保不殘留前一次展示模式的攔截
       await exitDemoModeIfActive()

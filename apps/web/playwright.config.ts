@@ -25,7 +25,10 @@ export default defineConfig({
     timeout: 60000,
     env: {
       VITE_ENABLE_MSW: 'true',
-      VITE_E2E: 'true'
+      VITE_E2E: 'true',
+      // 供 src/mocks/handlers/supabaseAuth.ts 攔截的假 Supabase 專案設定
+      VITE_SUPABASE_URL: 'http://mock.supabase.local',
+      VITE_SUPABASE_ANON_KEY: 'mock-anon-key'
     }
   }
 })

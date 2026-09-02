@@ -36,12 +36,6 @@ async function ensureWorkerStopped() {
   workerStarted = false
 }
 
-// 啟用展示模式並開啟 Mock 攔截
-export async function enterDemoMode() {
-  await ensureWorkerStarted()
-  localStorage.setItem(DEMO_MODE_KEY, 'true')
-}
-
 // 登入真實帳號時清理展示模式殘留狀態
 export async function exitDemoModeIfActive() {
   await ensureWorkerStopped()
