@@ -555,11 +555,20 @@ select {
 }
 
 @media (max-width: 640px) {
+  // Element Plus 的 .el-form-item 本身以 flex-direction: row 排列 label 與 content，
+  // 舊寫法只解除 float 對兩者無效；窄螢幕須改為直向堆疊，label 才會換到獨立一行
+  .el-form--label-left .el-form-item,
+  .el-form--label-right .el-form-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .el-form--label-left .el-form-item__label,
   .el-form--label-right .el-form-item__label {
     float: none;
     display: block;
     width: auto !important;
+    justify-content: flex-start;
     text-align: left;
     line-height: 1.5;
     padding: 0 0 6px;
@@ -848,14 +857,16 @@ select {
   box-shadow: var(--app-shadow-shell);
 
   .el-dialog__header {
-    padding: 20px 24px 16px;
+    padding: 20px 48px 16px 24px;
     margin-right: 0;
     border-bottom: 1px solid var(--app-border-light);
   }
 
   .el-dialog__title {
+    display: block;
     font-size: var(--app-font-lg);
     font-weight: 700;
+    overflow-wrap: anywhere;
   }
 
   .el-dialog__body {

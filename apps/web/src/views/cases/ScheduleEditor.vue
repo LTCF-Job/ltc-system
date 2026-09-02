@@ -1212,7 +1212,7 @@ async function handleSave() {
 
 .table-clip-container {
   border-radius: 6px;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .date-cell-label {

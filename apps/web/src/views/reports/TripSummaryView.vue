@@ -286,12 +286,14 @@ onMounted(() => {
     display: flex;
     justify-content: flex-start;
     align-items: center;
-    gap: 24px;
+    flex-wrap: wrap;
+    gap: 8px 24px;
 
     .veh-title {
       display: flex;
       align-items: center;
-      gap: 10px;
+      flex-wrap: wrap;
+      gap: 4px 10px;
       font-size: 16px;
       font-weight: bold;
       color: var(--app-text-primary);
