@@ -64,6 +64,7 @@ func (r *RideRepository) SaveFormSubmission(
 	source string,
 	payload map[string]interface{},
 	issueText string,
+	anomalyFlags []string,
 ) (uuid.UUID, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -73,15 +74,15 @@ func (r *RideRepository) SaveFormSubmission(
 	submissionID := uuid.New()
 	query := `
 		INSERT INTO form_submissions (
-			id, form_id, service_date, submitted_at, driver_name_raw, driver_id, source, payload, issue_text
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			id, form_id, service_date, submitted_at, driver_name_raw, driver_id, source, payload, issue_text, anomaly_flags
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (form_id, service_date, submitted_at) DO UPDATE
-		SET payload = EXCLUDED.payload, issue_text = EXCLUDED.issue_text
+		SET payload = EXCLUDED.payload, issue_text = EXCLUDED.issue_text, anomaly_flags = EXCLUDED.anomaly_flags
 		RETURNING id
 	`
 	db := pgxdb.FromContext(ctx, r.db)
 	err = db.QueryRow(ctx, query,
-		submissionID, formID, serviceDate, submittedAt, driverNameRaw, driverID, source, payloadBytes, issueText,
+		submissionID, formID, serviceDate, submittedAt, driverNameRaw, driverID, source, payloadBytes, issueText, anomalyFlags,
 	).Scan(&submissionID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to save form submission: %w", err)
@@ -310,4 +311,51 @@ func (r *RideRepository) DeleteDerivedRideRecord(ctx context.Context, caseID uui
 	db := pgxdb.FromContext(ctx, r.db)
 	_, err := db.Exec(ctx, query, caseID, serviceDate, legSeq)
 	return err
+}
+
+// GetRideRecordByID 依 ID 查詢單筆搭乘紀錄，查無資料回傳 nil, nil。
+func (r *RideRepository) GetRideRecordByID(ctx context.Context, id uuid.UUID) (*app.RideRecord, error) {
+	query := `
+		SELECT id, case_id, service_date, leg_seq, merged_status, effective_status,
+		       vehicle_id, driver_id, has_conflict, conflict_resolved_at, conflict_resolved_by, conflict_resolution_note,
+		       to_char(depart_time_override, 'HH24:MI'), duration_min_override, not_claimed_aa09,
+		       corrected_by, corrected_at, correction_reason, created_at, updated_at
+		FROM ride_records
+		WHERE id = $1
+	`
+	var rec app.RideRecord
+	db := pgxdb.FromContext(ctx, r.db)
+	err := db.QueryRow(ctx, query, id).Scan(
+		&rec.ID, &rec.CaseID, &rec.ServiceDate, &rec.LegSeq, &rec.MergedStatus, &rec.EffectiveStatus,
+		&rec.VehicleID, &rec.DriverID, &rec.HasConflict, &rec.ConflictResolvedAt, &rec.ConflictResolvedBy, &rec.ConflictResolutionNote,
+		&rec.DepartTimeOverride, &rec.DurationMinOverride, &rec.NotClaimedAA09,
+		&rec.CorrectedBy, &rec.CorrectedAt, &rec.CorrectionReason, &rec.CreatedAt, &rec.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &rec, nil
+}
+
+// ResolveConflict 裁決混車衝突；回傳 false 代表該筆已被他人裁決過，不會覆寫既有裁決。
+func (r *RideRepository) ResolveConflict(ctx context.Context, rideID, vehicleID uuid.UUID, driverID *uuid.UUID, note *string, operatorID uuid.UUID) (bool, error) {
+	query := `
+		UPDATE ride_records
+		SET vehicle_id = $2,
+		    driver_id = $3,
+		    conflict_resolution_note = $4,
+		    conflict_resolved_at = now(),
+		    conflict_resolved_by = $5,
+		    updated_at = now()
+		WHERE id = $1 AND has_conflict = true AND conflict_resolved_at IS NULL
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	tag, err := db.Exec(ctx, query, rideID, vehicleID, driverID, note, operatorID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }

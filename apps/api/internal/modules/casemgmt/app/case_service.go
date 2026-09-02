@@ -18,6 +18,7 @@ var (
 	ErrCaseRegionUnset    = errors.New("個案尚未設定所屬區域，無法建立排班")
 	ErrInvalidTripPattern = errors.New("trip pattern must match schedule legs count")
 	ErrLegTimesNotOrdered = errors.New("schedule leg departure times must be strictly increasing")
+	ErrCaseNotFound       = errors.New("case not found")
 )
 
 // CaseService 封裝個案、單位、車輛、司機與排班之業務邏輯。
@@ -222,6 +223,45 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 		return nil, err
 	}
 	return entity, nil
+}
+
+// Delete 軟刪除個案並收斂其生效中排班。
+func (s *CaseService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRole, ip, ua string) error {
+	before, err := s.caseRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if before == nil {
+		return ErrCaseNotFound
+	}
+
+	ok, err := s.caseRepo.SoftDelete(ctx, id, actorID)
+	if err != nil {
+		return fmt.Errorf("failed to soft delete case: %w", err)
+	}
+	if !ok {
+		return ErrCaseNotFound
+	}
+
+	if err := s.caseRepo.CloseOpenSchedules(ctx, id); err != nil {
+		return fmt.Errorf("failed to close open schedules: %w", err)
+	}
+
+	if s.auditRepo != nil {
+		entityIDStr := id.String()
+		_ = s.auditRepo.Write(ctx, AuditEntry{
+			ActorID:    &actorID,
+			ActorRole:  &actorRole,
+			Action:     "delete",
+			EntityType: "cases",
+			EntityID:   &entityIDStr,
+			BeforeData: before,
+			IPAddress:  &ip,
+			UserAgent:  &ua,
+		})
+	}
+
+	return nil
 }
 
 // UpdateCaseTransportPreference 更新個案的交通偏好（所屬單位與去回程車輛），回傳更新後的個案主檔。

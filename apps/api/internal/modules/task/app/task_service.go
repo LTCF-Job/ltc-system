@@ -57,12 +57,8 @@ func NewTaskService(
 	}
 }
 
-// CheckMissingReports 比對特定日期應搭乘日曆與實際搭乘紀錄，偵測未回報趟次並觸發告警通知。
-func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.Time, region string) ([]MissingRideItem, error) {
-	year := targetDate.Year()
-	month := int(targetDate.Month())
-	dateStr := targetDate.Format("2006-01-02")
-
+// listMissingReports 是比對邏輯的純查詢版本：onlyDate 給定時只回傳該日，否則回傳整月。
+func (s *TaskService) listMissingReports(ctx context.Context, year, month int, region string, onlyDate *time.Time) ([]MissingRideItem, error) {
 	holidayMap, err := s.holidayRepo.GetHolidayMap(ctx, year, month, region)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch holidays: %w", err)
@@ -71,6 +67,11 @@ func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.T
 	schedules, err := s.caseRepo.GetActiveSchedulesForMonth(ctx, year, month, region)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch monthly schedules: %w", err)
+	}
+
+	var onlyDateStr string
+	if onlyDate != nil {
+		onlyDateStr = onlyDate.Format("2006-01-02")
 	}
 
 	var expectedList []MissingRideItem
@@ -87,53 +88,71 @@ func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.T
 		}
 
 		calInput := calendar.CaseScheduleCalendarInput{
-			CaseID:         sch.CaseID,
-			ClaimEndDate:   sch.ClaimEndDate,
-			EffectiveFrom:  sch.EffectiveFrom,
-			EffectiveTo:    sch.EffectiveTo,
-			Weekdays:       sch.Weekdays,
-			SiteOpenDays:   sch.SiteOpenDays,
-			Holidays:       holidayMap,
-			Legs:           legs,
+			CaseID:        sch.CaseID,
+			ClaimEndDate:  sch.ClaimEndDate,
+			EffectiveFrom: sch.EffectiveFrom,
+			EffectiveTo:   sch.EffectiveTo,
+			Weekdays:      sch.Weekdays,
+			SiteOpenDays:  sch.SiteOpenDays,
+			Holidays:      holidayMap,
+			Legs:          legs,
 		}
 
 		expectedRides := calendar.CalculateExpectedRides(year, month, calInput)
 		for _, er := range expectedRides {
-			if er.ServiceDate.Format("2006-01-02") == dateStr {
-				expectedList = append(expectedList, MissingRideItem{
-					CaseID:      sch.CaseID,
-					CaseCode:    sch.CaseCode,
-					CaseName:    sch.CaseName,
-					Region:      sch.Region,
-					ServiceDate: dateStr,
-					LegSeq:      er.LegSeq,
-					Direction:   er.Direction,
-					DepartTime:  er.DepartTime,
-					VehicleID:   legVehicleMap[er.LegSeq],
-				})
+			dateStr := er.ServiceDate.Format("2006-01-02")
+			if onlyDateStr != "" && dateStr != onlyDateStr {
+				continue
 			}
+			expectedList = append(expectedList, MissingRideItem{
+				CaseID:      sch.CaseID,
+				CaseCode:    sch.CaseCode,
+				CaseName:    sch.CaseName,
+				Region:      sch.Region,
+				ServiceDate: dateStr,
+				LegSeq:      er.LegSeq,
+				Direction:   er.Direction,
+				DepartTime:  er.DepartTime,
+				VehicleID:   legVehicleMap[er.LegSeq],
+			})
 		}
 	}
 
-	reportedSlots, err := s.taskRepo.GetReportedRideSlots(ctx, targetDate)
+	firstDay := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	lastDay := firstDay.AddDate(0, 1, -1)
+	reportedSlots, err := s.taskRepo.GetReportedRideSlotsInRange(ctx, firstDay, lastDay)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query reported rides: %w", err)
 	}
 
 	type key struct {
 		caseID uuid.UUID
+		date   string
 		legSeq int16
 	}
 	reportedSet := make(map[key]bool)
 	for _, slot := range reportedSlots {
-		reportedSet[key{caseID: slot.CaseID, legSeq: slot.LegSeq}] = true
+		reportedSet[key{caseID: slot.CaseID, date: slot.ServiceDate.Format("2006-01-02"), legSeq: slot.LegSeq}] = true
 	}
 
 	var missingList []MissingRideItem
 	for _, item := range expectedList {
-		if !reportedSet[key{caseID: item.CaseID, legSeq: item.LegSeq}] {
+		if !reportedSet[key{caseID: item.CaseID, date: item.ServiceDate, legSeq: item.LegSeq}] {
 			missingList = append(missingList, item)
 		}
+	}
+	return missingList, nil
+}
+
+// CheckMissingReports 比對特定日期應搭乘日曆與實際搭乘紀錄，偵測未回報趟次並觸發告警通知。
+func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.Time, region string) ([]MissingRideItem, error) {
+	year := targetDate.Year()
+	month := int(targetDate.Month())
+	dateStr := targetDate.Format("2006-01-02")
+
+	missingList, err := s.listMissingReports(ctx, year, month, region, &targetDate)
+	if err != nil {
+		return nil, err
 	}
 
 	// 存在未回報趟次時主動發送通報
@@ -145,6 +164,11 @@ func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.T
 	}
 
 	return missingList, nil
+}
+
+// ListMissingReportsForMonth 回傳整月未回報趟次，不觸發告警通知（供「異常集中處理」頁面查詢用）。
+func (s *TaskService) ListMissingReportsForMonth(ctx context.Context, year, month int, region string) ([]MissingRideItem, error) {
+	return s.listMissingReports(ctx, year, month, region, nil)
 }
 
 // MonthEndReminder 執行每月 26 日申報提醒檢查與發信通知。

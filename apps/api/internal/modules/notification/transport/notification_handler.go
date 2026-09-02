@@ -92,6 +92,75 @@ func (h *NotificationHandler) UpdateRecipient(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, item, nil)
 }
 
+// batchCreateRecipientsRequest 定義批次新增收件人請求結構。
+type batchCreateRecipientsRequest struct {
+	Recipients []struct {
+		Topic       string  `json:"topic" binding:"required"`
+		Email       string  `json:"email" binding:"required,email"`
+		DisplayName *string `json:"displayName"`
+	} `json:"recipients" binding:"required,min=1,dive"`
+}
+
+// BatchCreateRecipients 批次新增通知收件人。
+func (h *NotificationHandler) BatchCreateRecipients(c *gin.Context) {
+	var req batchCreateRecipientsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	items := make([]app.BatchRecipientInput, 0, len(req.Recipients))
+	for _, r := range req.Recipients {
+		items = append(items, app.BatchRecipientInput{Topic: r.Topic, Email: r.Email, DisplayName: r.DisplayName})
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+
+	created, err := h.svc.BatchCreateRecipients(c.Request.Context(), items, actorID, actorRole)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	httpx.RespondSuccess(c, http.StatusCreated, created, nil)
+}
+
+// batchDeleteRecipientsRequest 定義批次刪除收件人請求結構。
+type batchDeleteRecipientsRequest struct {
+	IDs []string `json:"ids" binding:"required,min=1"`
+}
+
+// BatchDeleteRecipients 批次刪除通知收件人。
+func (h *NotificationHandler) BatchDeleteRecipients(c *gin.Context) {
+	var req batchDeleteRecipientsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	ids := make([]int64, 0, len(req.IDs))
+	for _, s := range req.IDs {
+		id, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的收件人 ID", nil)
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+
+	count, err := h.svc.BatchDeleteRecipients(c.Request.Context(), ids, actorID, actorRole)
+	if err != nil {
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "批次刪除收件人失敗", nil)
+		return
+	}
+
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"count": count}, nil)
+}
+
 // DeleteRecipient 刪除通知收件人。
 func (h *NotificationHandler) DeleteRecipient(c *gin.Context) {
 	idStr := c.Param("id")

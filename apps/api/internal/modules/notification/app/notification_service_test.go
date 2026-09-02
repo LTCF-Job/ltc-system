@@ -4,7 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // MockEmailSender 供測試之 mock 寄信元件。
@@ -50,4 +52,110 @@ func (emptyStore) DeleteRecipient(context.Context, int64) error { return nil }
 func (emptyStore) InsertLog(context.Context, *Log) error        { return nil }
 func (emptyStore) ListLogs(context.Context, string, int, int) ([]Log, int64, error) {
 	return nil, 0, nil
+}
+func (emptyStore) BatchCreateRecipients(context.Context, []Recipient) ([]Recipient, error) {
+	return nil, nil
+}
+func (emptyStore) BatchDeleteRecipients(context.Context, []int64) (int64, error) { return 0, nil }
+
+// fakeRecipientStore 記錄批次寫入呼叫，供斷言白名單守門與 audit rollback 語意。
+type fakeRecipientStore struct {
+	emptyStore
+	batchCreateCalled bool
+	created           []Recipient
+	createErr         error
+	batchDeleteCalled bool
+	deleteCount       int64
+	deleteErr         error
+	listRecipients    []Recipient
+}
+
+func (f *fakeRecipientStore) ListRecipients(context.Context, string, bool) ([]Recipient, error) {
+	return f.listRecipients, nil
+}
+
+func (f *fakeRecipientStore) BatchCreateRecipients(_ context.Context, items []Recipient) ([]Recipient, error) {
+	f.batchCreateCalled = true
+	if f.createErr != nil {
+		return nil, f.createErr
+	}
+	f.created = items
+	return items, nil
+}
+
+func (f *fakeRecipientStore) BatchDeleteRecipients(_ context.Context, ids []int64) (int64, error) {
+	f.batchDeleteCalled = true
+	if f.deleteErr != nil {
+		return 0, f.deleteErr
+	}
+	return f.deleteCount, nil
+}
+
+type fakeNotificationAuditWriter struct {
+	entries []AuditEntry
+}
+
+func (f *fakeNotificationAuditWriter) Write(_ context.Context, e AuditEntry) error {
+	f.entries = append(f.entries, e)
+	return nil
+}
+
+func TestNotificationService_BatchCreateRecipients_RejectsUnknownTopic(t *testing.T) {
+	store := &fakeRecipientStore{}
+	svc := NewNotificationService(store, nil, &MockEmailSender{})
+
+	_, err := svc.BatchCreateRecipients(context.Background(), []BatchRecipientInput{
+		{Topic: "not_a_real_topic", Email: "a@example.com"},
+	}, uuid.New(), "admin")
+
+	assert.Error(t, err)
+	assert.False(t, store.batchCreateCalled, "白名單守門未通過時不應呼叫 store")
+}
+
+func TestNotificationService_BatchCreateRecipients_Success(t *testing.T) {
+	store := &fakeRecipientStore{}
+	audit := &fakeNotificationAuditWriter{}
+	svc := NewNotificationService(store, audit, &MockEmailSender{})
+
+	created, err := svc.BatchCreateRecipients(context.Background(), []BatchRecipientInput{
+		{Topic: "missing_report", Email: "a@example.com"},
+		{Topic: "month_end", Email: "b@example.com"},
+	}, uuid.New(), "admin")
+
+	assert.NoError(t, err)
+	assert.Len(t, created, 2)
+	if assert.Len(t, audit.entries, 1) {
+		assert.Equal(t, "batch_create_recipients", audit.entries[0].Action)
+	}
+}
+
+func TestNotificationService_BatchDeleteRecipients_ReturnsCount(t *testing.T) {
+	store := &fakeRecipientStore{deleteCount: 3}
+	audit := &fakeNotificationAuditWriter{}
+	svc := NewNotificationService(store, audit, &MockEmailSender{})
+
+	count, err := svc.BatchDeleteRecipients(context.Background(), []int64{1, 2, 3}, uuid.New(), "admin")
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), count)
+	if assert.Len(t, audit.entries, 1) {
+		assert.Equal(t, "batch_delete_recipients", audit.entries[0].Action)
+	}
+}
+
+func TestNotificationService_SendNotification_SkipsRecipientsWithoutResolvedEmail(t *testing.T) {
+	store := &fakeRecipientStore{
+		listRecipients: []Recipient{
+			{ID: 1, RecipientType: "email", Email: "a@example.com"},
+			{ID: 2, RecipientType: "role", Email: ""}, // role 型別尚未接上身分模組展開，Email 為空
+		},
+	}
+	sender := &MockEmailSender{}
+	svc := NewNotificationService(store, nil, sender)
+
+	err := svc.SendNotification(context.Background(), "missing_report", "測試", "內容")
+
+	assert.NoError(t, err)
+	require.Len(t, sender.SentList, 1, "只有已解析出 email 的收件人應該被寄送")
+	assert.Equal(t, "a@example.com", sender.SentList[0].To)
 }

@@ -32,6 +32,10 @@ type fakeCaseStore struct {
 		siteID, outboundVehicleID, inboundVehicleID                *uuid.UUID
 		siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string
 	}
+	deleted            map[uuid.UUID]bool
+	softDeleteErr      error
+	closedSchedulesFor uuid.UUID
+	closeSchedulesErr  error
 }
 
 func newFakeCaseStore() *fakeCaseStore {
@@ -108,6 +112,70 @@ func (f *fakeCaseStore) UpsertTransportPreference(ctx context.Context, caseID uu
 	f.lastUpsertPref.outboundVehicleNameRaw = outboundVehicleNameRaw
 	f.lastUpsertPref.inboundVehicleNameRaw = inboundVehicleNameRaw
 	return nil
+}
+
+func (f *fakeCaseStore) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
+	if f.softDeleteErr != nil {
+		return false, f.softDeleteErr
+	}
+	if f.deleted == nil {
+		f.deleted = map[uuid.UUID]bool{}
+	}
+	if f.deleted[id] {
+		return false, nil
+	}
+	f.deleted[id] = true
+	return true, nil
+}
+
+func (f *fakeCaseStore) CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error {
+	f.closedSchedulesFor = caseID
+	return f.closeSchedulesErr
+}
+
+type fakeCaseAuditWriter struct {
+	entries []AuditEntry
+}
+
+func (f *fakeCaseAuditWriter) Write(_ context.Context, e AuditEntry) error {
+	f.entries = append(f.entries, e)
+	return nil
+}
+
+func TestCaseService_Delete(t *testing.T) {
+	t.Run("查無個案回錯誤", func(t *testing.T) {
+		store := newFakeCaseStore()
+		svc := NewCaseService(testConfig(), store, nil, nil, nil)
+
+		err := svc.Delete(context.Background(), uuid.New(), uuid.New(), "admin", "127.0.0.1", "test-agent")
+		assert.Error(t, err)
+	})
+
+	t.Run("成功刪除並收斂排班、寫入稽核", func(t *testing.T) {
+		store := newFakeCaseStore()
+		caseID := uuid.New()
+		store.byID[caseID] = &Case{ID: caseID, Name: "測試個案"}
+		audit := &fakeCaseAuditWriter{}
+		svc := NewCaseService(testConfig(), store, nil, audit, nil)
+
+		err := svc.Delete(context.Background(), caseID, uuid.New(), "admin", "127.0.0.1", "test-agent")
+		require.NoError(t, err)
+		assert.True(t, store.deleted[caseID])
+		assert.Equal(t, caseID, store.closedSchedulesFor)
+		require.Len(t, audit.entries, 1)
+		assert.Equal(t, "delete", audit.entries[0].Action)
+	})
+
+	t.Run("已刪除的個案再次刪除回錯誤", func(t *testing.T) {
+		store := newFakeCaseStore()
+		caseID := uuid.New()
+		store.byID[caseID] = &Case{ID: caseID}
+		svc := NewCaseService(testConfig(), store, nil, nil, nil)
+
+		require.NoError(t, svc.Delete(context.Background(), caseID, uuid.New(), "admin", "127.0.0.1", "test-agent"))
+		err := svc.Delete(context.Background(), caseID, uuid.New(), "admin", "127.0.0.1", "test-agent")
+		assert.Error(t, err)
+	})
 }
 
 func TestCreateCase_OnlyNameSucceeds(t *testing.T) {

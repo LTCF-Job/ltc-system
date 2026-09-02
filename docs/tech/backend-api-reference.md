@@ -28,6 +28,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/cases/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
 | GET | `/cases/:id` | viewer, staff, admin | |
 | PATCH | `/cases/:id` | staff, admin | |
+| DELETE | `/cases/:id` | admin | 軟刪除（`deleted_at`/`deleted_by`），同交易內收斂生效中排班 |
 | POST | `/cases/:id/reveal` | staff, admin | 明文顯示身分證字號（會寫 audit log 的 `reveal_pii`） |
 | GET | `/cases/:id/schedule` | viewer, staff, admin | 取得排班（星期、時段、四趟制設定） |
 | PUT | `/cases/:id/schedule` | staff, admin | 覆寫排班 |
@@ -53,6 +54,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/vehicles` | viewer, staff, admin | 支援 `siteId`、`region`、`q` 篩選；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位），以及所屬單位帶出的 `siteName` 與唯讀 `region` |
 | POST | `/vehicles` | staff, admin | 車籍欄位（`siteId`、`brand`、`model`、`manufactureYm`、三項保險到期日、`lastInspectionDate`、`wheelchairAccessible`）皆為必填 |
 | PATCH | `/vehicles/:id` | staff, admin | 整筆覆寫，必填欄位同 POST |
+| DELETE | `/vehicles/:id` | admin | 軟刪除並標記 `status=retired`；仍有生效中司機指派或排班趟次綁定時回 409（`CodeResourceInUse`） |
 | PUT | `/vehicles/:id/drivers` | staff, admin | 整批設定本車司機：`{ driverIds: string[], effectiveFrom?: date }`；`driverIds` 為空代表清空 |
 
 ## 司機主檔 `driverH`
@@ -62,6 +64,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/drivers` | viewer, staff, admin | 每筆帶 `licenseClass`（駕照類別代碼）與 `licenseExpiryDate`（駕照有效日期），未補登為 `null` |
 | POST | `/drivers` | staff, admin | `licenseClass`／`licenseExpiryDate` 選填 |
 | PATCH | `/drivers/:id` | staff, admin | 欄位未提供代表不變更；`licenseExpiryDate` 明確給 `null` 才會清空 |
+| DELETE | `/drivers/:id` | admin | 軟刪除並標記 `status=resigned`，同交易內收斂生效中的司機指派區間 |
 | POST | `/drivers/:id/reveal` | staff, admin | 明文顯示司機個資 |
 | POST | `/drivers/:id/assignments` | staff, admin | 指派車輛給司機；一位司機同期只會有一台車，指派新車即取代原本的指派 |
 
@@ -96,7 +99,9 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | GET | `/rides/:id` | viewer, staff, admin | 單筆搭乘紀錄詳情 |
 | PATCH | `/rides/:id` | staff, admin | 人工更正搭乘紀錄（寫 audit log） |
 | POST | `/rides/manual-report` | staff, admin | 人工補登整筆回報（月曆空白格填寫） |
-| POST | `/rides/:id/resolve-conflict` | staff, admin | 裁決同車衝突回報 |
+| POST | `/rides/:id/resolve-conflict` | staff, admin | 裁決同車衝突回報：`{vehicleId, driverId, reason}`，寫入 `conflict_resolution_note` 並記稽核（`resolve_conflict`） |
+
+`GET /rides/issues` 支援 `issueType=conflict\|unreported\|import_error`（三擇一）、`month`（`YYYY-MM`，省略則預設當月）、`keyword`、`page`、`pageSize`。三種類型的資料路徑完全不同：`conflict` 讀 `ride_records` 聚合 `ride_sources` 車輛陣列；`unreported` 重用 `task/app.TaskService.ListMissingReportsForMonth` 的整月查詢（不觸發催報通知）；`import_error` 讀 `form_submissions.anomaly_flags` 非空的列。
 
 ## 匯出前置檢核與工作管理 `exportH`
 
@@ -124,10 +129,14 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
 | GET | `/settings/notification-recipients` | viewer, staff, admin | 通知收件人清單 |
-| POST | `/settings/notification-recipients` | admin | 新增收件人 |
+| POST | `/settings/notification-recipients` | admin | 新增收件人（僅支援 `email` 型別） |
+| POST | `/settings/notification-recipients/batch` | admin | 批次新增，`{recipients: [{topic, email, displayName?}]}`；`topic`+`email` 重複者靜默略過，回傳只含實際新增的列 |
+| POST | `/settings/notification-recipients/batch-delete` | admin | 批次刪除，`{ids: string[]}`，回 `{count}` |
 | PATCH | `/settings/notification-recipients/:id` | admin | |
 | DELETE | `/settings/notification-recipients/:id` | admin | |
 | GET | `/notifications/logs` | viewer, staff, admin | 通知發送歷史 |
+
+`notification_recipients` 除 `email` 型別外，資料庫已加 `recipient_type`/`target_role`/`user_id` 欄位（`role`／`user` 型別），但目前沒有任何前端頁面會建立這兩種型別；寄送時若收件人未能解析出 email 會略過並記 log，不讓整批通知失敗。
 
 ## 報表 `reportH`
 
@@ -164,7 +173,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | Method | Path | 角色 |
 |---|---|---|
 | GET | `/dashboard/metrics` | viewer, staff, admin |
-| GET | `/dashboard/stats` | viewer, staff, admin |
+| GET | `/dashboard/stats` | viewer, staff, admin | 回 `recentExports`：最近 5 筆申報匯出工作（重用 `exportH` 的 `ExportJobDTO` 形狀），其餘欄位見 [integration-contract.md](integration-contract.md) |
 
 ## 稽核紀錄 `auditH`
 
@@ -191,8 +200,30 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | DELETE | `/caregivers/:id` | admin | |
 | PUT | `/caregivers/:id/site` | staff, admin | 將單位待關聯的照護人員連結至既有單位，並清空原始單位名稱 |
 
-## ⚠️ 前端已預留但後端尚未實作
+## 角色身分管理 `roleH`
 
-前端 `src/api/users.ts`、`src/api/roles.ts` 已經寫好 `/users`、`/roles`、`/auth/change-password` 這幾支的呼叫（型別也定義好了），對應「使用者管理」「角色身分管理」頁面。**這幾支路由目前不存在於 `cmd/server/main.go`**，只有 MSW mock（`apps/web/src/mocks/handlers/`）在假裝有這個 API。
+角色資料落在 `roles` 表（`identity` 模組），非 Supabase 端資料，`is_system` 系統角色（`admin`/`dispatcher`/`staff`/`driver`/`viewer`）不可刪除且權限矩陣不可覆寫成別的 `base_role`。
 
-要串接時：新增 `UserHandler`／`RoleHandler`（連同對應 `service`／`repository`），路由掛在 `apiV1` 群組下，權限比照現有 `settings/*` 系列多半是 `admin` only。串接前先確認前端 `apps/web/src/types/api.d.ts` 裡 `UserDTO`／`RoleDTO`／`CreateUserRequest` 等型別跟要設計的後端 DTO 是否一致。
+| Method | Path | 角色 | 說明 |
+|---|---|---|---|
+| GET | `/roles` | admin | 角色清單（裸陣列，非 `Paged`），含各角色實際使用者數 |
+| GET | `/roles/:id` | admin | |
+| POST | `/roles` | admin | 新增自訂角色；`key` 未提供時由 `name` 產生 slug |
+| PATCH | `/roles/:id` | admin | 系統角色不可修改（`ErrSystemRoleImmutable`） |
+| DELETE | `/roles/:id` | admin | 系統角色或仍有使用者的角色不可刪除（`ErrSystemRoleImmutable`／`ErrRoleInUse`） |
+
+⚠️ `auth.RequireRoles` 只認得 `viewer`/`staff`/`admin` 三個字串，自訂角色的 `base_role` 只是把 API 存取層級對映到其中之一——建出權限矩陣全開但 `base_role=viewer` 的角色，實際仍會被大多數寫入端點擋在 403。
+
+## 使用者帳號管理 `identityH`
+
+底層是 Supabase Auth Admin API，需要 `SUPABASE_SERVICE_ROLE_KEY` 才能運作；**金鑰未設定時所有端點一律回 `503`（`CodeServiceUnavailable`），不會退化成假資料**。角色一律寫入 JWT 的 `app_metadata.role`（依 [jwt-role-metadata-precedence.md](../decisions/jwt-role-metadata-precedence.md)），`user_metadata` 只放 `displayName`/`phone`/`status` 等非授權資料。
+
+| Method | Path | 角色 | 說明 |
+|---|---|---|---|
+| GET | `/users` | admin | 使用者清單（裸陣列），支援 `keyword`／`role` 篩選（app 層過濾） |
+| GET | `/users/:id` | admin | |
+| POST | `/users` | admin | 建立使用者，`role` 須存在於 `roles` 表 |
+| PATCH | `/users/:id` | admin | |
+| PUT | `/users/:id/permissions` | admin | 覆寫個人自訂權限（存於 `app_metadata.custom_permissions`） |
+| DELETE | `/users/:id` | admin | 不可刪除自己（`ErrCannotDeleteSelf`，403） |
+| POST | `/auth/change-password` | viewer, staff, admin | 任何已登入者可改自己的密碼；後端先以舊密碼呼叫 Supabase `grant_type=password` 驗證通過才允許改新密碼 |

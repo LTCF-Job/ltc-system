@@ -1,7 +1,9 @@
 package transport
 
 import (
+	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"ltc-system/apps/api/internal/domain/rocdate"
@@ -163,12 +165,69 @@ func (h *RideHandler) ManualReport(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, rec, nil)
 }
 
+// rideRecordResponse 是搭乘紀錄的對外回應形狀。
+type rideRecordResponse struct {
+	ID                     string  `json:"id"`
+	CaseID                 string  `json:"caseId"`
+	CaseName               string  `json:"caseName"`
+	ServiceDate            string  `json:"serviceDate"`
+	LegSeq                 int16   `json:"legSeq"`
+	MergedStatus           string  `json:"mergedStatus"`
+	EffectiveStatus        string  `json:"effectiveStatus"`
+	VehicleID              string  `json:"vehicleId"`
+	VehicleName            string  `json:"vehicleName"`
+	DriverID               *string `json:"driverId"`
+	DriverName             string  `json:"driverName"`
+	HasConflict            bool    `json:"hasConflict"`
+	ConflictResolvedAt     *string `json:"conflictResolvedAt"`
+	ConflictResolutionNote *string `json:"conflictResolutionNote"`
+}
+
+func toRideRecordResponse(rec *app.RideRecord) rideRecordResponse {
+	resp := rideRecordResponse{
+		ID:                     rec.ID.String(),
+		CaseID:                 rec.CaseID.String(),
+		CaseName:               rec.CaseName,
+		ServiceDate:            rec.ServiceDate.Format("2006-01-02"),
+		LegSeq:                 rec.LegSeq,
+		MergedStatus:           rec.MergedStatus,
+		EffectiveStatus:        rec.EffectiveStatus,
+		VehicleID:              rec.VehicleID.String(),
+		VehicleName:            rec.VehicleName,
+		DriverName:             rec.DriverName,
+		HasConflict:            rec.HasConflict,
+		ConflictResolutionNote: rec.ConflictResolutionNote,
+	}
+	if rec.DriverID != nil {
+		s := rec.DriverID.String()
+		resp.DriverID = &s
+	}
+	if rec.ConflictResolvedAt != nil {
+		s := rec.ConflictResolvedAt.Format(time.RFC3339)
+		resp.ConflictResolvedAt = &s
+	}
+	return resp
+}
+
 // GetRecord 取得單筆搭乘紀錄。
-//
-// TODO: 尚無 RideService 查單筆紀錄的方法，待補上真實查詢後串接；
-// 目前誠實回傳查無資料，避免回傳假造內容。
 func (h *RideHandler) GetRecord(c *gin.Context) {
-	httpx.RespondError(c, http.StatusNotImplemented, httpx.CodeNotFound, "搭乘紀錄查詢尚未串接資料來源", nil)
+	rideID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的搭乘紀錄 ID", nil)
+		return
+	}
+
+	rec, err := h.rideService.GetRecord(c.Request.Context(), rideID)
+	if err != nil {
+		if errors.Is(err, app.ErrRideNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	httpx.RespondSuccess(c, http.StatusOK, toRideRecordResponse(rec), nil)
 }
 
 // GetCalendar 取得搭乘月曆矩陣資料。月份接受民國（115-07）與西元（2026-07）兩種寫法。
@@ -186,24 +245,130 @@ func (h *RideHandler) GetCalendar(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, matrix, nil)
 }
 
-// ListIssues 取得異常集中處理清單。
-//
-// TODO: 尚無 RideService 依類型彙整異常清單（衝突／未回報／解析失敗）的方法，
-// 待補上真實查詢後串接；目前誠實回傳空清單，避免回傳假造個案姓名與紀錄。
-func (h *RideHandler) ListIssues(c *gin.Context) {
-	list := []gin.H{}
+// issueTypeWhitelist 是 issueType 查詢參數的合法值。
+var issueTypeWhitelist = map[string]bool{"conflict": true, "unreported": true, "import_error": true}
 
+// issueRideResponse 是「異常集中處理」清單單一列的對外回應形狀。
+type issueRideResponse struct {
+	ID          string   `json:"id"`
+	CaseID      string   `json:"caseId"`
+	CaseName    string   `json:"caseName"`
+	ServiceDate string   `json:"serviceDate"`
+	LegSeq      int16    `json:"legSeq"`
+	Description string   `json:"description"`
+	Vehicles    []string `json:"vehicles,omitempty"`
+}
+
+func toIssueRideResponse(item app.IssueRide) issueRideResponse {
+	return issueRideResponse{
+		ID:          item.ID,
+		CaseID:      item.CaseID,
+		CaseName:    item.CaseName,
+		ServiceDate: item.ServiceDate.Format("2006-01-02"),
+		LegSeq:      item.LegSeq,
+		Description: item.Description,
+		Vehicles:    item.Vehicles,
+	}
+}
+
+// ListIssues 取得異常集中處理清單；issueType 為 conflict/unreported/import_error 三擇一。
+func (h *RideHandler) ListIssues(c *gin.Context) {
+	issueType := c.Query("issueType")
+	if !issueTypeWhitelist[issueType] {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的 issueType", nil)
+		return
+	}
+
+	now := time.Now()
+	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(now.Year(), int(now.Month())))
+	start, _, _ := rocdate.MonthRange(monthStr)
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	items, total, err := h.rideService.ListIssues(c.Request.Context(), issueType, start.Year(), int(start.Month()), c.Query("region"), c.Query("keyword"), page, pageSize)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	list := make([]issueRideResponse, 0, len(items))
+	for _, item := range items {
+		list = append(list, toIssueRideResponse(item))
+	}
+
+	totalPages := int(total) / pageSize
+	if int(total)%pageSize != 0 {
+		totalPages++
+	}
 	httpx.RespondSuccess(c, http.StatusOK, list, httpx.PaginationMeta{
-		Page:     1,
-		PageSize: 20,
-		Total:    0,
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages,
 	})
 }
 
-// ResolveConflict 解決混車衝突。
-//
-// TODO: 尚無 RideService 寫入衝突裁決結果的方法，待補上真實寫入後串接；
-// 目前誠實回傳未實作，避免回傳假造的解決成功狀態。
+// ResolveConflictDTO 用於接收混車衝突裁決請求。
+type ResolveConflictDTO struct {
+	VehicleID string  `json:"vehicleId" binding:"required"`
+	DriverID  *string `json:"driverId"`
+	Reason    *string `json:"reason"`
+}
+
+// ResolveConflict 人工裁決混車衝突。
 func (h *RideHandler) ResolveConflict(c *gin.Context) {
-	httpx.RespondError(c, http.StatusNotImplemented, httpx.CodeInternalError, "混車衝突裁決尚未串接資料來源", nil)
+	rideID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的搭乘紀錄 ID", nil)
+		return
+	}
+
+	var dto ResolveConflictDTO
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	vehicleID, err := uuid.Parse(dto.VehicleID)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的車輛 ID", nil)
+		return
+	}
+
+	var driverID *uuid.UUID
+	if dto.DriverID != nil && *dto.DriverID != "" {
+		if d, err := uuid.Parse(*dto.DriverID); err == nil {
+			driverID = &d
+		}
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+
+	err = h.rideService.ResolveConflict(c.Request.Context(), rideID, app.ResolveConflictInput{
+		VehicleID: vehicleID,
+		DriverID:  driverID,
+		Reason:    dto.Reason,
+	}, actorID, actorRole)
+	if err != nil {
+		if errors.Is(err, app.ErrRideNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrConflictAlreadyResolved) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"resolved": true}, nil)
 }

@@ -38,7 +38,8 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		LEFT JOIN sites st ON st.id = p.site_id
 		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
 		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
-		WHERE ($1 = '' OR c.region = $1)
+		WHERE c.deleted_at IS NULL
+		  AND ($1 = '' OR c.region = $1)
 		  AND ($2 = '' OR c.status = $2)
 		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.code ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
 		  AND ($6 = false OR (
@@ -79,7 +80,8 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 	countQuery := `
 		SELECT COUNT(*) FROM cases c
 		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
-		WHERE ($1 = '' OR c.region = $1)
+		WHERE c.deleted_at IS NULL
+		  AND ($1 = '' OR c.region = $1)
 		  AND ($2 = '' OR c.status = $2)
 		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.code ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
 		  AND ($4 = false OR (
@@ -138,7 +140,7 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 		LEFT JOIN sites st ON st.id = p.site_id
 		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
 		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
-		WHERE c.id = $1
+		WHERE c.id = $1 AND c.deleted_at IS NULL
 	`
 	var c app.Case
 	db := pgxdb.FromContext(ctx, r.db)
@@ -161,7 +163,7 @@ func (r *CaseRepository) GetByHMAC(ctx context.Context, hmac []byte) (*app.Case,
 		SELECT id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 		       home_address, region, ltc_level, service_category, service_usage_type, claim_end_date,
 		       status, created_at, updated_at
-		FROM cases WHERE national_id_hmac = $1 LIMIT 1
+		FROM cases WHERE national_id_hmac = $1 AND deleted_at IS NULL LIMIT 1
 	`
 	var c app.Case
 	db := pgxdb.FromContext(ctx, r.db)
@@ -182,7 +184,7 @@ func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm strin
 		SELECT id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 		       home_address, region, ltc_level, service_category, service_usage_type, claim_end_date,
 		       status, created_at, updated_at
-		FROM cases WHERE name_normalized = $1
+		FROM cases WHERE name_normalized = $1 AND deleted_at IS NULL
 	`
 	rows, err := r.db.Query(ctx, query, nameNorm)
 	if err != nil {
@@ -234,7 +236,7 @@ func (r *CaseRepository) Update(ctx context.Context, c *app.Case) error {
 		    service_category = $7, service_usage_type = $8, claim_end_date = $9,
 		    status = $10, household_type = $11, gender = $12, birth_date = $13,
 		    care_contact_role = $14, care_contact_name = $15, registered_address = $16, remarks = $17, updated_at = now()
-		WHERE id = $1
+		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING updated_at
 	`
 	return r.db.QueryRow(ctx, query,
@@ -390,7 +392,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 		FROM cases c
 		JOIN case_schedules s ON c.id = s.case_id
 		JOIN sites st ON s.site_id = st.id
-		WHERE c.status = 'active'
+		WHERE c.status = 'active' AND c.deleted_at IS NULL
 		  AND ($1 = '' OR c.region = $1)
 		  AND s.effective_range && daterange($2, $3, '[]')
 		ORDER BY c.code ASC
@@ -470,7 +472,7 @@ func (r *CaseRepository) ListNameIndex(ctx context.Context) ([]app.CaseNameRef, 
 	rows, err := r.db.Query(ctx, `
 		SELECT id, code, name, name_normalized
 		FROM cases
-		WHERE status = 'active'
+		WHERE status = 'active' AND deleted_at IS NULL
 		ORDER BY code ASC
 	`)
 	if err != nil {
@@ -487,4 +489,25 @@ func (r *CaseRepository) ListNameIndex(ctx context.Context) ([]app.CaseNameRef, 
 		list = append(list, c)
 	}
 	return list, rows.Err()
+}
+
+// SoftDelete 軟刪除個案，回傳 false 代表該筆已被刪除過。
+func (r *CaseRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
+	db := pgxdb.FromContext(ctx, r.db)
+	tag, err := db.Exec(ctx, `UPDATE cases SET deleted_at = now(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// CloseOpenSchedules 收斂該個案所有生效中排班的區間至今天，供刪除個案時使用。
+func (r *CaseRepository) CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error {
+	db := pgxdb.FromContext(ctx, r.db)
+	_, err := db.Exec(ctx, `
+		UPDATE case_schedules
+		SET effective_range = daterange(lower(effective_range), CURRENT_DATE, '[)'), updated_at = now()
+		WHERE case_id = $1 AND upper_inf(effective_range)
+	`, caseID)
+	return err
 }

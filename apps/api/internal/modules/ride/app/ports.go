@@ -112,7 +112,7 @@ type RideRecordStore interface {
 	ListRideSourcesForSlot(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) ([]RideSourceRow, error)
 	ListCalendarCases(ctx context.Context, start, end time.Time, region, keyword string) ([]CalendarCase, error)
 	ListRideRecordsInRange(ctx context.Context, start, end time.Time, region, keyword string) ([]RideRecord, error)
-	SaveFormSubmission(ctx context.Context, formID uuid.UUID, serviceDate, submittedAt time.Time, driverNameRaw string, driverID *uuid.UUID, source string, payload map[string]interface{}, issueText string) (uuid.UUID, error)
+	SaveFormSubmission(ctx context.Context, formID uuid.UUID, serviceDate, submittedAt time.Time, driverNameRaw string, driverID *uuid.UUID, source string, payload map[string]interface{}, issueText string, anomalyFlags []string) (uuid.UUID, error)
 	InsertRideSource(ctx context.Context, submissionID, caseID uuid.UUID, serviceDate time.Time, legSeq int16, vehicleID uuid.UUID, driverID *uuid.UUID, reported string, colIdx int) error
 	ListRideSourceSlotsForForm(ctx context.Context, formID uuid.UUID, dates []time.Time) ([]RideSlot, error)
 	DeleteFormSubmissions(ctx context.Context, formID uuid.UUID, dates []time.Time) (int, error)
@@ -121,4 +121,41 @@ type RideRecordStore interface {
 	GetRideRecordForSlot(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) (*RideRecord, error)
 	UpsertRideRecord(ctx context.Context, rec *RideRecord) error
 	CorrectRideRecord(ctx context.Context, rideID uuid.UUID, effectiveStatus *string, vehicleID, driverID *uuid.UUID, departTimeOverride *string, durationMinOverride *int16, notClaimedAA09 *bool, reason *string, operatorID uuid.UUID) error
+	GetRideRecordByID(ctx context.Context, id uuid.UUID) (*RideRecord, error)
+	ResolveConflict(ctx context.Context, rideID, vehicleID uuid.UUID, driverID *uuid.UUID, note *string, operatorID uuid.UUID) (bool, error)
+	ListPendingConflicts(ctx context.Context, start, end time.Time, keyword string, page, pageSize int) ([]ConflictRide, int64, error)
+	ListImportErrorSubmissions(ctx context.Context, start, end time.Time, keyword string, page, pageSize int) ([]ImportErrorSubmission, int64, error)
+}
+
+// ConflictRide 是一筆待裁決混車衝突。
+type ConflictRide struct {
+	ID          uuid.UUID
+	CaseID      uuid.UUID
+	CaseName    string
+	ServiceDate time.Time
+	LegSeq      int16
+	Vehicles    []string
+}
+
+// ImportErrorSubmission 是一筆表單匯入異常紀錄。
+type ImportErrorSubmission struct {
+	ID            uuid.UUID
+	ServiceDate   time.Time
+	DriverNameRaw string
+	AnomalyFlags  []string
+	RawPayload    string
+}
+
+// MissingRide 是一筆應搭未回報之趟次，由 task 模組經 MissingReportProvider 提供。
+type MissingRide struct {
+	CaseID      uuid.UUID
+	CaseName    string
+	ServiceDate time.Time
+	LegSeq      int16
+	VehicleName string
+}
+
+// MissingReportProvider 提供整月未回報清單，由擁有排班/回報比對能力的模組實作。
+type MissingReportProvider interface {
+	ListMissingForMonth(ctx context.Context, year, month int, region string) ([]MissingRide, error)
 }

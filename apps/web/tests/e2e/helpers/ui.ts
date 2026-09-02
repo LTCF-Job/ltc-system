@@ -8,11 +8,13 @@ export async function expectElMessage(
   textOrRegex?: string | RegExp,
   type: 'success' | 'warning' | 'error' | 'info' = 'success'
 ) {
-  const messageLocator = page.locator(`.el-message--${type}`)
+  // Element Plus 訊息淡出前仍留在 DOM，可能同時存在多則，一律只看最新一則。
+  const messageLocator = (
+    textOrRegex
+      ? page.locator(`.el-message--${type}`).filter({ hasText: textOrRegex })
+      : page.locator(`.el-message--${type}`)
+  ).last()
   await expect(messageLocator).toBeVisible({ timeout: 10000 })
-  if (textOrRegex) {
-    await expect(messageLocator).toContainText(textOrRegex)
-  }
 }
 
 /**
@@ -21,7 +23,7 @@ export async function expectElMessage(
 export async function confirmMessageBox(page: Page) {
   const msgBox = page.locator('.el-message-box')
   await expect(msgBox).toBeVisible({ timeout: 5000 })
-  const confirmBtn = msgBox.getByRole('button', { name: /確定|確認|是/ })
+  const confirmBtn = msgBox.getByRole('button', { name: /確定|確認|是|刪除/ })
   await confirmBtn.click()
 }
 

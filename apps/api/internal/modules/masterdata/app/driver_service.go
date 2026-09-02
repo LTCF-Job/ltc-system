@@ -14,13 +14,14 @@ import (
 
 // DriverService 封裝司機主檔業務邏輯：身分證加密、HMAC 索引、姓名正規化與車輛指派。
 type DriverService struct {
-	store DriverStore
-	cfg   *config.Config
+	store     DriverStore
+	cfg       *config.Config
+	auditRepo AuditWriter
 }
 
 // NewDriverService 建立 DriverService 實例。
-func NewDriverService(store DriverStore, cfg *config.Config) *DriverService {
-	return &DriverService{store: store, cfg: cfg}
+func NewDriverService(store DriverStore, cfg *config.Config, auditRepo AuditWriter) *DriverService {
+	return &DriverService{store: store, cfg: cfg, auditRepo: auditRepo}
 }
 
 // List 查詢司機清單。
@@ -181,4 +182,31 @@ func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, i
 		return nil, err
 	}
 	return assignment, nil
+}
+
+// Delete 軟刪除司機並收斂其生效中車輛指派。
+func (s *DriverService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRole string) error {
+	ok, err := s.store.SoftDelete(ctx, id, actorID)
+	if err != nil {
+		return fmt.Errorf("failed to soft delete driver: %w", err)
+	}
+	if !ok {
+		return ErrDriverNotFound
+	}
+
+	if err := s.store.CloseActiveAssignments(ctx, id); err != nil {
+		return fmt.Errorf("failed to close active assignments: %w", err)
+	}
+
+	if s.auditRepo != nil {
+		entityIDStr := id.String()
+		_ = s.auditRepo.Write(ctx, AuditEntry{
+			ActorID:    &actorID,
+			ActorRole:  &actorRole,
+			Action:     "delete",
+			EntityType: "drivers",
+			EntityID:   &entityIDStr,
+		})
+	}
+	return nil
 }

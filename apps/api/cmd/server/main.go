@@ -26,6 +26,9 @@ import (
 	holidayapp "ltc-system/apps/api/internal/modules/holiday/app"
 	holidayinfra "ltc-system/apps/api/internal/modules/holiday/infra"
 	holidaytransport "ltc-system/apps/api/internal/modules/holiday/transport"
+	identityapp "ltc-system/apps/api/internal/modules/identity/app"
+	identityinfra "ltc-system/apps/api/internal/modules/identity/infra"
+	identitytransport "ltc-system/apps/api/internal/modules/identity/transport"
 	masterapp "ltc-system/apps/api/internal/modules/masterdata/app"
 	masterinfra "ltc-system/apps/api/internal/modules/masterdata/infra"
 	mastertransport "ltc-system/apps/api/internal/modules/masterdata/transport"
@@ -110,8 +113,8 @@ func main() {
 	mdAudit := masterdataAuditWriter{svc: auditSvc}
 	regionSvc := masterapp.NewRegionService(mdRegionRepo, mdAudit)
 	siteSvc := masterapp.NewSiteService(mdSiteRepo)
-	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo)
-	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg)
+	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo, mdAudit)
+	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg, mdAudit)
 	txRunner := pgxdb.NewTxRunner(pool)
 	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer())
 	excelAdapter := importinfra.NewExcelAdapter()
@@ -125,7 +128,9 @@ func main() {
 		excelAdapter,
 		txRunner,
 	)
-	rideSvc := rideapp.NewRideService(rideRepo, rideDriverResolver{repo: mdDriverRepo}, rideScheduleReader{repo: caseRepo}, rideAuditWriter{svc: auditSvc})
+	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, nil)
+	taskSvc := taskapp.NewTaskService(taskRepo, taskScheduleReader{repo: caseRepo}, holidayRepo, notificationSvc)
+	rideSvc := rideapp.NewRideService(rideRepo, rideDriverResolver{repo: mdDriverRepo}, rideScheduleReader{repo: caseRepo}, rideAuditWriter{svc: auditSvc}, rideMissingReportProvider{svc: taskSvc})
 	driverReportExcel := drinfra.NewExcelAdapter()
 	driverReportSvc := drapp.NewDriverReportService(
 		drinfra.NewDriverReportRepository(pool),
@@ -140,7 +145,6 @@ func main() {
 	excelRenderer := reportinfra.NewExcelRenderer()
 	precheckSvc := reportapp.NewPrecheckService(precheckRepo)
 	govClaimSvc := reportapp.NewGovClaimService(cfg, govClaimRepo, exportJobRepo, excelRenderer, reportinfra.NewZipArchiver(), precheckSvc, reportingAuditWriter{svc: auditSvc})
-	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, nil)
 	holidayProvider := holidayapp.GovernmentHolidayProvider(&holidayinfra.GovernmentHolidayHTTPClient{
 		Endpoint: holidayinfra.GovernmentHolidayCSVEndpoint,
 		Client:   &http.Client{Timeout: cfg.GovernmentHolidayAPITimeout},
@@ -151,10 +155,15 @@ func main() {
 	maintenanceSvc := opsapp.NewMaintenanceService(maintenanceRepo, opsVehicleLister{repo: mdVehicleRepo}, opsAudit, opsinfra.NewExcelRenderer())
 	attendanceSvc := opsapp.NewAttendanceService(attendanceRepo, opsDriverLister{repo: mdDriverRepo}, opsAudit, holidayRepo)
 	fuelSvc := opsapp.NewFuelService(fuelRepo, opsAudit)
-	dashboardSvc := reportapp.NewDashboardService(dashboardRepo)
-	taskSvc := taskapp.NewTaskService(taskRepo, taskScheduleReader{repo: caseRepo}, holidayRepo, notificationSvc)
+	dashboardSvc := reportapp.NewDashboardService(dashboardRepo, exportJobRepo)
 	caregiverExcelAdapter := caregiverinfra.NewExcelAdapter()
 	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverSiteLookup{repo: mdSiteRepo}, caregiverExcelAdapter, caregiverExcelAdapter)
+
+	roleRepo := identityinfra.NewRoleRepository(pool)
+	identityAudit := identityAuditWriter{svc: auditSvc}
+	adminClient := identityinfra.NewSupabaseAdminClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, &http.Client{Timeout: cfg.SupabaseAdminTimeout})
+	roleSvc := identityapp.NewRoleService(roleRepo, adminClient, identityAudit, txRunner)
+	userSvc := identityapp.NewUserService(adminClient, roleRepo, identityAudit)
 
 	// 初始化 Handlers
 	h := handlers{
@@ -177,6 +186,8 @@ func main() {
 		dashboard:    reporttransport.NewDashboardHandler(dashboardSvc),
 		driverReport: drtransport.NewDriverReportHandler(driverReportSvc),
 		caregiver:    caregivertransport.NewCaregiverHandler(caregiverSvc),
+		role:         identitytransport.NewRoleHandler(roleSvc),
+		identity:     identitytransport.NewIdentityHandler(userSvc),
 	}
 
 	r := newRouter(cfg, pool, h)

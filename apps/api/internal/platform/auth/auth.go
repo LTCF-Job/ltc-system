@@ -43,8 +43,12 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
 	// user_metadata 僅補齊 app_metadata 未提供時的角色與顯示名稱。
 	role := "viewer"
 	name := ""
+	email := ""
 	if r, ok := claims["role"].(string); ok {
 		role = r
+	}
+	if e, ok := claims["email"].(string); ok {
+		email = e
 	}
 	if userMetadata, ok := claims["user_metadata"].(map[string]interface{}); ok {
 		if r, ok := userMetadata["role"].(string); ok {
@@ -71,6 +75,7 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
 	c.Set(ContextKeyActorID, actorID)
 	c.Set(ContextKeyActorRole, role)
 	c.Set(ContextKeyActorName, name)
+	c.Set(ContextKeyUserEmail, email)
 }
 
 // Middleware 驗證傳入的 Supabase JWT Token 簽章並將使用者角色與 ID 注入 Gin Context。
@@ -208,6 +213,16 @@ func GetActorRole(c *gin.Context) string {
 		}
 	}
 	return "viewer"
+}
+
+// GetActorEmail 從 Context 取出當前使用者的登入信箱。
+func GetActorEmail(c *gin.Context) string {
+	if val, exists := c.Get(ContextKeyUserEmail); exists {
+		if e, ok := val.(string); ok {
+			return e
+		}
+	}
+	return ""
 }
 
 // GetActorName 從 Context 取出當前使用者的顯示名稱（來源為 JWT user_metadata.display_name，

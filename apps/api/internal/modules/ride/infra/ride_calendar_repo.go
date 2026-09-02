@@ -170,3 +170,74 @@ func (r *RideRepository) ListRideRecordsInRange(
 	}
 	return records, rows.Err()
 }
+
+// ListPendingConflicts 取得待裁決之混車衝突清單，涉及車輛聚合自 ride_sources 中已回報「有坐」的來源。
+func (r *RideRepository) ListPendingConflicts(ctx context.Context, start, end time.Time, keyword string, page, pageSize int) ([]app.ConflictRide, int64, error) {
+	offset := (page - 1) * pageSize
+	query := `
+		SELECT rr.id, rr.case_id, c.name, rr.service_date, rr.leg_seq, COALESCE(veh.vehicles, ARRAY[]::text[]),
+		       count(*) OVER()
+		FROM ride_records rr
+		JOIN cases c ON rr.case_id = c.id
+		LEFT JOIN LATERAL (
+			SELECT array_agg(DISTINCT v.display_name ORDER BY v.display_name) AS vehicles
+			FROM ride_sources rs
+			JOIN vehicles v ON rs.vehicle_id = v.id
+			WHERE rs.case_id = rr.case_id AND rs.service_date = rr.service_date AND rs.leg_seq = rr.leg_seq
+			  AND rs.reported = 'boarded'
+		) veh ON true
+		WHERE rr.has_conflict = true AND rr.conflict_resolved_at IS NULL
+		  AND rr.service_date >= $1 AND rr.service_date <= $2
+		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.code ILIKE '%' || $3 || '%')
+		ORDER BY rr.service_date ASC, rr.leg_seq ASC
+		LIMIT $4 OFFSET $5
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, start, end, keyword, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var items []app.ConflictRide
+	var total int64
+	for rows.Next() {
+		var item app.ConflictRide
+		if err := rows.Scan(&item.ID, &item.CaseID, &item.CaseName, &item.ServiceDate, &item.LegSeq, &item.Vehicles, &total); err != nil {
+			return nil, 0, err
+		}
+		items = append(items, item)
+	}
+	return items, total, rows.Err()
+}
+
+// ListImportErrorSubmissions 取得帶有異常標記之匯入紀錄清單。
+func (r *RideRepository) ListImportErrorSubmissions(ctx context.Context, start, end time.Time, keyword string, page, pageSize int) ([]app.ImportErrorSubmission, int64, error) {
+	offset := (page - 1) * pageSize
+	query := `
+		SELECT id, service_date, driver_name_raw, anomaly_flags, payload::text, count(*) OVER()
+		FROM form_submissions
+		WHERE array_length(anomaly_flags, 1) > 0
+		  AND service_date >= $1 AND service_date <= $2
+		  AND ($3 = '' OR driver_name_raw ILIKE '%' || $3 || '%')
+		ORDER BY service_date DESC, submitted_at DESC
+		LIMIT $4 OFFSET $5
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, start, end, keyword, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var items []app.ImportErrorSubmission
+	var total int64
+	for rows.Next() {
+		var item app.ImportErrorSubmission
+		if err := rows.Scan(&item.ID, &item.ServiceDate, &item.DriverNameRaw, &item.AnomalyFlags, &item.RawPayload, &total); err != nil {
+			return nil, 0, err
+		}
+		items = append(items, item)
+	}
+	return items, total, rows.Err()
+}

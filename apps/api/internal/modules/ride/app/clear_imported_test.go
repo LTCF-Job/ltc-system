@@ -30,7 +30,7 @@ func ingestOneDay(t *testing.T, svc *RideService, formID, vehicleID, caseID uuid
 func TestClearImportedDates_RemovesRecordWhenNoSourceRemains(t *testing.T) {
 	caseID, formID, vehicleID := uuid.New(), uuid.New(), uuid.New()
 	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "吳桂 [去程]", 1, 3)})
-	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	ingestOneDay(t, svc, formID, vehicleID, caseID, "2026-03-02", "吳桂 [去程]", "有坐")
 	require.NotNil(t, store.records[slotKey{caseID, "2026-03-02", 1}])
@@ -46,7 +46,7 @@ func TestClearImportedDates_RemovesRecordWhenNoSourceRemains(t *testing.T) {
 func TestClearImportedDates_KeepsManuallyCorrectedRecord(t *testing.T) {
 	caseID, formID, vehicleID := uuid.New(), uuid.New(), uuid.New()
 	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "吳桂 [去程]", 1, 3)})
-	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	ingestOneDay(t, svc, formID, vehicleID, caseID, "2026-03-02", "吳桂 [去程]", "有坐")
 	correctedAt := time.Now().UTC()
@@ -63,7 +63,7 @@ func TestClearImportedDates_KeepsOtherFormsMixedVehicleSources(t *testing.T) {
 	formA, formB := uuid.New(), uuid.New()
 	otherVehicleID := uuid.New()
 	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "吳桂 [去程]", 1, 3)})
-	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	ingestOneDay(t, svc, formA, vehicleID, caseID, "2026-03-02", "吳桂 [去程]", "有坐")
 	ingestOneDay(t, svc, formB, otherVehicleID, caseID, "2026-03-02", "吳桂 [去程]", "有坐")
@@ -83,7 +83,7 @@ func TestClearImportedDates_KeepsOtherFormsMixedVehicleSources(t *testing.T) {
 func TestClearImportedDates_IgnoresDatesOutsideTheGivenSet(t *testing.T) {
 	caseID, formID, vehicleID := uuid.New(), uuid.New(), uuid.New()
 	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "吳桂 [去程]", 1, 3)})
-	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	ingestOneDay(t, svc, formID, vehicleID, caseID, "2026-03-02", "吳桂 [去程]", "有坐")
 	ingestOneDay(t, svc, formID, vehicleID, caseID, "2026-04-02", "吳桂 [去程]", "有坐")
@@ -98,7 +98,7 @@ func TestClearImportedDates_IgnoresDatesOutsideTheGivenSet(t *testing.T) {
 
 func TestClearImportedDates_NoDatesIsANoOp(t *testing.T) {
 	store := newFakeRecordStore(nil)
-	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	removed, err := svc.ClearImportedDates(context.Background(), uuid.New(), nil)
 
@@ -120,7 +120,7 @@ func TestClearImportedDates_KeepsRecordsWithOtherManualMarkers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			caseID, formID, vehicleID := uuid.New(), uuid.New(), uuid.New()
 			store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "吳桂 [去程]", 1, 3)})
-			svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil)
+			svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 			ingestOneDay(t, svc, formID, vehicleID, caseID, "2026-03-02", "吳桂 [去程]", "有坐")
 			tt.apply(store.records[slotKey{caseID, "2026-03-02", 1}])
@@ -136,7 +136,7 @@ func TestClearImportedDates_KeepsRecordsWithOtherManualMarkers(t *testing.T) {
 func TestClearImportedDates_ClearsBothLegsOfFourTripPattern(t *testing.T) {
 	caseID, formID, vehicleID := uuid.New(), uuid.New(), uuid.New()
 	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "吳桂 [去程]", 1, 3)})
-	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{tripPattern: 4}, nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{tripPattern: 4}, nil, nil)
 
 	ingestOneDay(t, svc, formID, vehicleID, caseID, "2026-03-02", "吳桂 [去程]", "有坐")
 	require.NotNil(t, store.records[slotKey{caseID, "2026-03-02", 1}])
@@ -154,7 +154,7 @@ func TestClearImportedDates_DoesNotFallBackToTheRemovedVehicle(t *testing.T) {
 	formA, formB := uuid.New(), uuid.New()
 	removedVehicleID, remainingVehicleID := uuid.New(), uuid.New()
 	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "吳桂 [去程]", 1, 3)})
-	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	// 兩台車都回報「沒坐」：merge 找不到有坐的來源，會退回預設車輛
 	ingestOneDay(t, svc, formA, removedVehicleID, caseID, "2026-03-02", "吳桂 [去程]", "沒坐")

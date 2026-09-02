@@ -17,23 +17,23 @@ type ScheduleLeg struct {
 
 // ActiveSchedule 是月結作業展開搭乘日曆所需的個案排班資訊。
 type ActiveSchedule struct {
-	CaseID         uuid.UUID
-	CaseCode       string
-	CaseName       string
-	Region         string
-	ClaimEndDate   *time.Time
-	SiteID         uuid.UUID
-	SiteOpenDays   []int16
-	EffectiveFrom  time.Time
-	EffectiveTo    *time.Time
-	Weekdays       []int16
-	TripPattern    int16
-	Legs           []ScheduleLeg
+	CaseID        uuid.UUID
+	CaseCode      string
+	CaseName      string
+	Region        string
+	ClaimEndDate  *time.Time
+	SiteID        uuid.UUID
+	SiteOpenDays  []int16
+	EffectiveFrom time.Time
+	EffectiveTo   *time.Time
+	Weekdays      []int16
+	TripPattern   int16
+	Legs          []ScheduleLeg
 }
 
 // TaskStore 定義月結與缺報檢核所需的搭乘紀錄查詢。
 type TaskStore interface {
-	GetReportedRideSlots(ctx context.Context, targetDate time.Time) ([]ReportedRideSlot, error)
+	GetReportedRideSlotsInRange(ctx context.Context, start, end time.Time) ([]ReportedRideSlotOnDate, error)
 	GetMonthEndRideStats(ctx context.Context, start, end time.Time) (MonthEndRideStats, error)
 }
 
@@ -52,10 +52,11 @@ type Notifier interface {
 	SendNotification(ctx context.Context, topic, subject, body string) error
 }
 
-// ReportedRideSlot 代表已回報趟次之辨識鍵。
-type ReportedRideSlot struct {
-	CaseID uuid.UUID
-	LegSeq int16
+// ReportedRideSlotOnDate 代表已回報趟次之辨識鍵，含服務日期以避免跨日誤判。
+type ReportedRideSlotOnDate struct {
+	CaseID      uuid.UUID
+	ServiceDate time.Time
+	LegSeq      int16
 }
 
 // MonthEndRideStats 代表月統計搭乘數據。

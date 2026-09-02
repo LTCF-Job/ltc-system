@@ -7,6 +7,7 @@ import (
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
 	drapp "ltc-system/apps/api/internal/modules/driverreport/app"
 	holidayapp "ltc-system/apps/api/internal/modules/holiday/app"
+	identityapp "ltc-system/apps/api/internal/modules/identity/app"
 	masterapp "ltc-system/apps/api/internal/modules/masterdata/app"
 	notifyapp "ltc-system/apps/api/internal/modules/notification/app"
 	opsapp "ltc-system/apps/api/internal/modules/ops/app"
@@ -25,6 +26,15 @@ func (w caseAuditWriter) Write(ctx context.Context, e caseapp.AuditEntry) error 
 		ActorID: e.ActorID, ActorRole: e.ActorRole, Action: e.Action, EntityType: e.EntityType,
 		EntityID: e.EntityID, BeforeData: e.BeforeData, AfterData: e.AfterData,
 		IPAddress: e.IPAddress, UserAgent: e.UserAgent,
+	})
+}
+
+type identityAuditWriter struct{ svc *auditapp.Service }
+
+func (w identityAuditWriter) Write(ctx context.Context, e identityapp.AuditEntry) error {
+	return w.svc.Write(ctx, auditapp.Entry{
+		ActorID: e.ActorID, ActorRole: e.ActorRole, Action: e.Action, EntityType: e.EntityType,
+		EntityID: e.EntityID, BeforeData: e.BeforeData, AfterData: e.AfterData,
 	})
 }
 

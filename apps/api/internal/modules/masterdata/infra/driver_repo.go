@@ -80,7 +80,8 @@ func (r *DriverRepository) List(ctx context.Context, region, q string, page, pag
 	query := `
 		SELECT ` + driverColumns + `
 		FROM drivers
-		WHERE ($1 = '' OR region = $1)
+		WHERE deleted_at IS NULL
+		  AND ($1 = '' OR region = $1)
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR code ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
 		ORDER BY code ASC
 		LIMIT $3 OFFSET $4
@@ -103,7 +104,8 @@ func (r *DriverRepository) List(ctx context.Context, region, q string, page, pag
 	var total int64
 	countQuery := `
 		SELECT COUNT(*) FROM drivers
-		WHERE ($1 = '' OR region = $1)
+		WHERE deleted_at IS NULL
+		  AND ($1 = '' OR region = $1)
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR code ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
 	`
 	_ = r.db.QueryRow(ctx, countQuery, region, q).Scan(&total)
@@ -113,17 +115,17 @@ func (r *DriverRepository) List(ctx context.Context, region, q string, page, pag
 
 // GetByID 依 UUID 取得司機。
 func (r *DriverRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Driver, error) {
-	return r.getOne(ctx, `SELECT `+driverColumns+` FROM drivers WHERE id = $1`, id)
+	return r.getOne(ctx, `SELECT `+driverColumns+` FROM drivers WHERE id = $1 AND deleted_at IS NULL`, id)
 }
 
 // GetByHMAC 依身分證 HMAC 索引檢查是否已存在。
 func (r *DriverRepository) GetByHMAC(ctx context.Context, hmac []byte) (*app.Driver, error) {
-	return r.getOne(ctx, `SELECT `+driverColumns+` FROM drivers WHERE national_id_hmac = $1 LIMIT 1`, hmac)
+	return r.getOne(ctx, `SELECT `+driverColumns+` FROM drivers WHERE national_id_hmac = $1 AND deleted_at IS NULL LIMIT 1`, hmac)
 }
 
 // GetByNameNormalized 依正規化姓名搜尋司機。
 func (r *DriverRepository) GetByNameNormalized(ctx context.Context, nameNorm string) (*app.Driver, error) {
-	return r.getOne(ctx, `SELECT `+driverColumns+` FROM drivers WHERE name_normalized = $1 LIMIT 1`, nameNorm)
+	return r.getOne(ctx, `SELECT `+driverColumns+` FROM drivers WHERE name_normalized = $1 AND deleted_at IS NULL LIMIT 1`, nameNorm)
 }
 
 func (r *DriverRepository) getOne(ctx context.Context, query string, args ...interface{}) (*app.Driver, error) {
@@ -159,7 +161,7 @@ func (r *DriverRepository) Update(ctx context.Context, d *app.Driver) error {
 		UPDATE drivers
 		SET name = $2, name_normalized = $3, email = $4, region = $5, status = $6,
 		    license_class = $7, license_expiry_date = $8, updated_at = now()
-		WHERE id = $1
+		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING updated_at
 	`
 	return r.db.QueryRow(ctx, query, d.ID, d.Name, d.NameNormalized, d.Email, d.Region, d.Status,
@@ -193,6 +195,7 @@ func (r *DriverRepository) ListDriversForVehicleOnDate(ctx context.Context, vehi
 		JOIN drivers d ON a.driver_id = d.id
 		WHERE a.vehicle_id = $1
 		  AND a.effective_range @> $2::date
+		  AND d.deleted_at IS NULL
 		ORDER BY d.code ASC
 	`
 	rows, err := r.db.Query(ctx, query, vehicleID, serviceDate)
@@ -224,6 +227,7 @@ func (r *DriverRepository) ListByVehicleIDsOnDate(ctx context.Context, vehicleID
 		JOIN drivers d ON a.driver_id = d.id
 		WHERE a.vehicle_id = ANY($1::uuid[])
 		  AND a.effective_range @> $2::date
+		  AND d.deleted_at IS NULL
 		ORDER BY d.code ASC
 	`
 	rows, err := r.db.Query(ctx, query, vehicleIDs, on)
@@ -315,4 +319,23 @@ func (r *DriverRepository) ReplaceVehicleDrivers(ctx context.Context, vehicleID 
 	}
 
 	return tx.Commit(ctx)
+}
+
+// SoftDelete 軟刪除司機，回傳 false 代表該筆已被刪除過。
+func (r *DriverRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
+	tag, err := r.db.Exec(ctx, `UPDATE drivers SET deleted_at = now(), deleted_by = $2, status = 'resigned' WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// CloseActiveAssignments 收斂該司機所有生效中車輛指派的區間至今天。
+func (r *DriverRepository) CloseActiveAssignments(ctx context.Context, driverID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE driver_assignments
+		SET effective_range = daterange(lower(effective_range), CURRENT_DATE, '[)')
+		WHERE driver_id = $1 AND upper_inf(effective_range)
+	`, driverID)
+	return err
 }

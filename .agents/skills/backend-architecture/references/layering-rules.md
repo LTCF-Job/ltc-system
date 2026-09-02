@@ -34,6 +34,7 @@ Each module owns one business capability. Put new work in the module that alread
 | `holiday` | Public holidays and government-calendar sync |
 | `audit` | Audit-log writes and queries; the only owner of `audit_log` SQL |
 | `task` | Missing-report detection and month-end scheduled jobs |
+| `identity` | User accounts and roles: Supabase Auth Admin API wiring, self password change, the `roles` table |
 
 ## 3. Import matrix
 

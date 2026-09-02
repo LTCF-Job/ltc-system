@@ -69,6 +69,27 @@ func (a rideScheduleReader) GetActiveScheduleForCaseOnDate(ctx context.Context, 
 	return &rideapp.CaseSchedule{ID: s.ID, CaseID: s.CaseID, SiteID: s.SiteID, TripPattern: s.TripPattern, Legs: legs}, nil
 }
 
+// rideMissingReportProvider 讓 ride 的異常集中清單取得整月未回報趟次，不觸發告警通知。
+type rideMissingReportProvider struct{ svc *taskapp.TaskService }
+
+func (a rideMissingReportProvider) ListMissingForMonth(ctx context.Context, year, month int, region string) ([]rideapp.MissingRide, error) {
+	items, err := a.svc.ListMissingReportsForMonth(ctx, year, month, region)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]rideapp.MissingRide, 0, len(items))
+	for _, item := range items {
+		serviceDate, _ := time.Parse("2006-01-02", item.ServiceDate)
+		out = append(out, rideapp.MissingRide{
+			CaseID:      item.CaseID,
+			CaseName:    item.CaseName,
+			ServiceDate: serviceDate,
+			LegSeq:      item.LegSeq,
+		})
+	}
+	return out, nil
+}
+
 // taskScheduleReader 讓 task 的月結作業取得整月有效排班。
 type taskScheduleReader struct{ repo *caseinfra.CaseRepository }
 

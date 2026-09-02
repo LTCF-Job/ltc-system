@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -28,6 +29,9 @@ type Config struct {
 	SentryDSN                   string        `envconfig:"SENTRY_DSN"`
 	LogLevel                    string        `envconfig:"LOG_LEVEL" default:"info"`
 	GovernmentHolidayAPITimeout time.Duration `envconfig:"GOVERNMENT_HOLIDAY_API_TIMEOUT" default:"10s"`
+	SupabaseURL                 string        `envconfig:"SUPABASE_URL"`
+	SupabaseServiceRoleKey      string        `envconfig:"SUPABASE_SERVICE_ROLE_KEY"`
+	SupabaseAdminTimeout        time.Duration `envconfig:"SUPABASE_ADMIN_API_TIMEOUT" default:"10s"`
 
 	// 解析後的金鑰 bytes
 	EncryptionKey []byte `ignored:"true"`
@@ -71,6 +75,14 @@ func LoadFromEnv() (*Config, error) {
 	// 確保加密金鑰與 HMAC 金鑰不同
 	if cfg.EncryptionKeyB64 == cfg.HMACKeyB64 {
 		return nil, errors.New("ENCRYPTION_KEY and HMAC_KEY must not be identical")
+	}
+
+	if cfg.SupabaseURL == "" && cfg.SupabaseProjectRef != "" {
+		cfg.SupabaseURL = fmt.Sprintf("https://%s.supabase.co", cfg.SupabaseProjectRef)
+	}
+	// 金鑰留空時 identity 模組的端點會誠實回 503，不強制擋住啟動——這裡只提醒維運人員。
+	if cfg.AppEnv == "production" && cfg.SupabaseServiceRoleKey == "" {
+		slog.Warn("SUPABASE_SERVICE_ROLE_KEY is not set; user/role management endpoints will return 503")
 	}
 
 	return &cfg, nil

@@ -92,7 +92,8 @@ func NewVehicleRepository(db *pgxpool.Pool) *VehicleRepository {
 
 // vehicleFilterSQL 是 List 與其 count 查詢共用的條件；區域條件走所屬單位，車輛本身不存區域。
 const vehicleFilterSQL = `
-	WHERE ($1::uuid IS NULL OR v.site_id = $1)
+	WHERE v.deleted_at IS NULL
+	  AND ($1::uuid IS NULL OR v.site_id = $1)
 	  AND ($2 = '' OR s.region = $2)
 	  AND ($3 = '' OR v.plate_no ILIKE '%' || $3 || '%' OR v.display_name ILIKE '%' || $3 || '%')
 `
@@ -134,12 +135,12 @@ func (r *VehicleRepository) List(ctx context.Context, filter app.VehicleFilter, 
 
 // GetByID 依 UUID 取得車輛。
 func (r *VehicleRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Vehicle, error) {
-	return r.getOne(ctx, vehicleSelect+` WHERE v.id = $1`, id)
+	return r.getOne(ctx, vehicleSelect+` WHERE v.id = $1 AND v.deleted_at IS NULL`, id)
 }
 
 // GetByDisplayName 依顯示名稱尋找（支援匯入比對）。
 func (r *VehicleRepository) GetByDisplayName(ctx context.Context, displayName string) (*app.Vehicle, error) {
-	return r.getOne(ctx, vehicleSelect+` WHERE v.display_name = $1 LIMIT 1`, displayName)
+	return r.getOne(ctx, vehicleSelect+` WHERE v.display_name = $1 AND v.deleted_at IS NULL LIMIT 1`, displayName)
 }
 
 func (r *VehicleRepository) getOne(ctx context.Context, query string, arg interface{}) (*app.Vehicle, error) {
@@ -197,7 +198,7 @@ func (r *VehicleRepository) Update(ctx context.Context, v *app.Vehicle) error {
 		    passenger_insurance_expiry = $9, third_party_insurance_expiry = $10,
 		    last_inspection_date = $11, wheelchair_accessible = $12, status = $13,
 		    updated_at = now()
-		WHERE id = $1
+		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING created_at, updated_at
 	`
 	if err := r.db.QueryRow(ctx, query, vehicleWriteArgs(v)...).Scan(&v.CreatedAt, &v.UpdatedAt); err != nil {
@@ -219,4 +220,34 @@ func (r *VehicleRepository) fillSite(ctx context.Context, v *app.Vehicle) error 
 	}
 	v.SiteName, v.Region = name, region
 	return nil
+}
+
+// SoftDelete 軟刪除車輛，回傳 false 代表該筆已被刪除過。
+func (r *VehicleRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
+	tag, err := r.db.Exec(ctx, `UPDATE vehicles SET deleted_at = now(), deleted_by = $2, status = 'retired' WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// CountActiveDriverAssignments 統計該車輛目前生效中的司機指派筆數。
+func (r *VehicleRepository) CountActiveDriverAssignments(ctx context.Context, vehicleID uuid.UUID) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM driver_assignments
+		WHERE vehicle_id = $1 AND upper_inf(effective_range)
+	`, vehicleID).Scan(&count)
+	return count, err
+}
+
+// CountScheduleLegs 統計該車輛目前仍被生效中排班綁定的趟次筆數。
+func (r *VehicleRepository) CountScheduleLegs(ctx context.Context, vehicleID uuid.UUID) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM schedule_legs sl
+		JOIN case_schedules cs ON sl.schedule_id = cs.id
+		WHERE sl.vehicle_id = $1 AND upper_inf(cs.effective_range)
+	`, vehicleID).Scan(&count)
+	return count, err
 }

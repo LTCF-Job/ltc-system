@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"ltc-system/apps/api/internal/domain/crypto"
 	"ltc-system/apps/api/internal/platform/config"
 )
@@ -32,6 +33,11 @@ type fakeDriverStore struct {
 
 	byVehicle   map[uuid.UUID][]Driver
 	lastReplace *replacedVehicleDrivers
+
+	deleted           map[uuid.UUID]bool
+	softDeleteErr     error
+	closedAssignments uuid.UUID
+	closeAssignErr    error
 }
 
 // replacedVehicleDrivers 記錄一次 ReplaceVehicleDrivers 呼叫的參數。
@@ -95,12 +101,31 @@ func (f *fakeDriverStore) ReplaceVehicleDrivers(ctx context.Context, vehicleID u
 	return nil
 }
 
+func (f *fakeDriverStore) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
+	if f.softDeleteErr != nil {
+		return false, f.softDeleteErr
+	}
+	if f.deleted == nil {
+		f.deleted = map[uuid.UUID]bool{}
+	}
+	if f.deleted[id] {
+		return false, nil
+	}
+	f.deleted[id] = true
+	return true, nil
+}
+
+func (f *fakeDriverStore) CloseActiveAssignments(ctx context.Context, driverID uuid.UUID) error {
+	f.closedAssignments = driverID
+	return f.closeAssignErr
+}
+
 func TestDriverService_Create(t *testing.T) {
 	cfg := testConfig()
 
 	t.Run("rejects invalid national id", func(t *testing.T) {
 		store := newFakeDriverStore()
-		svc := NewDriverService(store, cfg)
+		svc := NewDriverService(store, cfg, nil)
 
 		_, err := svc.Create(context.Background(), CreateDriverInput{
 			Name:       "測試司機",
@@ -114,7 +139,7 @@ func TestDriverService_Create(t *testing.T) {
 
 	t.Run("encrypts and stores a valid national id", func(t *testing.T) {
 		store := newFakeDriverStore()
-		svc := NewDriverService(store, cfg)
+		svc := NewDriverService(store, cfg, nil)
 
 		d, err := svc.Create(context.Background(), CreateDriverInput{
 			Name:       "測試司機",
@@ -153,7 +178,7 @@ func TestDriverService_Create(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				store := newFakeDriverStore()
-				svc := NewDriverService(store, cfg)
+				svc := NewDriverService(store, cfg, nil)
 
 				d, err := svc.Create(context.Background(), CreateDriverInput{
 					Name:              "測試司機",
@@ -188,7 +213,7 @@ func TestDriverService_Update(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		store := newFakeDriverStore()
-		svc := NewDriverService(store, cfg)
+		svc := NewDriverService(store, cfg, nil)
 
 		_, err := svc.Update(context.Background(), uuid.New(), UpdateDriverInput{})
 		assert.ErrorIs(t, err, ErrDriverNotFound)
@@ -198,7 +223,7 @@ func TestDriverService_Update(t *testing.T) {
 		id := uuid.New()
 		store := newFakeDriverStore()
 		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active"}
-		svc := NewDriverService(store, cfg)
+		svc := NewDriverService(store, cfg, nil)
 
 		newName := "新名字"
 		d, err := svc.Update(context.Background(), id, UpdateDriverInput{Name: &newName})
@@ -214,7 +239,7 @@ func TestDriverService_Update(t *testing.T) {
 		store := newFakeDriverStore()
 		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active",
 			LicenseClass: strPtr("sedan"), LicenseExpiryDate: &oldExpiry}
-		svc := NewDriverService(store, cfg)
+		svc := NewDriverService(store, cfg, nil)
 
 		newExpiry := time.Date(2031, 3, 24, 0, 0, 0, 0, time.UTC)
 		d, err := svc.Update(context.Background(), id, UpdateDriverInput{
@@ -231,7 +256,7 @@ func TestDriverService_Update(t *testing.T) {
 		id := uuid.New()
 		store := newFakeDriverStore()
 		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active"}
-		svc := NewDriverService(store, cfg)
+		svc := NewDriverService(store, cfg, nil)
 
 		_, err := svc.Update(context.Background(), id, UpdateDriverInput{LicenseClass: strPtr("motorcycle")})
 
@@ -244,7 +269,7 @@ func TestDriverService_Update(t *testing.T) {
 		expiry := time.Date(2027, 5, 21, 0, 0, 0, 0, time.UTC)
 		store := newFakeDriverStore()
 		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active", LicenseExpiryDate: &expiry}
-		svc := NewDriverService(store, cfg)
+		svc := NewDriverService(store, cfg, nil)
 
 		d, err := svc.Update(context.Background(), id, UpdateDriverInput{})
 		assert.NoError(t, err)
@@ -259,7 +284,7 @@ func TestDriverService_Update(t *testing.T) {
 func TestDriverService_Reveal(t *testing.T) {
 	cfg := testConfig()
 	store := newFakeDriverStore()
-	svc := NewDriverService(store, cfg)
+	svc := NewDriverService(store, cfg, nil)
 
 	cipher, err := crypto.Encrypt("A123456789", cfg.EncryptionKey)
 	assert.NoError(t, err)
@@ -276,7 +301,7 @@ func TestDriverService_Reveal(t *testing.T) {
 
 func TestDriverService_AssignVehicle(t *testing.T) {
 	store := newFakeDriverStore()
-	svc := NewDriverService(store, testConfig())
+	svc := NewDriverService(store, testConfig(), nil)
 
 	driverID := uuid.New()
 	vehicleID := uuid.New()
@@ -291,4 +316,27 @@ func TestDriverService_AssignVehicle(t *testing.T) {
 	assert.Equal(t, driverID, assignment.DriverID)
 	assert.Equal(t, vehicleID, assignment.VehicleID)
 	assert.Same(t, assignment, store.lastAssign)
+}
+
+func TestDriverService_Delete(t *testing.T) {
+	t.Run("成功刪除並收斂車輛指派", func(t *testing.T) {
+		store := newFakeDriverStore()
+		driverID := uuid.New()
+		svc := NewDriverService(store, testConfig(), nil)
+
+		err := svc.Delete(context.Background(), driverID, uuid.New(), "admin")
+		require.NoError(t, err)
+		assert.True(t, store.deleted[driverID])
+		assert.Equal(t, driverID, store.closedAssignments)
+	})
+
+	t.Run("已刪除再次刪除回錯誤", func(t *testing.T) {
+		store := newFakeDriverStore()
+		driverID := uuid.New()
+		svc := NewDriverService(store, testConfig(), nil)
+
+		require.NoError(t, svc.Delete(context.Background(), driverID, uuid.New(), "admin"))
+		err := svc.Delete(context.Background(), driverID, uuid.New(), "admin")
+		assert.ErrorIs(t, err, ErrDriverNotFound)
+	})
 }

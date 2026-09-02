@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -104,6 +105,29 @@ func (h *CaseHandler) Reveal(c *gin.Context) {
 	}
 
 	httpx.RespondSuccess(c, http.StatusOK, gin.H{"nationalId": plainID}, nil)
+}
+
+// Delete 軟刪除個案並收斂其生效中排班。
+func (h *CaseHandler) Delete(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的個案 ID", nil)
+		return
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+
+	if err := h.masterService.Delete(c.Request.Context(), id, actorID, actorRole, c.ClientIP(), c.Request.UserAgent()); err != nil {
+		if errors.Is(err, app.ErrCaseNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 // CreateSchedule 建立個案排班設定與時段明細。

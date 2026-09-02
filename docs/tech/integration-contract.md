@@ -42,6 +42,12 @@ view 元件呼叫 src/api/*.ts
 - **Mock 角色 header 外洩到正式環境**：`X-Mock-Role` 免登入捷徑只在 `APP_ENV=local` 生效，寫死在 `internal/platform/auth/auth.go`；改動這段驗證邏輯時，判斷分支寫錯會讓正式環境也吃這個 header，等同繞過登入。
 - **展示模式（`demo/demo`）攔截殘留**：非展示帳密登入前若未正確呼叫 `exitDemoModeIfActive()`，前一次展示模式的 MSW 攔截會繼續吃掉真實帳號的請求，讓正式資料被假資料蓋過；細節見 `frontend-framework.md` 的展示帳號段落。
 
+## 刻意保留的契約落差
+
+- **`DashboardStatsDTO` 的未回欄位**：前端型別宣告 7 個欄位，後端 `GET /dashboard/stats` 只真的回 `recentExports`，其餘欄位（來自不同資料源）目前由 `GET /dashboard/metrics` 分開提供，未合併進 `stats`。既有漂移，本輪只補上 `recentExports` 這一項，不擴大範圍統一兩支端點。
+- **`import_error` 分頁的 `caseName` 語意**：`GET /rides/issues?issueType=import_error` 回傳的 `caseName` 欄位實際內容是 `driver_name_raw`（原始回報文字/欄位），不是個案姓名——該分頁前端標題本來就是「回報文字/欄位」，欄位名稱沿用共用 DTO 只是為了三種 `issueType` 共用同一個回應形狀。同理 `caseId` 回空字串、`legSeq` 回 `0`，前端這兩欄在該分頁本來就不顯示。
+
 ## Unverified
 
 - `error.details` 的欄位名稱／巢狀規則沒有共用的型別定義或 schema 驗證，目前只能靠前後端各自的實作互相對齊，未找到自動化契約測試。
+- **Supabase Admin API 的實際回應形狀**：本輪開發時 `SUPABASE_SERVICE_ROLE_KEY` 留空，`identity` 模組（`/users`、密碼變更）的請求／回應欄位（`app_metadata` vs `raw_app_meta_data`、`ban_duration` 停用語義、`grant_type=password` 的錯誤 payload）皆依官方文件推測，未經真實環境驗證。金鑰就位後第一件事應是打真實環境對照 `identity/infra/supabase_admin_client.go` 的假設。

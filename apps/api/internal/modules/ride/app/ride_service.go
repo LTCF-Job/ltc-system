@@ -14,10 +14,11 @@ import (
 
 // RideService 封裝司機接送匯報的展開、正規化、混車合併、衝突裁決與更正。
 type RideService struct {
-	formRepo   RideRecordStore
-	driverRepo DriverResolver
-	caseRepo   ScheduleReader
-	auditRepo  AuditWriter
+	formRepo        RideRecordStore
+	driverRepo      DriverResolver
+	caseRepo        ScheduleReader
+	auditRepo       AuditWriter
+	missingProvider MissingReportProvider
 }
 
 // NewRideService 建立 RideService 實例。
@@ -26,12 +27,14 @@ func NewRideService(
 	driverRepo DriverResolver,
 	caseRepo ScheduleReader,
 	auditRepo AuditWriter,
+	missingProvider MissingReportProvider,
 ) *RideService {
 	return &RideService{
-		formRepo:   formRepo,
-		driverRepo: driverRepo,
-		caseRepo:   caseRepo,
-		auditRepo:  auditRepo,
+		formRepo:        formRepo,
+		driverRepo:      driverRepo,
+		caseRepo:        caseRepo,
+		auditRepo:       auditRepo,
+		missingProvider: missingProvider,
 	}
 }
 
@@ -67,6 +70,13 @@ func (s *RideService) IngestSubmission(ctx context.Context, formID, defaultVehic
 		}
 	}
 
+	columns, err := s.formRepo.GetFormColumns(ctx, formID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get form columns: %w", err)
+	}
+
+	anomalyFlags := detectSubmissionAnomalies(columns, req.Answers)
+
 	rawPayload := map[string]interface{}{
 		"serviceDate": req.ServiceDate.Format("2006-01-02"),
 		"driverRaw":   req.DriverRaw,
@@ -75,15 +85,10 @@ func (s *RideService) IngestSubmission(ctx context.Context, formID, defaultVehic
 	}
 
 	submissionID, err := s.formRepo.SaveFormSubmission(
-		ctx, formID, req.ServiceDate, submittedAt, req.DriverRaw, driverID, "import", rawPayload, req.Remark,
+		ctx, formID, req.ServiceDate, submittedAt, req.DriverRaw, driverID, "import", rawPayload, req.Remark, anomalyFlags,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to save form submission: %w", err)
-	}
-
-	columns, err := s.formRepo.GetFormColumns(ctx, formID)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get form columns: %w", err)
 	}
 
 	written := 0
@@ -177,6 +182,26 @@ func (s *RideService) ListImportedMonths(ctx context.Context) ([]ImportedMonth, 
 		return []ImportedMonth{}, nil
 	}
 	return months, nil
+}
+
+// detectSubmissionAnomalies 找出這列匯報中無法辨識的欄位值與未完成對應的欄位。
+// 空白儲存格代表未回報，不視為異常。
+func detectSubmissionAnomalies(columns []FormColumn, answers map[string]string) []string {
+	var flags []string
+	for _, col := range columns {
+		value, exists := answers[col.ColumnHeader]
+		if !exists || strings.TrimSpace(value) == "" {
+			continue
+		}
+		if col.MappingStatus != "mapped" {
+			flags = append(flags, fmt.Sprintf("unmapped_column:%s", col.ColumnHeader))
+			continue
+		}
+		if _, ok := merge.ParseReportedValue(value); !ok {
+			flags = append(flags, fmt.Sprintf("unparsed_value:%s:%s", col.ColumnHeader, value))
+		}
+	}
+	return flags
 }
 
 // expandLegSeqs 套用四趟展開規則（R4 / §5.5）：表單第 1 趟展開為 1、3 趟；
@@ -429,4 +454,170 @@ func (s *RideService) ManualReportRide(
 	}
 
 	return &rec, nil
+}
+
+// GetRecord 取得單筆搭乘紀錄詳情，查無資料回 ErrRideNotFound。
+func (s *RideService) GetRecord(ctx context.Context, id uuid.UUID) (*RideRecord, error) {
+	rec, err := s.formRepo.GetRideRecordByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ride record: %w", err)
+	}
+	if rec == nil {
+		return nil, ErrRideNotFound
+	}
+	return rec, nil
+}
+
+// ResolveConflictInput 代表裁決混車衝突之請求結構體。
+type ResolveConflictInput struct {
+	VehicleID uuid.UUID
+	DriverID  *uuid.UUID
+	Reason    *string
+}
+
+// ResolveConflict 人工裁決同車衝突回報，把裁決結果寫回搭乘紀錄並留存稽核。
+func (s *RideService) ResolveConflict(ctx context.Context, rideID uuid.UUID, req ResolveConflictInput, actorID uuid.UUID, actorRole string) error {
+	before, err := s.formRepo.GetRideRecordByID(ctx, rideID)
+	if err != nil {
+		return fmt.Errorf("failed to load ride record: %w", err)
+	}
+	if before == nil {
+		return ErrRideNotFound
+	}
+
+	resolved, err := s.formRepo.ResolveConflict(ctx, rideID, req.VehicleID, req.DriverID, req.Reason, actorID)
+	if err != nil {
+		return fmt.Errorf("failed to resolve conflict: %w", err)
+	}
+	if !resolved {
+		return ErrConflictAlreadyResolved
+	}
+
+	if s.auditRepo != nil {
+		entityIDStr := rideID.String()
+		_ = s.auditRepo.Write(ctx, AuditEntry{
+			ActorID:    &actorID,
+			ActorRole:  &actorRole,
+			Action:     "resolve_conflict",
+			EntityType: "ride_records",
+			EntityID:   &entityIDStr,
+			BeforeData: before,
+			AfterData:  req,
+		})
+	}
+
+	return nil
+}
+
+// IssueRide 是「異常集中處理」分頁的單一列，三種 issueType 共用同一個形狀。
+type IssueRide struct {
+	ID          string
+	CaseID      string
+	CaseName    string
+	ServiceDate time.Time
+	LegSeq      int16
+	Description string
+	Vehicles    []string
+}
+
+// ListIssues 依 issueType 分派查詢「異常集中處理」清單，month 格式為 YYYY-MM。
+func (s *RideService) ListIssues(ctx context.Context, issueType string, year, month int, region, keyword string, page, pageSize int) ([]IssueRide, int64, error) {
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0).Add(-time.Second)
+
+	switch issueType {
+	case "conflict":
+		return s.listConflictIssues(ctx, start, end, keyword, page, pageSize)
+	case "unreported":
+		return s.listUnreportedIssues(ctx, year, month, region, page, pageSize)
+	case "import_error":
+		return s.listImportErrorIssues(ctx, start, end, keyword, page, pageSize)
+	default:
+		return nil, 0, fmt.Errorf("unknown issue type: %s", issueType)
+	}
+}
+
+func (s *RideService) listConflictIssues(ctx context.Context, start, end time.Time, keyword string, page, pageSize int) ([]IssueRide, int64, error) {
+	rows, total, err := s.formRepo.ListPendingConflicts(ctx, start, end, keyword, page, pageSize)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list pending conflicts: %w", err)
+	}
+	items := make([]IssueRide, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, IssueRide{
+			ID:          r.ID.String(),
+			CaseID:      r.CaseID.String(),
+			CaseName:    r.CaseName,
+			ServiceDate: r.ServiceDate,
+			LegSeq:      r.LegSeq,
+			Description: conflictDescription(r),
+			Vehicles:    r.Vehicles,
+		})
+	}
+	return items, total, nil
+}
+
+func (s *RideService) listUnreportedIssues(ctx context.Context, year, month int, region string, page, pageSize int) ([]IssueRide, int64, error) {
+	if s.missingProvider == nil {
+		return []IssueRide{}, 0, nil
+	}
+	rows, err := s.missingProvider.ListMissingForMonth(ctx, year, month, region)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list missing reports: %w", err)
+	}
+
+	total := int64(len(rows))
+	from := (page - 1) * pageSize
+	if from > len(rows) {
+		from = len(rows)
+	}
+	to := from + pageSize
+	if to > len(rows) {
+		to = len(rows)
+	}
+
+	items := make([]IssueRide, 0, to-from)
+	for _, r := range rows[from:to] {
+		items = append(items, IssueRide{
+			ID:          fmt.Sprintf("unreported:%s:%s:%d", r.CaseID, r.ServiceDate.Format("2006-01-02"), r.LegSeq),
+			CaseID:      r.CaseID.String(),
+			CaseName:    r.CaseName,
+			ServiceDate: r.ServiceDate,
+			LegSeq:      r.LegSeq,
+			Description: unreportedDescription(r),
+		})
+	}
+	return items, total, nil
+}
+
+func (s *RideService) listImportErrorIssues(ctx context.Context, start, end time.Time, keyword string, page, pageSize int) ([]IssueRide, int64, error) {
+	rows, total, err := s.formRepo.ListImportErrorSubmissions(ctx, start, end, keyword, page, pageSize)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list import error submissions: %w", err)
+	}
+	items := make([]IssueRide, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, IssueRide{
+			ID:          r.ID.String(),
+			CaseName:    r.DriverNameRaw,
+			ServiceDate: r.ServiceDate,
+			Description: describeAnomalyFlags(r.AnomalyFlags),
+		})
+	}
+	return items, total, nil
+}
+
+func conflictDescription(r ConflictRide) string {
+	return fmt.Sprintf("同一趟次有 %d 台車輛回報「有坐」，需人工裁決", len(r.Vehicles))
+}
+
+func unreportedDescription(r MissingRide) string {
+	return "應搭乘但尚未有任何司機回報"
+}
+
+func describeAnomalyFlags(flags []string) string {
+	if len(flags) == 0 {
+		return "匯入資料異常"
+	}
+	return strings.Join(flags, "；")
 }

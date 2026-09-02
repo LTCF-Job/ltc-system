@@ -67,6 +67,12 @@ func (s *NotificationService) SendNotification(ctx context.Context, topic, subje
 	}
 
 	for _, r := range recipients {
+		if r.Email == "" {
+			slog.Warn("Skipping notification recipient without a resolved email",
+				slog.String("topic", topic), slog.String("recipientType", r.RecipientType), slog.Int64("recipientId", r.ID))
+			continue
+		}
+
 		var sendErr error
 		if s.sender != nil {
 			sendErr = s.sender.SendEmail(ctx, r.Email, subject, body)
@@ -99,21 +105,21 @@ func (s *NotificationService) ListRecipients(ctx context.Context, topic string) 
 	return s.repo.ListRecipients(ctx, topic, false)
 }
 
-// CreateRecipient 新增收件人並留存稽核紀錄。
+// CreateRecipient 新增收件人並留存稽核紀錄；目前唯一的建立入口只支援 email 型別。
 func (s *NotificationService) CreateRecipient(ctx context.Context, topic, email string, displayName *string, actorID uuid.UUID, actorRole string) (*Recipient, error) {
 	item := &Recipient{
-		Topic:       topic,
-		Email:       email,
-		DisplayName: displayName,
-		Active:      true,
-		CreatedBy:   actorID,
+		Topic:         topic,
+		RecipientType: "email",
+		Email:         email,
+		DisplayName:   displayName,
+		Active:        true,
+		CreatedBy:     actorID,
 	}
 
 	if err := s.repo.CreateRecipient(ctx, item); err != nil {
 		return nil, err
 	}
 
-	// 留存 setting_change 稽核紀錄
 	if s.auditRepo != nil {
 		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
@@ -181,4 +187,80 @@ func (s *NotificationService) DeleteRecipient(ctx context.Context, id int64, act
 // ListLogs 取得通知發送歷史。
 func (s *NotificationService) ListLogs(ctx context.Context, topic string, page, pageSize int) ([]Log, int64, error) {
 	return s.repo.ListLogs(ctx, topic, page, pageSize)
+}
+
+// notificationTopics 是允許的通知主題白名單，與 notification_recipients 資料表的 CHECK 約束一致。
+var notificationTopics = map[string]bool{
+	"missing_report": true,
+	"driver_leave":   true,
+	"month_end":      true,
+	"export_failed":  true,
+}
+
+// BatchRecipientInput 代表批次新增收件人的單筆輸入。
+type BatchRecipientInput struct {
+	Topic       string
+	Email       string
+	DisplayName *string
+}
+
+// BatchCreateRecipients 批次新增收件人並留存單筆彙整稽核紀錄。
+func (s *NotificationService) BatchCreateRecipients(ctx context.Context, items []BatchRecipientInput, actorID uuid.UUID, actorRole string) ([]Recipient, error) {
+	entries := make([]Recipient, 0, len(items))
+	for _, in := range items {
+		if !notificationTopics[in.Topic] {
+			return nil, fmt.Errorf("unsupported notification topic: %s", in.Topic)
+		}
+		entries = append(entries, Recipient{
+			Topic:       in.Topic,
+			Email:       in.Email,
+			DisplayName: in.DisplayName,
+			CreatedBy:   actorID,
+		})
+	}
+
+	created, err := s.repo.BatchCreateRecipients(ctx, entries)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.auditRepo != nil && len(created) > 0 {
+		emails := make([]string, 0, len(created))
+		for _, r := range created {
+			emails = append(emails, r.Email)
+		}
+		entityID := fmt.Sprintf("batch:%d", len(created))
+		_ = s.auditRepo.Write(ctx, AuditEntry{
+			ActorID:    &actorID,
+			ActorRole:  &actorRole,
+			Action:     "batch_create_recipients",
+			EntityType: "notification_recipient",
+			EntityID:   &entityID,
+			AfterData:  emails,
+		})
+	}
+
+	return created, nil
+}
+
+// BatchDeleteRecipients 批次刪除收件人並留存單筆彙整稽核紀錄。
+func (s *NotificationService) BatchDeleteRecipients(ctx context.Context, ids []int64, actorID uuid.UUID, actorRole string) (int64, error) {
+	count, err := s.repo.BatchDeleteRecipients(ctx, ids)
+	if err != nil {
+		return 0, err
+	}
+
+	if s.auditRepo != nil && count > 0 {
+		entityID := fmt.Sprintf("batch:%d", count)
+		_ = s.auditRepo.Write(ctx, AuditEntry{
+			ActorID:    &actorID,
+			ActorRole:  &actorRole,
+			Action:     "batch_delete_recipients",
+			EntityType: "notification_recipient",
+			EntityID:   &entityID,
+			AfterData:  map[string]int64{"count": count},
+		})
+	}
+
+	return count, nil
 }

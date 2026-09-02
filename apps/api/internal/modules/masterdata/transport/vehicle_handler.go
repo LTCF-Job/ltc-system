@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
+	"ltc-system/apps/api/internal/platform/auth"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
@@ -115,4 +117,27 @@ func (h *VehicleHandler) SetDrivers(c *gin.Context) {
 	}
 
 	httpx.RespondSuccess(c, http.StatusOK, gin.H{"vehicleId": id, "driverIds": req.DriverIDs}, nil)
+}
+
+// Delete 軟刪除車輛。
+func (h *VehicleHandler) Delete(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		respondInvalidID(c, "無效的車輛 ID")
+		return
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+
+	if err := h.svc.Delete(c.Request.Context(), id, actorID, actorRole); err != nil {
+		if errors.Is(err, app.ErrVehicleInUse) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }

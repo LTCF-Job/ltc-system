@@ -22,6 +22,8 @@ type CaseStore interface {
 	// 維持現況，僅有非 nil 的 ID 會覆寫對應欄位；raw name 字串隨對應 ID 是否為 nil
 	// 一併寫入或清空，供比對不到主檔時保留原始名稱待人工關聯。
 	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
+	SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error)
+	CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error
 }
 
 // SiteRef 是驗證個案交通偏好所需的最小單位資訊。

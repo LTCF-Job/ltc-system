@@ -72,6 +72,14 @@ func (f *fakeCaseStore) UpsertTransportPreference(ctx context.Context, caseID uu
 	return nil
 }
 
+func (f *fakeCaseStore) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
+	return true, nil
+}
+
+func (f *fakeCaseStore) CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error {
+	return nil
+}
+
 func newTestCaseHandler(store *fakeCaseStore) *CaseHandler {
 	svc := app.NewCaseService(&config.Config{}, store, nil, nil, nil)
 	return NewCaseHandler(svc)

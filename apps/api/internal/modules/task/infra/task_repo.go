@@ -19,27 +19,27 @@ func NewTaskRepository(db *pgxpool.Pool) *TaskRepository {
 	return &TaskRepository{db: db}
 }
 
-// GetReportedRideSlots 查詢指定日期已回報且非未回報狀態之趟次清單。
-func (r *TaskRepository) GetReportedRideSlots(ctx context.Context, targetDate time.Time) ([]app.ReportedRideSlot, error) {
+// GetReportedRideSlotsInRange 查詢區間內已回報且非未回報狀態之趟次清單。
+func (r *TaskRepository) GetReportedRideSlotsInRange(ctx context.Context, start, end time.Time) ([]app.ReportedRideSlotOnDate, error) {
 	if r.db == nil {
-		return []app.ReportedRideSlot{}, nil
+		return []app.ReportedRideSlotOnDate{}, nil
 	}
 
 	query := `
-		SELECT case_id, leg_seq
+		SELECT case_id, service_date, leg_seq
 		FROM ride_records
-		WHERE service_date = $1 AND effective_status != 'unreported'
+		WHERE service_date >= $1 AND service_date <= $2 AND effective_status != 'unreported'
 	`
-	rows, err := r.db.Query(ctx, query, targetDate)
+	rows, err := r.db.Query(ctx, query, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query reported rides: %w", err)
 	}
 	defer rows.Close()
 
-	var list []app.ReportedRideSlot
+	var list []app.ReportedRideSlotOnDate
 	for rows.Next() {
-		var slot app.ReportedRideSlot
-		if err := rows.Scan(&slot.CaseID, &slot.LegSeq); err != nil {
+		var slot app.ReportedRideSlotOnDate
+		if err := rows.Scan(&slot.CaseID, &slot.ServiceDate, &slot.LegSeq); err != nil {
 			return nil, fmt.Errorf("failed to scan reported ride slot: %w", err)
 		}
 		list = append(list, slot)
@@ -59,7 +59,7 @@ func (r *TaskRepository) GetMonthEndRideStats(ctx context.Context, start, end ti
 			COUNT(*) as total,
 			COUNT(CASE WHEN effective_status = 'boarded' THEN 1 END) as boarded,
 			COUNT(CASE WHEN effective_status = 'unreported' THEN 1 END) as unreported,
-			COUNT(CASE WHEN has_conflict = true THEN 1 END) as conflicts
+			COUNT(CASE WHEN has_conflict = true AND conflict_resolved_at IS NULL THEN 1 END) as conflicts
 		FROM ride_records
 		WHERE service_date >= $1 AND service_date <= $2
 	`

@@ -49,12 +49,25 @@ type DashboardMetricsDTO struct {
 
 // DashboardService 提供儀表板整合統計資料。
 type DashboardService struct {
-	repo DashboardRepositoryPort
+	repo     DashboardRepositoryPort
+	jobStore ExportJobStore
 }
 
 // NewDashboardService 建立 DashboardService 實例。
-func NewDashboardService(repo DashboardRepositoryPort) *DashboardService {
-	return &DashboardService{repo: repo}
+func NewDashboardService(repo DashboardRepositoryPort, jobStore ExportJobStore) *DashboardService {
+	return &DashboardService{repo: repo, jobStore: jobStore}
+}
+
+// GetRecentExports 取得最近的申報匯出工作紀錄。
+func (s *DashboardService) GetRecentExports(ctx context.Context) ([]GovClaimJob, error) {
+	if s.jobStore == nil {
+		return []GovClaimJob{}, nil
+	}
+	jobs, _, err := s.jobStore.ListJobs(ctx, 1, 5)
+	if err != nil {
+		return nil, err
+	}
+	return jobs, nil
 }
 
 // GetMetrics 查詢儀表板完整營運與圖表統計指標。

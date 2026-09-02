@@ -11,6 +11,7 @@ import (
 	casetransport "ltc-system/apps/api/internal/modules/casemgmt/transport"
 	drtransport "ltc-system/apps/api/internal/modules/driverreport/transport"
 	holidaytransport "ltc-system/apps/api/internal/modules/holiday/transport"
+	identitytransport "ltc-system/apps/api/internal/modules/identity/transport"
 	mastertransport "ltc-system/apps/api/internal/modules/masterdata/transport"
 	notifytransport "ltc-system/apps/api/internal/modules/notification/transport"
 	opstransport "ltc-system/apps/api/internal/modules/ops/transport"
@@ -47,6 +48,8 @@ type handlers struct {
 	dashboard    *reporttransport.DashboardHandler
 	driverReport *drtransport.DriverReportHandler
 	caregiver    *caregivertransport.CaregiverHandler
+	role         *identitytransport.RoleHandler
+	identity     *identitytransport.IdentityHandler
 }
 
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
@@ -99,6 +102,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 		apiV1.GET("/cases/export", auth.RequireRoles("viewer", "staff", "admin"), h.kase.ExportProfileWorkbook)
 		apiV1.GET("/cases/:id", auth.RequireRoles("viewer", "staff", "admin"), h.kase.Get)
 		apiV1.PATCH("/cases/:id", auth.RequireRoles("staff", "admin"), h.kase.Update)
+		apiV1.DELETE("/cases/:id", auth.RequireRoles("admin"), h.kase.Delete)
 		apiV1.PUT("/cases/:id/transport-preference", auth.RequireRoles("staff", "admin"), h.kase.UpdateTransportPreference)
 		apiV1.POST("/cases/:id/reveal", auth.RequireRoles("staff", "admin"), h.kase.Reveal)
 		apiV1.GET("/cases/:id/schedule", auth.RequireRoles("viewer", "staff", "admin"), h.kase.GetSchedule)
@@ -117,12 +121,14 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 		apiV1.GET("/vehicles", auth.RequireRoles("viewer", "staff", "admin"), h.vehicle.List)
 		apiV1.POST("/vehicles", auth.RequireRoles("staff", "admin"), h.vehicle.Create)
 		apiV1.PATCH("/vehicles/:id", auth.RequireRoles("staff", "admin"), h.vehicle.Update)
+		apiV1.DELETE("/vehicles/:id", auth.RequireRoles("admin"), h.vehicle.Delete)
 		apiV1.PUT("/vehicles/:id/drivers", auth.RequireRoles("staff", "admin"), h.vehicle.SetDrivers)
 
 		// 4. 司機主檔
 		apiV1.GET("/drivers", auth.RequireRoles("viewer", "staff", "admin"), h.driver.List)
 		apiV1.POST("/drivers", auth.RequireRoles("staff", "admin"), h.driver.Create)
 		apiV1.PATCH("/drivers/:id", auth.RequireRoles("staff", "admin"), h.driver.Update)
+		apiV1.DELETE("/drivers/:id", auth.RequireRoles("admin"), h.driver.Delete)
 		apiV1.POST("/drivers/:id/reveal", auth.RequireRoles("staff", "admin"), h.driver.Reveal)
 		apiV1.POST("/drivers/:id/assignments", auth.RequireRoles("staff", "admin"), h.driver.AssignVehicle)
 
@@ -164,6 +170,8 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 		// 9. 通知收件人管理與通知留痕 (B5.2b)
 		apiV1.GET("/settings/notification-recipients", auth.RequireRoles("viewer", "staff", "admin"), h.notification.ListRecipients)
 		apiV1.POST("/settings/notification-recipients", auth.RequireRoles("admin"), h.notification.CreateRecipient)
+		apiV1.POST("/settings/notification-recipients/batch", auth.RequireRoles("admin"), h.notification.BatchCreateRecipients)
+		apiV1.POST("/settings/notification-recipients/batch-delete", auth.RequireRoles("admin"), h.notification.BatchDeleteRecipients)
 		apiV1.PATCH("/settings/notification-recipients/:id", auth.RequireRoles("admin"), h.notification.UpdateRecipient)
 		apiV1.DELETE("/settings/notification-recipients/:id", auth.RequireRoles("admin"), h.notification.DeleteRecipient)
 		apiV1.GET("/notifications/logs", auth.RequireRoles("viewer", "staff", "admin"), h.notification.ListLogs)
@@ -210,6 +218,22 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers) *gin.Engine {
 		apiV1.PATCH("/caregivers/:id", auth.RequireRoles("staff", "admin"), h.caregiver.Update)
 		apiV1.DELETE("/caregivers/:id", auth.RequireRoles("admin"), h.caregiver.Delete)
 		apiV1.PUT("/caregivers/:id/site", auth.RequireRoles("staff", "admin"), h.caregiver.LinkSite)
+
+		// 18. 角色身分管理 roleH
+		apiV1.GET("/roles", auth.RequireRoles("admin"), h.role.ListRoles)
+		apiV1.GET("/roles/:id", auth.RequireRoles("admin"), h.role.GetRole)
+		apiV1.POST("/roles", auth.RequireRoles("admin"), h.role.CreateRole)
+		apiV1.PATCH("/roles/:id", auth.RequireRoles("admin"), h.role.UpdateRole)
+		apiV1.DELETE("/roles/:id", auth.RequireRoles("admin"), h.role.DeleteRole)
+
+		// 19. 使用者帳號管理與密碼變更 identityH
+		apiV1.GET("/users", auth.RequireRoles("admin"), h.identity.ListUsers)
+		apiV1.GET("/users/:id", auth.RequireRoles("admin"), h.identity.GetUser)
+		apiV1.POST("/users", auth.RequireRoles("admin"), h.identity.CreateUser)
+		apiV1.PATCH("/users/:id", auth.RequireRoles("admin"), h.identity.UpdateUser)
+		apiV1.PUT("/users/:id/permissions", auth.RequireRoles("admin"), h.identity.UpdateUserPermissions)
+		apiV1.DELETE("/users/:id", auth.RequireRoles("admin"), h.identity.DeleteUser)
+		apiV1.POST("/auth/change-password", auth.RequireRoles("viewer", "staff", "admin"), h.identity.ChangeSelfPassword)
 	}
 
 	return r

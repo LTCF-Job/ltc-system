@@ -265,13 +265,13 @@ export const systemHandlers = [
           (u.phone && u.phone.includes(q))
       )
     }
-    return HttpResponse.json(list)
+    return HttpResponse.json({ data: list })
   }),
 
   http.get('/api/v1/users/:id', ({ params }) => {
     const user = mockUsers.find((u) => u.id === params.id)
     if (!user) return new HttpResponse(null, { status: 404 })
-    return HttpResponse.json(user)
+    return HttpResponse.json({ data: user })
   }),
 
   http.post('/api/v1/users', async ({ request }) => {
@@ -311,7 +311,7 @@ export const systemHandlers = [
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
     })
 
-    return HttpResponse.json(newUser)
+    return HttpResponse.json({ data: newUser })
   }),
 
   http.patch('/api/v1/users/:id', async ({ params, request }) => {
@@ -337,7 +337,7 @@ export const systemHandlers = [
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
     })
 
-    return HttpResponse.json(user)
+    return HttpResponse.json({ data: user })
   }),
 
   http.put('/api/v1/users/:id/permissions', async ({ params, request }) => {
@@ -345,7 +345,7 @@ export const systemHandlers = [
     if (!user) return new HttpResponse(null, { status: 404 })
     const body = (await request.json()) as any
     const before = user.customPermissions ? { ...user.customPermissions } : null
-    user.customPermissions = body.permissions
+    user.customPermissions = body.customPermissions
 
     mockAuditLogs.unshift({
       id: `audit_${Date.now()}`,
@@ -363,7 +363,7 @@ export const systemHandlers = [
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
     })
 
-    return HttpResponse.json(user)
+    return HttpResponse.json({ data: user })
   }),
 
   http.delete('/api/v1/users/:id', ({ params }) => {
@@ -386,7 +386,7 @@ export const systemHandlers = [
         createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
       })
     }
-    return HttpResponse.json({ success: true })
+    return HttpResponse.json({ data: { success: true } })
   }),
 
   http.post('/api/v1/auth/change-password', async () => {
@@ -405,7 +405,7 @@ export const systemHandlers = [
       userAgent: 'Mock Agent',
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
     })
-    return HttpResponse.json({ success: true })
+    return HttpResponse.json({ data: { success: true } })
   }),
 
   // 角色身分管理 (CRUD)
@@ -427,14 +427,14 @@ export const systemHandlers = [
       )
     }
 
-    return HttpResponse.json(list)
+    return HttpResponse.json({ data: list })
   }),
 
   http.get('/api/v1/roles/:id', ({ params }) => {
     const role = mockRoles.find((r) => r.id === params.id || r.key === params.id)
     if (!role) return new HttpResponse(null, { status: 404 })
     const userCount = mockUsers.filter((u) => u.role === role.key).length
-    return HttpResponse.json({ ...role, userCount })
+    return HttpResponse.json({ data: { ...role, userCount } })
   }),
 
   http.post('/api/v1/roles', async ({ request }) => {
@@ -472,7 +472,7 @@ export const systemHandlers = [
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
     })
 
-    return HttpResponse.json(newRole)
+    return HttpResponse.json({ data: newRole })
   }),
 
   http.patch('/api/v1/roles/:id', async ({ params, request }) => {
@@ -506,7 +506,7 @@ export const systemHandlers = [
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
     })
 
-    return HttpResponse.json(responseData)
+    return HttpResponse.json({ data: responseData })
   }),
 
   http.delete('/api/v1/roles/:id', ({ params }) => {
@@ -546,6 +546,6 @@ export const systemHandlers = [
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
     })
 
-    return HttpResponse.json({ success: true })
+    return HttpResponse.json({ data: { success: true } })
   })
 ]

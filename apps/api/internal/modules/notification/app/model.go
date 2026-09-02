@@ -9,13 +9,16 @@ import (
 
 // Recipient 代表一位通知收件人設定。
 type Recipient struct {
-	ID          int64
-	Topic       string
-	Email       string
-	DisplayName *string
-	Active      bool
-	CreatedBy   uuid.UUID
-	CreatedAt   time.Time
+	ID            int64
+	Topic         string
+	RecipientType string
+	Email         string
+	TargetRole    *string
+	UserID        *uuid.UUID
+	DisplayName   *string
+	Active        bool
+	CreatedBy     uuid.UUID
+	CreatedAt     time.Time
 }
 
 // Log 代表一筆通知發送留痕。
@@ -58,4 +61,6 @@ type Store interface {
 	DeleteRecipient(ctx context.Context, id int64) error
 	InsertLog(ctx context.Context, log *Log) error
 	ListLogs(ctx context.Context, topic string, page, pageSize int) ([]Log, int64, error)
+	BatchCreateRecipients(ctx context.Context, items []Recipient) ([]Recipient, error)
+	BatchDeleteRecipients(ctx context.Context, ids []int64) (int64, error)
 }

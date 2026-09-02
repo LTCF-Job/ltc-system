@@ -20,6 +20,8 @@ const (
 	CodeReportImportFailed = "DRIVER_REPORT_IMPORT_FAILED"
 	CodeFormMappingFailed  = "FORM_MAPPING_FAILED"
 	CodeInternalError      = "INTERNAL_ERROR"
+	CodeServiceUnavailable = "SERVICE_UNAVAILABLE"
+	CodeResourceInUse      = "RESOURCE_IN_USE"
 )
 
 // codeMessages 為每個錯誤碼提供固定、非技術性的預設訊息，是前端顯示文字的單一事實來源。

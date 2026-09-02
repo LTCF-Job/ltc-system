@@ -8,32 +8,39 @@ import type {
 import type { SystemPermissions } from '@/types/domain'
 
 export async function listUsers(params?: { q?: string; role?: string }): Promise<UserDTO[]> {
-  return apiClient.get('/users', { params })
+  const res = await apiClient.get('/users', { params })
+  return (res as any).data ?? res
 }
 
 export async function getUser(id: string): Promise<UserDTO> {
-  return apiClient.get(`/users/${id}`)
+  const res = await apiClient.get(`/users/${id}`)
+  return (res as any).data ?? res
 }
 
 export async function createUser(data: CreateUserRequest): Promise<UserDTO> {
-  return apiClient.post('/users', data)
+  const res = await apiClient.post('/users', data)
+  return (res as any).data ?? res
 }
 
 export async function updateUser(id: string, data: UpdateUserRequest): Promise<UserDTO> {
-  return apiClient.patch(`/users/${id}`, data)
+  const res = await apiClient.patch(`/users/${id}`, data)
+  return (res as any).data ?? res
 }
 
 export async function updateUserPermissions(
   id: string,
   permissions: SystemPermissions | null
 ): Promise<UserDTO> {
-  return apiClient.put(`/users/${id}/permissions`, { permissions })
+  const res = await apiClient.put(`/users/${id}/permissions`, { customPermissions: permissions })
+  return (res as any).data ?? res
 }
 
 export async function deleteUser(id: string): Promise<{ success: boolean }> {
-  return apiClient.delete(`/users/${id}`)
+  const res = await apiClient.delete(`/users/${id}`)
+  return (res as any).data ?? res
 }
 
 export async function changeSelfPassword(data: ChangePasswordRequest): Promise<{ success: boolean }> {
-  return apiClient.post('/auth/change-password', data)
+  const res = await apiClient.post('/auth/change-password', data)
+  return (res as any).data ?? res
 }

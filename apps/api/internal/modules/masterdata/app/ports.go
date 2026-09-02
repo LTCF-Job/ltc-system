@@ -21,6 +21,9 @@ type VehicleStore interface {
 	List(ctx context.Context, filter VehicleFilter, page, pageSize int) ([]Vehicle, int64, error)
 	Create(ctx context.Context, v *Vehicle) error
 	Update(ctx context.Context, v *Vehicle) error
+	SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error)
+	CountActiveDriverAssignments(ctx context.Context, vehicleID uuid.UUID) (int, error)
+	CountScheduleLegs(ctx context.Context, vehicleID uuid.UUID) (int, error)
 }
 
 // DriverStore 定義司機主檔與車輛指派的讀寫邊界。
@@ -32,6 +35,8 @@ type DriverStore interface {
 	AssignVehicle(ctx context.Context, a *DriverAssignment) error
 	ListByVehicleIDsOnDate(ctx context.Context, vehicleIDs []uuid.UUID, on time.Time) (map[uuid.UUID][]Driver, error)
 	ReplaceVehicleDrivers(ctx context.Context, vehicleID uuid.UUID, driverIDs []uuid.UUID, effectiveFrom time.Time) error
+	SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error)
+	CloseActiveAssignments(ctx context.Context, driverID uuid.UUID) error
 }
 
 // RegionStore 定義區域主檔的讀寫邊界。

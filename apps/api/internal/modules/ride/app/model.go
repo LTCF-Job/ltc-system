@@ -25,26 +25,27 @@ type FormColumn struct {
 
 // RideRecord 代表 ride_records 實體。
 type RideRecord struct {
-	ID                  uuid.UUID
-	CaseID              uuid.UUID
-	CaseName            string
-	ServiceDate         time.Time
-	LegSeq              int16
-	MergedStatus        string
-	EffectiveStatus     string
-	VehicleID           uuid.UUID
-	VehicleName         string
-	DriverID            *uuid.UUID
-	DriverName          string
-	HasConflict         bool
-	ConflictResolvedAt  *time.Time
-	ConflictResolvedBy  *uuid.UUID
-	DepartTimeOverride  *string
-	DurationMinOverride *int16
-	NotClaimedAA09      bool
-	CorrectedBy         *uuid.UUID
-	CorrectedAt         *time.Time
-	CorrectionReason    *string
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	ID                     uuid.UUID
+	CaseID                 uuid.UUID
+	CaseName               string
+	ServiceDate            time.Time
+	LegSeq                 int16
+	MergedStatus           string
+	EffectiveStatus        string
+	VehicleID              uuid.UUID
+	VehicleName            string
+	DriverID               *uuid.UUID
+	DriverName             string
+	HasConflict            bool
+	ConflictResolvedAt     *time.Time
+	ConflictResolvedBy     *uuid.UUID
+	ConflictResolutionNote *string
+	DepartTimeOverride     *string
+	DurationMinOverride    *int16
+	NotClaimedAA09         bool
+	CorrectedBy            *uuid.UUID
+	CorrectedAt            *time.Time
+	CorrectionReason       *string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }

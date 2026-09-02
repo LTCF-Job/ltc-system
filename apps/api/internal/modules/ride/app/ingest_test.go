@@ -19,14 +19,22 @@ type slotKey struct {
 // fakeRecordStore 記下寫入的來源列，並在重算時把它們回讀，重現正式流程中
 // InsertRideSource → ListRideSourcesForSlot → UpsertRideRecord 的循環。
 type fakeRecordStore struct {
-	columns        []FormColumn
-	sources        map[slotKey][]fakeSource
-	records        map[slotKey]*RideRecord
-	submissions    map[uuid.UUID]submissionKey
-	submission     uuid.UUID
-	lastSource     string
-	importedMonths []ImportedMonth
-	importedErr    error
+	columns          []FormColumn
+	sources          map[slotKey][]fakeSource
+	records          map[slotKey]*RideRecord
+	submissions      map[uuid.UUID]submissionKey
+	submission       uuid.UUID
+	lastSource       string
+	lastAnomalyFlags []string
+	importedMonths   []ImportedMonth
+	importedErr      error
+	conflictResolved bool
+	resolveErr       error
+	resolveResult    bool
+	pendingConflicts []ConflictRide
+	importErrors     []ImportErrorSubmission
+	getByIDResult    *RideRecord
+	getByIDErr       error
 }
 
 // submissionKey 讓 fake 能像資料庫一樣依 form 與服務日期刪除提交紀錄。
@@ -74,9 +82,10 @@ func (f *fakeRecordStore) ListRideRecordsInRange(context.Context, time.Time, tim
 	return nil, nil
 }
 
-func (f *fakeRecordStore) SaveFormSubmission(_ context.Context, formID uuid.UUID, serviceDate, _ time.Time, _ string, _ *uuid.UUID, source string, _ map[string]interface{}, _ string) (uuid.UUID, error) {
+func (f *fakeRecordStore) SaveFormSubmission(_ context.Context, formID uuid.UUID, serviceDate, _ time.Time, _ string, _ *uuid.UUID, source string, _ map[string]interface{}, _ string, anomalyFlags []string) (uuid.UUID, error) {
 	f.submission = uuid.New()
 	f.lastSource = source
+	f.lastAnomalyFlags = anomalyFlags
 	f.submissions[f.submission] = submissionKey{formID: formID, date: serviceDate.Format("2006-01-02")}
 	return f.submission, nil
 }
@@ -177,6 +186,26 @@ func (f *fakeRecordStore) CorrectRideRecord(context.Context, uuid.UUID, *string,
 	return nil
 }
 
+func (f *fakeRecordStore) GetRideRecordByID(context.Context, uuid.UUID) (*RideRecord, error) {
+	return f.getByIDResult, f.getByIDErr
+}
+
+func (f *fakeRecordStore) ResolveConflict(context.Context, uuid.UUID, uuid.UUID, *uuid.UUID, *string, uuid.UUID) (bool, error) {
+	f.conflictResolved = true
+	if f.resolveErr != nil {
+		return false, f.resolveErr
+	}
+	return f.resolveResult, nil
+}
+
+func (f *fakeRecordStore) ListPendingConflicts(context.Context, time.Time, time.Time, string, int, int) ([]ConflictRide, int64, error) {
+	return f.pendingConflicts, int64(len(f.pendingConflicts)), nil
+}
+
+func (f *fakeRecordStore) ListImportErrorSubmissions(context.Context, time.Time, time.Time, string, int, int) ([]ImportErrorSubmission, int64, error) {
+	return f.importErrors, int64(len(f.importErrors)), nil
+}
+
 type fakeScheduleReader struct{ tripPattern int16 }
 
 func (f fakeScheduleReader) GetActiveScheduleForCaseOnDate(_ context.Context, caseID uuid.UUID, _ time.Time) (*CaseSchedule, error) {
@@ -216,7 +245,7 @@ func TestIngestSubmission_WritesReportedStatusVerbatim(t *testing.T) {
 		mappedColumn(caseID, "1.吳桂 [去程]", 1, 3),
 		mappedColumn(caseID, "1.吳桂 [回程]", 2, 4),
 	})
-	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	written, err := svc.IngestSubmission(context.Background(), uuid.New(), vehicleID, ProcessSubmissionRequest{
 		ServiceDate: serviceDate,
@@ -247,7 +276,7 @@ func TestIngestSubmission_SkipsUnmappedAndNonReportValues(t *testing.T) {
 		mappedColumn(caseID, "1.吳桂 [去程]", 1, 3),
 		{ID: uuid.New(), ColumnIndex: 4, ColumnHeader: "2.李四 [去程]", MappingStatus: "pending"},
 	})
-	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	written, err := svc.IngestSubmission(context.Background(), uuid.New(), uuid.New(), ProcessSubmissionRequest{
 		ServiceDate: time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC),
@@ -264,7 +293,7 @@ func TestIngestSubmission_SkipsUnmappedAndNonReportValues(t *testing.T) {
 func TestIngestSubmission_ExpandsFourTripPattern(t *testing.T) {
 	caseID := uuid.New()
 	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "1.吳桂 [去程]", 1, 3)})
-	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{tripPattern: 4}, nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{tripPattern: 4}, nil, nil)
 
 	written, err := svc.IngestSubmission(context.Background(), uuid.New(), uuid.New(), ProcessSubmissionRequest{
 		ServiceDate: time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC),
@@ -277,7 +306,7 @@ func TestIngestSubmission_ExpandsFourTripPattern(t *testing.T) {
 }
 
 func TestIngestSubmission_RequiresServiceDate(t *testing.T) {
-	svc := NewRideService(newFakeRecordStore(nil), fakeDriverResolver{}, fakeScheduleReader{}, nil)
+	svc := NewRideService(newFakeRecordStore(nil), fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	_, err := svc.IngestSubmission(context.Background(), uuid.New(), uuid.New(), ProcessSubmissionRequest{})
 	assert.Error(t, err)

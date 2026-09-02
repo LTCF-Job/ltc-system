@@ -2,20 +2,26 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+// ErrVehicleInUse 表示車輛仍有生效中之司機指派或排班趟次綁定，不可刪除。
+var ErrVehicleInUse = errors.New("vehicle is still in use")
+
 // VehicleService 封裝車輛主檔業務邏輯，包含車輛目前掛載的司機。
 type VehicleService struct {
-	store   VehicleStore
-	drivers DriverStore
+	store     VehicleStore
+	drivers   DriverStore
+	auditRepo AuditWriter
 }
 
 // NewVehicleService 建立 VehicleService 實例。
-func NewVehicleService(store VehicleStore, drivers DriverStore) *VehicleService {
-	return &VehicleService{store: store, drivers: drivers}
+func NewVehicleService(store VehicleStore, drivers DriverStore, auditRepo AuditWriter) *VehicleService {
+	return &VehicleService{store: store, drivers: drivers, auditRepo: auditRepo}
 }
 
 // List 查詢車輛清單，並帶出每台車今日生效的司機。
@@ -95,4 +101,39 @@ func (s *VehicleService) Update(ctx context.Context, id uuid.UUID, in VehicleInp
 		return nil, err
 	}
 	return &v, nil
+}
+
+// Delete 軟刪除車輛；仍有生效中司機指派或排班趟次綁定時回 ErrVehicleInUse。
+func (s *VehicleService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRole string) error {
+	assignments, err := s.store.CountActiveDriverAssignments(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to count active driver assignments: %w", err)
+	}
+	legs, err := s.store.CountScheduleLegs(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to count schedule legs: %w", err)
+	}
+	if assignments > 0 || legs > 0 {
+		return ErrVehicleInUse
+	}
+
+	ok, err := s.store.SoftDelete(ctx, id, actorID)
+	if err != nil {
+		return fmt.Errorf("failed to soft delete vehicle: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("vehicle not found")
+	}
+
+	if s.auditRepo != nil {
+		entityIDStr := id.String()
+		_ = s.auditRepo.Write(ctx, AuditEntry{
+			ActorID:    &actorID,
+			ActorRole:  &actorRole,
+			Action:     "delete",
+			EntityType: "vehicles",
+			EntityID:   &entityIDStr,
+		})
+	}
+	return nil
 }
