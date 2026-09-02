@@ -63,6 +63,7 @@ export interface UserDTO {
   customPermissions?: SystemPermissions | null
   lastLoginAt?: string
   createdAt?: string
+  dataPlane?: 'production' | 'demo'
 }
 
 export interface CreateUserRequest {

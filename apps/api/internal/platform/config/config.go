@@ -13,6 +13,7 @@ import (
 type Config struct {
 	Port                        string        `envconfig:"PORT" default:"8080"`
 	AppEnv                      string        `envconfig:"APP_ENV" required:"true"`
+	DataPlane                   string        `envconfig:"DATA_PLANE" default:"production"`
 	DatabaseURL                 string        `envconfig:"DATABASE_URL" default:"postgres://postgres:postgres@localhost:5432/ltc_system?sslmode=disable"`
 	DBMaxOpenConns              int           `envconfig:"DB_MAX_OPEN_CONNS" default:"5"`
 	DBMaxIdleConns              int           `envconfig:"DB_MAX_IDLE_CONNS" default:"2"`
@@ -44,6 +45,11 @@ func LoadFromEnv() (*Config, error) {
 	// APP_ENV 決定 AuthMiddleware 是否放行 mock 憑證，禁止靜默預設值以避免正式環境誤留開發後門
 	if cfg.AppEnv != "local" && cfg.AppEnv != "production" {
 		return nil, fmt.Errorf("APP_ENV must be explicitly set to \"local\" or \"production\", got %q", cfg.AppEnv)
+	}
+
+	// AuthMiddleware（internal/platform/auth）以此值比對 JWT 的 data_plane claim，拼字錯誤會讓所有合法憑證被判定跨環境而全部拒絕，需在啟動時就攔下。
+	if cfg.DataPlane != "production" && cfg.DataPlane != "demo" {
+		return nil, fmt.Errorf("DATA_PLANE must be \"production\" or \"demo\", got %q", cfg.DataPlane)
 	}
 
 	// 正式環境缺少 JWKS 時 AuthMiddleware 會對每個請求回應 500，改為啟動時直接拒絕啟動

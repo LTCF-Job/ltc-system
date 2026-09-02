@@ -29,6 +29,12 @@ ON CONFLICT (name) DO UPDATE SET
   status = EXCLUDED.status,
   sort_order = EXCLUDED.sort_order;
 
+-- ltc_demo 等未附掛 Supabase Auth 的資料庫沒有 auth schema，此區塊整段略過，
+-- 業務參考資料（regions）仍照常寫入。
+DO $$
+BEGIN
+IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'auth') THEN
+
 INSERT INTO auth.users (
     id,
     instance_id,
@@ -94,3 +100,6 @@ VALUES (
 ON CONFLICT (provider_id, provider) DO UPDATE SET
     identity_data = EXCLUDED.identity_data,
     updated_at = now();
+
+END IF;
+END $$;

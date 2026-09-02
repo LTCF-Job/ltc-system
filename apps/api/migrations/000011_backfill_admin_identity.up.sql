@@ -3,6 +3,11 @@
 -- 已跑過舊版 000002 的環境（auth.users 已存在但缺 identities）需要這支補上，
 -- 否則密碼正確仍會被 Supabase Auth 判定 Invalid login credentials。
 
+-- ltc_demo 等沒有 auth schema 的資料庫整段略過。
+DO $$
+BEGIN
+IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'auth') THEN
+
 INSERT INTO auth.identities (
     id,
     provider_id,
@@ -28,3 +33,6 @@ WHERE EXISTS (
 ON CONFLICT (provider_id, provider) DO UPDATE SET
     identity_data = EXCLUDED.identity_data,
     updated_at = now();
+
+END IF;
+END $$;

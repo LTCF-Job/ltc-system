@@ -19,6 +19,9 @@ const (
 	ContextKeyActorRole = "actor_role"
 	ContextKeyUserEmail = "user_email"
 	ContextKeyActorName = "actor_name"
+	ContextKeyDataPlane = "actor_data_plane"
+	DataPlaneProduction = "production"
+	DataPlaneDemo       = "demo"
 )
 
 // newSupabaseJWKS 建立向 Supabase JWKS 端點取金鑰並自動輪替的 Keyfunc；未設定 URL 時回傳 nil。
@@ -54,12 +57,17 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
 			name = n
 		}
 	}
+	// data_plane 只信任 app_metadata，理由與上方 role 相同：user_metadata 使用者可自行竄改。
+	dataPlane := DataPlaneProduction
 	if appMetadata, ok := claims["app_metadata"].(map[string]interface{}); ok {
 		if r, ok := appMetadata["role"].(string); ok {
 			role = r
 		}
 		if n, ok := appMetadata["display_name"].(string); ok {
 			name = n
+		}
+		if dp, ok := appMetadata["data_plane"].(string); ok {
+			dataPlane = dp
 		}
 	}
 	if name == "" {
@@ -71,6 +79,7 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
 	c.Set(ContextKeyActorID, actorID)
 	c.Set(ContextKeyActorRole, role)
 	c.Set(ContextKeyActorName, name)
+	c.Set(ContextKeyDataPlane, dataPlane)
 }
 
 // Middleware 驗證傳入的 Supabase JWT Token 簽章並將使用者角色與 ID 注入 Gin Context。
@@ -146,6 +155,9 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 				return
 			}
 			setActorFromClaims(c, claims)
+			if !enforceDataPlane(c, cfg) {
+				return
+			}
 			c.Next()
 			return
 		}
@@ -165,8 +177,25 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		setActorFromClaims(c, claims)
+		if !enforceDataPlane(c, cfg) {
+			return
+		}
 		c.Next()
 	}
+}
+
+// enforceDataPlane 驗證 JWT 的 data_plane 是否符合目前服務環境，不符則回應 401 並中止請求。
+func enforceDataPlane(c *gin.Context, cfg *config.Config) bool {
+	servicePlane := cfg.DataPlane
+	if servicePlane == "" {
+		servicePlane = DataPlaneProduction
+	}
+	tokenPlane, _ := c.Get(ContextKeyDataPlane)
+	if tokenPlane != servicePlane {
+		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "此憑證不適用於目前環境", nil)
+		return false
+	}
+	return true
 }
 
 // RequireRoles 依據角色權限矩陣驗證當前請求是否具有執行權限。
@@ -219,4 +248,14 @@ func GetActorName(c *gin.Context) string {
 		}
 	}
 	return ""
+}
+
+// GetActorDataPlane 從 Context 安全取出當前憑證所屬的 data plane。
+func GetActorDataPlane(c *gin.Context) string {
+	if val, exists := c.Get(ContextKeyDataPlane); exists {
+		if dp, ok := val.(string); ok {
+			return dp
+		}
+	}
+	return DataPlaneProduction
 }
