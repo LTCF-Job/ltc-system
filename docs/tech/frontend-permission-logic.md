@@ -49,8 +49,8 @@ ROLE_HIERARCHY = { admin: 4, dispatcher: 3, staff: 3, driver: 2, viewer: 1 }
 
 前端這套「模組 view/edit/delete」矩陣，**角色層級**已經跟後端對齊：後端 `auth.RequirePermission(module, action)` 直接查角色目前的 `roles.permissions`（同一份資料，「角色身分管理」頁存的就是它），不再是路由層級的粗粒度角色字串白名單，詳見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。`/users`、`/roles`、`/auth/change-password`、`/demo/reset`、`/tasks/*`、`/holidays*` 仍是 `RequireRoles` 白名單，不受角色矩陣控制（理由見該決策文件）。
 
-## ⚠️ 個人自訂覆蓋（`customPermissions`）仍是已知落差
+## 個人自訂覆蓋（`customPermissions`）已接上後端，與角色矩陣同一套機制
 
-上面「角色層級」已對齊，但「使用者管理」頁對**單一使用者**再疊加的 `customPermissions` 覆蓋，後端目前**沒有**讀取——JWT 的 `setActorFromClaims` 沒有解析 `app_metadata.custom_permissions`，`auth.RequirePermission` 查的是角色矩陣，不是這個使用者的個人覆蓋。
+「使用者管理」頁對**單一使用者**再疊加的 `customPermissions` 覆蓋，後端現在會讀取：`auth.RequirePermission` 透過 `CustomPermissionResolver`（查 Supabase Admin API，包一層與角色矩陣相同的 30 秒 TTL 快取）取得該使用者的個人覆蓋，疊加在角色矩陣之上——語意與這裡的 `effectivePermissions` 一致（整個模組物件替換，不是欄位層級合併）。取捨與方案比較見 [custom-permission-admin-api-enforcement.md](../decisions/custom-permission-admin-api-enforcement.md)。
 
-實際影響：如果透過「使用者管理」頁把某個 `staff` 使用者的 `masters_cases.edit` 自訂關掉，前端會隱藏／擋掉編輯按鈕，**但後端仍照這個使用者的角色（`staff`）矩陣放行**，只要繞過前端直接打 `PATCH /cases/:id` 一樣會成功——後端目前沒有能力執行個人層級的細粒度限制，只有角色層級。這是設計上先天的落差，不是 bug，但接手的人要知道個人自訂權限只是 UX 層面的引導，不是安全邊界；真正的安全邊界是使用者所屬的角色矩陣。
+**已知取捨**：`SUPABASE_SERVICE_ROLE_KEY` 未設定時（見 `pending-integrations.md`），後端會 fail-open 為「一律沒有個人覆蓋」，即使「使用者管理」頁已經設定了 customPermissions，後端也不會套用——這種情況下前端顯示的覆蓋值跟後端實際放行的角色矩陣值會不一致，金鑰設定後才會真正生效。

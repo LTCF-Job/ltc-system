@@ -33,7 +33,7 @@ covers:
 
 ## Consequences
 
-- 個人層級的 `custom_permissions` 覆蓋（「角色身分管理」頁對單一使用者的自訂權限）**這次沒有一併接上** API 層——目前仍只影響前端 UX，是 `frontend-permission-logic.md` 已經記錄的既有落差，維持原狀而非新增退化；後端 `setActorFromClaims` 未解析 JWT 的 `custom_permissions` 宣告。
+- 個人層級的 `custom_permissions` 覆蓋（「使用者管理」頁對單一使用者的自訂權限）當時**沒有一併接上** API 層，後續已在 [custom-permission-admin-api-enforcement.md](custom-permission-admin-api-enforcement.md) 補上——與本文件描述的角色矩陣採同一套「查詢＋30 秒 TTL 快取」機制，只是資料來源改為 Supabase Admin API，取捨見該文件。
 - 新增自訂角色、或修改既有角色的模組矩陣，會在 30 秒內反映到 API 存取範圍；反過來說，撤銷某角色的權限後最多有 30 秒的延遲視窗。
 - `roles.base_role` 欄位在這次改動後不再被任何執行路徑讀取（僅 migration 000018 一次性回填時用過），保留欄位本身供未來「哪些角色屬於高信任層級」之類的判斷使用，但目前是死資料，之後若徹底不需要可以另開 migration 移除。
 - 這個檔案一旦再被改動（尤其是 `permission.go` 的快取 TTL、或 routes.go 新增／調整模組路由）就會被標記 stale，需要重新核對「哪些路由走矩陣、哪些維持白名單」的邊界是否還成立。

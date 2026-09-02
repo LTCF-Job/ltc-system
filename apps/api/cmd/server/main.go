@@ -167,6 +167,7 @@ func main() {
 	permResolver := auth.NewCachedPermissionResolver(rolePermissionResolver{store: roleRepo})
 	identityAudit := identityAuditWriter{svc: auditSvc}
 	adminClient := identityinfra.NewSupabaseAdminClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, &http.Client{Timeout: cfg.SupabaseAdminTimeout})
+	customPermResolver := auth.NewCachedCustomPermissionResolver(userCustomPermissionResolver{admin: adminClient})
 	roleSvc := identityapp.NewRoleService(roleRepo, adminClient, identityAudit, txRunner)
 	userSvc := identityapp.NewUserService(adminClient, roleRepo, identityAudit)
 	// Demo data-plane 專屬：重置端點與一般請求互斥的鎖只在 DATA_PLANE=demo 時建立，正式環境完全不掛載。
@@ -208,7 +209,7 @@ func main() {
 		demo:         demoHandler,
 	}
 
-	r := newRouter(cfg, pool, h, demoGuard, permResolver)
+	r := newRouter(cfg, pool, h, demoGuard, permResolver, customPermResolver)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	slog.Info("Starting LTC API Server", slog.String("addr", addr), slog.String("env", cfg.AppEnv))
