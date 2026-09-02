@@ -107,3 +107,26 @@ commit 前不再要求使用者逐欄確認：有系統推薦個案（`suggested
   單一瀏覽器分頁，兩位管理員同時對同一台車同一個月匯入仍會競爭。
 - `imported-months` 的 SQL 分組（`to_char(service_date, 'YYYY-MM')` 與 `source = 'import'` 篩選）
   只以 app 層的 fake 與 handler 測試覆蓋，未在真實 PostgreSQL 上驗證。
+
+## 資料一致性防護規則
+
+這些規則是匯入／匯出流程的長期契約，不能只依賴目前 Excel 欄位順序或 fake 測試：
+
+- 每筆來源資料必須保留 raw headers／values 與不可變的 row identity。不可只用 `時間戳記` 作為 `source_key`；若來源沒有 immutable ID，遇到相同 timestamp 的多列必須明確回報衝突，不可靜默覆寫。
+- 歷史資料匯出必須依該筆保存的欄位識別與 mapping version 解讀，不可用現在的 `form_columns` 位置回頭解讀舊 payload。
+- 未知欄位可略過並設為 `null`，但 schema、連線、權限、migration 或其他 infrastructure error 不得偽裝成可接受的 unmatched；該列應 rollback 或明確標示不可寫入。
+- 所有會寫入相同 ride slot 的 writer（import、webhook、manual correction 及其他來源）必須共用同一個 transaction + slot lock API。多 slot 操作要先收集、去重，再按 `(case_id, service_date, leg_seq)` 排序鎖定，必要時 retry deadlock。
+- `form_columns` 的完整 metadata 應原子更新或版本化；transaction rollback 後的 counters、audit 與 mapping 狀態不得留下半套結果。
+- 無時區來源時間必須明確套用來源時區（目前預期為 `Asia/Taipei`），並在 staging／production 以實際資料驗證。
+
+## 驗證分層
+
+```text
+unit / browser mock / frontend E2E
+              !=
+real PostgreSQL migration + transaction + concurrency
+              !=
+production import/export observation
+```
+
+回報時必須分開列出每一層證據。`go test`、type-check、build 或 browser mock 通過，不代表 migration、rollback、duplicate identity 或跨程序 lock 已在真實 PostgreSQL 驗證。
