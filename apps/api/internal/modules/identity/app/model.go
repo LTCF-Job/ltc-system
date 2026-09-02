@@ -21,10 +21,11 @@ type Role struct {
 	UpdatedAt   time.Time
 }
 
-// ModulePermission 是單一功能模組的檢視／編輯權限。
+// ModulePermission 是單一功能模組的檢視／編輯／刪除權限。
 type ModulePermission struct {
-	View bool `json:"view"`
-	Edit bool `json:"edit"`
+	View   bool `json:"view"`
+	Edit   bool `json:"edit"`
+	Delete bool `json:"delete"`
 }
 
 // AuthUser 代表 Supabase Auth 的一個使用者帳號。

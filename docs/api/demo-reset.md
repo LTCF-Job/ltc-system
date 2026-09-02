@@ -46,9 +46,5 @@ covers:
 
 - 重置在單一 PostgreSQL 交易內完成：先 `TRUNCATE` 所有業務資料表（`regions` 除外，見 `migrations/000002_seed_reference_data.up.sql`），再套用種子 SQL，最後重新加密種子資料的假身分證欄位（見 `docs/decisions/demo-data-plane-architecture.md`）；任何一步失敗都整筆回滾，不會留下半套資料。
 - 呼叫這支端點的請求，以及重置期間所有其他 `/api/v1/*` 請求，共用同一個行程內 `sync.RWMutex`（`internal/modules/demo/app.ConcurrencyGuard`）：一般請求持共享鎖，重置需要獨佔鎖，因此重置一定會等既有請求做完，重置進行中新進來的請求會排隊等待，不會讀到重置到一半的中間狀態。這個機制假設 Demo 只有單一 Cloud Run instance；多 instance 時不會互相阻擋。
-- 沒有速率限制，也沒有「只有特定使用者能重置」的限制——任何 Demo 使用者都能觸發，且會影響所有正在使用 Demo 的人；前端呼叫前應要求二次確認（見 spec 原始需求，前端 UI 尚未實作這支確認流程，屬於未完成項目）。
+- 沒有速率限制，也沒有「只有特定使用者能重置」的限制——任何 Demo 使用者都能觸發，且會影響所有正在使用 Demo 的人；前端已在呼叫前以 `ElMessageBox.confirm` 要求二次確認，見 [`DefaultLayout.vue`](../../apps/web/src/layouts/DefaultLayout.vue)。
 - 冪等：重複呼叫只會把資料集重設回同一份基準狀態，不會累積或報錯。
-
-## Unverified
-
-- 前端尚未實作呼叫這支端點的 UI（確認對話框、重置後重新整理頁面），目前只驗證到後端 API 本身。

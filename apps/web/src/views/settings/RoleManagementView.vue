@@ -158,6 +158,20 @@
               </span>
             </template>
           </el-table-column>
+
+          <el-table-column label="刪除權限" width="180" align="center">
+            <template #default="{ row }">
+              <span
+                v-if="selectedRole?.permissions?.[row.id]?.delete"
+                class="perm-status perm-delete"
+              >
+                <el-icon><Check /></el-icon> 允許刪除
+              </span>
+              <span v-else class="perm-status perm-none">
+                <el-icon><Close /></el-icon> 無權限
+              </span>
+            </template>
+          </el-table-column>
         </el-table>
       </el-card>
     </div>
@@ -197,9 +211,9 @@
             </div>
 
             <div class="perm-quick-actions">
-              <el-button size="small" @click="handleBatchSet(true, false)">全選檢視</el-button>
-              <el-button size="small" type="primary" plain @click="handleBatchSet(true, true)">全選編輯</el-button>
-              <el-button size="small" type="info" plain @click="handleBatchSet(false, false)">全部清空</el-button>
+              <el-button size="small" @click="handleBatchSet(true, false, false)">全選檢視</el-button>
+              <el-button size="small" type="primary" plain @click="handleBatchSet(true, true, false)">全選編輯</el-button>
+              <el-button size="small" type="info" plain @click="handleBatchSet(false, false, false)">全部清空</el-button>
 
               <el-select
                 v-model="templateRoleKey"
@@ -253,6 +267,18 @@
                   @change="onEditPermChange(row.id)"
                 >
                   編輯
+                </el-checkbox>
+              </template>
+            </el-table-column>
+
+            <el-table-column label="刪除" width="120" align="center">
+              <template #default="{ row }">
+                <el-checkbox
+                  v-model="formPermissions[row.id].delete"
+                  :disabled="!formPermissions[row.id].edit"
+                  @change="onDeletePermChange(row.id)"
+                >
+                  刪除
                 </el-checkbox>
               </template>
             </el-table-column>
@@ -344,7 +370,7 @@ function countRolePerms(perms?: SystemPermissions) {
 function initEmptyPermissions(): SystemPermissions {
   const p: SystemPermissions = {}
   for (const m of SYSTEM_MODULES) {
-    p[m.id] = { view: false, edit: false }
+    p[m.id] = { view: false, edit: false, delete: false }
   }
   return p
 }
@@ -395,7 +421,8 @@ function openEditDialog(role: RoleDTO) {
       if (role.permissions[m.id]) {
         p[m.id] = {
           view: !!role.permissions[m.id].view,
-          edit: !!role.permissions[m.id].edit
+          edit: !!role.permissions[m.id].edit,
+          delete: !!role.permissions[m.id].delete
         }
       }
     }
@@ -418,7 +445,8 @@ function openCopyDialog(role: RoleDTO) {
       if (role.permissions[m.id]) {
         p[m.id] = {
           view: !!role.permissions[m.id].view,
-          edit: !!role.permissions[m.id].edit
+          edit: !!role.permissions[m.id].edit,
+          delete: !!role.permissions[m.id].delete
         }
       }
     }
@@ -427,11 +455,12 @@ function openCopyDialog(role: RoleDTO) {
   dialogVisible.value = true
 }
 
-function handleBatchSet(viewVal: boolean, editVal: boolean) {
+function handleBatchSet(viewVal: boolean, editVal: boolean, deleteVal: boolean) {
   for (const m of SYSTEM_MODULES) {
     formPermissions.value[m.id] = {
       view: viewVal,
-      edit: editVal
+      edit: editVal,
+      delete: deleteVal
     }
   }
 }
@@ -442,20 +471,33 @@ function handleApplyTemplate(roleIdOrKey: string) {
   for (const m of SYSTEM_MODULES) {
     formPermissions.value[m.id] = {
       view: !!target.permissions[m.id]?.view,
-      edit: !!target.permissions[m.id]?.edit
+      edit: !!target.permissions[m.id]?.edit,
+      delete: !!target.permissions[m.id]?.delete
     }
   }
   ElMessage.info(`已套用【${target.name}】之權限配置範本`)
 }
 
+// 三個層級是包含關係：delete 需要 edit，edit 需要 view；勾選較高層級時往下補齊，
+// 取消較低層級時往上一併取消，避免存出「能刪除但不能檢視」這種無意義組合。
 function onViewPermChange(moduleId: string) {
   if (!formPermissions.value[moduleId].view) {
     formPermissions.value[moduleId].edit = false
+    formPermissions.value[moduleId].delete = false
   }
 }
 
 function onEditPermChange(moduleId: string) {
   if (formPermissions.value[moduleId].edit) {
+    formPermissions.value[moduleId].view = true
+  } else {
+    formPermissions.value[moduleId].delete = false
+  }
+}
+
+function onDeletePermChange(moduleId: string) {
+  if (formPermissions.value[moduleId].delete) {
+    formPermissions.value[moduleId].edit = true
     formPermissions.value[moduleId].view = true
   }
 }
@@ -732,6 +774,10 @@ onMounted(() => {
 
   &.perm-edit {
     color: var(--app-primary);
+  }
+
+  &.perm-delete {
+    color: var(--app-status-danger-fg);
   }
 
   &.perm-none {

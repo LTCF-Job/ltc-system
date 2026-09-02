@@ -254,6 +254,16 @@
               <el-checkbox
                 v-model="tempPermissions[row.id].edit"
                 :disabled="!tempPermissions[row.id].view"
+                @change="onEditPermChange(row.id)"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="刪除" width="105" align="center">
+            <template #default="{ row }">
+              <el-checkbox
+                v-model="tempPermissions[row.id].delete"
+                :disabled="!tempPermissions[row.id].edit"
+                @change="onDeletePermChange(row.id)"
               />
             </template>
           </el-table-column>
@@ -501,10 +511,11 @@ function openPermissionDrawer(user: UserDTO) {
 
   for (const m of SYSTEM_MODULES) {
     const isCustomized = custom[m.id] !== undefined
-    const base = isCustomized ? custom[m.id] : roleDefault[m.id] || { view: false, edit: false }
+    const base = isCustomized ? custom[m.id] : roleDefault[m.id] || { view: false, edit: false, delete: false }
     initialPerms[m.id] = {
       view: !!base.view,
-      edit: !!base.edit
+      edit: !!base.edit,
+      delete: !!base.delete
     }
   }
 
@@ -512,10 +523,26 @@ function openPermissionDrawer(user: UserDTO) {
   drawerVisible.value = true
 }
 
+// 三個層級是包含關係：delete 需要 edit，edit 需要 view；同一組聯動規則見 RoleManagementView.vue
 function onViewPermChange(modId: string) {
-  // 若關閉檢視權限，自動關閉編輯權限
   if (!tempPermissions.value[modId].view) {
     tempPermissions.value[modId].edit = false
+    tempPermissions.value[modId].delete = false
+  }
+}
+
+function onEditPermChange(modId: string) {
+  if (tempPermissions.value[modId].edit) {
+    tempPermissions.value[modId].view = true
+  } else {
+    tempPermissions.value[modId].delete = false
+  }
+}
+
+function onDeletePermChange(modId: string) {
+  if (tempPermissions.value[modId].delete) {
+    tempPermissions.value[modId].edit = true
+    tempPermissions.value[modId].view = true
   }
 }
 
@@ -528,8 +555,8 @@ function handleResetToRoleDefault() {
   }
   const resetPerms: SystemPermissions = {}
   for (const m of SYSTEM_MODULES) {
-    const base = roleDefault[m.id] || { view: false, edit: false }
-    resetPerms[m.id] = { view: !!base.view, edit: !!base.edit }
+    const base = roleDefault[m.id] || { view: false, edit: false, delete: false }
+    resetPerms[m.id] = { view: !!base.view, edit: !!base.edit, delete: !!base.delete }
   }
   tempPermissions.value = resetPerms
   ElMessage.info(`已載入【${getRoleDisplayName(selectedUser.value.role)}】角色之預設權限配置`)

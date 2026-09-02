@@ -50,6 +50,7 @@ import (
 	taskapp "ltc-system/apps/api/internal/modules/task/app"
 	taskinfra "ltc-system/apps/api/internal/modules/task/infra"
 	tasktransport "ltc-system/apps/api/internal/modules/task/transport"
+	"ltc-system/apps/api/internal/platform/auth"
 	"ltc-system/apps/api/internal/platform/config"
 	"ltc-system/apps/api/internal/platform/pgxdb"
 
@@ -163,6 +164,7 @@ func main() {
 	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverSiteLookup{repo: mdSiteRepo}, caregiverExcelAdapter, caregiverExcelAdapter)
 
 	roleRepo := identityinfra.NewRoleRepository(pool)
+	permResolver := auth.NewCachedPermissionResolver(rolePermissionResolver{store: roleRepo})
 	identityAudit := identityAuditWriter{svc: auditSvc}
 	adminClient := identityinfra.NewSupabaseAdminClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, &http.Client{Timeout: cfg.SupabaseAdminTimeout})
 	roleSvc := identityapp.NewRoleService(roleRepo, adminClient, identityAudit, txRunner)
@@ -206,7 +208,7 @@ func main() {
 		demo:         demoHandler,
 	}
 
-	r := newRouter(cfg, pool, h, demoGuard)
+	r := newRouter(cfg, pool, h, demoGuard, permResolver)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	slog.Info("Starting LTC API Server", slog.String("addr", addr), slog.String("env", cfg.AppEnv))
@@ -227,6 +229,8 @@ func connectDatabase(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, er
 		return nil, fmt.Errorf("parse database config: %w", err)
 	}
 	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+	poolCfg.MaxConns = int32(cfg.DBMaxOpenConns)
+	poolCfg.MinConns = int32(cfg.DBMaxIdleConns)
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {

@@ -5,7 +5,9 @@ covers: ["apps/api/cmd/server/routes.go"]
 
 # 後端 API 路由總覽
 
-Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/health`（不驗證）跟 `/api/v1/ingest/google-form`（走 `X-Ingest-Token`）。角色欄是 `auth.RequireRoles(...)` 白名單，實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
+Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/health`（不驗證）跟 `/api/v1/ingest/google-form`（走 `X-Ingest-Token`）。實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
+
+下表「角色」欄列的是**目前系統五個內建角色（viewer/dispatcher/staff/driver/admin）實際能通過的結果**，不是授權機制本身：大多數模組 CRUD 路由已改用 `auth.RequirePermission(module, action)` 查角色的模組權限矩陣（`roles.permissions`，可在「角色身分管理」頁調整，自訂角色的實際存取範圍以矩陣為準，不受下表侷限），只有 `/users`、`/roles`、`/auth/change-password`、`/demo/reset`、`/tasks/*`、`/holidays*` 仍是 `auth.RequireRoles(...)` 寫死的角色字串白名單。機制細節與兩者的邊界見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。
 
 架構背景見 [backend-framework.md](backend-framework.md)，每支端點背後的業務流程見 [backend-flows.md](backend-flows.md)。
 

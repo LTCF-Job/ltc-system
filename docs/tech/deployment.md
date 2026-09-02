@@ -55,7 +55,7 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 | `PORT` | `8080` | Cloud Run 自動注入，不用設 | HTTP 監聽埠 |
 | `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL` 與 `ALLOWED_ORIGINS`，否則直接拒絕啟動 |
 | `DATABASE_URL` | Supabase 連線池網址 | 同左，存在 Secret Manager | 見上方 pgbouncer 說明 |
-| `DB_MAX_OPEN_CONNS` / `DB_MAX_IDLE_CONNS` | `5` / `2` | 同左 | 目前設定值有讀進 config，但尚未接到 `pgxpool` 的 `MaxConns`／`MinConns`，實際連線數上限吃 pgx 預設值，非本次修復範圍 |
+| `DB_MAX_OPEN_CONNS` / `DB_MAX_IDLE_CONNS` | `5` / `2` | 同左 | 對應 `pgxpool` 的 `MaxConns`／`MinConns` |
 | `ENCRYPTION_KEY` / `HMAC_KEY` | 32 bytes base64 | 同左，存在 Secret Manager | 個案身分證等敏感欄位加密用 |
 | `SUPABASE_JWKS_URL` | 可留空（本機不驗簽） | `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json` | `production` 必填 |
 | `SUPABASE_PROJECT_REF` | Supabase 專案 ref | 同左 | |

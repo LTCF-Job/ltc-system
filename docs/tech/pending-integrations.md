@@ -28,7 +28,7 @@ covers: ["apps/api/cmd/server/routes.go", "apps/api/internal/modules/ride/transp
 ## 已知限制
 
 - **Supabase Service Role Key 留空**：項目 7、8、9 所在的 `identity` 模組已完整實作，但 `SUPABASE_SERVICE_ROLE_KEY` 於本輪部署中留空。金鑰未設定時，`/users`、`/roles`、`/auth/change-password` 等端點一律回 `503`（`CodeServiceUnavailable`），不會退化成假資料。待金鑰就位後即可直接運作，無需再改程式。
-- **自訂角色的 API 存取層級**：`auth.RequireRoles` 只認得 `viewer`/`staff`/`admin` 三個字串，`roles` 表的 `base_role` 欄位是這個限制的顯性化，不是解法——管理員可能建出「權限矩陣全開但 API 全 403」的自訂角色，需在角色管理頁面留意此提示。
+- **自訂角色的 API 存取層級**：已改為 `auth.RequirePermission` 直接查角色的模組權限矩陣（`view`/`edit`/`delete` 三軸），不再是 `viewer`/`staff`/`admin` 三字串白名單，詳見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。個人層級的 `customPermissions` 覆蓋仍只影響前端 UX，尚未接上 API 層，是這次刻意保留、未擴大的既有落差。
 - **匯入異常分頁的 `caseName` 語意**：`import_error` 分頁回傳的 `caseName` 實際內容是 `driver_name_raw`（回報文字/欄位），非個案姓名，詳見 [integration-contract.md](integration-contract.md)。
 - **Supabase Admin API 回應形狀未經真實環境驗證**：金鑰留空狀態下無法對真實環境跑一次，欄位假設（`app_metadata` 命名、`ban_duration` 語義等）僅依官方文件推測，見 [integration-contract.md](integration-contract.md) 的 Unverified 段落。
 

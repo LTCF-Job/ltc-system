@@ -33,7 +33,7 @@ effectivePermissions = roleDefault 複製一份
                         再用 user.customPermissions 逐模組覆蓋（有設定該模組才覆蓋，沒設定的模組維持角色預設）
 ```
 
-覆蓋是**整個模組物件替換**（`{ view, edit }` 一起換掉），不是欄位層級合併——自訂權限只設了 `edit: true` 也會連 `view` 一起被覆蓋成該筆自訂資料裡的值,寫自訂權限資料時兩個欄位都要給值，不能只給其中一個期待另一個沿用角色預設。
+覆蓋是**整個模組物件替換**（`{ view, edit, delete }` 一起換掉），不是欄位層級合併——自訂權限只設了 `edit: true` 也會連 `view`／`delete` 一起被覆蓋成該筆自訂資料裡的值，寫自訂權限資料時三個欄位都要給值，不能只給其中一個期待另一個沿用角色預設。
 
 `hasPermission(module, action)` 最終看的就是這個合併後的結果，admin 角色永遠 bypass（不查表，直接 `true`）。
 
@@ -45,8 +45,12 @@ ROLE_HIERARCHY = { admin: 4, dispatcher: 3, staff: 3, driver: 2, viewer: 1 }
 
 `can(requiredRoles)`：admin 永遠 `true`；否則比較「自己角色的等級」是否 ≥ 陣列中任一個要求角色的等級（不是要求完全命中角色名稱，是等級比較，`dispatcher` 跟 `staff` 同等級 3，兩者互相都能通過對方的門檻）。這套階層邏輯目前只在 `meta.roles`（沒設 `module` 時）跟少數元件內部判斷使用，跟上面的模組權限表是兩套獨立機制，不要混著改。
 
-## ⚠️ 跟後端授權不對稱，是已知落差
+## 跟後端授權的對應關係
 
-前端這套「模組 view/edit ＋ 個人自訂覆蓋」的精細權限，**後端完全不知道**。後端 `middleware.RequireRoles(...)` 只認 JWT 裡的角色字串，是路由層級的粗粒度白名單（見 [backend-api-reference.md](backend-api-reference.md)），沒有模組概念，也沒有「這個使用者被自訂為某模組唯讀」這種資料。
+前端這套「模組 view/edit/delete」矩陣，**角色層級**已經跟後端對齊：後端 `auth.RequirePermission(module, action)` 直接查角色目前的 `roles.permissions`（同一份資料，「角色身分管理」頁存的就是它），不再是路由層級的粗粒度角色字串白名單，詳見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。`/users`、`/roles`、`/auth/change-password`、`/demo/reset`、`/tasks/*`、`/holidays*` 仍是 `RequireRoles` 白名單，不受角色矩陣控制（理由見該決策文件）。
 
-實際影響：如果透過「使用者管理」頁把某個 `staff` 使用者的 `masters_cases.edit` 自訂關掉，前端會隱藏／擋掉編輯按鈕，**但這個使用者的 JWT 角色仍是 `staff`**，只要繞過前端直接打 `PATCH /cases/:id`，後端的 `RequireRoles("staff", "admin")` 一樣會放行——後端目前沒有能力執行個人層級的細粒度限制。這件事在「使用者管理」「角色身分管理」頁後端串接（見 [backend-api-reference.md](backend-api-reference.md) 的 gap 標註）之前不會自動解決，是設計上先天的落差，不是 bug，但接手的人要知道前端權限只是 UX 層面的引導，不是安全邊界。
+## ⚠️ 個人自訂覆蓋（`customPermissions`）仍是已知落差
+
+上面「角色層級」已對齊，但「使用者管理」頁對**單一使用者**再疊加的 `customPermissions` 覆蓋，後端目前**沒有**讀取——JWT 的 `setActorFromClaims` 沒有解析 `app_metadata.custom_permissions`，`auth.RequirePermission` 查的是角色矩陣，不是這個使用者的個人覆蓋。
+
+實際影響：如果透過「使用者管理」頁把某個 `staff` 使用者的 `masters_cases.edit` 自訂關掉，前端會隱藏／擋掉編輯按鈕，**但後端仍照這個使用者的角色（`staff`）矩陣放行**，只要繞過前端直接打 `PATCH /cases/:id` 一樣會成功——後端目前沒有能力執行個人層級的細粒度限制，只有角色層級。這是設計上先天的落差，不是 bug，但接手的人要知道個人自訂權限只是 UX 層面的引導，不是安全邊界；真正的安全邊界是使用者所屬的角色矩陣。
