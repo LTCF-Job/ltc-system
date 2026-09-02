@@ -6,11 +6,12 @@
 
 | 服務 | 平台 | 用途 |
 |---|---|---|
-| `apps/api` | Google Cloud Run（service `ltc-api` + migration job `ltc-api-migrate`），region `asia-east1` | Go 後端 API |
-| `apps/web` | Vercel（project `ltc-system`） | Vue 3 前端靜態站台 |
+| `apps/api` | Google Cloud Run（service `ltc-api` + migration job `ltc-api-migrate`），region `asia-east1` | Go 後端 API（正式） |
+| `apps/api`（Demo） | Google Cloud Run（service `ltc-api-demo` + migration job `ltc-api-demo-migrate`），同一個 GCP 專案、region `asia-east1` | Go 後端 API（Demo，`DATA_PLANE=demo`） |
+| `apps/web` | Vercel（project `ltc-system`） | Vue 3 前端靜態站台，正式與 Demo 帳號共用同一份前端部署 |
 | Supabase 專案 `oywacuduaiulnfxzmpxs` | Supabase | PostgreSQL 資料庫、Auth（GoTrue）、Storage |
 
-正式環境（`main` 分支）與 develop 環境（`develop` 分支）目前共用**同一個** Supabase 專案；沒有各自獨立的資料庫。
+正式環境（`main` 分支）與 develop 環境（`develop` 分支）目前共用**同一個** Supabase 專案與**同一個** `postgres` 資料庫；沒有各自獨立的資料庫。Demo 帳號（`demo@ltc.example.com`）則不同——它連的是同一個 Supabase 專案底下**另一個獨立資料庫** `ltc_demo`，透過獨立的 `ltc-api-demo` Cloud Run 服務存取，實體隔離、不會讀寫到正式資料。從零建置這一整套 Demo 基礎設施的步驟見 [`environment-bootstrap.md`](environment-bootstrap.md#如果還要建一個-demo-環境選用)。
 
 ## Supabase（資料庫與 Auth）
 
@@ -48,6 +49,31 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 
 日後任何新增的入口（例如獨立的 worker、one-off script）只要用同一個 `DATABASE_URL` 連 Supabase pooler，都要照這個寫法，不能直接 `pgxpool.New(ctx, dsn)`。
 
+### 已知坑：連 Supavisor pooler 存取非預設資料庫／非預設角色時，使用者名稱要帶專案 ref
+
+`ltc_demo` 這種另外建立的資料庫，用自訂角色（例如 `ltc_demo_app`）透過 6543 埠的 Supavisor pooler 連線時，`DATABASE_URL` 的使用者名稱不能只寫角色名稱，一定要寫成 `<角色>.<Supabase 專案 ref>`（例如 `ltc_demo_app.oywacuduaiulnfxzmpxs`），否則會連線失敗：
+
+```
+FATAL: (ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)
+```
+
+這是 Supavisor 用使用者名稱判斷要路由到哪個 Supabase 專案（tenant）的機制，不是這個專案特有的設定錯誤——預設的 `postgres` 使用者本來就長這樣（`postgres.<project-ref>`），只是自訂角色第一次接觸這個規則時容易漏掉。
+
+### 已知坑：`ltc_demo_app` 沒有 CREATE 權限，migration 要用另一組帳號跑
+
+[`demo-db-roles.sql`](../../apps/api/ops/demo-db-roles.sql) 只授予 `ltc_demo_app` 對**既有**資料表的 DML 權限（`SELECT/INSERT/UPDATE/DELETE`），沒有 `CREATE TABLE` 權限——這是刻意的，Demo API 執行期不應該有改 schema 的能力。這代表 `ltc-api-demo-migrate` 這個 job 不能用 `ltc_demo_app` 的 `DATABASE_URL`，直接跑會在建立 `schema_migrations` 表格那步就失敗：
+
+```
+ERROR: permission denied for schema public (SQLSTATE 42501)
+```
+
+正確做法是準備**兩組**指向 `ltc_demo` 的連線字串、存成兩個不同的 Secret Manager secret：
+
+- `DEMO_MIGRATE_DATABASE_URL`：用 Supabase 專案預設的 `postgres` 超級使用者（`postgres.<project-ref>`），只給 `ltc-api-demo-migrate` job 用。
+- `DEMO_DATABASE_URL`：用 `ltc_demo_app`（`ltc_demo_app.<project-ref>`），給 `ltc-api-demo` 服務本體用。
+
+只要執行 `demo-db-roles.sql` 時是用同一個 `postgres` 超級使用者連進 `ltc_demo`（腳本裡的 `ALTER DEFAULT PRIVILEGES` 是綁在「執行腳本的角色」上的），之後用這個超級使用者跑 migration 建的新表格，會自動套用同一組預設權限給 `ltc_demo_app`，不用每次新增 migration 都重跑一次 `demo-db-roles.sql`。
+
 ## `apps/api` 環境變數
 
 | 變數 | 本機 `.env` | Cloud Run | 說明 |
@@ -73,6 +99,7 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 | `VITE_API_BASE_URL` | 後端 API base URL。本機用 `/api/v1`（走 dev server proxy），部署環境要填完整網址，例如 `https://ltc-api-<hash>.<region>.run.app/api/v1` |
 | `VITE_SUPABASE_URL` | Supabase 專案網址，例如 `https://oywacuduaiulnfxzmpxs.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key（公開金鑰，非機密） |
+| `VITE_DEMO_API_BASE_URL` | Demo 帳號專用的後端 API base URL，指向 `ltc-api-demo` 服務，例如 `https://ltc-api-demo-<hash>.<region>.run.app/api/v1`。未設定時 Demo 帳號登入後所有 API 請求仍會打到 `VITE_API_BASE_URL`（正式 API），被 `data_plane` 檢查拒絕（見 [`client.ts`](../../apps/web/src/api/client.ts)） |
 | `VITE_GOOGLE_CLIENT_ID` / `VITE_GOOGLE_API_KEY` / `VITE_GOOGLE_APP_ID` | Google Picker／Identity Services，選填 |
 | `VITE_ENABLE_MSW` | 是否啟用 mock service worker，部署環境一律 `false` |
 
@@ -80,7 +107,7 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 
 ### 已知坑：Vercel Preview 環境變數要另外設
 
-`vercel env ls` 顯示的環境變數清單是分 Production／Preview／Development 各自獨立設定的。只在 Production 設過 `VITE_API_BASE_URL` 不代表 Preview（例如 `*-git-develop-*.vercel.app` 這種分支預覽網址）也有——曾經發生過 Preview 完全沒設 Supabase 相關變數，導致 develop 分支預覽網址永遠無法用真實帳密登入。
+`vercel env ls` 顯示的環境變數清單是分 Production／Preview／Development 各自獨立設定的，兩邊漏設哪個方向都發生過：曾經 Preview 完全沒設 Supabase 相關變數，導致 develop 分支預覽網址永遠無法用真實帳密登入；後來也發生過反過來——`VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 只設在 Preview，`Production`（`ltc-system-inky.vercel.app` 這個正式別名）從缺，導致正式站台的登入頁一律顯示「帳號密碼錯誤或無此使用者」（`supabase` client 為 `null`，根本沒真的呼叫 Supabase Auth）。新增任何 `VITE_` 變數後，養成習慣用 `vercel env ls`（不加參數，列出全部環境）比對 Production／Preview 兩欄是否都有，不要只看其中一個環境正常就當作沒問題。
 
 新增或檢查 Preview 環境變數：
 
@@ -110,6 +137,18 @@ vercel deploy
 
 ```bash
 vercel alias set https://ltc-system-<hash>-<team>.vercel.app ltc-system-git-<branch>-<team>.vercel.app
+```
+
+### 已知坑：`vercel` CLI 一律要在 repo 根目錄執行，不能先 `cd apps/web`
+
+這個專案的 Vercel 專案設定（Dashboard → Settings → General）已經把 Root Directory 設成 `apps/web`；`vercel` CLI（`link`／`env`／`deploy`／`--prod` 都算）本身的設計是「從 repo 根目錄執行、由 CLI 自己套用一次 Root Directory」。如果先 `cd apps/web` 再執行 CLI，Root Directory 會被套用兩次，等於在找 `apps/web/apps/web`，輕則建置產物不完整（`vite: command not found`，因為根本沒真的跑 `npm install`），重則報 `[UNRESOLVED_ENTRY] Cannot resolve entry module index.html`。
+
+`.vercel/project.json`（`vercel link` 產生的專案連結檔）也要放在 **repo 根目錄**的 `.vercel/`，不要放在 `apps/web/.vercel/`，兩邊都要一致才不會混淆下次執行的人。手動用 CLI 部署時，全程留在 repo 根目錄：
+
+```bash
+vercel link --yes --project=<VERCEL_PROJECT_ID> --scope=<VERCEL_ORG_ID>
+vercel env add VITE_XXX production --value '...' --no-sensitive
+vercel --prod --yes
 ```
 
 ### 已知坑：`vercel build` 在 CI／本機不會自動把 `node_modules/.bin` 加進 PATH
