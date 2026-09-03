@@ -26,20 +26,25 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 		return []app.ReportVehicleTripSummary{}, nil
 	}
 
-	vehQuery := "SELECT id, plate_no, display_name, region FROM vehicles WHERE 1=1"
+	vehQuery := `
+		SELECT v.id, v.plate_no, v.display_name, COALESCE(s.region, '')
+		FROM vehicles v
+		LEFT JOIN sites s ON s.id = v.site_id
+		WHERE 1=1
+	`
 	var args []interface{}
 	argIdx := 1
 	if region != nil && *region != "" {
-		vehQuery += fmt.Sprintf(" AND region = $%d", argIdx)
+		vehQuery += fmt.Sprintf(" AND s.region = $%d", argIdx)
 		args = append(args, *region)
 		argIdx++
 	}
 	if vehicleID != nil {
-		vehQuery += fmt.Sprintf(" AND id = $%d", argIdx)
+		vehQuery += fmt.Sprintf(" AND v.id = $%d", argIdx)
 		args = append(args, *vehicleID)
 		argIdx++
 	}
-	vehQuery += " ORDER BY display_name ASC"
+	vehQuery += " ORDER BY v.display_name ASC"
 
 	vehRows, err := r.db.Query(ctx, vehQuery, args...)
 	if err != nil {
