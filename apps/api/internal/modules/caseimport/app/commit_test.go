@@ -88,8 +88,8 @@ func TestCommitCases_SkipsUnflaggedDuplicateAndImportsFlaggedOne(t *testing.T) {
 
 	dupID := uuid.New()
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
-		{RowIndex: 1, Name: "未勾選重複", IsDuplicate: true, DuplicateCaseID: &dupID, DuplicateCaseCode: "C0001"},
-		{RowIndex: 2, Name: "已勾選重複", IsDuplicate: true, DuplicateCaseID: &dupID, DuplicateCaseCode: "C0001"},
+		{RowIndex: 1, Name: "未勾選重複", IsDuplicate: true, DuplicateCaseID: &dupID},
+		{RowIndex: 2, Name: "已勾選重複", IsDuplicate: true, DuplicateCaseID: &dupID},
 		{RowIndex: 3, Name: "非重複個案"},
 	}}
 

@@ -60,7 +60,6 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 		}
 
 		caseReq := NewCase{
-			Code:              "IMP-" + strings.ToUpper(uuid.New().String()[:8]),
 			Name:              row.Name,
 			NationalID:        row.NationalID,
 			HouseholdType:     stringPointer(row.HouseholdType),

@@ -37,7 +37,6 @@ type TransportPreferenceWriter interface {
 
 // NewCase 是建立個案所需的輸入，僅 Name 為必要欄位。
 type NewCase struct {
-	Code              string
 	Name              string
 	NationalID        string
 	HouseholdType     *string
@@ -65,7 +64,6 @@ type Actor struct {
 // DuplicateRef 是查重比對到的既有個案基本資訊，供匯入預覽提示使用。
 type DuplicateRef struct {
 	CaseID   uuid.UUID
-	CaseCode string
 	CaseName string
 }
 

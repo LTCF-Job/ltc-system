@@ -221,10 +221,9 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			if !hasError && s.duplicates != nil {
 				if dup, _ := s.duplicates.FindDuplicate(ctx, normalizedNationalID, name); dup != nil {
 					rowRes.IsDuplicate = true
-					rowRes.DuplicateCaseCode = dup.CaseCode
 					rowRes.DuplicateCaseName = dup.CaseName
 					rowRes.DuplicateCaseID = &dup.CaseID
-					message := fmt.Sprintf("疑似重複個案（既有個案代碼 %s），預設略過，需勾選才會匯入", dup.CaseCode)
+					message := fmt.Sprintf("疑似重複個案（既有個案姓名 %s），預設略過，需勾選才會匯入", dup.CaseName)
 					rowRes.WarningMessage = appendMessage(rowRes.WarningMessage, message)
 					warningsList = append(warningsList, CaseImportWarningItem{RowIndex: actualRowIndex, CaseName: name, Field: "重複個案", Message: message})
 					hasWarning = true
@@ -263,7 +262,6 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			}
 			if rowRes.IsDuplicate {
 				previewRow["duplicateOf"] = map[string]string{
-					"code": rowRes.DuplicateCaseCode,
 					"name": rowRes.DuplicateCaseName,
 				}
 			}

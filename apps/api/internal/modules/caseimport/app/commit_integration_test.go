@@ -218,7 +218,7 @@ type caseRegistrar struct{ svc *caseapp.CaseService }
 
 func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, actor importapp.Actor) (uuid.UUID, error) {
 	entity, err := a.svc.CreateCase(ctx, caseapp.CreateCaseRequest{
-		Code: in.Code, Name: in.Name, NationalID: in.NationalID,
+		Name: in.Name, NationalID: in.NationalID,
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
@@ -251,5 +251,5 @@ func (a caseDuplicateFinder) FindDuplicate(ctx context.Context, nationalID, name
 	if err != nil || found == nil {
 		return nil, err
 	}
-	return &importapp.DuplicateRef{CaseID: found.ID, CaseCode: found.Code}, nil
+	return &importapp.DuplicateRef{CaseID: found.ID, CaseName: found.Name}, nil
 }

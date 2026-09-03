@@ -42,7 +42,6 @@ type CaseImportRowResult struct {
 	InboundVehicle    string            `json:"inboundVehicle,omitempty"`
 	Remarks           string            `json:"remarks,omitempty"`
 	IsDuplicate       bool              `json:"isDuplicate"`
-	DuplicateCaseCode string            `json:"duplicateCaseCode,omitempty"`
 	DuplicateCaseName string            `json:"duplicateCaseName,omitempty"`
 	DuplicateCaseID   *uuid.UUID        `json:"duplicateCaseId,omitempty"`
 	WarningMessage    string            `json:"warningMessage,omitempty"`

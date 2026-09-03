@@ -235,7 +235,7 @@ func TestParseCases_FlagsDuplicateByNationalID(t *testing.T) {
 
 	dupCaseID := uuid.New()
 	finder := fakeDuplicateFinder{byNationalID: map[string]*DuplicateRef{
-		"A202559750": {CaseID: dupCaseID, CaseCode: "C0001"},
+		"A202559750": {CaseID: dupCaseID, CaseName: "王小明"},
 	}}
 
 	svc := NewImportService(nil, finder, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
@@ -248,7 +248,7 @@ func TestParseCases_FlagsDuplicateByNationalID(t *testing.T) {
 	assert.Equal(t, 1, preview.ValidRows)
 	assert.Equal(t, 1, preview.WarningRows)
 	assert.True(t, got.IsDuplicate)
-	assert.Equal(t, "C0001", got.DuplicateCaseCode)
+	assert.Equal(t, "王小明", got.DuplicateCaseName)
 	require.NotNil(t, got.DuplicateCaseID)
 	assert.Equal(t, dupCaseID, *got.DuplicateCaseID)
 }
@@ -266,7 +266,7 @@ func TestParseCases_FlagsDuplicateByNameWhenNationalIDBlank(t *testing.T) {
 
 	dupCaseID := uuid.New()
 	finder := fakeDuplicateFinder{byName: map[string]*DuplicateRef{
-		"王小明": {CaseID: dupCaseID, CaseCode: "C0002"},
+		"王小明": {CaseID: dupCaseID, CaseName: "王小明"},
 	}}
 
 	svc := NewImportService(nil, finder, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
@@ -274,7 +274,7 @@ func TestParseCases_FlagsDuplicateByNameWhenNationalIDBlank(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
 	assert.True(t, preview.Rows[0].IsDuplicate)
-	assert.Equal(t, "C0002", preview.Rows[0].DuplicateCaseCode)
+	assert.Equal(t, "王小明", preview.Rows[0].DuplicateCaseName)
 }
 
 func TestParseCases_EmptyAndCorruptedFiles(t *testing.T) {
