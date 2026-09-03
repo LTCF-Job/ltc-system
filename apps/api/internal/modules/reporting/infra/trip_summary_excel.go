@@ -92,7 +92,7 @@ func (ExcelRenderer) RenderTripSummary(periodYM string, vehicles []app.TripSumma
 		f.SetCellValue(sheetName, "A1", fmt.Sprintf("長照交通接送 車輛趟數表 (%s)", periodYM))
 		f.SetCellValue(sheetName, "A2", fmt.Sprintf("車輛名稱：%s (%s)", v.VehicleName, v.PlateNo))
 
-		headers := []string{"個案編號", "個案姓名", "去程趟數", "回程趟數", "個人合計"}
+		headers := []string{"個案姓名", "去程趟數", "回程趟數", "個人合計"}
 		for colIdx, h := range headers {
 			cell, _ := excelize.CoordinatesToCellName(colIdx+1, 4)
 			f.SetCellValue(sheetName, cell, h)
@@ -101,29 +101,26 @@ func (ExcelRenderer) RenderTripSummary(periodYM string, vehicles []app.TripSumma
 
 		rowNum := 5
 		for _, r := range v.Rows {
-			f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), r.CaseCode)
-			f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), r.CaseName)
-			f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), r.OutboundCount)
-			f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), r.InboundCount)
-			f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), r.TotalCount)
+			f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), r.CaseName)
+			f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), r.OutboundCount)
+			f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), r.InboundCount)
+			f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), r.TotalCount)
 			rowNum++
 		}
 
 		// 車輛小計列
 		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), "車輛小計")
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), "")
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), v.SubtotalOutbound)
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), v.SubtotalInbound)
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), v.SubtotalTotal)
-		for c := 1; c <= 5; c++ {
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), v.SubtotalOutbound)
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), v.SubtotalInbound)
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), v.SubtotalTotal)
+		for c := 1; c <= 4; c++ {
 			cell, _ := excelize.CoordinatesToCellName(c, rowNum)
 			f.SetCellStyle(sheetName, cell, cell, subtotalStyle)
 		}
 
-		f.SetColWidth(sheetName, "A", "A", 16)
-		f.SetColWidth(sheetName, "B", "B", 18)
-		f.SetColWidth(sheetName, "C", "E", 14)
-		if err := f.SetSheetDimension(sheetName, fmt.Sprintf("A1:E%d", rowNum)); err != nil {
+		f.SetColWidth(sheetName, "A", "A", 18)
+		f.SetColWidth(sheetName, "B", "D", 14)
+		if err := f.SetSheetDimension(sheetName, fmt.Sprintf("A1:D%d", rowNum)); err != nil {
 			return nil, fmt.Errorf("failed to set trip summary sheet dimension: %w", err)
 		}
 	}

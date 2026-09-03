@@ -86,9 +86,9 @@ func (r *ExportJobRepository) CompleteJob(ctx context.Context, jobID uuid.UUID, 
 	}
 	for seq, file := range files {
 		batch.Queue(`
-			INSERT INTO export_job_files (job_id, case_id, seq, case_code, case_name, region, file_name, row_count, file_checksum)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		`, jobID, file.CaseID, seq+1, file.CaseCode, file.CaseName, file.Region, file.FileName, file.RowCount, file.Checksum)
+			INSERT INTO export_job_files (job_id, case_id, seq, case_name, region, file_name, row_count, file_checksum)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, jobID, file.CaseID, seq+1, file.CaseName, file.Region, file.FileName, file.RowCount, file.Checksum)
 	}
 	batch.Queue(`UPDATE export_jobs SET status = 'succeeded', finished_at = now() WHERE id = $1`, jobID)
 
@@ -273,7 +273,7 @@ func (r *ExportJobRepository) LoadNationalIDCiphers(ctx context.Context, caseID 
 
 func (r *ExportJobRepository) listJobFiles(ctx context.Context, jobID uuid.UUID) ([]app.GovClaimCaseFile, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT case_id, case_code, case_name, region, file_name, row_count, COALESCE(file_checksum, '')
+		SELECT case_id, case_name, region, file_name, row_count, COALESCE(file_checksum, '')
 		FROM export_job_files WHERE job_id = $1 ORDER BY seq
 	`, jobID)
 	if err != nil {
@@ -285,7 +285,7 @@ func (r *ExportJobRepository) listJobFiles(ctx context.Context, jobID uuid.UUID)
 	for rows.Next() {
 		var file app.GovClaimCaseFile
 		if err := rows.Scan(
-			&file.CaseID, &file.CaseCode, &file.CaseName, &file.Region,
+			&file.CaseID, &file.CaseName, &file.Region,
 			&file.FileName, &file.RowCount, &file.Checksum,
 		); err != nil {
 			return nil, fmt.Errorf("scan export job file: %w", err)

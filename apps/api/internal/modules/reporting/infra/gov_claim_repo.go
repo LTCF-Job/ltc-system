@@ -25,7 +25,7 @@ func NewGovClaimRepository(db *pgxpool.Pool) *GovClaimRepository {
 // 而不是被 INNER JOIN 靜默濾掉，讓資料缺漏在匯出結果上看不見。
 const govClaimSourceQuery = `
 	SELECT
-		c.id, c.code, c.name, COALESCE(c.region, ''),
+		c.id, c.name, COALESCE(c.region, ''),
 		c.national_id_cipher, COALESCE(c.national_id_masked, ''),
 		COALESCE(c.home_address, ''), c.service_category, c.service_usage_type,
 		r.service_date, r.leg_seq, r.not_claimed_aa09,
@@ -46,7 +46,7 @@ const govClaimSourceQuery = `
 	  AND r.effective_status = 'boarded'
 	  AND ($3 = '' OR c.region = $3)
 	  AND (COALESCE(cardinality($4::uuid[]), 0) = 0 OR c.id = ANY($4::uuid[]))
-	ORDER BY c.code, r.leg_seq, r.service_date
+	ORDER BY c.name, r.leg_seq, r.service_date
 `
 
 // QueryGovClaimSources 查詢指定期間內可申報的搭乘紀錄。
@@ -75,7 +75,7 @@ func (r *GovClaimRepository) QueryGovClaimSources(
 	for rows.Next() {
 		var row govClaimSourceRow
 		if err := rows.Scan(
-			&row.CaseID, &row.CaseCode, &row.CaseName, &row.Region,
+			&row.CaseID, &row.CaseName, &row.Region,
 			&row.CaseNationalIDCipher, &row.CaseNationalIDMasked,
 			&row.HomeAddress, &row.ServiceCategory, &row.ServiceUsageType,
 			&row.ServiceDate, &row.LegSeq, &row.NotClaimedAA09,

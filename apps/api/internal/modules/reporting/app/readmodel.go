@@ -42,7 +42,6 @@ type ReportVehicleItem struct {
 // ReportTripSummaryCaseRow 代表個案趟數統計資料。
 type ReportTripSummaryCaseRow struct {
 	CaseID        uuid.UUID
-	CaseCode      string
 	CaseName      string
 	OutboundCount int
 	InboundCount  int
@@ -59,7 +58,6 @@ type ReportVehicleTripSummary struct {
 type ReportHsinchuScheduleRow struct {
 	Direction   string
 	RunNo       int16
-	CaseCode    string
 	CaseName    string
 	Note        *string
 	DepartTime  string

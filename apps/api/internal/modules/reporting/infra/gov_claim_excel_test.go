@@ -46,7 +46,6 @@ func TestExcelGenerators_ValidOpenXML(t *testing.T) {
 				SubtotalTotal:    20,
 				Rows: []app.TripSummaryCaseRow{
 					{
-						CaseCode:      "C001",
 						CaseName:      "王大明",
 						OutboundCount: 5,
 						InboundCount:  5,
@@ -73,7 +72,6 @@ func TestExcelGenerators_ValidOpenXML(t *testing.T) {
 			{
 				Direction:   "outbound",
 				RunNo:       1,
-				CaseCode:    "C001",
 				CaseName:    "張小美",
 				DepartTime:  "08:30",
 				Origin:      "竹北市光明六路1號",

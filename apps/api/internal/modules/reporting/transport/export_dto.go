@@ -20,7 +20,6 @@ type createExportJobRequest struct {
 // exportJobFileResponse 代表匯出結果中的單一個案工作簿。
 type exportJobFileResponse struct {
 	CaseID      string `json:"caseId"`
-	CaseCode    string `json:"caseCode"`
 	CaseName    string `json:"caseName"`
 	Region      string `json:"region"`
 	RowCount    int    `json:"rowCount"`
@@ -79,7 +78,6 @@ func toExportJobResponse(job app.GovClaimJob) exportJobResponse {
 	for _, file := range job.Files {
 		resp.Files = append(resp.Files, exportJobFileResponse{
 			CaseID:      file.CaseID.String(),
-			CaseCode:    file.CaseCode,
 			CaseName:    file.CaseName,
 			Region:      file.Region,
 			RowCount:    file.RowCount,

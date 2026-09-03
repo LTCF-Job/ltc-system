@@ -10,7 +10,6 @@ import (
 // govClaimSourceRow 對應 govClaimSourceQuery 的一列結果。
 type govClaimSourceRow struct {
 	CaseID               uuid.UUID
-	CaseCode             string
 	CaseName             string
 	Region               string
 	CaseNationalIDCipher []byte
@@ -39,7 +38,6 @@ type govClaimSourceRow struct {
 func (r govClaimSourceRow) toApp() app.GovClaimSource {
 	return app.GovClaimSource{
 		CaseID:               r.CaseID,
-		CaseCode:             r.CaseCode,
 		CaseName:             r.CaseName,
 		Region:               r.Region,
 		CaseNationalIDCipher: r.CaseNationalIDCipher,

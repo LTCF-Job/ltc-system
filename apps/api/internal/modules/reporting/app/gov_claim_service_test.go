@@ -163,7 +163,6 @@ func newSource(t *testing.T, caseID uuid.UUID, caseCode, caseName string, driver
 	t.Helper()
 	s := app.GovClaimSource{
 		CaseID:               caseID,
-		CaseCode:             caseCode,
 		CaseName:             caseName,
 		Region:               "hsinchu",
 		CaseNationalIDCipher: mustEncrypt(t, "A202559750"),
@@ -225,10 +224,10 @@ func TestCreateGovClaimJob_OneFilePerCase(t *testing.T) {
 	assert.Len(t, store.completed, 2)
 	assert.Equal(t, 2, job.TotalCases)
 	assert.Equal(t, 3, job.TotalRows)
-	assert.Equal(t, "蔡曾切11507.xlsx", store.completed[0].FileName)
-	assert.Equal(t, "林大明11507.xlsx", store.completed[1].FileName)
-	assert.Equal(t, 2, store.completed[0].RowCount)
-	assert.Equal(t, 1, store.completed[1].RowCount)
+	assert.Equal(t, "林大明11507.xlsx", store.completed[0].FileName)
+	assert.Equal(t, "蔡曾切11507.xlsx", store.completed[1].FileName)
+	assert.Equal(t, 1, store.completed[0].RowCount)
+	assert.Equal(t, 2, store.completed[1].RowCount)
 	assert.Empty(t, job.Skipped)
 
 	// 查詢期間須為該民國月份的西元起訖（左閉右開）
@@ -406,8 +405,8 @@ func TestRenderZip_PacksEveryCaseFile(t *testing.T) {
 	assert.Equal(t, "gov-claim-hsinchu-11507.zip", fileName)
 	assert.NotEmpty(t, archive)
 	require.Len(t, archiver.entries, 2)
-	assert.Equal(t, "蔡曾切11507.xlsx", archiver.entries[0].Name)
-	assert.Equal(t, "林大明11507.xlsx", archiver.entries[1].Name)
+	assert.Equal(t, "林大明11507.xlsx", archiver.entries[0].Name)
+	assert.Equal(t, "蔡曾切11507.xlsx", archiver.entries[1].Name)
 }
 
 func TestRenderZip_RejectsDirectModeJob(t *testing.T) {

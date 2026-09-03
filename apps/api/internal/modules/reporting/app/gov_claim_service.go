@@ -138,7 +138,6 @@ func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob
 	cases := make([]ExportJobAuditCaseFile, 0, len(job.Files))
 	for _, f := range job.Files {
 		cases = append(cases, ExportJobAuditCaseFile{
-			CaseCode: f.CaseCode,
 			CaseName: f.CaseName,
 			Region:   f.Region,
 			FileName: f.FileName,
@@ -256,16 +255,15 @@ func (s *GovClaimService) buildJobContent(
 
 		content, err := s.renderer.RenderGovClaim(rows)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("render gov claim for case %s: %w", group.caseCode, err)
+			return nil, nil, nil, fmt.Errorf("render gov claim for case %s: %w", group.caseName, err)
 		}
 
 		sum := sha256.Sum256(content)
 		files = append(files, GovClaimCaseFile{
 			CaseID:   group.caseID,
-			CaseCode: group.caseCode,
 			CaseName: group.caseName,
 			Region:   group.region,
-			FileName: uniqueFileName(usedFileNames, group.caseName, group.caseCode, periodYM),
+			FileName: uniqueFileName(usedFileNames, group.caseName, periodYM),
 			RowCount: len(rows),
 			Checksum: hex.EncodeToString(sum[:]),
 			Bytes:    content,
@@ -485,11 +483,14 @@ func newExportLine(lineNo int, group caseGroup, row govform.ClaimRow, driverID *
 	}
 }
 
-// uniqueFileName 以「個案姓名＋民國年月」命名，比照政府端收到的範本檔名；同名時補個案編號。
-func uniqueFileName(used map[string]bool, caseName, caseCode, periodYM string) string {
-	name := fmt.Sprintf("%s%s.xlsx", caseName, periodYM)
-	if used[name] {
-		name = fmt.Sprintf("%s_%s%s.xlsx", caseName, caseCode, periodYM)
+// uniqueFileName 以「個案姓名＋民國年月」命名，比照政府端收到的範本檔名；同名時補序號。
+func uniqueFileName(used map[string]bool, caseName, periodYM string) string {
+	base := fmt.Sprintf("%s%s", caseName, periodYM)
+	name := base + ".xlsx"
+	counter := 2
+	for used[name] {
+		name = fmt.Sprintf("%s (%d).xlsx", base, counter)
+		counter++
 	}
 	used[name] = true
 	return name
@@ -546,7 +547,6 @@ func rowKeyOf(row govform.ClaimRow) rowKey {
 
 type caseGroup struct {
 	caseID           uuid.UUID
-	caseCode         string
 	caseName         string
 	region           string
 	nationalIDCipher []byte
@@ -554,7 +554,7 @@ type caseGroup struct {
 	items            []GovClaimSource
 }
 
-// groupByCase 依個案分組並以個案編號排序，讓同一組輸入永遠產出相同的檔案順序。
+// groupByCase 依個案分組並以個案姓名與 ID 排序，讓同一組輸入永遠產出相同的檔案順序。
 func groupByCase(sources []GovClaimSource) []caseGroup {
 	index := make(map[uuid.UUID]int)
 	groups := make([]caseGroup, 0)
@@ -564,7 +564,6 @@ func groupByCase(sources []GovClaimSource) []caseGroup {
 		if !ok {
 			groups = append(groups, caseGroup{
 				caseID:           item.CaseID,
-				caseCode:         item.CaseCode,
 				caseName:         item.CaseName,
 				region:           item.Region,
 				nationalIDCipher: item.CaseNationalIDCipher,
@@ -576,7 +575,12 @@ func groupByCase(sources []GovClaimSource) []caseGroup {
 		groups[pos].items = append(groups[pos].items, item)
 	}
 
-	sort.SliceStable(groups, func(i, j int) bool { return groups[i].caseCode < groups[j].caseCode })
+	sort.SliceStable(groups, func(i, j int) bool {
+		if groups[i].caseName != groups[j].caseName {
+			return groups[i].caseName < groups[j].caseName
+		}
+		return groups[i].caseID.String() < groups[j].caseID.String()
+	})
 	return groups
 }
 

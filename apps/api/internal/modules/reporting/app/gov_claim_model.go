@@ -41,7 +41,6 @@ const (
 // 指標欄位代表來源可能缺漏，由 service 判斷是否跳過該列。
 type GovClaimSource struct {
 	CaseID               uuid.UUID
-	CaseCode             string
 	CaseName             string
 	Region               string
 	CaseNationalIDCipher []byte
@@ -90,7 +89,6 @@ type ExportLine struct {
 // Bytes 只在產生當下有值；讀取歷史工作時為 nil，需由快照重繪。
 type GovClaimCaseFile struct {
 	CaseID   uuid.UUID
-	CaseCode string
 	CaseName string
 	Region   string
 	FileName string
@@ -163,7 +161,6 @@ type ExportJobAuditSnapshot struct {
 
 // ExportJobAuditCaseFile 是稽核快照中單一個案的匯出檔案摘要。
 type ExportJobAuditCaseFile struct {
-	CaseCode string `json:"caseCode"`
 	CaseName string `json:"caseName"`
 	Region   string `json:"region"`
 	FileName string `json:"fileName"`

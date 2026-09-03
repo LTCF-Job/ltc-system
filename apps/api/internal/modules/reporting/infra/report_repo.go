@@ -58,7 +58,7 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 	var results []app.ReportVehicleTripSummary
 	statQuery := `
 		SELECT 
-			c.id, c.code, c.name,
+			c.id, c.name,
 			COALESCE(SUM(CASE WHEN r.leg_seq IN (1, 3) THEN 1 ELSE 0 END), 0) AS outbound_count,
 			COALESCE(SUM(CASE WHEN r.leg_seq IN (2, 4) THEN 1 ELSE 0 END), 0) AS inbound_count,
 			COUNT(r.id) AS total_count
@@ -67,8 +67,8 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 		WHERE r.vehicle_id = $1
 		  AND r.service_date >= $2 AND r.service_date < $3
 		  AND r.effective_status = 'boarded'
-		GROUP BY c.id, c.code, c.name
-		ORDER BY c.code ASC
+		GROUP BY c.id, c.name
+		ORDER BY c.name ASC
 	`
 
 	for _, v := range vehicles {
@@ -80,7 +80,7 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 		var rows []app.ReportTripSummaryCaseRow
 		for rRows.Next() {
 			var row app.ReportTripSummaryCaseRow
-			if err := rRows.Scan(&row.CaseID, &row.CaseCode, &row.CaseName, &row.OutboundCount, &row.InboundCount, &row.TotalCount); err == nil {
+			if err := rRows.Scan(&row.CaseID, &row.CaseName, &row.OutboundCount, &row.InboundCount, &row.TotalCount); err == nil {
 				rows = append(rows, row)
 			}
 		}
@@ -105,7 +105,7 @@ func (r *ReportRepository) QueryHsinchuScheduleData(ctx context.Context, siteID 
 
 	query := `
 		SELECT 
-			l.direction, l.run_no, c.code, c.name, cs.note,
+			l.direction, l.run_no, c.name, cs.note,
 			to_char(l.depart_time, 'HH24:MI') as depart_time,
 			to_char(l.arrive_time, 'HH24:MI') as arrive_time,
 			COALESCE(c.home_address, ''), s.address as site_address,
@@ -145,7 +145,7 @@ func (r *ReportRepository) QueryHsinchuScheduleData(ctx context.Context, siteID 
 	for rows.Next() {
 		var item app.ReportHsinchuScheduleRow
 		if err := rows.Scan(
-			&item.Direction, &item.RunNo, &item.CaseCode, &item.CaseName, &item.Note,
+			&item.Direction, &item.RunNo, &item.CaseName, &item.Note,
 			&item.DepartTime, &item.ArriveTime, &item.HomeAddress, &item.SiteAddress,
 			&item.VehicleName, &item.SiteName,
 		); err != nil {

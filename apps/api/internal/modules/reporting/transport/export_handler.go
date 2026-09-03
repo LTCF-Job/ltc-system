@@ -155,7 +155,7 @@ func (h *ExportHandler) DownloadCaseFile(c *gin.Context) {
 		return
 	}
 
-	writeAttachment(c, xlsxContentType, asciiFileName("gov-claim", file.CaseCode, "xlsx"), file.FileName, file.Bytes)
+	writeAttachment(c, xlsxContentType, asciiFileName("gov-claim", file.CaseID.String()[:8], "xlsx"), file.FileName, file.Bytes)
 }
 
 // Download 下載整包壓縮檔；逐案下載模式的工作沒有整包檔案，回傳 ErrNotZipJob。

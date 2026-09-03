@@ -19,7 +19,6 @@ type ReportRepositoryPort interface {
 // TripSummaryCaseRow 代表單一個案之趟數統計。
 type TripSummaryCaseRow struct {
 	CaseID        string `json:"caseId"`
-	CaseCode      string `json:"caseCode"`
 	CaseName      string `json:"caseName"`
 	OutboundCount int    `json:"outboundCount"`
 	InboundCount  int    `json:"inboundCount"`
@@ -53,7 +52,6 @@ type TripSummaryReport struct {
 type HsinchuScheduleItem struct {
 	Direction   string  `json:"direction"` // outbound, inbound
 	RunNo       int16   `json:"runNo"`     // 趟次 (1, 2, 3...)
-	CaseCode    string  `json:"caseCode"`
 	CaseName    string  `json:"caseName"`
 	Note        *string `json:"note,omitempty"`
 	DepartTime  string  `json:"departTime"`
@@ -114,7 +112,6 @@ func (s *ReportService) GetTripSummary(ctx context.Context, periodYm string, reg
 		for _, r := range vs.Rows {
 			vehSummary.Rows = append(vehSummary.Rows, TripSummaryCaseRow{
 				CaseID:        r.CaseID.String(),
-				CaseCode:      r.CaseCode,
 				CaseName:      r.CaseName,
 				OutboundCount: r.OutboundCount,
 				InboundCount:  r.InboundCount,
@@ -176,7 +173,6 @@ func (s *ReportService) GetHsinchuSchedule(ctx context.Context, siteID *uuid.UUI
 		schedItem := HsinchuScheduleItem{
 			Direction:   item.Direction,
 			RunNo:       item.RunNo,
-			CaseCode:    item.CaseCode,
 			CaseName:    item.CaseName,
 			Note:        item.Note,
 			DepartTime:  item.DepartTime,

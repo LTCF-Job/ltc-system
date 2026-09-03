@@ -58,10 +58,10 @@ func TestExportHandler_CreateReturnsPerCaseDownloadLinks(t *testing.T) {
 	assert.Empty(t, resp.Data.DownloadURL, "逐案下載模式不提供整包下載連結")
 
 	require.Len(t, resp.Data.Files, 2)
-	assert.Equal(t, "蔡曾切11507.xlsx", resp.Data.Files[0].FileName)
-	assert.Equal(t, 2, resp.Data.Files[0].RowCount)
+	assert.Equal(t, "林大明11507.xlsx", resp.Data.Files[0].FileName)
+	assert.Equal(t, 1, resp.Data.Files[0].RowCount)
 	assert.Equal(t,
-		fmt.Sprintf("/api/v1/exports/%s/files/%s/download", resp.Data.ID, testCaseID.String()),
+		fmt.Sprintf("/api/v1/exports/%s/files/%s/download", resp.Data.ID, testCaseID2.String()),
 		resp.Data.Files[0].DownloadURL,
 	)
 }
@@ -120,7 +120,7 @@ func TestExportHandler_DownloadCaseFileServesOpenableWorkbook(t *testing.T) {
 	assert.Contains(t, w.Header().Get("Content-Type"), "spreadsheetml.sheet")
 
 	disposition := w.Header().Get("Content-Disposition")
-	assert.Contains(t, disposition, "gov-claim-C001.xlsx")
+	assert.Contains(t, disposition, fmt.Sprintf("gov-claim-%s.xlsx", testCaseID.String()[:8]))
 	assert.Contains(t, disposition, "filename*=UTF-8''")
 	for _, ch := range disposition {
 		assert.True(t, ch <= unicode.MaxASCII, "Content-Disposition 應僅含 ASCII: %s", disposition)
@@ -163,7 +163,7 @@ func TestExportHandler_DownloadZip(t *testing.T) {
 	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
 	require.NoError(t, err)
 	require.Len(t, reader.File, 2)
-	assert.Equal(t, "蔡曾切11507.xlsx", reader.File[0].Name)
+	assert.Equal(t, "林大明11507.xlsx", reader.File[0].Name)
 }
 
 func TestExportHandler_DownloadRejectsDirectModeJob(t *testing.T) {
@@ -188,8 +188,7 @@ func TestExportHandler_GetReturnsCaseListForHistory(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.Len(t, resp.Data.Files, 2)
-	assert.Equal(t, "C001", resp.Data.Files[0].CaseCode)
-	assert.Equal(t, "蔡曾切", resp.Data.Files[0].CaseName)
+	assert.Equal(t, "林大明", resp.Data.Files[0].CaseName)
 }
 
 func TestExportHandler_ListReturnsPagination(t *testing.T) {
@@ -394,16 +393,15 @@ func (m *memoryExportStore) LoadNationalIDCiphers(context.Context, uuid.UUID, []
 func testSources(t *testing.T) []app.GovClaimSource {
 	t.Helper()
 	return []app.GovClaimSource{
-		newTestSource(testCaseID, "C001", "蔡曾切", 1, 1, "outbound", "09:40"),
-		newTestSource(testCaseID, "C001", "蔡曾切", 1, 2, "inbound", "12:20"),
-		newTestSource(testCaseID2, "C002", "林大明", 1, 1, "outbound", "09:40"),
+		newTestSource(testCaseID, "蔡曾切", 1, 1, "outbound", "09:40"),
+		newTestSource(testCaseID, "蔡曾切", 1, 2, "inbound", "12:20"),
+		newTestSource(testCaseID2, "林大明", 1, 1, "outbound", "09:40"),
 	}
 }
 
-func newTestSource(caseID uuid.UUID, code, name string, day int, legSeq int16, direction, departTime string) app.GovClaimSource {
+func newTestSource(caseID uuid.UUID, name string, day int, legSeq int16, direction, departTime string) app.GovClaimSource {
 	return app.GovClaimSource{
 		CaseID:                 caseID,
-		CaseCode:               code,
 		CaseName:               name,
 		Region:                 "hsinchu",
 		CaseNationalIDCipher:   mustEncrypt("A202559750"),

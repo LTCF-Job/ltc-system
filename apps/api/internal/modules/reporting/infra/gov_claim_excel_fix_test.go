@@ -21,7 +21,6 @@ func TestVerifyCleanOpenXMLOutput(t *testing.T) {
 			SubtotalTotal:    20,
 			Rows: []app.TripSummaryCaseRow{
 				{
-					CaseCode:      "C001",
 					CaseName:      "王大明",
 					OutboundCount: 5,
 					InboundCount:  5,
