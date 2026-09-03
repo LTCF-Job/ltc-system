@@ -16,7 +16,6 @@
             <h2 id="login-title">登入系統</h2>
           </div>
 
-          <!-- 登入表單 -->
           <el-form
             ref="formRef"
             :model="form"

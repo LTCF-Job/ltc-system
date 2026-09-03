@@ -14,7 +14,7 @@ import (
 // ErrVehicleRequired 代表建立匯報表時未指定車輛。
 var ErrVehicleRequired = errors.New("vehicle is required")
 
-// DriverReportService 負責司機接送匯報表的登錄、範本產生、匯入與欄位對應。
+// DriverReportService 負責司機接送匯報表的登記、範本產生、匯入與欄位對應。
 type DriverReportService struct {
 	repo         FormStore
 	excel        SpreadsheetReader

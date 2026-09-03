@@ -123,7 +123,7 @@ function knownColumnsFor(formId: string): Map<string, DriverReportColumnDTO> {
 }
 
 // persistColumnRecords 對應後端 CommitDriverReport 的 persistColumnDecisions：正式匯入時把檔案
-// 出現過的所有欄位登錄成 form_columns（首次出現即 pending），讓「待維護資料」查得到完全比對不到
+// 出現過的所有欄位登記成 form_columns（首次出現即 pending），讓「待維護資料」查得到完全比對不到
 // 個案的欄位；已對應的欄位覆寫成 mapped，其餘沿用既有狀態。
 function persistColumnRecords(
   formId: string,

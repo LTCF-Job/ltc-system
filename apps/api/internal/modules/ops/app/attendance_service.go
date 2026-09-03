@@ -45,7 +45,7 @@ type AttendanceRecordInput struct {
 	Note       *string   `json:"note,omitempty"`
 }
 
-// AttendanceService 提供司機出勤與請假登錄服務。
+// AttendanceService 提供司機出勤與請假登記服務。
 type AttendanceService struct {
 	attendanceRepo AttendanceStore
 	driverRepo     DriverLister

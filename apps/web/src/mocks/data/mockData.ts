@@ -1913,7 +1913,7 @@ export const mockMaintenanceLogs: MaintenanceLogDTO[] = [
   }
 ]
 
-// 司機月出勤展示資料：涵蓋 4 種出勤狀態 (work 出勤, leave 事假, sick 病假, off 休假) 與請假備註
+// 司機月出勤展示資料：涵蓋 4 種出勤狀態（work 出勤、leave 事假、sick 病假、off 休假）與請假備註
 export const mockAttendanceReport: MonthAttendanceReportDTO = {
   periodYm: '115-07',
   daysInMonth: 31,
@@ -1988,7 +1988,7 @@ export const mockAttendanceReport: MonthAttendanceReportDTO = {
   ]
 }
 
-// 車輛油資登錄紀錄
+// 車輛油資紀錄
 export const mockFuelLogs: FuelLogDTO[] = [
   {
     id: 'fuel_1',
@@ -2149,5 +2149,5 @@ export const mockDashboardMetrics: DashboardMetricsDTO = {
 // 讓 demoStore 的 JSON 快照／還原機制能正確持久化，重新整理頁面後不遺失
 export const mockDriverReportImportedDates: Record<string, string[]> = {}
 
-// 司機接送匯報每個 (匯報表, 月份) 各自的最後匯入時間，對應後端的 max(submitted_at)
+// 司機接送匯報每個（匯報表、月份）各自的最後匯入時間，對應後端的 max(submitted_at)
 export const mockDriverReportLastImportByMonth: Record<string, string> = {}

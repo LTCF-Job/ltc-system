@@ -59,7 +59,7 @@ type ReportedRideSlotOnDate struct {
 	LegSeq      int16
 }
 
-// MonthEndRideStats 代表月統計搭乘數據。
+// MonthEndRideStats 代表月統計搭乘資料。
 type MonthEndRideStats struct {
 	TotalRides      int
 	BoardedRides    int

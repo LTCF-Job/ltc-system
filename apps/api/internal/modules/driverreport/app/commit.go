@@ -220,7 +220,7 @@ func (s *DriverReportService) writeImportAudit(ctx context.Context, formID uuid.
 	}
 }
 
-// persistColumnDecisions 先把檔案中的所有個案欄位登錄成 form_columns，再套用使用者
+// persistColumnDecisions 先把檔案中的所有個案欄位登記成 form_columns，再套用使用者
 // 在預覽畫面所做的對應決定；沒有決定的欄位維持既有狀態（首次出現即 pending）。
 func (s *DriverReportService) persistColumnDecisions(
 	ctx context.Context,

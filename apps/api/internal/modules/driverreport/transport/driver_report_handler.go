@@ -31,7 +31,7 @@ type DriverReportServiceInterface interface {
 	CommitDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, decisions []app.ColumnDecision, yearMonth string, actor app.Actor) (*app.CommitResult, error)
 }
 
-// DriverReportHandler 處理司機接送匯報表的登錄、匯入與欄位對應之 HTTP 請求。
+// DriverReportHandler 處理司機接送匯報表的登記、匯入與欄位對應之 HTTP 請求。
 type DriverReportHandler struct {
 	svc DriverReportServiceInterface
 }

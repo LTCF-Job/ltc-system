@@ -43,31 +43,31 @@ var codeMessages = map[string]string{
 	CodeInternalError:      "系統發生錯誤，請稍後再試",
 }
 
-// APIResponse 代表成功回應之統一封裝結構。
+// APIResponse 定義 API 成功回應結構。
 type APIResponse struct {
 	Data interface{} `json:"data"`
 	Meta interface{} `json:"meta,omitempty"`
 }
 
-// ErrorDetail 代表欄位驗證錯誤之詳細資訊。
+// ErrorDetail 定義欄位驗證錯誤之詳細資訊。
 type ErrorDetail struct {
 	Field  string `json:"field,omitempty"`
 	Reason string `json:"reason"`
 }
 
-// ErrorResponse 代表失敗回應之統一封裝結構。
+// ErrorResponse 定義 API 錯誤回應結構。
 type ErrorResponse struct {
 	Error ErrorBody `json:"error"`
 }
 
-// ErrorBody 代表錯誤本體。
+// ErrorBody 定義 API 錯誤主體。
 type ErrorBody struct {
 	Code    string        `json:"code"`
 	Message string        `json:"message"`
 	Details []ErrorDetail `json:"details,omitempty"`
 }
 
-// PaginationMeta 分頁中繼資訊。
+// PaginationMeta 定義分頁資訊。
 type PaginationMeta struct {
 	Page       int   `json:"page"`
 	PageSize   int   `json:"pageSize"`
@@ -94,9 +94,9 @@ func RespondError(c *gin.Context, httpStatus int, code string, message string, d
 	})
 }
 
-// RespondErrorCode 依錯誤碼查表回傳統一、非技術性錯誤訊息。
-// err 為實際發生的底層錯誤，僅記錄於伺服器端 log，絕不回傳給前端；呼叫端不應再自行組出 err.Error() 作為 message。
+// RespondErrorCode 依錯誤碼查表回傳非技術性錯誤訊息。
 func RespondErrorCode(c *gin.Context, httpStatus int, code string, err error, details []ErrorDetail) {
+	// 僅於伺服器端記錄底層錯誤日誌，避免將系統細節洩漏給前端
 	if err != nil {
 		slog.Error("api_error",
 			slog.String("code", code),
@@ -106,6 +106,7 @@ func RespondErrorCode(c *gin.Context, httpStatus int, code string, err error, de
 		)
 	}
 	message, ok := codeMessages[code]
+	// 查無對應錯誤碼時降級為內部系統錯誤
 	if !ok {
 		message = codeMessages[CodeInternalError]
 	}

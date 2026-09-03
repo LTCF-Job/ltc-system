@@ -18,7 +18,6 @@
         </el-descriptions-item>
       </el-descriptions>
 
-      <!-- 人工填寫表單 -->
       <el-form
         ref="formRef"
         :model="form"

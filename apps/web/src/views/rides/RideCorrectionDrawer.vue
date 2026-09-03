@@ -51,7 +51,6 @@
         </div>
       </el-card>
 
-      <!-- 更正表單 -->
       <el-card shadow="never" class="form-card">
         <template #header>
           <span class="card-title">搭乘紀錄更正欄位</span>

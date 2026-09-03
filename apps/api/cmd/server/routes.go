@@ -206,7 +206,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *de
 		apiV1.DELETE("/vehicles/maintenance/:id", auth.RequirePermission(perm, customPerm, "vehicles_maintenance", "delete"), h.maintenance.Delete)
 		apiV1.GET("/vehicles/maintenance/blank-template", auth.RequirePermission(perm, customPerm, "vehicles_maintenance", "view"), h.maintenance.DownloadBlankTemplate)
 
-		// 12. 司機出勤與請假登錄 (B6.3)
+		// 12. 司機出勤與請假登記 (B6.3)
 		apiV1.GET("/attendance", auth.RequirePermission(perm, customPerm, "attendance_fuel", "view"), h.attendance.GetMonthAttendance)
 		apiV1.POST("/attendance", auth.RequirePermission(perm, customPerm, "attendance_fuel", "edit"), h.attendance.Upsert)
 

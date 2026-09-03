@@ -175,7 +175,7 @@ func (r *DriverReportRepository) ListColumnsWithMapping(ctx context.Context, for
 	return cols, rows.Err()
 }
 
-// UpsertColumns 登錄檔案中出現的欄位。以表頭文字為衝突鍵，個案增減造成的欄號位移
+// UpsertColumns 登記檔案中出現的欄位。以表頭文字為衝突鍵，個案增減造成的欄號位移
 // 不會覆蓋到別的個案；已對應過的欄位只更新欄號與推薦值，保留人工確認的對應結果。
 func (r *DriverReportRepository) UpsertColumns(ctx context.Context, formID uuid.UUID, drafts []app.ColumnDraft) error {
 	if r.db == nil {

@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// FuelService 提供車輛油資登錄與管理服務。
+// FuelService 提供車輛油資登記與管理服務。
 type FuelService struct {
 	fuelRepo  FuelStore
 	auditRepo AuditWriter

@@ -202,7 +202,6 @@
           />
         </el-form-item>
 
-        <!-- 權限矩陣配置區塊 -->
         <div class="perm-config-box">
           <div class="perm-config-header">
             <div class="perm-config-title">

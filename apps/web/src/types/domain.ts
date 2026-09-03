@@ -370,7 +370,7 @@ export interface ModulePermission {
 
 export type SystemPermissions = Record<string, ModulePermission>
 
-// 角色預設權限配置表
+// 角色預設權限設定表
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, SystemPermissions> = {
   admin: SYSTEM_MODULES.reduce((acc, m) => {
     acc[m.id] = { view: true, edit: true, delete: true }
