@@ -19,7 +19,6 @@ type DriverDayAttendanceDTO struct {
 // DriverMonthAttendanceDTO 代表單一司機當月出勤彙整。
 type DriverMonthAttendanceDTO struct {
 	DriverID   string                            `json:"driverId"`
-	DriverCode string                            `json:"driverCode"`
 	DriverName string                            `json:"driverName"`
 	Region     string                            `json:"region"`
 	Days       map[string]DriverDayAttendanceDTO `json:"days"`
@@ -79,9 +78,9 @@ func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm str
 	}
 	if len(drivers) == 0 {
 		drivers = []DriverRef{
-			{ID: uuid.New(), Code: "D001", Name: "郭澤威", Region: "hsinchu"},
-			{ID: uuid.New(), Code: "D002", Name: "林大慶", Region: "hsinchu"},
-			{ID: uuid.New(), Code: "D003", Name: "陳志豪", Region: "miaoli"},
+			{ID: uuid.New(), Name: "郭澤威", Region: "hsinchu"},
+			{ID: uuid.New(), Name: "林大慶", Region: "hsinchu"},
+			{ID: uuid.New(), Name: "陳志豪", Region: "miaoli"},
 		}
 	}
 
@@ -122,7 +121,6 @@ func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm str
 
 		dDTO := DriverMonthAttendanceDTO{
 			DriverID:   d.ID.String(),
-			DriverCode: d.Code,
 			DriverName: d.Name,
 			Region:     d.Region,
 			Days:       make(map[string]DriverDayAttendanceDTO),

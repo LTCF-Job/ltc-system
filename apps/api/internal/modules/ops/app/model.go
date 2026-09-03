@@ -56,7 +56,6 @@ type MaintenanceLog struct {
 type DriverRef struct {
 	ID     uuid.UUID
 	Name   string
-	Code   string
 	Region string
 }
 

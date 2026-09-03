@@ -14,7 +14,6 @@ import (
 // MissingRideItem 代表未回報之搭乘趟次。
 type MissingRideItem struct {
 	CaseID      uuid.UUID  `json:"caseId"`
-	CaseCode    string     `json:"caseCode"`
 	CaseName    string     `json:"caseName"`
 	Region      string     `json:"region"`
 	ServiceDate string     `json:"serviceDate"` // YYYY-MM-DD
@@ -106,7 +105,6 @@ func (s *TaskService) listMissingReports(ctx context.Context, year, month int, r
 			}
 			expectedList = append(expectedList, MissingRideItem{
 				CaseID:      sch.CaseID,
-				CaseCode:    sch.CaseCode,
 				CaseName:    sch.CaseName,
 				Region:      sch.Region,
 				ServiceDate: dateStr,

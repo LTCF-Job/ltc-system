@@ -51,7 +51,7 @@ func (r *RideRepository) ListCalendarCases(
 	region, keyword string,
 ) ([]app.CalendarCase, error) {
 	query := `
-		SELECT c.id, c.code, c.name, c.region, c.claim_end_date,
+		SELECT c.id, c.name, c.region, c.claim_end_date,
 		       cs.id, cs.trip_pattern, cs.weekdays, s.open_days,
 		       lower(cs.effective_range), upper(cs.effective_range)
 		FROM cases c
@@ -59,8 +59,8 @@ func (r *RideRepository) ListCalendarCases(
 		JOIN sites s ON cs.site_id = s.id
 		WHERE c.status = 'active'
 		  AND ($3 = '' OR c.region = $3)
-		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%' OR c.code ILIKE '%' || $4 || '%')
-		ORDER BY c.code ASC
+		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
+		ORDER BY c.name ASC
 	`
 	db := pgxdb.FromContext(ctx, r.db)
 	rows, err := db.Query(ctx, query, start, end, region, keyword)
@@ -76,7 +76,7 @@ func (r *RideRepository) ListCalendarCases(
 		var scheduleID uuid.UUID
 		var effectiveTo *time.Time
 		if err := rows.Scan(
-			&c.ID, &c.Code, &c.Name, &c.Region, &c.ClaimEndDate,
+			&c.ID, &c.Name, &c.Region, &c.ClaimEndDate,
 			&scheduleID, &c.TripPattern, &c.Weekdays, &c.SiteOpenDays,
 			&c.EffectiveFrom, &effectiveTo,
 		); err != nil {

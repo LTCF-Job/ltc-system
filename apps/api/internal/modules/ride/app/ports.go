@@ -94,7 +94,6 @@ type CalendarLeg struct {
 // CalendarCase 是月曆表一列所需的個案與其當期排班。
 type CalendarCase struct {
 	ID            uuid.UUID
-	Code          string
 	Name          string
 	Region        string
 	TripPattern   int16

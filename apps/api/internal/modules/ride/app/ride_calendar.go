@@ -45,7 +45,6 @@ type CalendarCell struct {
 // CalendarRow 是月曆的單一個案列。
 type CalendarRow struct {
 	CaseID      string                  `json:"caseId"`
-	CaseCode    string                  `json:"caseCode"`
 	CaseName    string                  `json:"caseName"`
 	Region      string                  `json:"region"`
 	TripPattern int16                   `json:"tripPattern"`
@@ -94,7 +93,6 @@ func (s *RideService) GetCalendar(ctx context.Context, year, month int, region, 
 	for _, c := range cases {
 		row := CalendarRow{
 			CaseID:      c.ID.String(),
-			CaseCode:    c.Code,
 			CaseName:    c.Name,
 			Region:      c.Region,
 			TripPattern: c.TripPattern,

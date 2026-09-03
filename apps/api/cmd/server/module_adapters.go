@@ -105,7 +105,7 @@ func (a taskScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year
 			legs = append(legs, taskapp.ScheduleLeg{LegSeq: l.LegSeq, Direction: l.Direction, DepartTime: l.DepartTime, VehicleID: l.VehicleID})
 		}
 		out = append(out, taskapp.ActiveSchedule{
-			CaseID: s.CaseID, CaseCode: s.CaseCode, CaseName: s.CaseName, Region: s.Region,
+			CaseID: s.CaseID, CaseName: s.CaseName, Region: s.Region,
 			ClaimEndDate: s.ClaimEndDate, SiteID: s.SiteID,
 			SiteOpenDays: s.SiteOpenDays, EffectiveFrom: s.EffectiveFrom, EffectiveTo: s.EffectiveTo,
 			Weekdays: s.Weekdays, TripPattern: s.TripPattern, Legs: legs,
@@ -124,7 +124,7 @@ func (a opsDriverLister) List(ctx context.Context, region, q string, page, pageS
 	}
 	out := make([]opsapp.DriverRef, 0, len(list))
 	for _, d := range list {
-		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name, Code: d.Code, Region: d.Region})
+		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name, Region: d.Region})
 	}
 	return out, total, nil
 }
@@ -187,7 +187,7 @@ type caseRegistrar struct{ svc *caseapp.CaseService }
 
 func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, actor importapp.Actor) (uuid.UUID, error) {
 	entity, err := a.svc.CreateCase(ctx, caseapp.CreateCaseRequest{
-		Code: in.Code, Name: in.Name, NationalID: in.NationalID,
+		Name: in.Name, NationalID: in.NationalID,
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
@@ -295,5 +295,5 @@ func (a caseDuplicateFinder) FindDuplicate(ctx context.Context, nationalID, name
 	if err != nil || found == nil {
 		return nil, err
 	}
-	return &importapp.DuplicateRef{CaseID: found.ID, CaseCode: found.Code, CaseName: found.Name}, nil
+	return &importapp.DuplicateRef{CaseID: found.ID, CaseName: found.Name}, nil
 }

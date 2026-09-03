@@ -18,7 +18,6 @@ type ScheduleLeg struct {
 // ActiveSchedule 是月結作業展開搭乘日曆所需的個案排班資訊。
 type ActiveSchedule struct {
 	CaseID        uuid.UUID
-	CaseCode      string
 	CaseName      string
 	Region        string
 	ClaimEndDate  *time.Time

@@ -43,7 +43,6 @@ func weekdayScheduleFixture(caseID uuid.UUID, year, month int) ActiveSchedule {
 	from := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	return ActiveSchedule{
 		CaseID:        caseID,
-		CaseCode:      "C001",
 		CaseName:      "測試個案",
 		Region:        "竹北",
 		EffectiveFrom: from,
