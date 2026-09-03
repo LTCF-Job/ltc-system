@@ -1,0 +1,233 @@
+package app
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"ltc-system/apps/api/internal/platform/config"
+)
+
+func testConfig() *config.Config {
+	return &config.Config{
+		EncryptionKey: bytes.Repeat([]byte("a"), 32),
+		HMACKey:       bytes.Repeat([]byte("b"), 32),
+	}
+}
+
+// fakeCaseStore is a deterministic CaseStore test double.
+type fakeCaseStore struct {
+	byID           map[uuid.UUID]*Case
+	byHMAC         map[string]*Case
+	byNameNorm     map[string][]Case
+	createErr      error
+	lastCreate     *Case
+	lastUpsertPref struct {
+		caseID                                                     uuid.UUID
+		siteID, outboundVehicleID, inboundVehicleID                *uuid.UUID
+		siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string
+	}
+	deleted            map[uuid.UUID]bool
+	softDeleteErr      error
+	closedSchedulesFor uuid.UUID
+	closeSchedulesErr  error
+}
+
+func newFakeCaseStore() *fakeCaseStore {
+	return &fakeCaseStore{
+		byID:       map[uuid.UUID]*Case{},
+		byHMAC:     map[string]*Case{},
+		byNameNorm: map[string][]Case{},
+	}
+}
+
+func (f *fakeCaseStore) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
+	return nil, 0, nil
+}
+
+func (f *fakeCaseStore) GetByID(ctx context.Context, id uuid.UUID) (*Case, error) {
+	c, ok := f.byID[id]
+	if !ok {
+		return nil, errors.New("case not found")
+	}
+	return c, nil
+}
+
+func (f *fakeCaseStore) GetByHMAC(ctx context.Context, hmac []byte) (*Case, error) {
+	c, ok := f.byHMAC[string(hmac)]
+	if !ok {
+		return nil, nil
+	}
+	return c, nil
+}
+
+func (f *fakeCaseStore) GetByNameNormalized(ctx context.Context, nameNorm string) ([]Case, error) {
+	return f.byNameNorm[nameNorm], nil
+}
+
+func (f *fakeCaseStore) Create(ctx context.Context, c *Case) error {
+	f.lastCreate = c
+	if f.createErr != nil {
+		return f.createErr
+	}
+	if c.ID == uuid.Nil {
+		c.ID = uuid.New()
+	}
+	f.byID[c.ID] = c
+	if len(c.NationalIDHMAC) > 0 {
+		f.byHMAC[string(c.NationalIDHMAC)] = c
+	}
+	f.byNameNorm[c.NameNormalized] = append(f.byNameNorm[c.NameNormalized], *c)
+	return nil
+}
+
+func (f *fakeCaseStore) Update(ctx context.Context, c *Case) error {
+	f.byID[c.ID] = c
+	return nil
+}
+
+func (f *fakeCaseStore) CreateSchedule(ctx context.Context, s *CaseSchedule) error {
+	return nil
+}
+
+func (f *fakeCaseStore) GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*CaseSchedule, error) {
+	return nil, nil
+}
+
+func (f *fakeCaseStore) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]ActiveCaseScheduleInfo, error) {
+	return nil, nil
+}
+
+func (f *fakeCaseStore) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
+	f.lastUpsertPref.caseID = caseID
+	f.lastUpsertPref.siteID = siteID
+	f.lastUpsertPref.outboundVehicleID = outboundVehicleID
+	f.lastUpsertPref.inboundVehicleID = inboundVehicleID
+	f.lastUpsertPref.siteNameRaw = siteNameRaw
+	f.lastUpsertPref.outboundVehicleNameRaw = outboundVehicleNameRaw
+	f.lastUpsertPref.inboundVehicleNameRaw = inboundVehicleNameRaw
+	return nil
+}
+
+func (f *fakeCaseStore) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
+	if f.softDeleteErr != nil {
+		return false, f.softDeleteErr
+	}
+	if f.deleted == nil {
+		f.deleted = map[uuid.UUID]bool{}
+	}
+	if f.deleted[id] {
+		return false, nil
+	}
+	f.deleted[id] = true
+	return true, nil
+}
+
+func (f *fakeCaseStore) CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error {
+	f.closedSchedulesFor = caseID
+	return f.closeSchedulesErr
+}
+
+type fakeCaseAuditWriter struct {
+	entries []AuditEntry
+}
+
+func (f *fakeCaseAuditWriter) Write(_ context.Context, e AuditEntry) error {
+	f.entries = append(f.entries, e)
+	return nil
+}
+
+func TestCaseService_Delete(t *testing.T) {
+	t.Run("查無個案回錯誤", func(t *testing.T) {
+		store := newFakeCaseStore()
+		svc := NewCaseService(testConfig(), store, nil, nil, nil)
+
+		err := svc.Delete(context.Background(), uuid.New(), uuid.New(), "admin", "127.0.0.1", "test-agent")
+		assert.Error(t, err)
+	})
+
+	t.Run("成功刪除並收斂排班、寫入稽核", func(t *testing.T) {
+		store := newFakeCaseStore()
+		caseID := uuid.New()
+		store.byID[caseID] = &Case{ID: caseID, Name: "測試個案"}
+		audit := &fakeCaseAuditWriter{}
+		svc := NewCaseService(testConfig(), store, nil, audit, nil)
+
+		err := svc.Delete(context.Background(), caseID, uuid.New(), "admin", "127.0.0.1", "test-agent")
+		require.NoError(t, err)
+		assert.True(t, store.deleted[caseID])
+		assert.Equal(t, caseID, store.closedSchedulesFor)
+		require.Len(t, audit.entries, 1)
+		assert.Equal(t, "delete", audit.entries[0].Action)
+	})
+
+	t.Run("已刪除的個案再次刪除回錯誤", func(t *testing.T) {
+		store := newFakeCaseStore()
+		caseID := uuid.New()
+		store.byID[caseID] = &Case{ID: caseID}
+		svc := NewCaseService(testConfig(), store, nil, nil, nil)
+
+		require.NoError(t, svc.Delete(context.Background(), caseID, uuid.New(), "admin", "127.0.0.1", "test-agent"))
+		err := svc.Delete(context.Background(), caseID, uuid.New(), "admin", "127.0.0.1", "test-agent")
+		assert.Error(t, err)
+	})
+}
+
+func TestCreateCase_OnlyNameSucceeds(t *testing.T) {
+	store := newFakeCaseStore()
+	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+
+	entity, err := svc.CreateCase(context.Background(), CreateCaseRequest{Name: "只填姓名"}, uuid.New(), "admin", "127.0.0.1", "test-agent")
+
+	require.NoError(t, err)
+	require.NotNil(t, entity)
+	assert.Equal(t, "只填姓名", entity.Name)
+	assert.Nil(t, entity.NationalIDCipher)
+	assert.Nil(t, entity.HomeAddress)
+	assert.Nil(t, entity.Region)
+	assert.Equal(t, "active", entity.Status)
+}
+
+func TestCreateCase_DuplicateNationalIDNoLongerErrors(t *testing.T) {
+	store := newFakeCaseStore()
+	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+
+	first, err := svc.CreateCase(context.Background(), CreateCaseRequest{Name: "個案一", NationalID: "A202559750"}, uuid.New(), "admin", "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	require.NotNil(t, first)
+
+	second, err := svc.CreateCase(context.Background(), CreateCaseRequest{Name: "個案二", NationalID: "A202559750"}, uuid.New(), "admin", "127.0.0.1", "test-agent")
+	require.NoError(t, err, "身分證字號重複不再擋建立")
+	require.NotNil(t, second)
+	assert.NotEqual(t, first.ID, second.ID)
+}
+
+func TestCreateCase_RejectsMalformedNationalIDWhenProvided(t *testing.T) {
+	store := newFakeCaseStore()
+	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+
+	_, err := svc.CreateCase(context.Background(), CreateCaseRequest{Name: "格式錯誤個案", NationalID: "NOT-VALID"}, uuid.New(), "admin", "127.0.0.1", "test-agent")
+	assert.Error(t, err)
+}
+
+func TestUpdateCaseTransportPreference_PartialUpdateKeepsOtherIDsIntact(t *testing.T) {
+	store := newFakeCaseStore()
+	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+	caseID := uuid.New()
+	store.byID[caseID] = &Case{ID: caseID}
+
+	siteID := uuid.New()
+	_, err := svc.UpdateCaseTransportPreference(context.Background(), caseID, &siteID, nil, nil, "", "未比對到的去程車", "未比對到的回程車")
+
+	require.NoError(t, err)
+	assert.Equal(t, &siteID, store.lastUpsertPref.siteID)
+	assert.Nil(t, store.lastUpsertPref.outboundVehicleID, "未提供的去程車 ID 應維持 nil，交由 repo 端 COALESCE 保留現況")
+	assert.Nil(t, store.lastUpsertPref.inboundVehicleID)
+	assert.Equal(t, "未比對到的去程車", store.lastUpsertPref.outboundVehicleNameRaw)
+	assert.Equal(t, "未比對到的回程車", store.lastUpsertPref.inboundVehicleNameRaw)
+}

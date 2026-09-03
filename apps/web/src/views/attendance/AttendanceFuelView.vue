@@ -1,5 +1,6 @@
 <template>
   <div class="attendance-fuel-view">
+    <PageHeader title="出勤與油資登錄" />
     <el-tabs v-model="activeTab" type="border-card" class="main-tabs">
       <!-- 分頁 1: 司機出勤與請假月曆 -->
       <el-tab-pane label="司機出勤與請假" name="attendance">
@@ -21,7 +22,7 @@
                 v-model="attendanceQuery"
                 placeholder="搜尋司機姓名／代碼"
                 clearable
-                style="width: 180px"
+                style="width: 240px"
                 @keyup.enter="fetchAttendance"
               />
 
@@ -35,12 +36,12 @@
                 <el-option
                   v-for="d in drivers"
                   :key="d.id"
-                  :label="`${d.name} (${d.code})`"
+                  :label="d.name"
                   :value="d.id"
                 />
               </el-select>
 
-              <el-button type="primary" icon="Search" @click="fetchAttendance">
+              <el-button type="primary" @click="fetchAttendance">
                 查詢
               </el-button>
               <el-button @click="handleResetAttendance">
@@ -49,19 +50,42 @@
             </div>
 
             <!-- 出勤彙總指標 -->
-            <div class="stats-badges">
-              <el-tag effect="dark" type="success" size="large">
-                出勤：{{ totalAttendanceStats.work }} 人天
-              </el-tag>
-              <el-tag effect="dark" type="warning" size="large">
-                事假：{{ totalAttendanceStats.leave }} 人天
-              </el-tag>
-              <el-tag effect="dark" type="danger" size="large">
-                病假：{{ totalAttendanceStats.sick }} 人天
-              </el-tag>
-              <el-tag effect="dark" type="info" size="large">
-                休假：{{ totalAttendanceStats.off }} 人天
-              </el-tag>
+            <div class="attendance-summary-pills">
+              <div class="summary-pill">
+                <span class="dot dot-work"></span>
+                <span class="label">出勤 (O)</span>
+                <span class="val">{{ totalAttendanceStats.work }}</span>
+                <span class="unit">人天</span>
+              </div>
+              <div class="summary-pill">
+                <span class="dot dot-leave"></span>
+                <span class="label">事假 (事)</span>
+                <span class="val">{{ totalAttendanceStats.leave }}</span>
+                <span class="unit">人天</span>
+              </div>
+              <div class="summary-pill">
+                <span class="dot dot-sick"></span>
+                <span class="label">病假 (病)</span>
+                <span class="val">{{ totalAttendanceStats.sick }}</span>
+                <span class="unit">人天</span>
+              </div>
+              <div class="summary-pill">
+                <span class="dot dot-off"></span>
+                <span class="label">休假 (休)</span>
+                <span class="val">{{ totalAttendanceStats.off }}</span>
+                <span class="unit">人天</span>
+              </div>
+              <div class="summary-pill">
+                <span class="dot dot-absent"></span>
+                <span class="label">漏報缺勤 (缺)</span>
+                <span class="val">{{ totalAttendanceStats.absent }}</span>
+                <span class="unit">人天</span>
+              </div>
+              <div class="summary-pill holiday-pill">
+                <span class="dot dot-holiday"></span>
+                <span class="label">國定假日</span>
+                <span class="unit">灰底</span>
+              </div>
             </div>
           </div>
 
@@ -73,26 +97,33 @@
               size="small"
               height="580"
               class="attendance-matrix"
+              style="width: 100%;"
             >
               <el-table-column
                 prop="driverName"
                 label="司機姓名"
-                width="140"
+                width="160"
                 fixed="left"
+                align="center"
+                show-overflow-tooltip
               >
                 <template #default="{ row }">
-                  <div class="driver-cell">
-                    <span class="driver-name">{{ row.driverName }}</span>
-                    <el-tag size="small" type="info" effect="plain">{{ row.driverCode }}</el-tag>
-                  </div>
+                  <span class="driver-name-text">
+                    {{ row.driverName }}
+                  </span>
                 </template>
               </el-table-column>
 
               <el-table-column label="出勤統計" width="130" fixed="left" align="center">
                 <template #default="{ row }">
                   <div class="driver-summary">
-                    <span class="text-success">出:{{ row.workDays }}</span>
-                    <span class="text-warning">假:{{ row.leaveDays + row.sickDays }}</span>
+                    <span>出 {{ row.workDays }}</span>
+                    <span class="summary-divider">/</span>
+                    <span>假 {{ row.leaveDays + row.sickDays }}</span>
+                    <template v-if="row.absentDays > 0">
+                      <span class="summary-divider">/</span>
+                      <span class="summary-absent">缺 {{ row.absentDays }}</span>
+                    </template>
                   </div>
                 </template>
               </el-table-column>
@@ -101,10 +132,22 @@
               <el-table-column
                 v-for="day in (attendanceReport?.daysInMonth || 31)"
                 :key="day"
-                :label="String(day)"
-                width="42"
+                min-width="48"
                 align="center"
+                :class-name="isHoliday(day) ? 'col-holiday' : ''"
               >
+                <template #header>
+                  <div class="day-header" :class="{ 'is-holiday-header': isHoliday(day) }">
+                    <el-tooltip
+                      v-if="isHoliday(day)"
+                      :content="`${getDayKey(day)} 國定假日：${getHolidayName(day) || '放假'}`"
+                      placement="top"
+                    >
+                      <span class="day-num holiday-text">{{ day }}</span>
+                    </el-tooltip>
+                    <span v-else class="day-num">{{ day }}</span>
+                  </div>
+                </template>
                 <template #default="{ row }">
                   <div
                     class="day-cell"
@@ -112,15 +155,23 @@
                     @click="handleCellClick(row, day)"
                   >
                     <el-tooltip
-                      v-if="getDayRecord(row, day)"
+                      v-if="getDayRecord(row, day) || isHoliday(day)"
                       :content="getTooltipContent(row, day)"
                       placement="top"
                     >
-                      <span class="cell-symbol">
-                        {{ getStatusShort(getDayRecord(row, day)?.status) }}
-                      </span>
+                      <div class="cell-content">
+                        <template v-if="getDayRecord(row, day)">
+                          <span
+                            class="cell-symbol"
+                            :class="`symbol-${getDayRecord(row, day)?.status}`"
+                          >
+                            {{ getStatusDisplay(getDayRecord(row, day)?.status).symbol }}
+                          </span>
+                        </template>
+                        <span v-else class="cell-symbol cell-empty">-</span>
+                      </div>
                     </el-tooltip>
-                    <span v-else class="cell-symbol">-</span>
+                    <span v-else class="cell-symbol cell-empty">-</span>
                   </div>
                 </template>
               </el-table-column>
@@ -129,130 +180,135 @@
         </div>
       </el-tab-pane>
 
-      <!-- 分頁 2: 車輛油資登錄 -->
       <el-tab-pane label="車輛油資登錄" name="fuel">
-        <div class="tab-content" v-loading="fuelLoading">
-          <!-- 油資過濾與統計卡片 -->
-          <div class="fuel-top-section">
-            <div class="filter-header">
-              <div class="left-controls" style="display: flex; gap: 8px; align-items: center;">
-                <el-input
-                  v-model="fuelQuery"
-                  placeholder="搜尋車牌／車名／司機"
-                  clearable
-                  style="width: 180px"
-                  @keyup.enter="fetchFuelLogs"
-                />
+        <DataTablePage
+          :max-width="1100"
+          :loading="fuelLoading"
+          v-model:page="fuelPage"
+          v-model:pageSize="fuelPageSize"
+          :total="fuelTotal"
+          :page-sizes="[10, 20, 50]"
+          @page-change="fetchFuelLogs"
+          @size-change="fetchFuelLogs"
+        >
+          <template #filter>
+            <el-input
+              v-model="fuelQuery"
+              placeholder="搜尋車牌／車名／司機"
+              clearable
+              style="width: 240px"
+              @keyup.enter="fetchFuelLogs"
+            />
 
-                <el-select
-                  v-model="fuelVehicleId"
-                  placeholder="全部車輛"
-                  clearable
-                  style="width: 140px"
-                  @change="fetchFuelLogs"
-                >
-                  <el-option
-                    v-for="veh in vehicles"
-                    :key="veh.id"
-                    :label="veh.displayName"
-                    :value="veh.id"
-                  />
-                </el-select>
+            <el-select
+              v-model="fuelVehicleId"
+              placeholder="全部車輛"
+              clearable
+              style="width: 140px"
+              @change="fetchFuelLogs"
+            >
+              <el-option
+                v-for="veh in vehicles"
+                :key="veh.id"
+                :label="veh.displayName"
+                :value="veh.id"
+              />
+            </el-select>
 
-                <el-select
-                  v-model="fuelDriverId"
-                  placeholder="全部司機"
-                  clearable
-                  style="width: 140px"
-                  @change="fetchFuelLogs"
-                >
-                  <el-option
-                    v-for="d in drivers"
-                    :key="d.id"
-                    :label="d.name"
-                    :value="d.id"
-                  />
-                </el-select>
+            <el-select
+              v-model="fuelDriverId"
+              placeholder="全部司機"
+              clearable
+              style="width: 140px"
+              @change="fetchFuelLogs"
+            >
+              <el-option
+                v-for="d in drivers"
+                :key="d.id"
+                :label="d.name"
+                :value="d.id"
+              />
+            </el-select>
 
-                <el-date-picker
-                  v-model="fuelDateRange"
-                  type="daterange"
-                  range-separator="至"
-                  start-placeholder="開始日期"
-                  end-placeholder="結束日期"
-                  value-format="YYYY-MM-DD"
-                  style="width: 230px"
-                  @change="fetchFuelLogs"
-                />
+            <el-date-picker
+              v-model="fuelDateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="開始日期"
+              end-placeholder="結束日期"
+              value-format="YYYY-MM-DD"
+              style="width: 230px"
+              @change="fetchFuelLogs"
+            />
 
-                <el-button type="primary" icon="Search" @click="fetchFuelLogs">
-                  查詢
-                </el-button>
-                <el-button @click="handleResetFuel">
-                  重設
-                </el-button>
-              </div>
+            <el-button type="primary" @click="fetchFuelLogs">
+              查詢
+            </el-button>
+            <el-button @click="handleResetFuel">
+              重設
+            </el-button>
+          </template>
 
-              <el-button v-if="authStore.can('staff')" type="primary" @click="openFuelDialog()">
-                <el-icon><Plus /></el-icon>
-                新增加油紀錄
-              </el-button>
-            </div>
+          <template #actions>
+            <el-button v-if="authStore.hasPermission('attendance_fuel', 'edit')" type="primary" :icon="Plus" @click="openFuelDialog()">
+              新增加油紀錄
+            </el-button>
+          </template>
 
-            <!-- 油資統計指標 -->
-            <el-row :gutter="16" class="mt-3">
-              <el-col :span="8">
-                <el-card shadow="hover" class="stat-card">
-                  <div class="stat-inner">
-                    <span class="stat-label">加油總筆數</span>
-                    <span class="stat-val">{{ fuelTotal }} 筆</span>
-                  </div>
-                </el-card>
-              </el-col>
-              <el-col :span="8">
-                <el-card shadow="hover" class="stat-card">
-                  <div class="stat-inner">
-                    <span class="stat-label">總加油公升數</span>
-                    <span class="stat-val text-primary">{{ fuelTotalLiters.toFixed(1) }} L</span>
-                  </div>
-                </el-card>
-              </el-col>
-              <el-col :span="8">
-                <el-card shadow="hover" class="stat-card">
-                  <div class="stat-inner">
-                    <span class="stat-label">總花費金額</span>
-                    <span class="stat-val text-danger">${{ fuelTotalCost.toLocaleString() }}</span>
-                  </div>
-                </el-card>
-              </el-col>
-            </el-row>
-          </div>
+          <template #table>
+          <!-- 油資統計指標 -->
+          <el-row :gutter="16" class="stat-row mb-3">
+            <el-col :xs="24" :sm="8">
+              <el-card shadow="never" class="stat-card">
+                <div class="stat-inner">
+                  <span class="stat-label">加油總筆數</span>
+                  <span class="stat-val">{{ fuelTotal }} <span class="unit">筆</span></span>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :xs="24" :sm="8">
+              <el-card shadow="never" class="stat-card">
+                <div class="stat-inner">
+                  <span class="stat-label">總加油公升數</span>
+                  <span class="stat-val">{{ fuelTotalLiters.toFixed(1) }} <span class="unit">L</span></span>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :xs="24" :sm="8">
+              <el-card shadow="never" class="stat-card">
+                <div class="stat-inner">
+                  <span class="stat-label">總花費金額</span>
+                  <span class="stat-val">${{ fuelTotalCost.toLocaleString() }}</span>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
 
           <!-- 油資表格 -->
-          <el-table :data="fuelLogs" border stripe size="small" class="mt-3">
-            <el-table-column prop="fuelDate" label="加油日期" width="110" align="center">
+          <el-table :data="fuelLogs" border stripe size="small" table-layout="auto" style="width: 100%;">
+            <el-table-column prop="fuelDate" label="加油日期" min-width="120" align="center" class-name="fuel-date-col">
               <template #default="{ row }">
-                <el-tag size="small" type="info">{{ row.fuelDate?.slice(0, 10) }}</el-tag>
+                <span>{{ row.fuelDate?.slice(0, 10) }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="vehicleName" label="車輛名稱" width="120" />
-            <el-table-column prop="plateNo" label="車牌號碼" width="110" align="center" />
-            <el-table-column prop="driverName" label="加油司機" width="110">
+            <el-table-column prop="vehicleName" label="車輛名稱" min-width="120" class-name="fuel-vehicle-col" />
+            <el-table-column prop="plateNo" label="車牌號碼" min-width="120" align="center" class-name="fuel-plate-col" />
+            <el-table-column prop="driverName" label="加油司機" min-width="100" align="center" class-name="fuel-driver-col">
               <template #default="{ row }">
                 {{ row.driverName || '-' }}
               </template>
             </el-table-column>
-            <el-table-column prop="liters" label="加油公升數" width="120" align="right">
+            <el-table-column prop="liters" label="加油公升數" min-width="130" align="right" class-name="fuel-liters-col">
               <template #default="{ row }">
                 {{ Number(row.liters).toFixed(2) }} L
               </template>
             </el-table-column>
-            <el-table-column prop="cost" label="花費金額" width="120" align="right">
+            <el-table-column prop="cost" label="花費金額" min-width="130" align="right" class-name="fuel-cost-col">
               <template #default="{ row }">
                 <span class="font-bold">${{ Number(row.cost).toLocaleString() }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="發票/收據憑證" width="120" align="center">
+            <el-table-column label="發票/收據憑證" min-width="130" align="center" class-name="fuel-receipt-col">
               <template #default="{ row }">
                 <el-link
                   v-if="row.receiptUrl"
@@ -265,31 +321,39 @@
                 <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
-            <el-table-column v-if="authStore.can('staff')" label="操作" width="120" align="center" fixed="right">
+            <el-table-column
+              v-if="authStore.hasPermission('attendance_fuel', 'edit') || authStore.hasPermission('attendance_fuel', 'delete')"
+              label="操作"
+              width="140"
+              align="center"
+              fixed="right"
+            >
               <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="openFuelDialog(row)">
-                  編輯
-                </el-button>
-                <el-button link type="danger" size="small" @click="handleDeleteFuel(row)">
-                  刪除
-                </el-button>
+                <TableRowActions>
+                  <el-button
+                    v-if="authStore.hasPermission('attendance_fuel', 'edit')"
+                    link
+                    type="primary"
+                    size="small"
+                    @click="openFuelDialog(row)"
+                  >
+                    編輯
+                  </el-button>
+                  <el-button
+                    v-if="authStore.hasPermission('attendance_fuel', 'delete')"
+                    link
+                    type="danger"
+                    size="small"
+                    @click="handleDeleteFuel(row)"
+                  >
+                    刪除
+                  </el-button>
+                </TableRowActions>
               </template>
             </el-table-column>
           </el-table>
-
-          <!-- 分頁 -->
-          <div class="pagination-box">
-            <el-pagination
-              v-model:current-page="fuelPage"
-              v-model:page-size="fuelPageSize"
-              :page-sizes="[10, 20, 50]"
-              :total="fuelTotal"
-              layout="total, sizes, prev, pager, next, jumper"
-              @size-change="fetchFuelLogs"
-              @current-change="fetchFuelLogs"
-            />
-          </div>
-        </div>
+          </template>
+        </DataTablePage>
       </el-tab-pane>
     </el-tabs>
 
@@ -297,7 +361,7 @@
     <el-dialog
       v-model="attendanceDialogVisible"
       title="登記司機出勤狀態"
-      width="400px"
+      width="min(480px, calc(100vw - 32px))"
       destroy-on-close
     >
       <div v-if="selectedCell" class="dialog-content">
@@ -306,17 +370,27 @@
             {{ selectedCell.driverName }}
           </el-descriptions-item>
           <el-descriptions-item label="日期">
-            {{ selectedCell.date }}
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span>{{ selectedCell.date }}</span>
+              <el-tag
+                v-if="holidayMap[selectedCell.date]"
+                type="info"
+                size="small"
+                effect="plain"
+              >
+                國定假日：{{ holidayMap[selectedCell.date]?.name || '放假' }}
+              </el-tag>
+            </div>
           </el-descriptions-item>
         </el-descriptions>
 
-        <el-form label-width="80px" label-position="right">
+        <el-form label-width="90px" label-position="right">
           <el-form-item label="出勤狀態">
             <el-radio-group v-model="editStatus">
-              <el-radio-button label="work">出勤</el-radio-button>
-              <el-radio-button label="leave">事假</el-radio-button>
-              <el-radio-button label="sick">病假</el-radio-button>
-              <el-radio-button label="off">休假</el-radio-button>
+              <el-radio-button label="work">出勤 (O)</el-radio-button>
+              <el-radio-button label="leave">事假 (事)</el-radio-button>
+              <el-radio-button label="sick">病假 (病)</el-radio-button>
+              <el-radio-button label="off">休假 (休)</el-radio-button>
             </el-radio-group>
           </el-form-item>
 
@@ -332,12 +406,7 @@
       </div>
 
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="attendanceDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="attendanceSaving" @click="handleSaveAttendance">
-            確定變更
-          </el-button>
-        </span>
+        <DialogFooter :loading="attendanceSaving" @confirm="handleSaveAttendance" @cancel="attendanceDialogVisible = false" />
       </template>
     </el-dialog>
 
@@ -345,14 +414,14 @@
     <el-dialog
       v-model="fuelDialogVisible"
       :title="editingFuelId ? '編輯加油紀錄' : '新增加油紀錄'"
-      width="480px"
+      width="min(480px, calc(100vw - 32px))"
       destroy-on-close
     >
       <el-form
         ref="fuelFormRef"
         :model="fuelForm"
         :rules="fuelRules"
-        label-width="100px"
+        label-width="110px"
         label-position="right"
       >
         <el-form-item label="加油車輛" prop="vehicleId">
@@ -414,12 +483,7 @@
       </el-form>
 
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="fuelDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="fuelSaving" @click="handleSaveFuel">
-            確定儲存
-          </el-button>
-        </span>
+        <DialogFooter :loading="fuelSaving" @confirm="handleSaveFuel" @cancel="fuelDialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -427,8 +491,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Refresh, Plus } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
+import DataTablePage from '@/components/DataTablePage.vue'
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import {
   getMonthAttendance,
   upsertAttendance,
@@ -437,6 +506,7 @@ import {
   updateFuelLog,
   deleteFuelLog
 } from '@/api/attendance'
+import { listHolidays, type HolidayItem } from '@/api/holidays'
 import { listDrivers, listVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import type {
@@ -454,10 +524,11 @@ const activeTab = ref('attendance')
 // --- 出勤相關狀態 ---
 const attendanceLoading = ref(false)
 const attendanceSaving = ref(false)
-const attendanceMonth = ref(new Date().toISOString().slice(0, 7))
+const attendanceMonth = ref('2026-07')
 const attendanceQuery = ref('')
 const selectedDriverId = ref<string>()
 const attendanceReport = ref<MonthAttendanceReportDTO | null>(null)
+const holidayMap = ref<Record<string, HolidayItem>>({})
 
 const drivers = ref<DriverDTO[]>([])
 const vehicles = ref<VehicleDTO[]>([])
@@ -468,13 +539,14 @@ const editStatus = ref<'work' | 'leave' | 'sick' | 'off'>('work')
 const editNote = ref('')
 
 const totalAttendanceStats = computed(() => {
-  const stats = { work: 0, leave: 0, sick: 0, off: 0 }
+  const stats = { work: 0, leave: 0, sick: 0, off: 0, absent: 0 }
   if (!attendanceReport.value) return stats
   for (const d of attendanceReport.value.drivers) {
     stats.work += d.workDays
     stats.leave += d.leaveDays
     stats.sick += d.sickDays
     stats.off += d.offDays
+    stats.absent += d.absentDays
   }
   return stats
 })
@@ -522,26 +594,38 @@ const fuelRules = {
 async function fetchOptions() {
   try {
     const [dRes, vRes] = await Promise.all([
-      listDrivers({ pageSize: 100 }),
-      listVehicles({ pageSize: 100 })
+      listDrivers({ status: 'active', pageSize: 100 }),
+      listVehicles({ status: 'active', pageSize: 100 })
     ])
     drivers.value = dRes.data
     vehicles.value = vRes.data
   } catch (err: any) {
-    ElMessage.error(err.message || '載入主檔選項失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入主檔選項失敗'))
   }
 }
 
 async function fetchAttendance() {
   attendanceLoading.value = true
   try {
-    attendanceReport.value = await getMonthAttendance(
-      attendanceMonth.value,
-      selectedDriverId.value,
-      attendanceQuery.value || undefined
-    )
+    const [yearStr, monthStr] = attendanceMonth.value.split('-')
+    const year = parseInt(yearStr, 10)
+    const month = parseInt(monthStr, 10)
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const startDate = `${attendanceMonth.value}-01`
+    const endDate = `${attendanceMonth.value}-${String(daysInMonth).padStart(2, '0')}`
+
+    const [attRes, holidayRes] = await Promise.all([
+      getMonthAttendance(
+        attendanceMonth.value,
+        selectedDriverId.value,
+        attendanceQuery.value || undefined
+      ),
+      listHolidays({ startDate, endDate })
+    ])
+    attendanceReport.value = attRes
+    holidayMap.value = Object.fromEntries((holidayRes.data || []).map((item) => [item.holidayDate, item]))
   } catch (err: any) {
-    ElMessage.error(err.message || '查詢出勤紀錄失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢出勤紀錄失敗'))
   } finally {
     attendanceLoading.value = false
   }
@@ -565,34 +649,68 @@ function getDayRecord(driver: any, day: number): DriverDayAttendanceDTO | undefi
   return driver.days[dateKey]
 }
 
-function getCellBgClass(driver: any, day: number): string {
-  const rec = getDayRecord(driver, day)
-  if (!rec) return ''
-  switch (rec.status) {
-    case 'work': return 'cell-work'
-    case 'leave': return 'cell-leave'
-    case 'sick': return 'cell-sick'
-    case 'off': return 'cell-off'
-    default: return ''
+function isHoliday(day: number): boolean {
+  const key = getDayKey(day)
+  const h = holidayMap.value[key]
+  return Boolean(h && h.isDayOff !== false)
+}
+
+function getHolidayName(day: number): string | undefined {
+  const key = getDayKey(day)
+  return holidayMap.value[key]?.name
+}
+
+function getStatusDisplay(status?: string): { symbol: string; text: string } {
+  switch (status) {
+    case 'work':
+      return { symbol: 'O', text: 'O' }
+    case 'leave':
+      return { symbol: '事', text: '事' }
+    case 'sick':
+      return { symbol: '病', text: '病' }
+    case 'off':
+      return { symbol: '休', text: '休' }
+    case 'absent':
+      return { symbol: '缺', text: '缺' }
+    default:
+      return { symbol: '-', text: '-' }
   }
 }
 
-function getStatusShort(status?: string): string {
-  switch (status) {
-    case 'work': return '出'
-    case 'leave': return '事'
-    case 'sick': return '病'
-    case 'off': return '休'
-    default: return '-'
+function getCellBgClass(driver: any, day: number): string {
+  const rec = getDayRecord(driver, day)
+  const holidayClass = isHoliday(day) ? 'is-holiday' : ''
+  if (!rec) {
+    return holidayClass ? 'cell-holiday' : ''
+  }
+  switch (rec.status) {
+    case 'work': return `cell-work ${holidayClass}`.trim()
+    case 'leave': return `cell-leave ${holidayClass}`.trim()
+    case 'sick': return `cell-sick ${holidayClass}`.trim()
+    case 'off': return `cell-off ${holidayClass}`.trim()
+    case 'absent': return `cell-absent ${holidayClass}`.trim()
+    default: return holidayClass ? 'cell-holiday' : ''
   }
 }
 
 function getTooltipContent(driver: any, day: number): string {
   const rec = getDayRecord(driver, day)
-  if (!rec) return ''
   const date = getDayKey(day)
-  const map: Record<string, string> = { work: '正常出勤', leave: '事假', sick: '病假', off: '休假' }
-  let str = `${date}：${map[rec.status] || rec.status}`
+  const holidayName = getHolidayName(day)
+  const holidayInfo = holidayName ? `【國定假日：${holidayName}】` : (isHoliday(day) ? '【國定假日】' : '')
+
+  if (!rec) {
+    return holidayInfo ? `${date} ${holidayInfo}` : date
+  }
+
+  const map: Record<string, string> = {
+    work: '正常出勤 (O)',
+    leave: '事假 (事)',
+    sick: '病假 (病)',
+    off: '休假 (休)',
+    absent: '應出勤未回報 (缺)'
+  }
+  let str = `${date} ${holidayInfo}：${map[rec.status] || rec.status}`.trim()
   if (rec.note) {
     str += ` (${rec.note})`
   }
@@ -600,7 +718,7 @@ function getTooltipContent(driver: any, day: number): string {
 }
 
 function handleCellClick(driver: any, day: number) {
-  if (!authStore.can('staff')) return
+  if (!authStore.hasPermission('attendance_fuel', 'edit')) return
   const dateKey = getDayKey(day)
   const rec = driver.days ? driver.days[dateKey] : undefined
   selectedCell.value = {
@@ -608,7 +726,7 @@ function handleCellClick(driver: any, day: number) {
     driverName: driver.driverName,
     date: dateKey
   }
-  editStatus.value = rec?.status || 'work'
+  editStatus.value = rec?.status && rec.status !== 'absent' ? rec.status : 'work'
   editNote.value = rec?.note || ''
   attendanceDialogVisible.value = true
 }
@@ -627,7 +745,7 @@ async function handleSaveAttendance() {
     attendanceDialogVisible.value = false
     fetchAttendance()
   } catch (err: any) {
-    ElMessage.error(err.message || '更新出勤狀態失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新出勤狀態失敗'))
   } finally {
     attendanceSaving.value = false
   }
@@ -649,7 +767,7 @@ async function fetchFuelLogs() {
     fuelLogs.value = res.data
     fuelTotal.value = res.meta.total
   } catch (err: any) {
-    ElMessage.error(err.message || '查詢油資紀錄失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢油資紀錄失敗'))
   } finally {
     fuelLoading.value = false
   }
@@ -701,7 +819,7 @@ async function handleSaveFuel() {
       fuelDialogVisible.value = false
       fetchFuelLogs()
     } catch (err: any) {
-      ElMessage.error(err.message || '儲存油資紀錄失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存油資紀錄失敗'))
     } finally {
       fuelSaving.value = false
     }
@@ -720,7 +838,7 @@ async function handleDeleteFuel(row: any) {
     fetchFuelLogs()
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '刪除失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除失敗'))
     }
   }
 }
@@ -758,9 +876,66 @@ onMounted(async () => {
     flex-wrap: wrap;
   }
 
-  .stats-badges {
+  .attendance-summary-pills {
     display: flex;
+    align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
+
+    .summary-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background-color: var(--app-status-neutral-bg);
+      font-size: 13px;
+      color: var(--app-text-regular);
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+
+        &.dot-work {
+          background-color: var(--app-status-success-fg);
+        }
+        &.dot-leave {
+          background-color: var(--app-status-warning-fg);
+        }
+        &.dot-sick {
+          background-color: var(--app-status-danger-fg);
+        }
+        &.dot-off {
+          background-color: var(--app-text-muted);
+        }
+        &.dot-absent {
+          background-color: #f97316;
+        }
+        &.dot-holiday {
+          background-color: #94a3b8;
+        }
+      }
+
+      .label {
+        font-size: var(--app-font-xs);
+        color: var(--app-text-secondary);
+      }
+
+      .val {
+        font-weight: 600;
+        color: var(--app-text-primary);
+      }
+
+      .unit {
+        font-size: var(--app-font-xs);
+        color: var(--app-text-muted);
+      }
+
+      &.holiday-pill {
+        background-color: #f1f5f9;
+      }
+    }
   }
 }
 
@@ -769,62 +944,175 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-.driver-cell {
+.day-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  justify-content: center;
+  width: 100%;
+  font-weight: 600;
 
-  .driver-name {
-    font-weight: 600;
+  &.is-holiday-header {
+    background-color: #f1f5f9;
+    color: #475569;
+    border-radius: 3px;
+    padding: 1px 0;
   }
+
+  .holiday-text {
+    cursor: pointer;
+    text-decoration: underline dotted #94a3b8;
+  }
+}
+
+:deep(.col-holiday) {
+  background-color: #f8fafc !important;
+}
+
+.driver-name-text {
+  font-weight: 600;
+  color: var(--app-text-primary);
+  font-size: 13px;
+  display: inline-block;
+  width: 100%;
+  text-align: center;
 }
 
 .driver-summary {
   display: flex;
-  justify-content: space-around;
-  font-size: 12px;
-  font-weight: 600;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: var(--app-font-xs);
+  color: var(--app-text-regular);
+
+  .summary-divider {
+    color: var(--app-text-muted);
+  }
+
+  .summary-absent {
+    color: #c2410c;
+    font-weight: 700;
+  }
 }
 
 .day-cell {
   height: 28px;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 4px;
   cursor: pointer;
-  font-weight: 600;
-  font-size: 12px;
-  transition: all 0.2s;
+  font-weight: 500;
+  font-size: var(--app-font-xs);
+  transition: all 0.15s ease;
+  background-color: transparent;
+  color: var(--app-text-regular);
 
   &:hover {
-    filter: brightness(0.9);
+    background-color: var(--app-status-neutral-bg);
+  }
+
+  .cell-content {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .cell-symbol {
+    font-weight: 700;
+    font-size: 13px;
+
+    &.symbol-work {
+      color: #16a34a;
+    }
+
+    &.symbol-leave {
+      color: #b45309;
+    }
+
+    &.symbol-sick {
+      color: #dc2626;
+    }
+
+    &.symbol-off {
+      color: #64748b;
+    }
+
+    &.symbol-absent {
+      color: #c2410c;
+    }
   }
 
   &.cell-work {
-    background-color: var(--el-color-success-light-9);
-    color: var(--el-color-success);
+    background-color: #ffffff;
+    color: #16a34a;
   }
 
   &.cell-leave {
-    background-color: var(--el-color-warning-light-9);
-    color: var(--el-color-warning);
+    background-color: #fef3c7;
+    color: #92400e;
+    font-weight: 600;
   }
 
   &.cell-sick {
-    background-color: var(--el-color-danger-light-9);
-    color: var(--el-color-danger);
+    background-color: #fee2e2;
+    color: #991b1b;
+    font-weight: 600;
   }
 
   &.cell-off {
-    background-color: var(--el-fill-color-light);
-    color: var(--el-text-color-secondary);
+    background-color: var(--app-status-neutral-bg);
+    color: var(--app-text-muted);
   }
+
+  &.cell-absent {
+    background-color: #fff7ed;
+    color: #c2410c;
+    font-weight: 700;
+    border: 1px solid #fb923c;
+  }
+
+  &.cell-holiday {
+    background-color: #f1f5f9;
+    color: #64748b;
+  }
+
+  &.is-holiday {
+    background-color: #f1f5f9;
+
+    &.cell-work {
+      background-color: #f0fdf4;
+      border: 1px solid #bbf7d0;
+    }
+
+    &.cell-leave {
+      background-color: #fef3c7;
+    }
+
+    &.cell-sick {
+      background-color: #fee2e2;
+    }
+
+    &.cell-off {
+      background-color: #e2e8f0;
+    }
+  }
+
+  .cell-empty {
+    color: var(--app-text-muted);
+  }
+}
+
+.stat-row {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 
 .stat-card {
   border-radius: 6px;
+  border: 1px solid var(--app-border-light);
 
   .stat-inner {
     display: flex;
@@ -833,40 +1121,57 @@ onMounted(async () => {
 
     .stat-label {
       font-size: 13px;
-      color: var(--el-text-color-secondary);
+      color: var(--app-text-secondary);
     }
 
     .stat-val {
       font-size: 18px;
-      font-weight: bold;
+      font-weight: 700;
+      color: var(--app-text-primary);
+
+      .unit {
+        font-size: 13px;
+        font-weight: 400;
+        color: var(--app-text-secondary);
+        margin-left: 2px;
+      }
     }
   }
 }
 
-.font-bold {
-  font-weight: 600;
+:deep(.fuel-date-col .cell) {
+  white-space: nowrap;
+  min-width: 120px;
 }
 
-.text-success {
-  color: var(--el-color-success);
+:deep(.fuel-vehicle-col .cell) {
+  white-space: nowrap;
+  min-width: 120px;
 }
 
-.text-warning {
-  color: var(--el-color-warning);
+:deep(.fuel-plate-col .cell) {
+  white-space: nowrap;
+  min-width: 120px;
 }
 
-.text-danger {
-  color: var(--el-color-danger);
+:deep(.fuel-driver-col .cell) {
+  white-space: nowrap;
+  min-width: 100px;
 }
 
-.text-muted {
-  color: var(--el-text-color-placeholder);
+:deep(.fuel-liters-col .cell) {
+  white-space: nowrap;
+  min-width: 130px;
 }
 
-.pagination-box {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
+:deep(.fuel-cost-col .cell) {
+  white-space: nowrap;
+  min-width: 130px;
+}
+
+:deep(.fuel-receipt-col .cell) {
+  white-space: nowrap;
+  min-width: 130px;
 }
 
 .mt-3 {

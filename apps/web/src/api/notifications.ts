@@ -16,7 +16,8 @@ export async function listNotificationRecipients(params?: {
   active?: boolean
   q?: string
 }): Promise<NotificationRecipientDTO[]> {
-  return apiClient.get('/settings/notification-recipients', { params })
+  const res = await apiClient.get('/settings/notification-recipients', { params })
+  return (res as any).data ?? (res as any)
 }
 
 export async function createNotificationRecipient(

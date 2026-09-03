@@ -15,6 +15,7 @@ import type {
   UpdateDriverRequest,
   DryRunImportResultDTO
 } from '@/types/api'
+import { sanitizeVehiclePayload } from '@/utils/vehicleForm'
 
 // 區域 Regions
 export async function listRegions(params?: {
@@ -44,18 +45,20 @@ export async function deleteRegion(id: string): Promise<void> {
 }
 
 
-// 據點 Sites
+// 單位 Sites
 export async function listSites(params?: {
   page?: number
   pageSize?: number
   region?: string
+  status?: string
   q?: string
 }): Promise<Paged<SiteDTO>> {
   return apiClient.get('/sites', { params })
 }
 
 export async function createSite(data: CreateSiteRequest): Promise<SiteDTO> {
-  return apiClient.post('/sites', data)
+  const res = await apiClient.post('/sites', data)
+  return (res as any).data ?? (res as any)
 }
 
 export async function updateSite(id: string, data: UpdateSiteRequest): Promise<SiteDTO> {
@@ -70,19 +73,23 @@ export async function deleteSite(id: string): Promise<void> {
 export async function listVehicles(params?: {
   page?: number
   pageSize?: number
+  siteId?: string
   region?: string
-  active?: boolean
+  status?: string
   q?: string
 }): Promise<Paged<VehicleDTO>> {
   return apiClient.get('/vehicles', { params })
 }
 
 export async function createVehicle(data: CreateVehicleRequest): Promise<VehicleDTO> {
-  return apiClient.post('/vehicles', data)
+  const payload = sanitizeVehiclePayload(data)
+  const res = await apiClient.post('/vehicles', payload)
+  return (res as any).data ?? (res as any)
 }
 
 export async function updateVehicle(id: string, data: UpdateVehicleRequest): Promise<VehicleDTO> {
-  return apiClient.patch(`/vehicles/${id}`, data)
+  const payload = sanitizeVehiclePayload(data as CreateVehicleRequest)
+  return apiClient.patch(`/vehicles/${id}`, payload)
 }
 
 export async function deleteVehicle(id: string): Promise<void> {
@@ -93,14 +100,15 @@ export async function deleteVehicle(id: string): Promise<void> {
 export async function listDrivers(params?: {
   page?: number
   pageSize?: number
-  active?: boolean
+  status?: string
   q?: string
 }): Promise<Paged<DriverDTO>> {
   return apiClient.get('/drivers', { params })
 }
 
 export async function createDriver(data: CreateDriverRequest): Promise<DriverDTO> {
-  return apiClient.post('/drivers', data)
+  const res: any = await apiClient.post('/drivers', data)
+  return res?.data ?? res
 }
 
 export async function updateDriver(id: string, data: UpdateDriverRequest): Promise<DriverDTO> {
@@ -119,9 +127,16 @@ export async function assignDriverVehicle(driverId: string, data: {
   vehicleId: string
   startDate: string
   endDate?: string
-  isPrimary: boolean
 }): Promise<void> {
   return apiClient.post(`/drivers/${driverId}/assignments`, data)
+}
+
+// 整批設定車輛司機；被指派到本車的司機，其他車上尚未結束的指派會一併收掉
+export async function setVehicleDrivers(vehicleId: string, data: {
+  driverIds: string[]
+  effectiveFrom?: string
+}): Promise<void> {
+  return apiClient.put(`/vehicles/${vehicleId}/drivers`, data)
 }
 
 // 班表/主檔批次匯入

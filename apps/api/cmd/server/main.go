@@ -6,17 +6,54 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/gin-contrib/cors"
+	auditapp "ltc-system/apps/api/internal/modules/audit/app"
+	auditinfra "ltc-system/apps/api/internal/modules/audit/infra"
+	audittransport "ltc-system/apps/api/internal/modules/audit/transport"
+	caregiverapp "ltc-system/apps/api/internal/modules/caregiver/app"
+	caregiverinfra "ltc-system/apps/api/internal/modules/caregiver/infra"
+	caregivertransport "ltc-system/apps/api/internal/modules/caregiver/transport"
+	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
+	importinfra "ltc-system/apps/api/internal/modules/caseimport/infra"
+	importtransport "ltc-system/apps/api/internal/modules/caseimport/transport"
+	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
+	caseinfra "ltc-system/apps/api/internal/modules/casemgmt/infra"
+	casetransport "ltc-system/apps/api/internal/modules/casemgmt/transport"
+	drapp "ltc-system/apps/api/internal/modules/driverreport/app"
+	drinfra "ltc-system/apps/api/internal/modules/driverreport/infra"
+	drtransport "ltc-system/apps/api/internal/modules/driverreport/transport"
+	holidayapp "ltc-system/apps/api/internal/modules/holiday/app"
+	holidayinfra "ltc-system/apps/api/internal/modules/holiday/infra"
+	holidaytransport "ltc-system/apps/api/internal/modules/holiday/transport"
+	identityapp "ltc-system/apps/api/internal/modules/identity/app"
+	identityinfra "ltc-system/apps/api/internal/modules/identity/infra"
+	identitytransport "ltc-system/apps/api/internal/modules/identity/transport"
+	masterapp "ltc-system/apps/api/internal/modules/masterdata/app"
+	masterinfra "ltc-system/apps/api/internal/modules/masterdata/infra"
+	mastertransport "ltc-system/apps/api/internal/modules/masterdata/transport"
+	notifyapp "ltc-system/apps/api/internal/modules/notification/app"
+	notifyinfra "ltc-system/apps/api/internal/modules/notification/infra"
+	notifytransport "ltc-system/apps/api/internal/modules/notification/transport"
+	opsapp "ltc-system/apps/api/internal/modules/ops/app"
+	opsinfra "ltc-system/apps/api/internal/modules/ops/infra"
+	opstransport "ltc-system/apps/api/internal/modules/ops/transport"
+	reportapp "ltc-system/apps/api/internal/modules/reporting/app"
+	reportinfra "ltc-system/apps/api/internal/modules/reporting/infra"
+	reporttransport "ltc-system/apps/api/internal/modules/reporting/transport"
+	rideapp "ltc-system/apps/api/internal/modules/ride/app"
+	rideinfra "ltc-system/apps/api/internal/modules/ride/infra"
+	ridetransport "ltc-system/apps/api/internal/modules/ride/transport"
+	taskapp "ltc-system/apps/api/internal/modules/task/app"
+	taskinfra "ltc-system/apps/api/internal/modules/task/infra"
+	tasktransport "ltc-system/apps/api/internal/modules/task/transport"
+	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/config"
+	"ltc-system/apps/api/internal/platform/pgxdb"
+
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"ltc-system/apps/api/internal/config"
-	"ltc-system/apps/api/internal/handler"
-	"ltc-system/apps/api/internal/middleware"
-	"ltc-system/apps/api/internal/repository"
-	"ltc-system/apps/api/internal/service"
 )
 
 func main() {
@@ -35,222 +72,129 @@ func main() {
 	}
 
 	ctx := context.Background()
-	var pool *pgxpool.Pool
-
-	pool, err = pgxpool.New(ctx, cfg.DatabaseURL)
+	pool, err := connectDatabase(ctx, cfg)
 	if err != nil {
-		slog.Warn("Could not create database pool (running in offline mode)", slog.String("error", err.Error()))
+		// production 下無資料庫連線代表這台伺服器無法提供任何真實資料，
+		// 啟動即失敗比讓所有 repository 帶著 nil pool 悄悄上線更安全。
+		// local 下允許離線啟動，方便前端在沒有本機 DB 時開發。
+		if cfg.AppEnv == "production" {
+			slog.Error("Database connection failed, refusing to start in production", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		slog.Warn("Could not connect to database (running in offline mode, local only)", slog.String("error", err.Error()))
 	} else {
 		defer pool.Close()
-		pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		if err := pool.Ping(pingCtx); err != nil {
-			slog.Warn("Database ping failed (continuing startup)", slog.String("error", err.Error()))
-		} else {
-			slog.Info("Connected to PostgreSQL database successfully")
-		}
+		slog.Info("Connected to PostgreSQL database successfully")
 	}
 
 	// 初始化 Repositories
-	regionRepo := repository.NewRegionRepository(pool)
-	caseRepo := repository.NewCaseRepository(pool)
-	siteRepo := repository.NewSiteRepository(pool)
-	vehicleRepo := repository.NewVehicleRepository(pool)
-	driverRepo := repository.NewDriverRepository(pool)
-	formRepo := repository.NewFormRepository(pool)
-	holidayRepo := repository.NewHolidayRepository(pool)
-	notificationRepo := repository.NewNotificationRepository(pool)
-	auditRepo := repository.NewAuditRepository(pool)
-	maintenanceRepo := repository.NewMaintenanceRepository(pool)
-	attendanceRepo := repository.NewAttendanceRepository(pool)
-	fuelRepo := repository.NewFuelRepository(pool)
-	reportRepo := repository.NewReportRepository(pool)
-	dashboardRepo := repository.NewDashboardRepository(pool)
-	precheckRepo := repository.NewPrecheckRepository(pool)
-	taskRepo := repository.NewTaskRepository(pool)
+	caseRepo := caseinfra.NewCaseRepository(pool)
+	rideRepo := rideinfra.NewRideRepository(pool)
+	holidayRepo := holidayinfra.NewHolidayRepository(pool)
+	notificationRepo := notifyinfra.NewNotificationRepository(pool)
+	auditSvc := auditapp.NewService(auditinfra.NewAuditRepository(pool))
+
+	// masterdata 模組自有的 repository，legacy service 透過本檔的 adapter 取用
+	mdRegionRepo := masterinfra.NewRegionRepository(pool)
+	mdSiteRepo := masterinfra.NewSiteRepository(pool)
+	mdVehicleRepo := masterinfra.NewVehicleRepository(pool)
+	mdDriverRepo := masterinfra.NewDriverRepository(pool)
+	maintenanceRepo := opsinfra.NewMaintenanceRepository(pool)
+	attendanceRepo := opsinfra.NewAttendanceRepository(pool)
+	fuelRepo := opsinfra.NewFuelRepository(pool)
+	reportRepo := reportinfra.NewReportRepository(pool)
+	dashboardRepo := reportinfra.NewDashboardRepository(pool)
+	precheckRepo := reportinfra.NewPrecheckRepository(pool)
+	govClaimRepo := reportinfra.NewGovClaimRepository(pool)
+	exportJobRepo := reportinfra.NewExportJobRepository(pool)
+	taskRepo := taskinfra.NewTaskRepository(pool)
+	caregiverRepo := caregiverinfra.NewCaregiverRepository(pool)
 
 	// 初始化 Services
-	regionSvc := service.NewRegionService(regionRepo, auditRepo)
-	masterSvc := service.NewMasterService(cfg, caseRepo, siteRepo, vehicleRepo, driverRepo, auditRepo)
-	importSvc := service.NewImportService(masterSvc, siteRepo, vehicleRepo, driverRepo, caseRepo)
-	rideSvc := service.NewRideService(formRepo, driverRepo, caseRepo, vehicleRepo, auditRepo)
-	formSvc := service.NewFormService(formRepo)
-	precheckSvc := service.NewPrecheckService(precheckRepo)
-	notificationSvc := service.NewNotificationService(notificationRepo, auditRepo, nil)
-	holidaySvc := service.NewHolidayService(holidayRepo, auditRepo)
-	reportSvc := service.NewReportService(reportRepo)
-	auditSvc := service.NewAuditService(auditRepo)
-	maintenanceSvc := service.NewMaintenanceService(maintenanceRepo, vehicleRepo, auditRepo)
-	attendanceSvc := service.NewAttendanceService(attendanceRepo, driverRepo, auditRepo)
-	fuelSvc := service.NewFuelService(fuelRepo, auditRepo)
-	dashboardSvc := service.NewDashboardService(dashboardRepo)
-	taskSvc := service.NewTaskService(taskRepo, caseRepo, holidayRepo, notificationSvc)
+	mdAudit := masterdataAuditWriter{svc: auditSvc}
+	regionSvc := masterapp.NewRegionService(mdRegionRepo, mdAudit)
+	siteSvc := masterapp.NewSiteService(mdSiteRepo)
+	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo, mdAudit)
+	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg, mdAudit)
+	txRunner := pgxdb.NewTxRunner(pool)
+	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer())
+	excelAdapter := importinfra.NewExcelAdapter()
+	importSvc := importapp.NewImportService(
+		caseRegistrar{svc: caseSvc},
+		caseDuplicateFinder{svc: caseSvc},
+		importSiteLookup{repo: mdSiteRepo},
+		importVehicleLookup{repo: mdVehicleRepo},
+		caseRepo,
+		excelAdapter,
+		excelAdapter,
+		txRunner,
+	)
+	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, nil)
+	taskSvc := taskapp.NewTaskService(taskRepo, taskScheduleReader{repo: caseRepo}, holidayRepo, notificationSvc)
+	rideSvc := rideapp.NewRideService(rideRepo, rideDriverResolver{repo: mdDriverRepo}, rideScheduleReader{repo: caseRepo}, rideAuditWriter{svc: auditSvc}, rideMissingReportProvider{svc: taskSvc})
+	opsAudit := opsAuditWriter{svc: auditSvc}
+	attendanceSvc := opsapp.NewAttendanceService(attendanceRepo, opsDriverLister{repo: mdDriverRepo}, opsAudit, holidayRepo)
+	driverReportExcel := drinfra.NewExcelAdapter()
+	driverReportSvc := drapp.NewDriverReportService(
+		drinfra.NewDriverReportRepository(pool),
+		driverReportExcel,
+		driverReportExcel,
+		driverReportCaseLookup{repo: caseRepo},
+		driverReportDriverResolver{repo: mdDriverRepo},
+		driverReportRideIngestor{svc: rideSvc},
+		driverReportAttendanceRegistrar{svc: attendanceSvc},
+		driverReportAuditWriter{svc: auditSvc},
+		txRunner,
+	)
+	excelRenderer := reportinfra.NewExcelRenderer()
+	precheckSvc := reportapp.NewPrecheckService(precheckRepo)
+	govClaimSvc := reportapp.NewGovClaimService(cfg, govClaimRepo, exportJobRepo, excelRenderer, reportinfra.NewZipArchiver(), precheckSvc, reportingAuditWriter{svc: auditSvc})
+	holidayProvider := holidayapp.GovernmentHolidayProvider(&holidayinfra.GovernmentHolidayHTTPClient{
+		Endpoint: holidayinfra.GovernmentHolidayCSVEndpoint,
+		Client:   &http.Client{Timeout: cfg.GovernmentHolidayAPITimeout},
+	})
+	holidaySvc := holidayapp.NewHolidaySyncService(holidayRepo, holidayAuditWriter{svc: auditSvc}, holidayProvider)
+	reportSvc := reportapp.NewReportService(reportRepo, excelRenderer)
+	maintenanceSvc := opsapp.NewMaintenanceService(maintenanceRepo, opsVehicleLister{repo: mdVehicleRepo}, opsAudit, opsinfra.NewExcelRenderer())
+	fuelSvc := opsapp.NewFuelService(fuelRepo, opsAudit)
+	dashboardSvc := reportapp.NewDashboardService(dashboardRepo, exportJobRepo)
+	caregiverExcelAdapter := caregiverinfra.NewExcelAdapter()
+	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverSiteLookup{repo: mdSiteRepo}, caregiverExcelAdapter, caregiverExcelAdapter)
+
+	roleRepo := identityinfra.NewRoleRepository(pool)
+	permResolver := auth.NewCachedPermissionResolver(rolePermissionResolver{store: roleRepo})
+	identityAudit := identityAuditWriter{svc: auditSvc}
+	adminClient := identityinfra.NewSupabaseAdminClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, &http.Client{Timeout: cfg.SupabaseAdminTimeout})
+	customPermResolver := auth.NewCachedCustomPermissionResolver(userCustomPermissionResolver{admin: adminClient})
+	roleSvc := identityapp.NewRoleService(roleRepo, adminClient, identityAudit, txRunner)
+	userSvc := identityapp.NewUserService(adminClient, roleRepo, identityAudit)
 
 	// 初始化 Handlers
-	regionH := handler.NewRegionHandler(regionSvc)
-	caseH := handler.NewCaseHandler(caseRepo, masterSvc, importSvc)
-	siteH := handler.NewSiteHandler(siteRepo)
-	vehicleH := handler.NewVehicleHandler(vehicleRepo)
-	driverH := handler.NewDriverHandler(cfg, driverRepo)
-	rideH := handler.NewRideHandler(rideSvc)
-	exportH := handler.NewExportHandler(precheckSvc)
-	notificationH := handler.NewNotificationHandler(notificationSvc)
-	holidayH := handler.NewHolidayHandler(holidaySvc)
-	reportH := handler.NewReportHandler(reportSvc)
-	auditH := handler.NewAuditHandler(auditSvc)
-	taskH := handler.NewTaskHandler(taskSvc)
-	maintenanceH := handler.NewMaintenanceHandler(maintenanceSvc)
-	attendanceH := handler.NewAttendanceHandler(attendanceSvc)
-	fuelH := handler.NewFuelHandler(fuelSvc)
-	dashboardH := handler.NewDashboardHandler(dashboardSvc)
-	formH := handler.NewFormHandler(formSvc)
-
-	r := gin.New()
-	r.Use(gin.Recovery())
-	r.Use(middleware.SlogLoggerMiddleware())
-
-	// CORS 設定：正式環境限制為白名單網域，本機開發維持全放行以配合任意 port 測試
-	corsConfig := cors.DefaultConfig()
-	if cfg.AppEnv == "production" {
-		corsConfig.AllowOrigins = strings.Split(cfg.AllowedOrigins, ",")
-	} else {
-		corsConfig.AllowAllOrigins = true
-	}
-	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Ingest-Token", "X-Mock-Role", "X-Mock-User-ID"}
-	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
-	r.Use(cors.New(corsConfig))
-
-	// 健康檢查端點 (健康檢查不走 JWT)。避免使用 /healthz：Cloud Run 預設網域的 Google 前端會保留攔截此精確路徑，導致外部請求收不到回應。
-	r.GET("/api/health", func(c *gin.Context) {
-		dbStatus := "connected"
-		if pool == nil || pool.Ping(c.Request.Context()) != nil {
-			dbStatus = "disconnected"
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"status":   "ok",
-			"env":      cfg.AppEnv,
-			"database": dbStatus,
-			"time":     time.Now().UTC().Format(time.RFC3339),
-		})
-	})
-
-	// Webhook 端點 (X-Ingest-Token 驗證)
-	r.POST("/api/v1/ingest/google-form", rideH.IngestWebhook)
-
-	// 需要 JWT 認證之 API 群組
-	apiV1 := r.Group("/api/v1")
-	apiV1.Use(middleware.AuthMiddleware(cfg))
-	{
-		// 0. 區域主檔
-		apiV1.GET("/regions", middleware.RequireRoles("viewer", "staff", "admin"), regionH.List)
-		apiV1.GET("/regions/:id", middleware.RequireRoles("viewer", "staff", "admin"), regionH.Get)
-		apiV1.POST("/regions", middleware.RequireRoles("staff", "admin"), regionH.Create)
-		apiV1.PATCH("/regions/:id", middleware.RequireRoles("staff", "admin"), regionH.Update)
-		apiV1.DELETE("/regions/:id", middleware.RequireRoles("admin"), regionH.Delete)
-
-		// 1. 個案主檔與排班
-
-		apiV1.GET("/cases", middleware.RequireRoles("viewer", "staff", "admin"), caseH.List)
-		apiV1.POST("/cases", middleware.RequireRoles("staff", "admin"), caseH.Create)
-		apiV1.GET("/cases/template", middleware.RequireRoles("viewer", "staff", "admin"), caseH.DownloadTemplate)
-		apiV1.GET("/cases/:id", middleware.RequireRoles("viewer", "staff", "admin"), caseH.Get)
-		apiV1.PATCH("/cases/:id", middleware.RequireRoles("staff", "admin"), caseH.Update)
-		apiV1.POST("/cases/:id/reveal", middleware.RequireRoles("staff", "admin"), caseH.Reveal)
-		apiV1.GET("/cases/:id/schedule", middleware.RequireRoles("viewer", "staff", "admin"), caseH.GetSchedule)
-		apiV1.PUT("/cases/:id/schedule", middleware.RequireRoles("staff", "admin"), caseH.SaveSchedule)
-		apiV1.POST("/cases/schedules", middleware.RequireRoles("staff", "admin"), caseH.CreateSchedule)
-		apiV1.POST("/cases/import", middleware.RequireRoles("staff", "admin"), caseH.ImportExcel)
-		apiV1.POST("/masters/import", middleware.RequireRoles("staff", "admin"), caseH.ImportExcel)
-
-		// 2. 據點主檔
-		apiV1.GET("/sites", middleware.RequireRoles("viewer", "staff", "admin"), siteH.List)
-		apiV1.POST("/sites", middleware.RequireRoles("staff", "admin"), siteH.Create)
-		apiV1.PATCH("/sites/:id", middleware.RequireRoles("staff", "admin"), siteH.Update)
-		apiV1.DELETE("/sites/:id", middleware.RequireRoles("admin"), siteH.Delete)
-
-		// 3. 車輛主檔
-		apiV1.GET("/vehicles", middleware.RequireRoles("viewer", "staff", "admin"), vehicleH.List)
-		apiV1.POST("/vehicles", middleware.RequireRoles("staff", "admin"), vehicleH.Create)
-		apiV1.PATCH("/vehicles/:id", middleware.RequireRoles("staff", "admin"), vehicleH.Update)
-
-		// 4. 司機主檔
-		apiV1.GET("/drivers", middleware.RequireRoles("viewer", "staff", "admin"), driverH.List)
-		apiV1.POST("/drivers", middleware.RequireRoles("staff", "admin"), driverH.Create)
-		apiV1.PATCH("/drivers/:id", middleware.RequireRoles("staff", "admin"), driverH.Update)
-		apiV1.POST("/drivers/:id/reveal", middleware.RequireRoles("staff", "admin"), driverH.Reveal)
-		apiV1.POST("/drivers/:id/assignments", middleware.RequireRoles("staff", "admin"), driverH.AssignVehicle)
-
-		// 5. 表單管理與欄位對應
-		apiV1.GET("/forms", middleware.RequireRoles("viewer", "staff", "admin"), formH.ListForms)
-		apiV1.POST("/forms/:id/sync", middleware.RequireRoles("staff", "admin"), formH.SyncForm)
-		apiV1.GET("/forms/columns", middleware.RequireRoles("viewer", "staff", "admin"), formH.ListColumns)
-		apiV1.PATCH("/forms/columns/:id/mapping", middleware.RequireRoles("staff", "admin"), formH.UpdateColumnMapping)
-		apiV1.POST("/forms/columns/batch-mapping", middleware.RequireRoles("staff", "admin"), formH.BatchMapping)
-
-		// 6. 搭乘月曆、搭乘紀錄更正、異常搭乘與未回報清單
-		apiV1.GET("/rides/calendar", middleware.RequireRoles("viewer", "staff", "admin"), rideH.GetCalendar)
-		apiV1.GET("/rides/issues", middleware.RequireRoles("viewer", "staff", "admin"), rideH.ListIssues)
-		apiV1.GET("/rides/missing", middleware.RequireRoles("viewer", "staff", "admin"), taskH.GetMissingReports)
-		apiV1.GET("/rides/:id", middleware.RequireRoles("viewer", "staff", "admin"), rideH.GetRecord)
-		apiV1.PATCH("/rides/:id", middleware.RequireRoles("staff", "admin"), rideH.Correct)
-		apiV1.POST("/rides/manual-report", middleware.RequireRoles("staff", "admin"), rideH.ManualReport)
-		apiV1.POST("/rides/:id/resolve-conflict", middleware.RequireRoles("staff", "admin"), rideH.ResolveConflict)
-
-		// 7. 匯出前置檢核與工作管理 (B4.3)
-		apiV1.GET("/exports/precheck", middleware.RequireRoles("staff", "admin"), exportH.Precheck)
-		apiV1.POST("/exports/precheck", middleware.RequireRoles("staff", "admin"), exportH.Precheck)
-		apiV1.GET("/exports", middleware.RequireRoles("viewer", "staff", "admin"), exportH.List)
-		apiV1.POST("/exports", middleware.RequireRoles("staff", "admin"), exportH.Create)
-		apiV1.GET("/exports/:id", middleware.RequireRoles("viewer", "staff", "admin"), exportH.Get)
-
-		// 8. 國定假日與行事曆管理 (B5.1)
-		apiV1.GET("/holidays", middleware.RequireRoles("viewer", "staff", "admin"), holidayH.List)
-		apiV1.POST("/holidays", middleware.RequireRoles("staff", "admin"), holidayH.Create)
-		apiV1.POST("/holidays/import", middleware.RequireRoles("staff", "admin"), holidayH.Import)
-		apiV1.DELETE("/holidays/:date", middleware.RequireRoles("admin"), holidayH.Delete)
-
-		// 9. 通知收件人管理與通知留痕 (B5.2b)
-		apiV1.GET("/settings/notification-recipients", middleware.RequireRoles("viewer", "staff", "admin"), notificationH.ListRecipients)
-		apiV1.POST("/settings/notification-recipients", middleware.RequireRoles("admin"), notificationH.CreateRecipient)
-		apiV1.PATCH("/settings/notification-recipients/:id", middleware.RequireRoles("admin"), notificationH.UpdateRecipient)
-		apiV1.DELETE("/settings/notification-recipients/:id", middleware.RequireRoles("admin"), notificationH.DeleteRecipient)
-		apiV1.GET("/notifications/logs", middleware.RequireRoles("viewer", "staff", "admin"), notificationH.ListLogs)
-
-		// 10. 營運報表 - 車輛趟數表 (B5.4) 與 新竹接送時刻表 (B6.1)
-		apiV1.GET("/reports/trip-summary", middleware.RequireRoles("viewer", "staff", "admin"), reportH.GetTripSummary)
-		apiV1.GET("/reports/trip-summary/export", middleware.RequireRoles("viewer", "staff", "admin"), reportH.ExportTripSummaryExcel)
-		apiV1.GET("/reports/hsinchu-schedule", middleware.RequireRoles("viewer", "staff", "admin"), reportH.GetHsinchuSchedule)
-		apiV1.GET("/reports/hsinchu-schedule/export", middleware.RequireRoles("viewer", "staff", "admin"), reportH.ExportHsinchuScheduleExcel)
-
-		// 11. 車輛維修保養管理與空白表下載 (B6.2)
-		apiV1.GET("/vehicles/maintenance", middleware.RequireRoles("viewer", "staff", "admin"), maintenanceH.List)
-		apiV1.POST("/vehicles/maintenance", middleware.RequireRoles("staff", "admin"), maintenanceH.Create)
-		apiV1.PATCH("/vehicles/maintenance/:id", middleware.RequireRoles("staff", "admin"), maintenanceH.Update)
-		apiV1.DELETE("/vehicles/maintenance/:id", middleware.RequireRoles("staff", "admin"), maintenanceH.Delete)
-		apiV1.GET("/vehicles/maintenance/blank-template", middleware.RequireRoles("viewer", "staff", "admin"), maintenanceH.DownloadBlankTemplate)
-
-		// 12. 司機出勤與請假登錄 (B6.3)
-		apiV1.GET("/attendance", middleware.RequireRoles("viewer", "staff", "admin"), attendanceH.GetMonthAttendance)
-		apiV1.POST("/attendance", middleware.RequireRoles("staff", "admin"), attendanceH.Upsert)
-
-		// 13. 車輛油資管理 (B6.3)
-		apiV1.GET("/fuel-logs", middleware.RequireRoles("viewer", "staff", "admin"), fuelH.List)
-		apiV1.POST("/fuel-logs", middleware.RequireRoles("staff", "admin"), fuelH.Create)
-		apiV1.PATCH("/fuel-logs/:id", middleware.RequireRoles("staff", "admin"), fuelH.Update)
-		apiV1.DELETE("/fuel-logs/:id", middleware.RequireRoles("staff", "admin"), fuelH.Delete)
-
-		// 14. 視覺化儀表板指標 (B6.4)
-		apiV1.GET("/dashboard/metrics", middleware.RequireRoles("viewer", "staff", "admin"), dashboardH.GetMetrics)
-		apiV1.GET("/dashboard/stats", middleware.RequireRoles("viewer", "staff", "admin"), dashboardH.GetStats)
-
-		// 15. 稽核紀錄查詢 (B5.5 - 僅限 admin)
-		apiV1.GET("/audit", middleware.RequireRoles("admin"), auditH.List)
-
-		// 16. 排程與維運任務端點 (B5.2 / B5.3)
-		apiV1.POST("/tasks/check-missing-reports", middleware.RequireRoles("staff", "admin"), taskH.CheckMissingReports)
-		apiV1.POST("/tasks/month-end-reminder", middleware.RequireRoles("staff", "admin"), taskH.MonthEndReminder)
+	h := handlers{
+		region:       mastertransport.NewRegionHandler(regionSvc),
+		kase:         casetransport.NewCaseHandler(caseSvc),
+		caseImport:   importtransport.NewImportHandler(importSvc),
+		site:         mastertransport.NewSiteHandler(siteSvc),
+		vehicle:      mastertransport.NewVehicleHandler(vehicleSvc),
+		driver:       mastertransport.NewDriverHandler(driverSvc),
+		ride:         ridetransport.NewRideHandler(rideSvc),
+		export:       reporttransport.NewExportHandler(precheckSvc, govClaimSvc),
+		notification: notifytransport.NewNotificationHandler(notificationSvc),
+		holiday:      holidaytransport.NewHolidayHandler(holidaySvc),
+		report:       reporttransport.NewReportHandler(reportSvc),
+		audit:        audittransport.NewAuditHandler(auditSvc),
+		task:         tasktransport.NewTaskHandler(taskSvc),
+		maintenance:  opstransport.NewMaintenanceHandler(maintenanceSvc),
+		attendance:   opstransport.NewAttendanceHandler(attendanceSvc),
+		fuel:         opstransport.NewFuelHandler(fuelSvc),
+		dashboard:    reporttransport.NewDashboardHandler(dashboardSvc),
+		driverReport: drtransport.NewDriverReportHandler(driverReportSvc),
+		caregiver:    caregivertransport.NewCaregiverHandler(caregiverSvc),
+		role:         identitytransport.NewRoleHandler(roleSvc),
+		identity:     identitytransport.NewIdentityHandler(userSvc),
 	}
 
+	r := newRouter(cfg, pool, h, permResolver, customPermResolver)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	slog.Info("Starting LTC API Server", slog.String("addr", addr), slog.String("env", cfg.AppEnv))
@@ -258,4 +202,31 @@ func main() {
 		slog.Error("Server terminated unexpectedly", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+}
+
+// connectDatabase 建立連線池並確認可連通；任何一步失敗都回傳 error，交由呼叫端依環境決定是否啟動。
+func connectDatabase(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
+	// Supabase 的連線池網址走 pgbouncer transaction pooling，同一個 pgxpool 連線
+	// 在不同請求間可能被路由到不同後端連線；pgx 預設會快取 prepared statement 名稱，
+	// 在這種環境下會不定期撞名回傳 "prepared statement already exists"，需改用
+	// simple protocol（見 cmd/migrate/main.go 同樣的修法）。
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse database config: %w", err)
+	}
+	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+	poolCfg.MaxConns = int32(cfg.DBMaxOpenConns)
+	poolCfg.MinConns = int32(cfg.DBMaxIdleConns)
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		return nil, fmt.Errorf("create database pool: %w", err)
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := pool.Ping(pingCtx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("ping database: %w", err)
+	}
+	return pool, nil
 }

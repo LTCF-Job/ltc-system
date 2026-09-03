@@ -1,0 +1,4 @@
+interface:
+  display_name: "Admin UI Design"
+  short_description: "Design clear and safe backoffice workflows"
+  default_prompt: "Apply the repository admin UI design rules to this backoffice workflow while preserving existing routes, permissions, data contracts, and project conventions."

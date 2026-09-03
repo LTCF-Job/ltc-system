@@ -1,85 +1,73 @@
 <template>
   <div class="login-container">
-    <el-card class="login-card" shadow="always">
-      <template #header>
-        <div class="card-header">
-          <h2>長照交通接送後台系統</h2>
-          <p class="subtitle">後台登入管理介面</p>
-        </div>
-      </template>
+    <el-card class="login-card" shadow="never">
+      <div class="login-grid">
+        <section class="brand-panel" aria-labelledby="brand-title">
+          <AppLogo size="xl" :show-text="false" variant="light" />
+          <h1 id="brand-title" aria-label="好安心關懷協會-後臺系統">
+            <span>好安心關懷協會</span>
+            <span>後臺系統</span>
+          </h1>
+        </section>
 
-      <!-- 登入表單 -->
-      <el-form
-        ref="formRef"
-        :model="form"
-        :rules="rules"
-        label-position="top"
-        @submit.prevent="handleLogin"
-      >
-        <el-form-item label="帳號 / 電子郵件" prop="email">
-          <el-input
-            v-model="form.email"
-            placeholder="請輸入電子郵件"
-            :prefix-icon="User"
-            autocomplete="username"
-          />
-        </el-form-item>
+        <section class="form-panel" aria-labelledby="login-title">
+          <div class="form-heading">
+            <p class="form-kicker">WELCOME BACK</p>
+            <h2 id="login-title">登入系統</h2>
+          </div>
 
-        <el-form-item label="密碼" prop="password">
-          <el-input
-            v-model="form.password"
-            type="password"
-            placeholder="請輸入密碼"
-            :prefix-icon="Lock"
-            show-password
-            autocomplete="current-password"
-          />
-        </el-form-item>
+          <el-form
+            ref="formRef"
+            :model="form"
+            :rules="rules"
+            label-position="top"
+            @submit.prevent="handleLogin"
+          >
+            <el-form-item label="帳號 / 電子郵件" prop="email">
+              <el-input
+                v-model="form.email"
+                placeholder="請輸入電子郵件"
+                :prefix-icon="User"
+                autocomplete="username"
+              />
+            </el-form-item>
 
-        <el-button
-          type="primary"
-          native-type="submit"
-          :loading="loading"
-          class="submit-btn"
-          size="large"
-        >
-          登入系統
-        </el-button>
-      </el-form>
+            <el-form-item label="密碼" prop="password">
+              <el-input
+                v-model="form.password"
+                type="password"
+                placeholder="請輸入密碼"
+                :prefix-icon="Lock"
+                show-password
+                autocomplete="current-password"
+              />
+            </el-form-item>
 
-      <!-- 展示模式快速身分切換：僅在明確啟用 mock 的開發／展示環境顯示 -->
-      <div v-if="isMockLoginEnabled" class="dev-quick-login">
-        <el-divider>
-          <span class="divider-tag">✨ 展示模式快速登入</span>
-        </el-divider>
-        <p class="demo-tip">系統已預載全類型個案、排班、搭乘矩陣、異常裁決與報表資料：</p>
-        <div class="quick-btns">
-          <el-button size="default" type="danger" plain @click="quickLogin('admin')">
-            系統管理員 (Admin)
-          </el-button>
-          <el-button size="default" type="primary" plain @click="quickLogin('dispatcher')">
-            調度員 (Dispatcher)
-          </el-button>
-          <el-button size="default" type="success" plain @click="quickLogin('driver')">
-            司機 (Driver)
-          </el-button>
-          <el-button size="default" type="info" plain @click="quickLogin('viewer')">
-            檢視者 (Viewer)
-          </el-button>
-        </div>
+            <el-button
+              type="primary"
+              native-type="submit"
+              :loading="loading"
+              class="submit-btn"
+              size="large"
+            >
+              登入系統
+            </el-button>
+          </el-form>
+        </section>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance } from 'element-plus'
+import AppLogo from '@/components/AppLogo.vue'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
-import { ROLE_LABELS, type UserRole } from '@/types/domain'
+import { type UserRole } from '@/types/domain'
 
 const router = useRouter()
 const route = useRoute()
@@ -87,11 +75,15 @@ const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
-const isMockLoginEnabled = import.meta.env.VITE_ENABLE_MSW === 'true'
+
+// 只有本機環境允許在沒有 Supabase 的情況下發 mock JWT；預覽、正式與雲端容器一律為 false
+const isLocalEnvironment = computed(
+  () => import.meta.env.DEV || import.meta.env.VITE_APP_ENV === 'local'
+)
 
 const form = reactive({
-  email: isMockLoginEnabled ? 'admin@ltc.example.com' : '',
-  password: isMockLoginEnabled ? 'password123' : ''
+  email: '',
+  password: ''
 })
 
 const rules = {
@@ -99,104 +91,171 @@ const rules = {
   password: [{ required: true, message: '請輸入密碼', trigger: 'blur' }]
 }
 
+function goAfterLogin() {
+  ElMessage.success('登入成功')
+  router.push((route.query.redirect as string) || '/')
+}
+
 async function handleLogin() {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
+
     if (!supabase) {
-      ElMessage.error('尚未設定 Supabase 登入環境變數，請聯絡系統管理員')
+      if (!isLocalEnvironment.value) {
+        // 非本機環境未連線 Supabase 時，嚴禁隨意登入
+        ElMessage.error('系統認證服務未設定，無法登入')
+        return
+      }
+      // 本機不接 Supabase，改發後端 local 分支認得的 mock JWT，讓登入流程與正式環境一致；
+      // 帳號含 "viewer" 字樣即以檢視人員身分登入，其餘一律管理員
+      const role: UserRole = form.email.includes('viewer') ? 'viewer' : 'admin'
+      await authStore.setSession(`mock_jwt_${role}`, {
+        id: '00000000-0000-0000-0000-000000000001',
+        email: form.email,
+        displayName: form.email,
+        role
+      })
+      goAfterLogin()
       return
     }
+
     loading.value = true
     try {
+      const authEmail = form.email === 'ltcf-admin' ? 'ltcf-admin@ltc.example.com' : form.email
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: form.email,
+        email: authEmail,
         password: form.password
       })
       if (error || !data.session || !data.user) {
-        ElMessage.error(error?.message || '帳號或密碼錯誤')
+        ElMessage.error('帳號密碼錯誤或無此使用者')
         return
       }
 
-      const role = (data.user.user_metadata?.role ?? data.user.app_metadata?.role ?? 'viewer') as UserRole
-      authStore.setSession(data.session.access_token, {
+      const role = (data.user.app_metadata?.role ?? data.user.user_metadata?.role ?? 'viewer') as UserRole
+      await authStore.setSession(data.session.access_token, {
         id: data.user.id,
         email: data.user.email || form.email,
         displayName: data.user.user_metadata?.display_name || data.user.email || form.email,
         role
       })
-
-      ElMessage.success('登入成功')
-      const redirect = (route.query.redirect as string) || '/'
-      router.push(redirect)
+      goAfterLogin()
     } finally {
       loading.value = false
     }
   })
 }
-
-function quickLogin(role: UserRole) {
-  const nameMap: Record<UserRole, string> = {
-    admin: '系統管理員 (王大明)',
-    dispatcher: '調度員 (李調度)',
-    driver: '司機 (張司機)',
-    staff: '行政人員 (陳專員)',
-    viewer: '主管檢視者 (林督導)'
-  }
-
-  authStore.setSession(`mock_jwt_${role}`, {
-    id: `usr_${role}`,
-    email: `${role}@ltc.example.com`,
-    displayName: nameMap[role] || '測試使用者',
-    role
-  })
-  ElMessage.success(`已快速切換為【${ROLE_LABELS[role] || role}】身分`)
-  const redirect = (route.query.redirect as string) || '/'
-  router.push(redirect)
-}
 </script>
 
 <style scoped>
-.card-header {
+.login-card {
+  width: min(900px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--app-border-color);
+  border-radius: 20px;
+  background: var(--app-surface);
+  box-shadow: 0 18px 50px rgba(25, 50, 77, 0.12);
+
+  :deep(.el-card__body) {
+    padding: 0;
+  }
+}
+
+.login-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(360px, 1.1fr);
+  min-height: 560px;
+}
+
+.brand-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 52px 44px;
   text-align: center;
+  background: linear-gradient(155deg, #edf8fb 0%, #f7fbfc 58%, #eef5fb 100%);
+}
 
-  h2 {
-    color: var(--el-color-primary);
-    font-size: 22px;
-    font-weight: bold;
-    margin-bottom: 6px;
-  }
+.brand-panel :deep(.app-logo) {
+  margin-bottom: 40px;
+}
 
-  .subtitle {
-    color: var(--el-text-color-secondary);
-    font-size: 14px;
-  }
+.form-kicker {
+  margin: 0 0 10px;
+  color: var(--app-primary);
+  font-size: var(--app-font-xs);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.brand-panel h1 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: none;
+  margin: 0;
+  color: var(--app-text-primary);
+  font-size: clamp(26px, 3vw, 34px);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.form-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 52px 56px;
+}
+
+.form-heading {
+  margin-bottom: 30px;
+}
+
+.form-heading h2 {
+  margin: 0 0 8px;
+  color: var(--app-text-primary);
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.form-panel :deep(.el-form-item) {
+  margin-bottom: 22px;
 }
 
 .submit-btn {
   width: 100%;
-  margin-top: 10px;
+  height: 46px;
+  margin-top: 4px;
+  border-radius: 9px;
 }
 
-.dev-quick-login {
-  margin-top: 24px;
-
-  .divider-tag {
-    font-weight: bold;
-    color: var(--el-color-warning-dark-2);
+@media (max-width: 720px) {
+  .login-grid {
+    grid-template-columns: 1fr;
+    min-height: auto;
   }
 
-  .demo-tip {
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
+  .brand-panel,
+  .form-panel {
+    padding: 34px 28px;
+  }
+
+  .brand-panel {
+    align-items: center;
     text-align: center;
-    margin-bottom: 12px;
   }
 
-  .quick-btns {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
+  .brand-panel :deep(.app-logo) {
+    margin-bottom: 20px;
+  }
+
+  .brand-panel h1 {
+    max-width: none;
+  }
+
+  .form-panel {
+    padding-top: 36px;
   }
 }
 </style>

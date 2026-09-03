@@ -3,6 +3,7 @@ import { ElMessage, ElNotification } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
 import type { ApiError } from '@/types/api'
+import { resolveErrorMessage } from './errorCodes'
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -12,16 +13,12 @@ export const apiClient = axios.create({
   }
 })
 
-// 請求攔截器：附加 JWT Token；Mock 角色標頭僅在明確啟用 mock 的開發環境附加，避免洩漏到正式環境請求
+// 請求攔截器：附加 JWT Token
 apiClient.interceptors.request.use(
   (config) => {
     const authStore = useAuthStore()
     if (authStore.token) {
       config.headers.Authorization = `Bearer ${authStore.token}`
-    }
-    if (import.meta.env.VITE_ENABLE_MSW === 'true' && authStore.user) {
-      config.headers['X-Mock-Role'] = authStore.user.role
-      config.headers['X-Mock-User-ID'] = authStore.user.id || '00000000-0000-0000-0000-000000000001'
     }
     return config
   },
@@ -31,14 +28,25 @@ apiClient.interceptors.request.use(
 // 回應攔截器：處理 401、403 與通用錯誤提示
 apiClient.interceptors.response.use(
   (response) => response.data,
-  (error: AxiosError<{ error?: ApiError }>) => {
+  async (error: AxiosError<{ error?: ApiError }>) => {
     const authStore = useAuthStore()
     const status = error.response?.status
-    const apiError = error.response?.data?.error
+    let apiError = error.response?.data?.error
+
+    // 當 responseType 為 'blob' 時，後端返回的 JSON 錯誤會被包在 Blob 內，需讀取轉回物件
+    if (!apiError && error.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text()
+        const parsed = JSON.parse(text)
+        apiError = parsed?.error
+      } catch {
+        // 忽略解析失敗
+      }
+    }
 
     if (status === 401) {
       const wasAuthenticated = authStore.isAuthenticated
-      authStore.logout()
+      await authStore.logout()
       if (router.currentRoute.value.path !== '/login') {
         router.push('/login')
         if (wasAuthenticated) {
@@ -53,14 +61,42 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    const message = apiError?.message || error.message || '系統發生錯誤，請稍後再試'
+    // 一律依錯誤碼查表顯示非技術性訊息，不直接信任後端或 axios 回傳的原始 message 字串
+    const message = resolveErrorMessage(apiError?.code)
+
+    // 常用欄位代碼轉繁體中文標籤，讓錯誤清單明確告知使用者有問題的欄位
+    const FIELD_LABELS: Record<string, string> = {
+      plateNo: '車號',
+      siteId: '所屬單位',
+      displayName: '代稱',
+      brand: '廠牌',
+      model: '車型',
+      manufactureYm: '出廠年月',
+      compulsoryInsuranceExpiry: '強制責任險',
+      passengerInsuranceExpiry: '乘客責任險',
+      thirdPartyInsuranceExpiry: '第三人責任險',
+      lastInspectionDate: '前次檢驗日期',
+      wheelchairAccessible: '符合輪椅載運規定',
+      status: '狀態',
+      name: '姓名',
+      nationalId: '身分證字號',
+      email: '電子信箱',
+      region: '區域',
+      address: '地址',
+      code: '代碼'
+    }
 
     // 若有詳細欄位錯誤清單，以通知元件條列呈現
     if (apiError?.details && apiError.details.length > 0) {
       ElNotification({
         title: message,
         type: 'error',
-        message: apiError.details.map((d) => `${d.field ? `[${d.field}] ` : ''}${d.reason}`).join('\n'),
+        message: apiError.details
+          .map((d) => {
+            const label = d.field ? FIELD_LABELS[d.field] || d.field : ''
+            return `${label ? `【${label}】` : ''}${d.reason}`
+          })
+          .join('\n'),
         duration: 6000
       })
     } else {

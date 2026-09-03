@@ -1,0 +1,723 @@
+<template>
+  <div class="caregiver-list-view">
+    <el-tabs v-model="activeTab" type="border-card" class="caregiver-tabs" @tab-change="handleTabChange">
+      <el-tab-pane label="照護人員清單" name="list">
+        <DataTablePage
+          title="照護人員管理"
+          :max-width="1070"
+          v-model:page="page"
+          v-model:pageSize="pageSize"
+          :total="total"
+          :loading="loading"
+          @page-change="handlePageChange"
+          @size-change="handleSizeChange"
+        >
+          <template #filter>
+            <el-input
+              v-model="filters.q"
+              placeholder="搜尋姓名"
+              clearable
+              style="width: 240px"
+              @keyup.enter="handleSearch"
+            />
+            <el-select
+              v-model="filters.status"
+              placeholder="狀態"
+              clearable
+              style="width: 130px"
+              @change="handleSearch"
+            >
+              <el-option label="全部狀態" value="" />
+              <el-option label="啟用" value="active" />
+              <el-option label="停用" value="inactive" />
+            </el-select>
+            <el-button type="primary" @click="handleSearch">查詢</el-button>
+            <el-button @click="handleReset">重設</el-button>
+          </template>
+
+          <template #actions>
+            <!-- 下載範本實際呼叫 GET /caregivers/template，後端僅要求 masters_caregivers:view -->
+            <el-button v-if="authStore.hasPermission('masters_caregivers', 'view')" plain @click="handleDownloadTemplate">
+              下載匯入範本
+            </el-button>
+
+            <el-button v-if="authStore.hasPermission('masters_caregivers', 'edit')" plain @click="openImportDialog">
+              批次匯入照護人員
+            </el-button>
+
+            <el-button v-if="authStore.hasPermission('masters_caregivers', 'edit')" type="primary" @click="openCreateDialog">
+              <el-icon><Plus /></el-icon>
+              新增照護人員
+            </el-button>
+          </template>
+
+          <template #table>
+            <el-table :data="caregivers" border stripe table-layout="auto" style="width: 100%">
+              <el-table-column label="類型" width="90" align="center">
+                <template #default="{ row }">
+                  <span>{{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="單位" min-width="220" class-name="site-col">
+                <template #default="{ row }">
+                  <span v-if="row.siteName">{{ row.siteName }}</span>
+                  <div v-else-if="row.siteNameRaw" class="unresolved-slot">
+                    <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
+                    <el-select
+                      filterable
+                      placeholder="選擇既有單位"
+                      style="width: 150px"
+                      @change="(val: string) => handleLinkSite(row as CaregiverDTO, val)"
+                    >
+                      <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
+                    </el-select>
+                    <el-button link type="primary" size="small" @click="openQuickCreateSite(row as CaregiverDTO)">新增單位</el-button>
+                  </div>
+                  <span v-else class="empty-value">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="name" label="姓名" min-width="120" class-name="name-col" />
+              <el-table-column label="聯絡方式" min-width="140" class-name="contact-col">
+                <template #default="{ row }">
+                  <span class="contact-value">{{ row.contact || '-' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="備註" min-width="180" show-overflow-tooltip class-name="notes-col">
+                <template #default="{ row }">
+                  <span>{{ row.notes || '-' }}</span>
+                </template>
+              </el-table-column>
+
+              <el-table-column prop="status" label="狀態" width="130" align="center">
+                <template #default="{ row }">
+                  <el-tooltip
+                    v-if="authStore.hasPermission('masters_caregivers', 'edit')"
+                    :content="row.status === 'active' ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
+                    placement="top"
+                    :show-after="300"
+                  >
+                    <button
+                      type="button"
+                      class="status-toggle-pill"
+                      :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+                      @click="handleToggleStatus(row as CaregiverDTO, row.status !== 'active')"
+                    >
+                      <span class="status-indicator-dot"></span>
+                      <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
+                    </button>
+                  </el-tooltip>
+                  <div
+                    v-else
+                    class="status-toggle-pill is-readonly"
+                    :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+                  >
+                    <span class="status-indicator-dot"></span>
+                    <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+
+              <el-table-column label="操作" width="140" fixed="right" align="center">
+                <template #default="{ row }">
+                  <TableRowActions>
+                    <el-button link type="primary" size="small" @click="openEditDialog(row)">
+                      編輯
+                    </el-button>
+                    <el-button
+                      v-if="authStore.hasPermission('masters_caregivers', 'delete')"
+                      link
+                      type="danger"
+                      size="small"
+                      @click="handleDelete(row)"
+                    >
+                      刪除
+                    </el-button>
+                  </TableRowActions>
+                </template>
+              </el-table-column>
+            </el-table>
+          </template>
+        </DataTablePage>
+      </el-tab-pane>
+
+      <!-- 待維護：單位名稱比對不到單位主檔、或聯絡方式／備註缺漏的照護人員資料，統一用「缺少欄位」欄提示，不再分組 -->
+      <el-tab-pane label="待維護" name="pending">
+        <div v-loading="pendingLoading" class="pending-panel">
+          <el-empty v-if="!pendingLoading && pendingCaregivers.length === 0" description="目前沒有待維護的照護人員" />
+          <el-table v-else :data="pendingCaregivers" border stripe table-layout="auto">
+            <el-table-column prop="name" label="姓名" min-width="120" class-name="name-col" />
+            <el-table-column label="單位" min-width="220" class-name="pending-site-col">
+              <template #default="{ row }">
+                <span v-if="row.siteName">{{ row.siteName }}</span>
+                <div v-else-if="row.siteNameRaw" class="unresolved-slot">
+                  <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
+                  <el-select
+                    filterable
+                    placeholder="選擇既有單位"
+                    style="width: 150px"
+                    @change="(val: string) => handleLinkSite(row as CaregiverDTO, val)"
+                  >
+                    <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
+                  </el-select>
+                  <el-button link type="primary" size="small" @click="openQuickCreateSite(row as CaregiverDTO)">新增單位</el-button>
+                </div>
+                <span v-else class="empty-value">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="聯絡方式" min-width="140" class-name="pending-contact-col">
+              <template #default="{ row }">
+                <span class="contact-value">{{ row.contact || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="備註" min-width="180" show-overflow-tooltip class-name="pending-notes-col">
+              <template #default="{ row }">
+                <span>{{ row.notes || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="缺少欄位" min-width="160" show-overflow-tooltip class-name="pending-missing-col">
+              <template #default="{ row }">
+                <span class="missing-fields">缺少：{{ missingFields(row as CaregiverDTO).join('、') }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="100" align="center" class-name="pending-action-col">
+              <template #default="{ row }">
+                <TableRowActions>
+                  <el-button link type="primary" size="small" @click="openEditDialog(row)">編輯</el-button>
+                </TableRowActions>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+
+    <!-- 新增單位快速建立對話框 -->
+    <el-dialog v-model="quickCreateSiteVisible" title="新增單位" width="min(480px, calc(100vw - 32px))">
+      <el-form label-width="90px">
+        <el-form-item label="單位名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
+        <el-form-item label="區域">
+          <el-select v-model="quickCreateSiteForm.region" style="width: 100%">
+            <el-option v-for="(label, key) in REGION_LABELS" :key="key" :value="key" :label="label" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <DialogFooter
+          confirm-text="建立並關聯"
+          :loading="quickCreateSiteSaving"
+          @confirm="handleQuickCreateSiteAndLink"
+          @cancel="quickCreateSiteVisible = false"
+        />
+      </template>
+    </el-dialog>
+
+    <!-- 批次匯入對話框 -->
+    <ImportPreviewDialog
+      ref="importDialogRef"
+      title="批次匯入照護人員 (類型/單位/姓名/聯絡方式/備註.xlsx)"
+      :on-dry-run="handleDryRun"
+      :on-commit="handleCommitImport"
+      :on-download-template="handleDownloadTemplate"
+      @success="handleImportSuccess"
+    >
+      <template #columns="{ checkedDuplicateRows, toggleDuplicateRow }">
+        <el-table-column prop="type" label="類型" width="80" />
+        <el-table-column prop="siteName" label="單位" width="140" />
+        <el-table-column prop="name" label="姓名" width="110" />
+        <el-table-column prop="contact" label="聯絡方式" width="140" />
+        <el-table-column prop="notes" label="備註" min-width="160" show-overflow-tooltip />
+        <el-table-column label="重複人員" width="150" align="center">
+          <template #default="{ row, $index }">
+            <template v-if="row.isDuplicate">
+              <el-tooltip :content="`與既有照護人員「${row.duplicateOf?.name ?? '未知'}」疑似重複`" placement="top">
+                <el-checkbox
+                  :model-value="checkedDuplicateRows.has(row.rowIndex ?? $index)"
+                  label="仍要匯入"
+                  @change="(val: string | number | boolean) => toggleDuplicateRow(row.rowIndex ?? $index, !!val)"
+                />
+              </el-tooltip>
+            </template>
+            <span v-else class="empty-value">-</span>
+          </template>
+        </el-table-column>
+      </template>
+    </ImportPreviewDialog>
+
+    <!-- 新增/編輯對話框 -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingId ? '編輯照護人員資料' : '新增照護人員'"
+      width="min(480px, calc(100vw - 32px))"
+    >
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+        <el-form-item label="類型" prop="type">
+          <el-select v-model="form.type" placeholder="請選擇類型" style="width: 100%">
+            <el-option
+              v-for="(label, key) in CAREGIVER_TYPE_LABELS"
+              :key="key"
+              :label="label"
+              :value="key"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="單位" prop="siteId">
+          <el-select v-model="form.siteId" placeholder="請選擇單位" filterable clearable style="width: 100%">
+            <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="姓名" prop="name">
+          <el-input v-model="form.name" placeholder="請輸入姓名" />
+        </el-form-item>
+        <el-form-item label="聯絡方式" prop="contact">
+          <el-input v-model="form.contact" placeholder="選填" />
+        </el-form-item>
+        <el-form-item label="備註" prop="notes">
+          <el-input v-model="form.notes" type="textarea" :rows="2" placeholder="選填" />
+        </el-form-item>
+        <el-form-item label="狀態" prop="status">
+          <el-radio-group v-model="form.status" class="status-radio-group">
+            <el-radio-button value="active">
+              <div class="radio-pill active-pill">
+                <span class="radio-dot"></span>
+                <span>啟用</span>
+              </div>
+            </el-radio-button>
+            <el-radio-button value="inactive">
+              <div class="radio-pill inactive-pill">
+                <span class="radio-dot"></span>
+                <span>停用</span>
+              </div>
+            </el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <DialogFooter
+          confirm-text="確認送出"
+          :loading="saving"
+          @confirm="handleSave"
+          @cancel="dialogVisible = false"
+        />
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive } from 'vue'
+import { Plus } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
+import DataTablePage from '@/components/DataTablePage.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
+import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
+import {
+  listCaregivers,
+  createCaregiver,
+  updateCaregiver,
+  deleteCaregiver,
+  linkCaregiverSite,
+  downloadCaregiverTemplate,
+  dryRunImportCaregivers,
+  commitImportCaregivers
+} from '@/api/caregivers'
+import { listSites, createSite } from '@/api/masters'
+import { useAuthStore } from '@/stores/auth'
+import { useListQuery } from '@/composables/useListQuery'
+import { downloadBlob } from '@/utils/download'
+import { REGION_LABELS, CAREGIVER_TYPE_LABELS, type Region, type CaregiverType } from '@/types/domain'
+import type { CaregiverDTO, SiteDTO } from '@/types/api'
+
+const authStore = useAuthStore()
+const activeTab = ref<'list' | 'pending'>('list')
+const caregivers = ref<CaregiverDTO[]>([])
+const availableSites = ref<SiteDTO[]>([])
+const importDialogRef = ref<InstanceType<typeof ImportPreviewDialog>>()
+
+const {
+  page,
+  pageSize,
+  total,
+  loading,
+  filters,
+  handlePageChange,
+  handleSizeChange,
+  handleSearch,
+  handleReset,
+  executeFetch
+} = useListQuery({
+  defaultFilters: { q: '', status: '' },
+  onFetch: async () => {
+    const res = await listCaregivers({
+      page: page.value,
+      pageSize: pageSize.value,
+      q: filters.q,
+      status: filters.status || undefined,
+      excludePending: true
+    })
+    caregivers.value = res.data
+    total.value = res.meta.total
+  }
+})
+
+async function loadSites() {
+  const res = await listSites({ status: 'active', pageSize: 100 })
+  availableSites.value = res.data
+}
+
+// 下載匯入範本
+async function handleDownloadTemplate() {
+  try {
+    const blob = await downloadCaregiverTemplate()
+    downloadBlob(blob, '照護人員批次匯入範本.xlsx')
+    ElMessage.success('照護人員匯入範本下載成功')
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載範本失敗'))
+  }
+}
+
+function openImportDialog() {
+  importDialogRef.value?.open()
+}
+
+// ImportPreviewDialog 是沿用個案匯入的共用元件，其錯誤／警告清單固定以 caseName 顯示
+// 姓名欄位；照護人員後端回應的欄位是 name，這裡轉接成元件既有的欄位形狀，元件本身不需改動。
+function withCaseNameAlias(items: any[] = []): any[] {
+  return items.map((item) => ({ ...item, caseName: item.name }))
+}
+
+async function handleDryRun(file: File): Promise<any> {
+  const preview: any = await dryRunImportCaregivers(file)
+  return {
+    ...preview,
+    errors: withCaseNameAlias(preview.errors),
+    warnings: withCaseNameAlias(preview.warnings)
+  }
+}
+
+async function handleCommitImport(file: File, includeDuplicateRows: number[]): Promise<any> {
+  const result: any = await commitImportCaregivers(file, includeDuplicateRows)
+  return {
+    importedCount: result.importedCount,
+    skippedRows: (result.skippedRows || []).map((row: any) => ({ rowIndex: row.rowIndex, caseName: row.name, reasons: row.reasons })),
+    warnings: withCaseNameAlias(result.warnings)
+  }
+}
+
+// 匯入完成後，若有單位待關聯或資料待補齊的提示，導引使用者前往「待維護」頁籤處理；
+// 無論點選哪個按鈕都視為使用者已確認匯入結果，一併關閉匯入視窗
+function handleImportSuccess() {
+  executeFetch()
+  ElMessageBox.confirm(
+    '本次匯入若有單位名稱未比對到單位主檔，或聯絡方式／備註未填寫，已建立資料並列入「待維護」頁籤，是否立即前往查看？',
+    '匯入完成',
+    { confirmButtonText: '前往待維護', cancelButtonText: '稍後再說', type: 'info' }
+  )
+    .then(() => {
+      activeTab.value = 'pending'
+      pendingLoaded = true
+      fetchPending()
+    })
+    .catch(() => {})
+    .finally(() => {
+      importDialogRef.value?.close()
+    })
+}
+
+// 依 siteId／contact／notes 是否有值，列出該筆照護人員缺少的欄位
+function missingFields(row: CaregiverDTO): string[] {
+  const missing: string[] = []
+  if (!row.siteId) missing.push('單位')
+  if (!row.contact) missing.push('聯絡方式')
+  if (!row.notes) missing.push('備註')
+  return missing
+}
+
+// 新增/編輯對話框
+const dialogVisible = ref(false)
+const saving = ref(false)
+const editingId = ref<string | null>(null)
+const formRef = ref<FormInstance>()
+const form = reactive({
+  siteId: '' as string | undefined,
+  name: '',
+  type: '' as CaregiverType | '',
+  contact: '',
+  notes: '',
+  status: 'active' as 'active' | 'inactive'
+})
+const rules = {
+  name: [{ required: true, message: '請輸入姓名', trigger: 'blur' }],
+  type: [{ required: true, message: '請選擇類型', trigger: 'change' }]
+}
+
+function openCreateDialog() {
+  editingId.value = null
+  form.siteId = undefined
+  form.name = ''
+  form.type = ''
+  form.contact = ''
+  form.notes = ''
+  form.status = 'active'
+  dialogVisible.value = true
+}
+
+function openEditDialog(row: any) {
+  editingId.value = row.id
+  form.siteId = row.siteId
+  form.name = row.name
+  form.type = row.type
+  form.contact = row.contact || ''
+  form.notes = row.notes || ''
+  form.status = row.status || 'active'
+  dialogVisible.value = true
+}
+
+async function handleToggleStatus(row: CaregiverDTO, newActive: boolean) {
+  const newStatus = newActive ? 'active' : 'inactive'
+  try {
+    await updateCaregiver(row.id, { status: newStatus })
+    row.status = newStatus
+    ElMessage.success(`已將照護人員「${row.name}」切換為 ${newActive ? '啟用' : '停用'}`)
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
+  }
+}
+
+async function handleSave() {
+  if (!formRef.value) return
+  await formRef.value.validate(async (valid) => {
+    if (!valid) return
+    saving.value = true
+    try {
+      if (editingId.value) {
+        await updateCaregiver(editingId.value, {
+          siteId: form.siteId,
+          name: form.name,
+          type: form.type as CaregiverType,
+          contact: form.contact,
+          notes: form.notes,
+          status: form.status
+        })
+        ElMessage.success('照護人員資料已更新')
+      } else {
+        await createCaregiver({
+          siteId: form.siteId,
+          name: form.name,
+          type: form.type as CaregiverType,
+          contact: form.contact,
+          notes: form.notes,
+          status: form.status
+        })
+        ElMessage.success('照護人員建立成功')
+      }
+      dialogVisible.value = false
+      executeFetch()
+      if (activeTab.value === 'pending') {
+        await fetchPending()
+      }
+    } catch (err: any) {
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存照護人員資料失敗'))
+    } finally {
+      saving.value = false
+    }
+  })
+}
+
+async function handleDelete(row: any) {
+  try {
+    await ElMessageBox.confirm(`確定要刪除照護人員「${row.name}」？此操作無法復原。`, '刪除確認', {
+      confirmButtonText: '刪除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger'
+    })
+    await deleteCaregiver(row.id)
+    ElMessage.success(`照護人員「${row.name}」已成功刪除`)
+    executeFetch()
+  } catch (err: any) {
+    if (err !== 'cancel') {
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除照護人員失敗'))
+    }
+  }
+}
+
+// 待維護頁籤：單位名稱未比對到單位主檔與資料缺漏的照護人員合併為單一清單，用「缺少欄位」呈現而非分組
+const pendingLoading = ref(false)
+const pendingCaregivers = ref<CaregiverDTO[]>([])
+
+async function fetchPending() {
+  pendingLoading.value = true
+  try {
+    const [unresolvedRes, incompleteRes] = await Promise.all([
+      listCaregivers({ unresolvedLink: true, pageSize: 100 }),
+      listCaregivers({ incomplete: true, pageSize: 100 })
+    ])
+    const merged = new Map<string, CaregiverDTO>()
+    for (const row of [...(unresolvedRes.data ?? []), ...(incompleteRes.data ?? [])]) {
+      merged.set(row.id, row)
+    }
+    pendingCaregivers.value = Array.from(merged.values())
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入待維護清單失敗'))
+  } finally {
+    pendingLoading.value = false
+  }
+}
+
+async function handleLinkSite(row: CaregiverDTO, siteId: string) {
+  if (!siteId) return
+  try {
+    await linkCaregiverSite(row.id, siteId)
+    ElMessage.success(`照護人員「${row.name}」已完成單位關聯`)
+    executeFetch()
+    if (activeTab.value === 'pending') {
+      await fetchPending()
+    }
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新單位關聯失敗'))
+  }
+}
+
+// 新增單位並立即關聯
+const quickCreateSiteVisible = ref(false)
+const quickCreateSiteSaving = ref(false)
+const quickCreateTarget = ref<CaregiverDTO | null>(null)
+const quickCreateSiteForm = reactive({ name: '', region: 'miaoli' as Region, address: '', openDays: [1, 2, 3, 4, 5] })
+
+// 單位名稱預先帶入匯入時的原始名稱，使用者只需確認區域與地址即可送出，不必重打一次名稱
+function openQuickCreateSite(row: CaregiverDTO) {
+  quickCreateTarget.value = row
+  quickCreateSiteForm.name = row.siteNameRaw || ''
+  quickCreateSiteForm.region = 'miaoli'
+  quickCreateSiteForm.address = ''
+  quickCreateSiteVisible.value = true
+}
+
+async function handleQuickCreateSiteAndLink() {
+  if (!quickCreateTarget.value) return
+  quickCreateSiteSaving.value = true
+  try {
+    const site = await createSite(quickCreateSiteForm)
+    availableSites.value.push(site)
+    await handleLinkSite(quickCreateTarget.value, site.id)
+    quickCreateSiteVisible.value = false
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '新增並關聯單位失敗'))
+  } finally {
+    quickCreateSiteSaving.value = false
+  }
+}
+
+// 待維護頁籤首次切入時才拉取清單，避免一般清單頁多打一次 API
+let pendingLoaded = false
+async function handleTabChange(name: string | number) {
+  if (name === 'pending' && !pendingLoaded) {
+    pendingLoaded = true
+    await fetchPending()
+  }
+}
+
+// 初始載入
+loadSites()
+executeFetch()
+</script>
+
+<style scoped>
+.caregiver-list-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.caregiver-tabs {
+  border-radius: 8px;
+}
+
+/* overflow-x: auto 讓表格加總寬度超過版面時把捲軸包在面板內，不外溢到整個頁面
+   （這個面板不像 DataTablePage 的 .table-container 內建這條規則，要自己補）。 */
+.pending-panel {
+  min-height: 120px;
+  overflow-x: auto;
+}
+
+/* table-layout="auto" 底下 el-table 本體內建 width: 100%，即使拿掉 inline style
+   仍會撐滿容器、內容明明很短卻拉滿版面；要顯式蓋成 max-content 才會縮到
+   「各欄寬度加總」（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
+.pending-panel :deep(.el-table) {
+  width: max-content;
+}
+
+/* el-table-column 的 min-width prop 在 table-layout="auto" 底下只會拿去算表格
+   總寬度的預算，不會變成該欄真正的 CSS min-width——欄位當筆內容比 min-width
+   短時（例如單位已直接關聯、不需要顯示原始名稱行內編輯列）欄寬會被壓到只剩
+   內容本身，跟其他撐開的欄位比例不一致。要另外補一條 :deep() min-width 才是
+   真的鎖住下限（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
+.pending-panel :deep(.pending-site-col .cell) { min-width: 220px; }
+.pending-panel :deep(.pending-contact-col .cell) { min-width: 140px; }
+.pending-panel :deep(.pending-action-col .cell) { min-width: 100px; }
+.pending-panel :deep(.pending-notes-col .cell) { min-width: 180px; }
+.pending-panel :deep(.pending-missing-col .cell) { min-width: 160px; }
+.pending-panel :deep(.name-col .cell) { min-width: 120px; }
+
+/* 不用 flex-wrap: wrap——欄寬不夠時會把「選擇既有單位」跟「新增單位」擠成第二行，
+   即使頁面還有空間也一樣。改成 nowrap，搭配 el-table 的 table-layout="auto"，
+   讓這欄依這一整行內容自然撐寬，有空間就單行顯示，不主動換行。 */
+.unresolved-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.unresolved-slot > * {
+  flex-shrink: 0;
+}
+
+/* flex-wrap: nowrap 跟 .unresolved-slot > * 的 flex-shrink: 0 只防止各元素被擠壓，
+   這個 span 沒有固定寬度時，文字本身還是會照 flex 容器目前的寬度自己換行——
+   要另外鎖 white-space: nowrap 才能讓整段名稱維持單行。 */
+.unresolved-raw-name {
+  color: var(--app-status-warning-fg);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.missing-fields {
+  color: var(--app-status-danger-fg);
+  font-size: 13px;
+}
+
+/* 同樣道理：span 沒鎖 nowrap，table-layout: auto 也救不了，聯絡方式還是會被壓成多行。 */
+.contact-value {
+  white-space: nowrap;
+}
+
+/* 姓名欄沒有自訂 template，只能用 class-name 打進 el-table 內部 cell 鎖 nowrap；
+   table-layout="auto" 底下固定 width 只會鎖死欄寬讓文字換行、不會依內容自動撐開，
+   min-width 欄位沒鎖 nowrap 一樣會被壓成逐字換行（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
+:deep(.name-col .cell) {
+  white-space: nowrap;
+  min-width: 120px;
+}
+
+/* 主表格「單位／聯絡方式／備註」欄同樣沒有 class-name 鎖 min-width 下限，
+   會被 table-layout="auto" 壓窄或被其他欄擠壓（見待維護子表格同一段說明）。 */
+:deep(.site-col .cell) {
+  white-space: nowrap;
+  min-width: 220px;
+}
+
+:deep(.contact-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.notes-col .cell) {
+  min-width: 180px;
+}
+
+.empty-value {
+  color: var(--app-text-muted);
+}
+</style>

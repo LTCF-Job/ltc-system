@@ -2,7 +2,7 @@
   <el-drawer
     v-model="visible"
     :title="`搭乘紀錄更正 — ${record?.caseName || ''} (${record?.serviceDate || ''})`"
-    size="520px"
+    size="min(520px, 92vw)"
     destroy-on-close
   >
     <div v-if="record" class="drawer-content">
@@ -51,7 +51,6 @@
         </div>
       </el-card>
 
-      <!-- 更正表單 -->
       <el-card shadow="never" class="form-card">
         <template #header>
           <span class="card-title">搭乘紀錄更正欄位</span>
@@ -60,8 +59,8 @@
         <el-form
           ref="formRef"
           :model="form"
-          label-width="130px"
-          :disabled="!authStore.can('staff')"
+          label-width="140px"
+          :disabled="!canEdit"
         >
           <el-form-item label="實際搭乘狀態">
             <el-radio-group v-model="form.effectiveStatus">
@@ -71,8 +70,27 @@
             </el-radio-group>
           </el-form-item>
 
+          <el-alert
+            v-if="masterDataError"
+            type="error"
+            show-icon
+            :closable="false"
+            title="車輛與司機主檔載入失敗，下方清單可能不完整"
+            style="margin-bottom: 12px"
+          >
+            <template #default>
+              <el-button size="small" @click="loadMasterData">重試</el-button>
+            </template>
+          </el-alert>
+
           <el-form-item label="實際承載車輛">
-            <el-select v-model="form.vehicleId" placeholder="選擇車輛" style="width: 100%" clearable>
+            <el-select
+              v-model="form.vehicleId"
+              :placeholder="isAbsent ? '沒坐無須選擇車輛' : '選擇車輛'"
+              :disabled="isAbsent || !canEdit"
+              style="width: 100%"
+              clearable
+            >
               <el-option
                 v-for="v in vehicles"
                 :key="v.id"
@@ -83,9 +101,15 @@
           </el-form-item>
 
           <el-form-item label="實際駕駛司機">
-            <el-select v-model="form.driverId" placeholder="選擇司機" style="width: 100%" clearable>
+            <el-select
+              v-model="form.driverId"
+              :placeholder="isAbsent ? '沒坐無須選擇司機' : '選擇司機'"
+              :disabled="isAbsent || !canEdit"
+              style="width: 100%"
+              clearable
+            >
               <el-option
-                v-for="d in drivers"
+                v-for="d in driverOptions"
                 :key="d.id"
                 :label="d.name"
                 :value="d.id"
@@ -98,10 +122,11 @@
               v-model="form.departTimeOverride"
               format="HH:mm"
               value-format="HH:mm"
-              placeholder="預設沿用排班時間"
+              :placeholder="isAbsent ? '沒坐無出發時間' : '預設沿用排班時間'"
+              :disabled="isAbsent || !canEdit"
               style="width: 100%"
             />
-            <div class="field-hint" v-if="record.scheduledDepartTime">
+            <div class="field-hint" v-if="!isAbsent && record.scheduledDepartTime">
               排班設定原值：{{ record.scheduledDepartTime }}
               <span v-if="form.departTimeOverride && form.departTimeOverride !== record.scheduledDepartTime" class="diff-tag">
                 (已更動)
@@ -114,16 +139,20 @@
               v-model="form.durationMinOverride"
               :min="1"
               :max="240"
-              placeholder="預設沿用排班時長"
+              :placeholder="isAbsent ? '沒坐無服務時長' : '預設沿用排班時長'"
+              :disabled="isAbsent || !canEdit"
               style="width: 100%"
             />
-            <div class="field-hint" v-if="record.scheduledDurationMin">
+            <div class="field-hint" v-if="!isAbsent && record.scheduledDurationMin">
               排班設定原值：{{ record.scheduledDurationMin }} 分鐘
             </div>
           </el-form-item>
 
           <el-form-item label="不申報 AA09">
-            <el-switch v-model="form.notClaimedAa09" />
+            <el-switch
+              v-model="form.notClaimedAa09"
+              :disabled="isAbsent || !canEdit"
+            />
           </el-form-item>
 
           <!-- 常用更正原因快選（選填） -->
@@ -152,31 +181,27 @@
 
       <!-- 歷次更正稽核資訊 -->
       <div v-if="record.correctedAt" class="audit-hint">
-        最後更正者：{{ record.correctedByName || '承辦人員' }} 於 {{ record.correctedAt }}
+        最後更正者：{{ record.correctedByName || '承辦人員' }} 於 {{ formatDateTime(record.correctedAt) }}
         <span v-if="record.correctionReason">（原因：{{ record.correctionReason }}）</span>
       </div>
     </div>
 
     <template #footer>
-      <div class="drawer-footer">
-        <el-button @click="visible = false">取消</el-button>
-        <el-button
-          v-if="authStore.can('staff')"
-          type="primary"
-          :loading="submitting"
-          @click="handleSubmitCorrection"
-        >
-          儲存更正
-        </el-button>
-      </div>
+      <DialogFooter
+        :show-confirm="canEdit"
+        :loading="submitting"
+        @confirm="handleSubmitCorrection"
+        @cancel="visible = false"
+      />
     </template>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { patchRideRecord } from '@/api/rides'
+import DialogFooter from '@/components/DialogFooter.vue'
 import { listVehicles, listDrivers } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
@@ -193,6 +218,27 @@ const submitting = ref(false)
 const record = ref<RideRecordDTO | null>(null)
 const vehicles = ref<VehicleDTO[]>([])
 const drivers = ref<DriverDTO[]>([])
+const masterDataError = ref(false)
+
+async function loadMasterData() {
+  masterDataError.value = false
+  try {
+    const [vRes, dRes] = await Promise.all([
+      listVehicles({ status: 'active', pageSize: 100 }),
+      listDrivers({ status: 'active', pageSize: 100 })
+    ])
+    vehicles.value = (vRes as any)?.data || vRes || []
+    drivers.value = (dRes as any)?.data || dRes || []
+  } catch {
+    // 全域攔截器已彈出錯誤訊息；這裡另外標記狀態，讓下拉選單旁能顯示可重試的空清單原因
+    masterDataError.value = true
+  }
+}
+
+const canEdit = computed(() => {
+  // 對應後端 PATCH /rides/:id 實際檢查的 rides_issues:edit
+  return authStore.hasPermission('rides_issues', 'edit')
+})
 
 const form = reactive<PatchRideRequest>({
   effectiveStatus: 'boarded',
@@ -204,25 +250,66 @@ const form = reactive<PatchRideRequest>({
   reason: ''
 })
 
+// 一台車可能有多位司機：選定車輛後只列該車的司機，並保留紀錄上原本的司機以免被藏起來
+const driverOptions = computed(() => {
+  const vehicle = vehicles.value.find((v) => v.id === form.vehicleId)
+  const assignedIds = (vehicle?.drivers || []).map((d) => d.id)
+  if (assignedIds.length === 0) return drivers.value
+  return drivers.value.filter((d) => assignedIds.includes(d.id) || d.id === record.value?.driverId)
+})
+
+watch(() => form.vehicleId, (vehicleId) => {
+  const switchedAway = vehicleId !== record.value?.vehicleId
+  if (switchedAway && form.driverId && !driverOptions.value.some((d) => d.id === form.driverId)) {
+    form.driverId = ''
+  }
+})
+
+const isAbsent = computed(() => form.effectiveStatus === 'absent')
+
+watch(
+  () => form.effectiveStatus,
+  (newStatus, oldStatus) => {
+    if (newStatus === 'absent') {
+      form.vehicleId = ''
+      form.driverId = ''
+      form.departTimeOverride = null
+      form.durationMinOverride = null
+      form.notClaimedAa09 = false
+    } else if (oldStatus === 'absent' && newStatus === 'boarded') {
+      if (!form.vehicleId && record.value?.vehicleId) {
+        form.vehicleId = record.value.vehicleId
+      }
+      if (!form.driverId && record.value?.driverId) {
+        form.driverId = record.value.driverId
+      }
+      if (form.departTimeOverride === null && record.value?.departTimeOverride) {
+        form.departTimeOverride = record.value.departTimeOverride
+      }
+      if (form.durationMinOverride === null && record.value?.durationMinOverride) {
+        form.durationMinOverride = record.value.durationMinOverride
+      }
+      if (record.value?.notClaimedAa09 !== undefined) {
+        form.notClaimedAa09 = record.value.notClaimedAa09
+      }
+    }
+  }
+)
+
 async function open(rideRecord: RideRecordDTO) {
   record.value = rideRecord
   form.effectiveStatus = rideRecord.effectiveStatus
-  form.vehicleId = rideRecord.vehicleId || ''
-  form.driverId = rideRecord.driverId || ''
-  form.departTimeOverride = rideRecord.departTimeOverride || null
-  form.durationMinOverride = rideRecord.durationMinOverride || null
-  form.notClaimedAa09 = rideRecord.notClaimedAa09 || false
+  form.vehicleId = rideRecord.effectiveStatus === 'absent' ? '' : (rideRecord.vehicleId || '')
+  form.driverId = rideRecord.effectiveStatus === 'absent' ? '' : (rideRecord.driverId || '')
+  form.departTimeOverride = rideRecord.effectiveStatus === 'absent' ? null : (rideRecord.departTimeOverride || null)
+  form.durationMinOverride = rideRecord.effectiveStatus === 'absent' ? null : (rideRecord.durationMinOverride || null)
+  form.notClaimedAa09 = rideRecord.effectiveStatus === 'absent' ? false : (rideRecord.notClaimedAa09 || false)
   form.reason = rideRecord.correctionReason || ''
 
   visible.value = true
 
   if (vehicles.value.length === 0) {
-    const [vRes, dRes] = await Promise.all([
-      listVehicles({ active: true, pageSize: 100 }),
-      listDrivers({ active: true, pageSize: 100 })
-    ])
-    vehicles.value = vRes.data
-    drivers.value = dRes.data
+    await loadMasterData()
   }
 }
 
@@ -230,22 +317,40 @@ async function handleSubmitCorrection() {
   if (!record.value) return
 
   // 二次確認
-  await ElMessageBox.confirm(
-    `確定更正 ${record.value.serviceDate} 第 ${record.value.legSeq} 趟搭乘紀錄？此操作將記錄於稽核紀錄。`,
-    '確認更正紀錄',
-    {
-      confirmButtonText: '確認',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }
-  )
+  try {
+    await ElMessageBox.confirm(
+      `確定更正 ${record.value.serviceDate} 第 ${record.value.legSeq} 趟搭乘紀錄？此操作將記錄於稽核紀錄。`,
+      '確認更正紀錄',
+      {
+        confirmButtonText: '確認送出',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
 
   submitting.value = true
   try {
-    await patchRideRecord(record.value.id, form)
+    const payload: PatchRideRequest & { caseId?: string; serviceDate?: string } = {
+      caseId: record.value.caseId,
+      serviceDate: record.value.serviceDate,
+      legSeq: record.value.legSeq,
+      effectiveStatus: form.effectiveStatus,
+      vehicleId: isAbsent.value ? undefined : (form.vehicleId || undefined),
+      driverId: isAbsent.value ? undefined : (form.driverId || undefined),
+      departTimeOverride: isAbsent.value ? null : (form.departTimeOverride || null),
+      durationMinOverride: isAbsent.value ? null : (form.durationMinOverride || null),
+      notClaimedAa09: isAbsent.value ? false : (form.notClaimedAa09 || false),
+      reason: form.reason || undefined
+    }
+    await patchRideRecord(record.value.id, payload)
     ElMessage.success('搭乘紀錄已成功更正')
     visible.value = false
     emit('updated')
+  } catch (err: any) {
+    ElMessage.error(err?.message || '更正搭乘紀錄失敗')
   } finally {
     submitting.value = false
   }
@@ -276,7 +381,7 @@ defineExpose({
 
 .card-title {
   font-weight: bold;
-  color: var(--el-color-primary);
+  color: var(--app-primary);
 }
 
 .sources-list {
@@ -286,7 +391,7 @@ defineExpose({
 
   .source-item {
     padding: 8px 12px;
-    background-color: var(--el-fill-color-light);
+    background-color: var(--app-status-neutral-bg);
     border-radius: 6px;
 
     .source-main {
@@ -298,8 +403,8 @@ defineExpose({
 
     .source-sub {
       margin-top: 4px;
-      font-size: 12px;
-      color: var(--el-text-color-secondary);
+      font-size: var(--app-font-xs);
+      color: var(--app-text-secondary);
     }
   }
 }
@@ -307,7 +412,7 @@ defineExpose({
 .empty-source {
   padding: 12px;
   text-align: center;
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: 13px;
 }
 
@@ -323,33 +428,28 @@ defineExpose({
   .quick-reason-tag {
     cursor: pointer;
     &:hover {
-      background-color: var(--el-color-primary-light-9);
+      background-color: var(--app-primary-light);
     }
   }
 }
 
 .field-hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+  font-size: var(--app-font-xs);
+  color: var(--app-text-secondary);
   margin-top: 2px;
 
   .diff-tag {
-    color: var(--el-color-warning);
+    color: var(--app-status-warning-fg);
     font-weight: bold;
   }
 }
 
 .audit-hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  background-color: var(--el-fill-color-light);
+  font-size: var(--app-font-xs);
+  color: var(--app-text-secondary);
+  background-color: var(--app-status-neutral-bg);
   padding: 8px 12px;
   border-radius: 6px;
 }
 
-.drawer-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
 </style>

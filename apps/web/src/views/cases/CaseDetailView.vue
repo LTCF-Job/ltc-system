@@ -16,13 +16,13 @@
           ref="editFormRef"
           :model="editForm"
           label-width="140px"
-          :disabled="!authStore.can('staff')"
+          :disabled="!authStore.hasPermission('masters_cases', 'edit')"
         >
           <el-descriptions title="系統與身分資訊" :column="2" border style="margin-bottom: 20px">
             <template #extra>
               <div class="descriptions-actions">
                 <el-button
-                  v-if="authStore.can('staff')"
+                  v-if="authStore.hasPermission('masters_cases', 'delete')"
                   type="danger"
                   plain
                   @click="handleDeleteCase"
@@ -31,34 +31,23 @@
                 </el-button>
               </div>
             </template>
-            <el-descriptions-item label="個案編號">{{ caseData?.code }}</el-descriptions-item>
             <el-descriptions-item label="身分證字號">
               <span class="font-mono font-bold">{{ caseData?.nationalId }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="目前狀態">
-              <el-tag
-                v-if="caseData"
-                :type="caseData.status === 'active' ? 'success' : (caseData.status === 'suspended' ? 'warning' : 'danger')"
-              >
-                {{ CASE_STATUS_LABELS[caseData.status] || caseData.status }}
-              </el-tag>
+              <StatusTag v-if="caseData" :status="caseData.status" preset="caseStatus" />
             </el-descriptions-item>
             <el-descriptions-item label="建立時間">{{ formatDateTime(caseData?.createdAt) }}</el-descriptions-item>
             <el-descriptions-item label="最後更新" :span="2">{{ formatDateTime(caseData?.updatedAt) }}</el-descriptions-item>
           </el-descriptions>
 
-          <el-row :gutter="20">
-            <el-col :span="6">
+          <el-row :gutter="16">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="個案姓名" prop="name">
                 <el-input v-model="editForm.name" />
               </el-form-item>
             </el-col>
-            <el-col :span="6">
-              <el-form-item label="聯絡電話" prop="phone">
-                <el-input v-model="editForm.phone" placeholder="如：0912345678" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="申報地區" prop="region">
                 <el-select v-model="editForm.region" filterable style="width: 100%">
                   <el-option
@@ -70,7 +59,7 @@
                 </el-select>
               </el-form-item>
             </el-col>
-            <el-col :span="6">
+            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="個案狀態" prop="status">
                 <el-select v-model="editForm.status" style="width: 100%">
                   <el-option value="active" label="在案" />
@@ -81,7 +70,7 @@
             </el-col>
           </el-row>
 
-          <el-row :gutter="20">
+          <el-row :gutter="16">
             <el-col :span="24">
               <el-form-item label="住家地址" prop="homeAddress">
                 <el-input v-model="editForm.homeAddress" />
@@ -89,8 +78,8 @@
             </el-col>
           </el-row>
 
-          <el-row :gutter="20">
-            <el-col :span="12">
+          <el-row :gutter="16">
+            <el-col :xs="24" :lg="12">
               <el-form-item label="服務類別" prop="serviceCategory">
                 <el-radio-group v-model="editForm.serviceCategory">
                   <el-radio :value="1">1. 補助</el-radio>
@@ -98,9 +87,9 @@
                 </el-radio-group>
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :xs="24" :lg="12">
               <el-form-item label="服務使用類型" prop="serviceUsageType">
-                <el-select v-model="editForm.serviceUsageType" style="width: 100%">
+                <el-select v-model="editForm.serviceUsageType" placeholder="未選擇" clearable style="width: 100%">
                   <el-option :value="1" label="1. 社區式長照機構" />
                   <el-option :value="2" label="2. 社區服務據點(不含身障類)" />
                   <el-option :value="3" label="3. 輔具中心" />
@@ -110,18 +99,8 @@
             </el-col>
           </el-row>
 
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="開始申報日" prop="claimStartDate">
-                <el-date-picker
-                  v-model="editForm.claimStartDate"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
+          <el-row :gutter="16">
+            <el-col :xs="24" :lg="12">
               <el-form-item label="結束申報日">
                 <el-date-picker
                   v-model="editForm.claimEndDate"
@@ -134,9 +113,112 @@
             </el-col>
           </el-row>
 
-          <div v-if="authStore.can('staff')" class="form-actions">
+          <el-divider content-position="left">個案背景與聯絡人</el-divider>
+
+          <el-row :gutter="16">
+            <el-col :xs="24" :sm="12" :lg="6">
+              <el-form-item label="家戶類型" prop="householdType">
+                <el-input v-model="editForm.householdType" placeholder="如：獨居、與子女同住" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :lg="6">
+              <el-form-item label="性別" prop="gender">
+                <el-select v-model="editForm.gender" clearable style="width: 100%">
+                  <el-option value="男" label="男" />
+                  <el-option value="女" label="女" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :lg="6">
+              <el-form-item label="出生日期" prop="birthDate">
+                <el-date-picker
+                  v-model="editForm.birthDate"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row :gutter="16">
+            <el-col :xs="24" :sm="12" :lg="8">
+              <el-form-item label="照顧者聯絡人角色" prop="careContactRole">
+                <el-input v-model="editForm.careContactRole" placeholder="如：個管、照專" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :lg="8">
+              <el-form-item label="照顧者聯絡人姓名" prop="careContactName">
+                <el-input v-model="editForm.careContactName" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="24" :lg="8">
+              <el-form-item label="戶籍地址" prop="registeredAddress">
+                <el-input v-model="editForm.registeredAddress" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row :gutter="16">
+            <el-col :span="24">
+              <el-form-item label="備註" prop="remarks">
+                <el-input v-model="editForm.remarks" type="textarea" :rows="2" placeholder="選填" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <div v-if="authStore.hasPermission('masters_cases', 'edit')" class="form-actions">
             <el-button type="primary" :loading="saving" @click="handleUpdateCase">
               儲存基本資料
+            </el-button>
+          </div>
+        </el-form>
+
+        <el-divider content-position="left">交通偏好</el-divider>
+
+        <el-form label-width="140px" :disabled="!authStore.hasPermission('masters_cases', 'edit')">
+          <el-row :gutter="16">
+            <el-col :xs="24" :sm="12" :lg="8">
+              <el-form-item label="所屬單位">
+                <el-select v-model="transportForm.siteId" filterable style="width: 100%">
+                  <el-option
+                    v-for="site in availableSites"
+                    :key="site.id"
+                    :value="site.id"
+                    :label="site.name"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :lg="8">
+              <el-form-item label="去程車輛">
+                <el-select v-model="transportForm.outboundVehicleId" filterable style="width: 100%">
+                  <el-option
+                    v-for="vehicle in availableVehicles"
+                    :key="vehicle.id"
+                    :value="vehicle.id"
+                    :label="vehicle.displayName"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :lg="8">
+              <el-form-item label="回程車輛">
+                <el-select v-model="transportForm.inboundVehicleId" filterable style="width: 100%">
+                  <el-option
+                    v-for="vehicle in availableVehicles"
+                    :key="vehicle.id"
+                    :value="vehicle.id"
+                    :label="vehicle.displayName"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <div v-if="authStore.hasPermission('masters_cases', 'edit')" class="form-actions">
+            <el-button type="primary" :loading="savingTransportPreference" @click="handleUpdateTransportPreference">
+              儲存交通偏好
             </el-button>
           </div>
         </el-form>
@@ -147,7 +229,7 @@
         <ScheduleEditor
           v-if="caseData"
           :case-id="caseData.id"
-          :region="caseData.region"
+          :region="caseData.region || 'miaoli'"
           :schedule="caseData.activeSchedule"
           @saved="handleScheduleSaved"
         />
@@ -161,12 +243,15 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import ScheduleEditor from './ScheduleEditor.vue'
-import { getCase, updateCase, deleteCase, getCaseSchedule } from '@/api/cases'
+import StatusTag from '@/components/StatusTag.vue'
+import { getCase, updateCase, deleteCase, getCaseSchedule, updateCaseTransportPreference } from '@/api/cases'
+import { listSites, listVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
-import { CASE_STATUS_LABELS, REGION_LABELS } from '@/types/domain'
-import type { CaseDTO, UpdateCaseRequest } from '@/types/api'
+import { REGION_LABELS } from '@/types/domain'
+import type { CaseDTO, UpdateCaseRequest, UpdateCaseTransportPreferenceRequest, SiteDTO, VehicleDTO } from '@/types/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -175,19 +260,33 @@ const caseId = computed(() => route.params.id as string)
 
 const loading = ref(false)
 const saving = ref(false)
+const savingTransportPreference = ref(false)
 const activeTab = ref(route.query.tab === 'schedule' ? 'schedule' : 'basic')
 const caseData = ref<CaseDTO | null>(null)
+const availableSites = ref<SiteDTO[]>([])
+const availableVehicles = ref<VehicleDTO[]>([])
 
 const editForm = reactive<UpdateCaseRequest>({
   name: '',
-  phone: '',
   region: 'miaoli',
   homeAddress: '',
-  serviceCategory: 1,
-  serviceUsageType: 2,
-  claimStartDate: '',
+  serviceCategory: undefined,
+  serviceUsageType: undefined,
   claimEndDate: '',
-  status: 'active'
+  status: 'active',
+  householdType: '',
+  gender: '',
+  birthDate: '',
+  careContactRole: '',
+  careContactName: '',
+  registeredAddress: '',
+  remarks: ''
+})
+
+const transportForm = reactive<UpdateCaseTransportPreferenceRequest>({
+  siteId: '',
+  outboundVehicleId: '',
+  inboundVehicleId: ''
 })
 
 async function fetchDetail() {
@@ -196,7 +295,11 @@ async function fetchDetail() {
   try {
     const [rawCase, rawSchedule] = await Promise.all([
       getCase(caseId.value) as Promise<any>,
-      getCaseSchedule(caseId.value).catch(() => null) as Promise<any>
+      // 404／查無排班是合法的「尚未排班」狀態；其餘錯誤（如伺服器錯誤）需往外拋出，不得一併當成無排班
+      getCaseSchedule(caseId.value).catch((err: any) => {
+        if (err?.response?.status === 404) return null
+        throw err
+      }) as Promise<any>
     ])
     const res: any = rawCase?.data ?? rawCase
     const sched: any = rawSchedule?.data ?? rawSchedule
@@ -210,19 +313,36 @@ async function fetchDetail() {
 
     caseData.value = res
     editForm.name = res.name || ''
-    editForm.phone = res.phone || ''
     editForm.region = res.region || 'miaoli'
     editForm.homeAddress = res.homeAddress || ''
-    editForm.serviceCategory = res.serviceCategory || 1
-    editForm.serviceUsageType = res.serviceUsageType || 2
-    editForm.claimStartDate = res.claimStartDate ? String(res.claimStartDate).slice(0, 10) : ''
+    editForm.serviceCategory = res.serviceCategory
+    editForm.serviceUsageType = res.serviceUsageType
     editForm.claimEndDate = res.claimEndDate ? String(res.claimEndDate).slice(0, 10) : ''
     editForm.status = res.status || 'active'
+    editForm.householdType = res.householdType || ''
+    editForm.gender = res.gender || ''
+    editForm.birthDate = res.birthDate ? String(res.birthDate).slice(0, 10) : ''
+    editForm.careContactRole = res.careContactRole || ''
+    editForm.careContactName = res.careContactName || ''
+    editForm.registeredAddress = res.registeredAddress || ''
+    editForm.remarks = res.remarks || ''
+    transportForm.siteId = res.siteId || ''
+    transportForm.outboundVehicleId = res.outboundVehicleId || ''
+    transportForm.inboundVehicleId = res.inboundVehicleId || ''
   } catch (err: any) {
-    ElMessage.error(err.message || '載入個案明細失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入個案明細失敗'))
   } finally {
     loading.value = false
   }
+}
+
+async function loadSitesAndVehicles() {
+  const [sitesRes, vehiclesRes] = await Promise.all([
+    listSites({ status: 'active', pageSize: 100 }),
+    listVehicles({ status: 'active', pageSize: 100 })
+  ])
+  availableSites.value = sitesRes.data
+  availableVehicles.value = vehiclesRes.data
 }
 
 async function handleUpdateCase() {
@@ -236,6 +356,21 @@ async function handleUpdateCase() {
   }
 }
 
+async function handleUpdateTransportPreference() {
+  savingTransportPreference.value = true
+  try {
+    // 三個欄位皆選填：只送出有值的欄位，避免把使用者未異動、原本為空的欄位當成「明確清空」送出
+    const payload: UpdateCaseTransportPreferenceRequest = {}
+    if (transportForm.siteId) payload.siteId = transportForm.siteId
+    if (transportForm.outboundVehicleId) payload.outboundVehicleId = transportForm.outboundVehicleId
+    if (transportForm.inboundVehicleId) payload.inboundVehicleId = transportForm.inboundVehicleId
+    await updateCaseTransportPreference(caseId.value, payload)
+    ElMessage.success('交通偏好已更新')
+  } finally {
+    savingTransportPreference.value = false
+  }
+}
+
 function handleScheduleSaved() {
   router.push('/cases')
 }
@@ -243,10 +378,10 @@ function handleScheduleSaved() {
 async function handleDeleteCase() {
   try {
     await ElMessageBox.confirm(
-      `確定要刪除個案「${caseData.value?.name} (${caseData.value?.code})」？此操作將一併移除其關聯排班資料，且無法復原。`,
+      `確定要刪除個案「${caseData.value?.name}」？此操作將一併移除其關聯排班資料，且無法復原。`,
       '刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning',
         confirmButtonClass: 'el-button--danger'
@@ -257,7 +392,7 @@ async function handleDeleteCase() {
     router.push('/cases')
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '刪除個案失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除個案失敗'))
     }
   }
 }
@@ -280,6 +415,7 @@ watch(
 
 onMounted(() => {
   fetchDetail()
+  loadSitesAndVehicles()
 })
 </script>
 

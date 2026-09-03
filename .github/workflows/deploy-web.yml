@@ -1,46 +1,85 @@
 name: Deploy Web to Vercel
 
+# push 觸發，理由同 deploy-api.yml：workflow_run 一律讀 default branch 上的
+# 工作流程定義檔，不是觸發它的那個分支，會讓修正永遠不生效。
+# 只有 main 分支會觸發部署，其餘分支的測試與 build 交給 ci.yml 的 PR 檢查負責。
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/deploy-web.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-web-${{ github.event.workflow_run.head_branch || github.ref_name }}
+  group: deploy-web-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Build and deploy
-    if: >-
-      (github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      contains(fromJSON('["develop", "main"]'), github.event.workflow_run.head_branch)) ||
-      github.event_name == 'workflow_dispatch'
+  test:
+    name: Type-check and build
     runs-on: ubuntu-latest
-    environment: ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'production' || 'develop' }}
     defaults:
       run:
         working-directory: apps/web
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_ENV: ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'production' || 'preview' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    name: Build and deploy
+    needs: test
+    runs-on: ubuntu-latest
+    environment: Production
+    # 注意：這個 job 故意不設 defaults.run.working-directory: apps/web。
+    # Vercel 專案在 dashboard 設定了 Root Directory = apps/web，新版
+    # vercel CLI（59.11+）的 `vercel pull` 會把這個值如實回傳在
+    # .vercel/project.json 裡；vercel CLI 是設計成從「repo 根目錄」執行，
+    # 由它自己套用一次 Root Directory。如果連 CLI 本身都先 cd 進
+    # apps/web 再執行，Root Directory 會被套用兩次，變成去找
+    # apps/web/apps/web，導致 `vite build` 因為找不到 index.html
+    # 而報 [UNRESOLVED_ENTRY] Cannot resolve entry module index.html。
+    # 所以 vercel pull／build／deploy 這三步都要留在 repo 根目錄執行；
+    # 只有 npm ci（跟 apps/web/package.json 綁定）需要用
+    # working-directory 個別指定。
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ENV: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: npm ci
 
       - name: Install Vercel CLI
         run: npm install --global vercel
@@ -49,17 +88,18 @@ jobs:
         run: vercel pull --yes --environment="$VERCEL_ENV" --token="$VERCEL_TOKEN"
 
       - name: Build
+        # vercel build 在 Vercel 平台上跑時，build container 本身就把
+        # node_modules/.bin 放進 PATH；在本機／CI 用 CLI 跑 vercel build
+        # 不會這樣做，偵測到的 build command（例如 vite build）會因為
+        # 找不到 vite 執行檔而以 "vite: not found" 失敗，要自己把
+        # apps/web/node_modules/.bin 加進 PATH（這裡在 repo 根目錄執行，
+        # 不能用 $PWD/node_modules/.bin，要指名 apps/web 底下那份）。
         run: |
-          if [ "$VERCEL_ENV" = "production" ]; then
-            vercel build --prod --token="$VERCEL_TOKEN"
-          else
-            vercel build --token="$VERCEL_TOKEN"
-          fi
+          export PATH="$PWD/apps/web/node_modules/.bin:$PATH"
+          vercel build --prod --token="$VERCEL_TOKEN"
 
       - name: Deploy prebuilt output
+        id: deploy
         run: |
-          if [ "$VERCEL_ENV" = "production" ]; then
-            vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
-          else
-            vercel deploy --prebuilt --token="$VERCEL_TOKEN"
-          fi
+          URL=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"

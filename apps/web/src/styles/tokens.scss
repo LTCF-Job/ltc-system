@@ -1,0 +1,129 @@
+// 設計 token：間距、字級、圓角、語意狀態色、角色色
+// 修改任何 apps/web 的 .vue 前，先查 .agents/skills/ltc-dashboard-visual-language/references/component-contract.md
+// 這裡沒有的值，不要在頁面裡另外硬寫一組
+
+:root {
+  // 間距（4px 級距）
+  --app-space-1: 4px;
+  --app-space-2: 8px;
+  --app-space-3: 12px;
+  --app-space-4: 16px;
+  --app-space-6: 24px;
+  --app-space-8: 32px;
+
+  // 字級
+  --app-font-xs: 13px;
+  --app-font-sm: 13px;
+  --app-font-md: 14px;
+  --app-font-lg: 16px;
+  --app-font-xl: 20px;
+  --app-font-2xl: 24px;
+  // KPI 數值專用：儀表板指標卡的數字要在一公尺外可讀，比 2xl 再大一級
+  --app-font-3xl: 34px;
+
+  // 大寫微標籤（KPI 標籤、側欄分組標題）：字小、字重高、加字距才不會糊成一團
+  --app-label-size: 11px;
+  --app-label-tracking: 0.08em;
+
+  // 圓角（補上 xs，收斂散落的 6px/4px）
+  --app-radius-xs: 8px;
+
+  // 版面尺寸
+  --app-header-height: 56px;
+  // 最長選單項目「批次上傳與待維護資料」「政府假日與工作日設定」（10 字＋子選單縮排）在 220px 下會被裁掉最後一個字，
+  // 選單項目文字是 white-space: nowrap 不換行，靠加寬側欄本身讓文字完整顯示
+  --app-aside-width: 240px;
+  --app-aside-width-collapsed: 68px;
+
+  // 側欄改為淺色面板，與主內容以細分隔線區隔而非靠深底色
+  --app-nav-bg: #ffffff;
+  --app-nav-border: var(--app-border-color);
+  --app-nav-fg: var(--app-text-regular);
+  --app-nav-fg-muted: var(--app-text-secondary);
+  --app-nav-hover-bg: #f2f5f9;
+  --app-nav-active-bg: var(--app-primary-light);
+  --app-nav-active-fg: var(--app-primary-dark);
+
+  // 容量長條：軌道用中性淺灰，填色一律取語意色實色，不用漸層
+  --app-bar-track: #eef1f5;
+  --app-bar-height: 7px;
+
+  // 三層版面：外層底色襯托浮起的白色應用殼，殼內主內容區再淺一階讓白卡片浮出來
+  // 底色要跟卡片白有肉眼可辨的落差，不能只比背景深一點點
+  --app-ground: #ced8e8;
+  // 水平內縮鎖在 8px：部分頁面的 <el-table style="width:100%"> 是鎖死容器寬度的既有寫法，
+  // 容器邊界不足時內容會直接裁切、不會出現橫向捲軸；實測 14px 起就會切到欄位（如使用者管理「最後登入」欄），
+  // 8px 是仍保持安全的上限。垂直方向縮到剛好看得出圓角浮起，不需要大留白
+  --app-shell-inset-x: 8px;
+  --app-shell-inset-y: 10px;
+  --app-shadow-shell: 0 20px 60px rgba(23, 55, 122, 0.16), 0 2px 8px rgba(16, 21, 34, 0.06);
+
+  // 語意狀態色：bg / fg 成對使用，取代各頁各寫一組的硬寫色碼
+  --app-status-success-bg: #e6f7e7;
+  --app-status-success-fg: #00792b;
+  --app-status-warning-bg: #fcf0dd;
+  --app-status-warning-fg: #975a00;
+  --app-status-danger-bg: #ffebec;
+  --app-status-danger-fg: #bf1943;
+  --app-status-info-bg: #ddf8fb;
+  --app-status-info-fg: #00788a;
+  --app-status-neutral-bg: #f1f3f4;
+  --app-status-neutral-fg: #586174;
+  // 描邊色：bg 太淡撐不出邊界、fg 又太重，四種語意色都需要這個中間階，
+  // 統一放在這裡取代各頁各自硬寫的邊框色碼
+  --app-status-success-border: #a3dbaa;
+  --app-status-warning-border: #ebc487;
+  --app-status-danger-border: #ffb3b8;
+  --app-status-info-border: #7fdce6;
+  --app-status-primary-border: #a6cdff;
+
+  // 角色色（使用者管理／角色身分管理）
+  --app-role-admin-fg: #a02a83;
+  --app-role-admin-dot: #c952a8;
+  --app-role-dispatcher-fg: #644fb1;
+  --app-role-dispatcher-dot: #8673d9;
+  --app-role-staff-fg: #007b4f;
+  --app-role-staff-dot: #00a071;
+  --app-role-driver-fg: #b34917;
+  --app-role-driver-dot: #dc6e41;
+  --app-role-viewer-fg: #495669;
+  --app-role-viewer-dot: #6b788c;
+}
+
+// 共用工具類別（原本在 7 個檔案各自重複定義）
+.font-bold {
+  font-weight: 700;
+}
+
+.font-mono {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+// 車牌號碼、身分證字號等需逐字核對的高辨識度識別碼，字級比一般表格內文（13px）大一級
+.text-id {
+  font-size: var(--app-font-md);
+}
+
+.text-muted {
+  color: var(--app-text-muted);
+}
+
+.text-secondary {
+  color: var(--app-text-secondary);
+}
+
+.mt-3 {
+  margin-top: var(--app-space-3);
+}
+
+// 表格單行不換行（金額、姓名、日期等短欄位），取代各頁各自在 .font-bold 裡夾帶 white-space
+.text-nowrap {
+  white-space: nowrap;
+}
+
+// 內容可能超過視窗高度的對話框表單，加這個 class 讓表單本身可捲動而不是被裁切
+.dialog-scroll-form {
+  max-height: min(560px, 70vh);
+  overflow-y: auto;
+  padding-right: var(--app-space-2);
+}

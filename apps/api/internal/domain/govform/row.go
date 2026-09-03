@@ -59,18 +59,10 @@ func BuildClaimRow(input ClaimRowInput) (ClaimRow, error) {
 	row.Cells[1] = rocDateInt
 
 	// 3. 服務項目代碼 (文字)
-	serviceCode := input.ServiceCode
-	if serviceCode == "" {
-		serviceCode = "BD03"
-	}
-	row.Cells[2] = serviceCode
+	row.Cells[2] = input.ServiceCode
 
 	// 4. 服務類別 (數值: 1 補助 / 2 自費)
-	cat := input.ServiceCategory
-	if cat == 0 {
-		cat = 1
-	}
-	row.Cells[3] = cat
+	row.Cells[3] = input.ServiceCategory
 
 	// 5. 數量 (數值: 固定 1)
 	row.Cells[4] = 1
@@ -158,11 +150,7 @@ func BuildClaimRow(input ClaimRowInput) (ClaimRow, error) {
 	row.Cells[31] = input.PlateNo
 
 	// 33. 服務使用類型 (數值: 1..4)
-	usageType := input.ServiceUsageType
-	if usageType == 0 {
-		usageType = 2
-	}
-	row.Cells[32] = usageType
+	row.Cells[32] = input.ServiceUsageType
 
 	return row, nil
 }

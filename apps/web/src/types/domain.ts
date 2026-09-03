@@ -2,18 +2,12 @@
 
 export type UserRole =
   | 'admin'
-  | 'dispatcher'
-  | 'driver'
-  | 'staff'
   | 'viewer'
   | (string & {})
 
 export const ROLE_LABELS: Record<string, string> = {
   admin: '系統管理員',
-  dispatcher: '調度員',
-  driver: '司機',
-  staff: '行政人員',
-  viewer: '檢視者'
+  viewer: '檢視人員'
 }
 
 export type RoleTagType = 'danger' | 'primary' | 'success' | 'warning' | 'info'
@@ -90,6 +84,23 @@ export const CASE_STATUS_LABELS: Record<CaseStatus, string> = {
   closed: '停案'
 }
 
+export type CaregiverType = 'case_manager' | 'specialist'
+
+export const CAREGIVER_TYPE_LABELS: Record<CaregiverType, string> = {
+  case_manager: '個管',
+  specialist: '專護'
+}
+
+// 職業駕照類別，對應政府「服務駕駛清冊」的駕照執照類別欄位
+export type DriverLicenseClass = 'sedan' | 'truck' | 'bus' | 'trailer'
+
+export const DRIVER_LICENSE_CLASS_LABELS: Record<DriverLicenseClass, string> = {
+  sedan: '職業小型車',
+  truck: '職業大貨車',
+  bus: '職業大客車',
+  trailer: '職業聯結車'
+}
+
 export type Direction = 'outbound' | 'inbound'
 
 export const DIRECTION_LABELS: Record<Direction, string> = {
@@ -105,11 +116,13 @@ export const PERIOD_LABELS: Record<Period, string> = {
 }
 
 export type TripPattern = 1 | 2 | 4
+export type CalendarTripPattern = TripPattern | 'custom'
 
-export const TRIP_PATTERN_LABELS: Record<TripPattern, string> = {
+export const TRIP_PATTERN_LABELS: Record<CalendarTripPattern, string> = {
   1: '單向 1 趟',
   2: '一般 2 趟',
-  4: '四趟'
+  4: '四趟',
+  custom: '自訂'
 }
 
 export type RideReportedStatus = 'boarded' | 'absent'
@@ -177,6 +190,24 @@ export const EXPORT_STATUS_LABELS: Record<ExportJobStatus, string> = {
   failed: '失敗'
 }
 
+export type ExportMode = 'direct' | 'zip'
+
+export const EXPORT_MODE_LABELS: Record<ExportMode, string> = {
+  direct: '直接下載',
+  zip: '壓縮檔'
+}
+
+// 申報列被略過的原因，對應後端 reporting/app 的 SkipReason 常數
+export const EXPORT_SKIP_REASON_LABELS: Record<string, string> = {
+  NO_SCHEDULE_LEG: '找不到對應的排班趟次',
+  NO_DEPART_TIME: '缺少出發時間或服務時長',
+  NO_DRIVER: '缺少司機或司機身分證',
+  NO_SERVICE_USAGE_TYPE: '服務使用類型不在 1~4',
+  NO_UNIT_PRICE: '缺少單價',
+  NO_NATIONAL_ID: '缺少個案身分證',
+  BUILD_ROW_FAILED: '申報列組建失敗'
+}
+
 export type ServiceCategory = 1 | 2
 
 export const SERVICE_CATEGORY_LABELS: Record<ServiceCategory, string> = {
@@ -216,11 +247,13 @@ export type AuditAction =
   | 'delete'
   | 'reveal_pii'
   | 'correct'
+  | 'manual_report'
   | 'resolve_conflict'
   | 'export'
   | 'setting_change'
   | 'import'
   | 'login'
+  | 'logout'
 
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   create: '主檔新增',
@@ -228,11 +261,13 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   delete: '主檔停用/刪除',
   reveal_pii: '查看完整身分證',
   correct: '搭乘紀錄更正',
+  manual_report: '搭乘事後補報',
   resolve_conflict: '衝突裁決',
   export: '申報匯出',
   setting_change: '系統設定變更',
   import: '批次匯入',
-  login: '使用者登入'
+  login: '使用者登入',
+  logout: '使用者登出'
 }
 
 export type AuditEntityType =
@@ -243,27 +278,39 @@ export type AuditEntityType =
   | 'regions'
   | 'ride_records'
   | 'notification_recipients'
+  | 'notification_recipient'
   | 'export_jobs'
   | 'app_settings'
   | 'users'
   | 'roles'
   | 'auth'
   | 'google_forms'
+  | 'fuel_logs'
+  | 'maintenance_logs'
+  | 'attendance_records'
+  | 'holiday'
+  | 'holiday_calendar'
 
 export const AUDIT_ENTITY_LABELS: Record<AuditEntityType, string> = {
   cases: '個案主檔',
-  sites: '據點主檔',
+  sites: '單位主檔',
   vehicles: '車輛主檔',
   drivers: '司機主檔',
   regions: '地區主檔',
   ride_records: '搭乘紀錄',
   notification_recipients: '通知收件人',
+  notification_recipient: '通知收件人',
   export_jobs: '匯出工作',
   app_settings: '系統設定',
   users: '使用者帳號',
   roles: '角色身分',
   auth: '登入驗證',
-  google_forms: 'Google 表單'
+  google_forms: 'Google 表單',
+  fuel_logs: '油資紀錄',
+  maintenance_logs: '維修保養紀錄',
+  attendance_records: '司機出勤紀錄',
+  holiday: '國定假日',
+  holiday_calendar: '行政行事曆'
 }
 
 export type AttendanceStatus = 'work' | 'leave' | 'sick' | 'off'
@@ -295,14 +342,15 @@ export const SYSTEM_MODULES: SystemModuleInfo[] = [
   { id: 'dashboard', name: '總覽儀表板', category: 'overview', categoryName: '首頁儀表' },
   { id: 'masters_regions', name: '地區管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_cases', name: '個案管理', category: 'masters', categoryName: '主檔資料' },
-  { id: 'masters_sites', name: '據點管理', category: 'masters', categoryName: '主檔資料' },
+  { id: 'masters_sites', name: '單位管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_vehicles', name: '車輛管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_drivers', name: '司機管理', category: 'masters', categoryName: '主檔資料' },
-  { id: 'forms_sync', name: '表單同步管理', category: 'operations', categoryName: '表單與搭乘' },
-  { id: 'forms_mappings', name: '欄位對應設定', category: 'operations', categoryName: '表單與搭乘' },
-  { id: 'rides_calendar', name: '搭乘月曆矩陣', category: 'operations', categoryName: '表單與搭乘' },
-  { id: 'rides_issues', name: '異常集中處理', category: 'operations', categoryName: '表單與搭乘' },
-  { id: 'rides_missing', name: '未回報清單', category: 'operations', categoryName: '表單與搭乘' },
+  { id: 'masters_caregivers', name: '照護人員管理', category: 'masters', categoryName: '主檔資料' },
+  { id: 'driver_reports', name: '上傳接送匯報', category: 'operations', categoryName: '司機接送匯報與搭乘' },
+  { id: 'driver_report_mappings', name: '欄位對應設定', category: 'operations', categoryName: '司機接送匯報與搭乘' },
+  { id: 'rides_calendar', name: '搭乘月曆表', category: 'operations', categoryName: '司機接送匯報與搭乘' },
+  { id: 'rides_issues', name: '異常集中處理', category: 'operations', categoryName: '司機接送匯報與搭乘' },
+  { id: 'rides_missing', name: '未回報清單', category: 'operations', categoryName: '司機接送匯報與搭乘' },
   { id: 'reports_trip_summary', name: '車輛趟數表', category: 'reports', categoryName: '營運報表' },
   { id: 'reports_hsinchu_schedule', name: '新竹接送時刻表', category: 'reports', categoryName: '營運報表' },
   { id: 'vehicles_maintenance', name: '車輛維修保養', category: 'operations', categoryName: '車輛維運' },
@@ -310,101 +358,19 @@ export const SYSTEM_MODULES: SystemModuleInfo[] = [
   { id: 'exports', name: '政府申報匯出', category: 'reports', categoryName: '申報匯出' },
   { id: 'audit_logs', name: '系統操作紀錄', category: 'system', categoryName: '系統管理' },
   { id: 'settings_notifications', name: '通知收件人管理', category: 'system', categoryName: '系統管理' },
+  { id: 'settings_holidays', name: '國定假日管理', category: 'system', categoryName: '系統管理' },
   { id: 'settings_users', name: '使用者與權限管理', category: 'system', categoryName: '系統管理' },
-  { id: 'settings_roles', name: '角色身分管理', category: 'system', categoryName: '系統管理' }
+  { id: 'settings_roles', name: '角色身分管理', category: 'system', categoryName: '系統管理' },
+  { id: 'ops_tasks', name: '排程維運任務', category: 'system', categoryName: '系統管理' }
 ]
 
 export interface ModulePermission {
   view: boolean
   edit: boolean
+  delete: boolean
 }
 
 export type SystemPermissions = Record<string, ModulePermission>
-
-// 角色預設權限配置表
-export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, SystemPermissions> = {
-  admin: SYSTEM_MODULES.reduce((acc, m) => {
-    acc[m.id] = { view: true, edit: true }
-    return acc
-  }, {} as SystemPermissions),
-
-  dispatcher: {
-    dashboard: { view: true, edit: false },
-    masters_regions: { view: true, edit: true },
-    masters_cases: { view: true, edit: true },
-    masters_sites: { view: true, edit: true },
-    masters_vehicles: { view: true, edit: true },
-    masters_drivers: { view: true, edit: true },
-    forms_sync: { view: true, edit: true },
-    forms_mappings: { view: true, edit: true },
-    rides_calendar: { view: true, edit: true },
-    rides_issues: { view: true, edit: true },
-    rides_missing: { view: true, edit: true },
-    reports_trip_summary: { view: true, edit: false },
-    reports_hsinchu_schedule: { view: true, edit: false },
-    vehicles_maintenance: { view: true, edit: true },
-    attendance_fuel: { view: true, edit: true },
-    exports: { view: true, edit: true },
-    audit_logs: { view: false, edit: false },
-    settings_notifications: { view: true, edit: false },
-    settings_users: { view: false, edit: false },
-    settings_roles: { view: false, edit: false }
-  },
-
-  driver: {
-    dashboard: { view: true, edit: false },
-    masters_regions: { view: false, edit: false },
-    masters_cases: { view: false, edit: false },
-    masters_sites: { view: false, edit: false },
-    masters_vehicles: { view: true, edit: false },
-    masters_drivers: { view: true, edit: false },
-    forms_sync: { view: false, edit: false },
-    forms_mappings: { view: false, edit: false },
-    rides_calendar: { view: true, edit: false },
-    rides_issues: { view: false, edit: false },
-    rides_missing: { view: false, edit: false },
-    reports_trip_summary: { view: false, edit: false },
-    reports_hsinchu_schedule: { view: false, edit: false },
-    vehicles_maintenance: { view: true, edit: true },
-    attendance_fuel: { view: true, edit: true },
-    exports: { view: false, edit: false },
-    audit_logs: { view: false, edit: false },
-    settings_notifications: { view: false, edit: false },
-    settings_users: { view: false, edit: false },
-    settings_roles: { view: false, edit: false }
-  },
-
-  staff: {
-    dashboard: { view: true, edit: false },
-    masters_regions: { view: true, edit: true },
-    masters_cases: { view: true, edit: true },
-    masters_sites: { view: true, edit: true },
-    masters_vehicles: { view: true, edit: true },
-    masters_drivers: { view: true, edit: true },
-    forms_sync: { view: true, edit: true },
-    forms_mappings: { view: true, edit: true },
-    rides_calendar: { view: true, edit: true },
-    rides_issues: { view: true, edit: true },
-    rides_missing: { view: true, edit: true },
-    reports_trip_summary: { view: true, edit: false },
-    reports_hsinchu_schedule: { view: true, edit: false },
-    vehicles_maintenance: { view: true, edit: true },
-    attendance_fuel: { view: true, edit: true },
-    exports: { view: true, edit: true },
-    audit_logs: { view: false, edit: false },
-    settings_notifications: { view: true, edit: false },
-    settings_users: { view: false, edit: false },
-    settings_roles: { view: false, edit: false }
-  },
-
-  viewer: SYSTEM_MODULES.reduce((acc, m) => {
-    acc[m.id] = {
-      view: !['audit_logs', 'settings_users', 'settings_roles'].includes(m.id),
-      edit: false
-    }
-    return acc
-  }, {} as SystemPermissions)
-}
 
 // 稽核日誌欄位名稱中文化字典
 export const AUDIT_FIELD_LABELS: Record<string, string> = {
@@ -443,8 +409,6 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   service_category: '服務類別',
   serviceUsageType: '使用型態',
   service_usage_type: '使用型態',
-  claimStartDate: '申報起始日',
-  claim_start_date: '申報起始日',
   claimEndDate: '申報終止日',
   claim_end_date: '申報終止日',
   weekdays: '排班星期',
@@ -473,7 +437,21 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   arrive_time: '預計抵達時間',
   departTimeOverride: '更正發車時間',
   depart_time_override: '更正發車時間',
+  durationMinOverride: '更正車程時間 (分)',
+  duration_min_override: '更正車程時間 (分)',
+  notClaimedAa09: '不申報 AA09',
+  not_claimed_aa09: '不申報 AA09',
   reason: '更正原因／異動說明',
+  caseId: '個案識別碼',
+  case_id: '個案識別碼',
+  caseName: '個案姓名',
+  case_name: '個案姓名',
+  caseCode: '個案編號',
+  case_code: '個案編號',
+  siteId: '單位識別碼',
+  site_id: '單位識別碼',
+  siteName: '單位名稱',
+  site_name: '單位名稱',
   vehicleId: '指派車輛編號',
   vehicle_id: '指派車輛編號',
   vehicleName: '指派車輛名稱',
@@ -482,8 +460,12 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   driver_id: '指派司機編號',
   driverName: '指派司機姓名',
   driver_name: '指派司機姓名',
+  driverCode: '司機代碼',
+  driver_code: '司機代碼',
   topic: '通知主題',
   channel: '發送管道',
+  targetType: '收件人類型',
+  target_type: '收件人類型',
   active: '啟用狀態',
   role: '使用者角色',
   password: '密碼設定',
@@ -506,16 +488,28 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   last_synced_at: '最後同步時間',
   correctionReason: '更正原因',
   correction_reason: '更正原因',
+  correctedBy: '更正人員識別碼',
+  corrected_by: '更正人員識別碼',
+  correctedByName: '更正人員姓名',
+  corrected_by_name: '更正人員姓名',
+  correctedAt: '更正時間',
+  corrected_at: '更正時間',
   hasConflict: '是否有衝突',
   has_conflict: '是否有衝突',
   anomalyFlags: '異常標記',
   anomaly_flags: '異常標記',
+  direction: '趟次方向',
   periodYm: '申報年月',
   period_ym: '申報年月',
   totalCases: '總個案數',
   total_cases: '總個案數',
   totalRows: '總資料筆數',
   total_rows: '總資料筆數',
+  cases: '匯出內容',
+  fileName: '檔案名稱',
+  file_name: '檔案名稱',
+  rowCount: '申報行數',
+  row_count: '申報行數',
   fileChecksum: '檔案校驗碼',
   file_checksum: '檔案校驗碼',
   importedCount: '成功匯入筆數',
@@ -534,6 +528,24 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   license_type: '駕照種類',
   licenseExpiryDate: '駕照到期日',
   license_expiry_date: '駕照到期日',
+  fuelDate: '加油日期',
+  fuel_date: '加油日期',
+  liters: '加油公升數',
+  cost: '花費金額',
+  maintenanceDate: '保養日期',
+  maintenance_date: '保養日期',
+  vendor: '保養廠／廠商',
+  mileage: '里程數 (km)',
+  items: '保養／維修項目',
+  receiptUrl: '收據憑證',
+  receipt_url: '收據憑證',
+  holidayDate: '假日日期',
+  holiday_date: '假日日期',
+  isDayOff: '是否放假',
+  is_day_off: '是否放假',
+  source: '來源',
+  year: '年份',
+  count: '筆數',
   updatedAt: '更新時間',
   updated_at: '更新時間',
   createdAt: '建立時間',
@@ -569,6 +581,16 @@ export const AUDIT_FIELD_SECTIONS: Record<string, string> = {
   service_area: '營運所屬',
   nationalIdMasked: '個資識別',
   national_id_masked: '個資識別',
+  caseId: '個案識別',
+  case_id: '個案識別',
+  caseName: '個案識別',
+  case_name: '個案識別',
+  caseCode: '個案識別',
+  case_code: '個案識別',
+  siteId: '單位識別',
+  site_id: '單位識別',
+  siteName: '單位識別',
+  site_name: '單位識別',
   description: '基本資料',
   note: '備註說明',
 
@@ -579,8 +601,6 @@ export const AUDIT_FIELD_SECTIONS: Record<string, string> = {
   service_category: '長照與補助',
   serviceUsageType: '長照與補助',
   service_usage_type: '長照與補助',
-  claimStartDate: '長照與補助',
-  claim_start_date: '長照與補助',
   claimEndDate: '長照與補助',
   claim_end_date: '長照與補助',
   serviceCode: '長照與補助',
@@ -608,6 +628,8 @@ export const AUDIT_FIELD_SECTIONS: Record<string, string> = {
   driver_id: '車輛與司機指派',
   driverName: '車輛與司機指派',
   driver_name: '車輛與司機指派',
+  driverCode: '車輛與司機指派',
+  driver_code: '車輛與司機指派',
   inspectionDueDate: '證照與檢驗',
   inspection_due_date: '證照與檢驗',
   insuranceDueDate: '證照與檢驗',
@@ -617,17 +639,44 @@ export const AUDIT_FIELD_SECTIONS: Record<string, string> = {
   licenseExpiryDate: '證照與檢驗',
   license_expiry_date: '證照與檢驗',
 
+  // 油資與維修
+  fuelDate: '油資紀錄',
+  fuel_date: '油資紀錄',
+  liters: '油資紀錄',
+  cost: '費用與單據',
+  maintenanceDate: '保養維修',
+  maintenance_date: '保養維修',
+  vendor: '保養維修',
+  mileage: '保養維修',
+  items: '保養維修',
+  receiptUrl: '費用與單據',
+  receipt_url: '費用與單據',
+
+  // 行事曆與假日
+  holidayDate: '行事曆與假日',
+  holiday_date: '行事曆與假日',
+  isDayOff: '行事曆與假日',
+  is_day_off: '行事曆與假日',
+  source: '行事曆與假日',
+  year: '行事曆與假日',
+  count: '系統統計',
+
   // 搭乘與回報
   serviceDate: '搭乘資訊',
   service_date: '搭乘資訊',
   legSeq: '搭乘資訊',
   leg_seq: '搭乘資訊',
+  direction: '搭乘資訊',
   departTime: '班次時間',
   depart_time: '班次時間',
   arriveTime: '班次時間',
   arrive_time: '班次時間',
   departTimeOverride: '更正資訊',
   depart_time_override: '更正資訊',
+  durationMinOverride: '更正資訊',
+  duration_min_override: '更正資訊',
+  notClaimedAa09: '申報註記',
+  not_claimed_aa09: '申報註記',
   effectiveStatus: '搭乘狀態',
   effective_status: '搭乘狀態',
   mergedStatus: '回報狀態',
@@ -635,6 +684,12 @@ export const AUDIT_FIELD_SECTIONS: Record<string, string> = {
   reason: '更正紀錄',
   correctionReason: '更正紀錄',
   correction_reason: '更正紀錄',
+  correctedBy: '更正紀錄',
+  corrected_by: '更正紀錄',
+  correctedByName: '更正紀錄',
+  corrected_by_name: '更正紀錄',
+  correctedAt: '更正紀錄',
+  corrected_at: '更正紀錄',
   hasConflict: '衝突標記',
   has_conflict: '衝突標記',
   anomalyFlags: '異常標記',
@@ -655,6 +710,11 @@ export const AUDIT_FIELD_SECTIONS: Record<string, string> = {
   total_cases: '申報統計',
   totalRows: '申報統計',
   total_rows: '申報統計',
+  cases: '申報統計',
+  fileName: '申報統計',
+  file_name: '申報統計',
+  rowCount: '申報統計',
+  row_count: '申報統計',
   fileChecksum: '檔案安全',
   file_checksum: '檔案安全',
 
@@ -679,6 +739,8 @@ export const AUDIT_FIELD_SECTIONS: Record<string, string> = {
   // 通知與系統
   topic: '通知設定',
   channel: '通知設定',
+  targetType: '通知設定',
+  target_type: '通知設定',
   updatedAt: '系統記錄',
   updated_at: '系統記錄',
   createdAt: '系統記錄',
@@ -705,7 +767,21 @@ export const AUDIT_VALUE_LABELS: Record<string, string> = {
   dispatcher: '調度員',
   driver: '司機',
   staff: '行政人員',
-  viewer: '檢視者'
+  viewer: '檢視者',
+  single_multi_case: '單檔多案 (.xlsx)',
+  case_per_file: '一案一檔 ZIP',
+  outbound: '去程',
+  inbound: '回程',
+  manual: '手動維護',
+  government: '政府行政行事曆',
+  role: '特定角色',
+  user: '特定使用者',
+  custom: '自訂信箱',
+  all: '全部',
+  holidays: '休假日',
+  'manual-workdays': '手動上班日',
+  true: '是',
+  false: '否'
 }
 
 

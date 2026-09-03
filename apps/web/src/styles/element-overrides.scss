@@ -1,108 +1,493 @@
-// Element Plus 樣式覆寫與全域主題變數
-@forward 'element-plus/theme-chalk/src/common/var.scss' with (
-  $colors: (
-    'primary': (
-      'base': #1d5b79,
-    ),
-    'success': (
-      'base': #2e7d32,
-    ),
-    'warning': (
-      'base': #ed6c02,
-    ),
-    'danger': (
-      'base': #d32f2f,
-    ),
-    'info': (
-      'base': #0288d1,
-    ),
+// Element Plus 樣式覆寫與 LTC 營運介面主題變數
+@use './tokens';
+@forward 'element-plus/theme-chalk/src/common/var.scss' with ($colors: ('primary': ('base': #0c70ed),
+    'success': ('base': #5cc570),
+    'warning': ('base': #d79200),
+    'danger': ('base': #e13c5b),
+    'info': ('base': #00a4b6),
   ),
-  $font-family: (
-    '': (
-      '"Noto Sans TC"',
-      '-apple-system',
-      'BlinkMacSystemFont',
-      '"Segoe UI"',
-      'Roboto',
-      'Helvetica',
-      'Arial',
-      'sans-serif'
-    )
-  )
-);
+  $font-family: ('': ('"Noto Sans TC"', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif)));
 
-// 全域基礎重設
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body, #app {
-  width: 100%;
-  height: 100%;
-  font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  color: #2c3e50;
-  background-color: #f5f7fa;
+:root {
+  --app-bg: #f5f8fc;
+  --app-surface: #ffffff;
+  --app-card-bg: #f7f9fa;
+  --app-text-primary: #101522;
+  --app-text-regular: #303949;
+  --app-text-secondary: #586174;
+  --app-text-muted: #8b94a5;
+  --app-border-color: #e8edf4;
+  --app-border-light: #f1f4f9;
+  --app-primary: #0c70ed;
+  --app-primary-dark: #0043bc;
+  --app-primary-light: #e6f3ff;
+  --app-navy-dark: #101522;
+  // 舊名相容別名，全部改用 --app-primary* 後即可移除
+  --app-orange: var(--app-primary);
+  --app-orange-dark: var(--app-primary-dark);
+  --app-orange-light: var(--app-primary-light);
+  --app-shadow-sm: 0 1px 2px rgba(16, 21, 34, 0.03);
+  --app-shadow-md: 0 6px 20px rgba(16, 21, 34, 0.06);
+  --app-radius-sm: 12px;
+  --app-radius-md: 18px;
+  --app-radius-lg: 28px;
+  --app-radius-full: 9999px;
 }
 
-// 登入頁專用置中版面（允許手寫例外 3）
-.login-container {
-  min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: linear-gradient(135deg, #1d5b79 0%, #143d52 100%);
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  font-family: 'Noto Sans TC', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--app-text-primary);
+  background: var(--app-ground);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
 
-  .login-card {
-    width: 420px;
-    border-radius: 12px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.el-card {
+  border: 1px solid var(--app-border-color);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-sm);
+  min-width: 0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+
+  &.is-hover-shadow:hover {
+    box-shadow: var(--app-shadow-md);
+    transform: translateY(-1px);
+  }
+
+  .el-card__header {
+    padding: 15px 18px;
+    border-bottom: 1px solid var(--app-border-light);
+    font-weight: 600;
+  }
+
+  .el-card__body {
+    padding: 18px;
   }
 }
 
-// 搭乘月曆格子狀態樣式（允許手寫例外 1）
+.el-button {
+  border-radius: var(--app-radius-sm);
+  font-weight: 600;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+
+  // 頁面主要動作一律全圓角膠囊，跟表格列裡的小按鈕（維持 radius-sm）拉出層級差
+  &--primary:not(.is-plain):not(.is-link):not(.is-text):not(.is-text) {
+    border-radius: var(--app-radius-full);
+    padding-left: 18px;
+    padding-right: 18px;
+    background: var(--app-primary);
+    border-color: var(--app-primary);
+    color: #ffffff;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--app-primary-dark);
+      border-color: var(--app-primary-dark);
+      color: #ffffff;
+      transform: scale(1.035);
+    }
+
+    &:active {
+      transform: scale(0.96);
+    }
+  }
+
+  &--primary.is-plain {
+    background: var(--app-primary-light);
+    border-color: var(--app-status-primary-border);
+    color: var(--app-primary-dark);
+
+    &:hover,
+    &:focus-visible {
+      background: #dbe9ff;
+      border-color: var(--app-primary);
+      color: var(--app-primary-dark);
+    }
+  }
+
+  &--warning.is-plain {
+    background: var(--app-status-warning-bg);
+    border-color: var(--app-status-warning-border);
+    color: var(--app-status-warning-fg);
+
+    &:hover,
+    &:focus-visible {
+      background: #ffecc2;
+      border-color: var(--app-status-warning-fg);
+      color: var(--app-status-warning-fg);
+    }
+  }
+
+  &--danger.is-plain {
+    background: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-border);
+    color: var(--app-status-danger-fg);
+
+    &:hover,
+    &:focus-visible {
+      background: #ffdde3;
+      border-color: var(--app-status-danger-fg);
+      color: var(--app-status-danger-fg);
+    }
+  }
+
+  &--info.is-plain {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #334155;
+
+    &:hover,
+    &:focus-visible {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+      color: #0f172a;
+    }
+  }
+
+  &--success.is-link {
+    color: var(--app-status-success-fg);
+
+    &:hover,
+    &:focus-visible {
+      color: #005000;
+    }
+  }
+
+  &--primary.is-link {
+    color: var(--app-primary);
+
+    &:hover,
+    &:focus-visible {
+      color: var(--app-primary-dark);
+    }
+  }
+
+  &--danger.is-link {
+    color: var(--app-status-danger-fg);
+
+    &:hover,
+    &:focus-visible {
+      color: #8d001e;
+    }
+  }
+
+  &--info.is-link {
+    color: var(--app-status-info-fg);
+
+    &:hover,
+    &:focus-visible {
+      color: #004e61;
+    }
+  }
+
+  &--warning.is-link {
+    color: var(--app-status-warning-fg);
+
+    &:hover,
+    &:focus-visible {
+      color: #6b3100;
+    }
+  }
+
+  &:focus-visible,
+  &.is-focus {
+    outline: 3px solid rgba(12, 112, 237, 0.24);
+    outline-offset: 1px;
+  }
+}
+
+// 表格列操作按鈕：link 按鈕本身只有文字顏色，容易被誤認成純文字連結或 tag 而非可點擊按鈕，
+// 這裡疊加淡底色 + 實色邊框 + hover 陰影位移讓它讀起來明確是按鈕，不改 type/size 屬性與既有 e2e 選取器。
+// 上下 padding 從 2px 加到 5px 改善擁擠感；左右維持 10px 不變，操作欄寬度仍依按鈕數固定（見下方按鈕數對照）不會溢出裁切
+// 陰影拿掉後，深度感改用「縮放 + 底色／邊框加深」的組合式微互動來傳達，
+// hover 放大、按下縮小，靠動態本身表現層次，不靠投影
+.table-row-actions .el-button.is-link {
+  padding: 5px 12px;
+  border-radius: var(--app-radius-full);
+  border: 1px solid transparent;
+  background: transparent;
+  font-weight: 600;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+
+  &.el-button--primary {
+    background: var(--app-primary-light);
+    border-color: var(--app-status-primary-border);
+
+    &:hover,
+    &:focus-visible {
+      background: #dbe9ff;
+      border-color: var(--app-primary);
+      transform: scale(1.06);
+    }
+
+    // 放在 hover 規則之後，等比選擇器下靠來源順序覆蓋 hover 的縮放，
+    // 確保滑鼠停留時按下仍看得到「按下去」的回饋，不會被 hover 的放大蓋掉
+    &:active {
+      transform: scale(0.94);
+    }
+  }
+
+  &.el-button--danger {
+    background: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-border);
+
+    &:hover,
+    &:focus-visible {
+      background: #ffdde3;
+      border-color: var(--app-status-danger-fg);
+      transform: scale(1.06);
+    }
+
+    &:active {
+      transform: scale(0.94);
+    }
+  }
+
+  &.el-button--warning {
+    background: var(--app-status-warning-bg);
+    border-color: var(--app-status-warning-border);
+
+    &:hover,
+    &:focus-visible {
+      background: #ffecc2;
+      border-color: var(--app-status-warning-fg);
+      transform: scale(1.06);
+    }
+
+    &:active {
+      transform: scale(0.94);
+    }
+  }
+
+  &.el-button--info {
+    background: var(--app-status-neutral-bg);
+    border-color: #cbd3dd;
+
+    &:hover,
+    &:focus-visible {
+      background: #e6e9ee;
+      border-color: var(--app-text-secondary);
+      transform: scale(1.06);
+    }
+
+    &:active {
+      transform: scale(0.94);
+    }
+  }
+}
+
+// Element Plus 的 .cell 預設 overflow: hidden（給文字省略號截斷用），操作欄按鈕
+// 沒有這個需求，卻一樣被裁切：hover 的位移／陰影動畫會在列高邊界被硬生生切掉，
+// 看起來像沒完整顯示。操作欄一律不會加 show-overflow-tooltip，直接全域放行 overflow。
+.el-table .cell:has(.table-row-actions) {
+  overflow: visible;
+}
+
+.el-form-item__label,
+.el-breadcrumb__inner,
+.el-pagination,
+.el-table th.el-table__cell {
+  color: var(--app-text-secondary);
+}
+
+.el-form-item__label {
+  font-weight: 500;
+}
+
+.el-tag {
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-full);
+  font-weight: 700;
+  padding: 0 11px;
+
+  &--primary {
+    background: var(--app-primary-light);
+    border-color: var(--app-status-primary-border);
+    color: var(--app-primary-dark);
+  }
+
+  &--success {
+    background: var(--app-status-success-bg);
+    border-color: var(--app-status-success-border);
+    color: var(--app-status-success-fg);
+  }
+
+  &--warning {
+    background: var(--app-status-warning-bg);
+    border-color: var(--app-status-warning-border);
+    color: var(--app-status-warning-fg);
+  }
+
+  &--danger {
+    background: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-border);
+    color: var(--app-status-danger-fg);
+  }
+
+  &--info {
+    background: var(--app-status-info-bg);
+    border-color: var(--app-status-info-border);
+    color: var(--app-status-info-fg);
+  }
+}
+
+.el-table {
+  max-width: 100%;
+  --el-table-header-bg-color: transparent;
+  --el-table-header-text-color: var(--app-text-secondary);
+  --el-table-border-color: var(--app-border-light);
+  --el-table-row-hover-bg-color: #f4f7fc;
+
+  // 只留橫向細線分列。直向格線把表格切成網格，會跟卡片、面板搶結構感。
+  // Element Plus 的元件樣式是元件載入時才注入，排在這份覆寫之後，必須 !important 才蓋得掉
+  &.el-table--border .el-table__cell,
+  .el-table__cell {
+    border-right: 0 !important;
+  }
+
+  &.el-table--border::after,
+  &.el-table--border::before,
+  &::before {
+    display: none !important;
+  }
+
+  // 表頭不填底色，改用一條比列線重一階的分隔線區隔
+  th.el-table__cell {
+    background: transparent;
+    border-bottom: 1px solid var(--app-border-color);
+  }
+
+  // 斑馬紋壓到幾乎看不見：寬表格仍需要逐列參照，但不該蓋過細線的結構
+  .el-table__row--striped td.el-table__cell {
+    background: #fbfcfe;
+  }
+
+  th.el-table__cell {
+    padding: 13px 0;
+    font-size: var(--app-label-size);
+    font-weight: 700;
+    letter-spacing: var(--app-label-tracking);
+  }
+
+  td.el-table__cell {
+    padding: 14px 0;
+    font-size: 13px;
+    // 數字欄逐列對齊才掃得快，等寬數字是這種營運表格的基本要求
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  border-radius: var(--app-radius-sm);
+  box-shadow: 0 0 0 1px var(--app-border-color) inset;
+
+  &:hover {
+    box-shadow: 0 0 0 1px #cfd7dc inset;
+  }
+
+  &.is-focus {
+    box-shadow: 0 0 0 1px var(--app-primary) inset, 0 0 0 3px rgba(12, 112, 237, 0.12);
+  }
+}
+
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--app-ground);
+}
+
+.login-card {
+  width: min(440px, 100%);
+  border-radius: var(--app-radius-lg);
+  box-shadow: 0 18px 50px rgba(16, 21, 34, 0.12);
+}
+
+.status-indicator-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.dot-critical {
+  background: #e13c5b;
+  box-shadow: 0 0 0 3px rgba(225, 60, 91, 0.14);
+}
+
+.dot-moderate {
+  background: #d79200;
+  box-shadow: 0 0 0 3px rgba(215, 146, 0, 0.14);
+}
+
+.dot-routine {
+  background: #5cc570;
+  box-shadow: 0 0 0 3px rgba(92, 197, 112, 0.14);
+}
+
 .calendar-cell {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   height: 38px;
+  border-radius: 8px;
   font-size: 15px;
-  font-weight: bold;
+  font-weight: 600;
   cursor: pointer;
-  user-select: none;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, outline-color 0.15s ease;
 
   &.status-boarded {
-    background-color: var(--el-color-success-light-9);
-    color: var(--el-color-success);
+    background: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
   }
 
   &.status-absent {
-    background-color: transparent;
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-muted);
   }
 
   &.status-unreported {
-    background-color: var(--el-color-warning-light-9);
-    color: var(--el-color-warning);
+    background: var(--app-status-warning-bg);
+    color: var(--app-status-warning-fg);
   }
 
   &.status-conflict {
-    background-color: var(--el-color-danger-light-9);
-    color: var(--el-color-danger);
-    animation: pulse-danger 2s infinite;
+    background: var(--app-status-danger-bg);
+    color: var(--app-status-danger-fg);
   }
 
   &.status-non-scheduled {
-    background-color: var(--el-fill-color-light);
+    background: var(--app-card-bg);
     color: transparent;
     cursor: default;
   }
 
   &.is-corrected {
-    border: 1px solid var(--el-color-primary) !important;
+    border: 1px solid var(--app-primary) !important;
 
     &::after {
       content: '';
@@ -112,37 +497,617 @@ html, body, #app {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background-color: var(--el-color-primary);
+      background: var(--app-primary);
     }
   }
 
   &:hover:not(.status-non-scheduled) {
-    outline: 2px solid var(--el-color-primary);
+    outline: 2px solid var(--app-primary);
+    outline-offset: -1px;
     z-index: 2;
   }
 }
 
-@keyframes pulse-danger {
-  0% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-// 列印樣式（允許手寫例外 2）
 @media print {
   body {
-    background-color: #ffffff;
+    background: #ffffff;
   }
+
   .no-print {
     display: none !important;
   }
+
   .print-only {
     display: block !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .el-card .el-card__body {
+    padding: 14px;
+  }
+
+  .el-dialog {
+    width: calc(100% - 24px) !important;
+    margin: 12vh auto 0;
+  }
+
+  .el-descriptions__table {
+    table-layout: fixed;
+  }
+
+  .el-descriptions__cell {
+    overflow-wrap: anywhere;
+  }
+
+  .layout-main .el-card__body:has(> .el-table),
+  .layout-main .el-tabs__content {
+    overflow-x: auto;
+  }
+
+  .layout-main .el-table {
+    min-width: max-content;
+  }
+
+  .el-pagination {
+    row-gap: 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  // Element Plus 的 .el-form-item 本身以 flex-direction: row 排列 label 與 content，
+  // 舊寫法只解除 float 對兩者無效；窄螢幕須改為直向堆疊，label 才會換到獨立一行
+  .el-form--label-left .el-form-item,
+  .el-form--label-right .el-form-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .el-form--label-left .el-form-item__label,
+  .el-form--label-right .el-form-item__label {
+    float: none;
+    display: block;
+    width: auto !important;
+    justify-content: flex-start;
+    text-align: left;
+    line-height: 1.5;
+    padding: 0 0 6px;
+  }
+
+  .el-form--label-left .el-form-item__content,
+  .el-form--label-right .el-form-item__content {
+    margin-left: 0 !important;
+  }
+
+  .el-radio-group {
+    white-space: normal;
+    line-height: 2.25;
+  }
+}
+
+// 狀態切換膠囊按鈕（Driver／Region／Vehicle 三頁共用，原本各頁各寫一份）
+.status-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 5px 14px;
+  border-radius: var(--app-radius-full);
+  font-size: var(--app-font-sm);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  outline: none;
+  background: transparent;
+  user-select: none;
+  line-height: 1;
+
+  .status-indicator-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-right: 0;
+    transition: all 0.2s ease;
+  }
+
+  &.is-active {
+    background-color: var(--app-status-success-bg);
+    border-color: var(--app-status-success-border);
+    color: var(--app-status-success-fg);
+
+    .status-indicator-dot {
+      background-color: var(--app-status-success-fg);
+      box-shadow: 0 0 0 3px rgba(8, 125, 88, 0.14);
+    }
+
+    &:hover {
+      background-color: #d3f6e6;
+      transform: scale(1.05);
+    }
+
+    &:active {
+      transform: scale(0.95);
+    }
+  }
+
+  &.is-inactive {
+    background-color: var(--app-status-neutral-bg);
+    border-color: #dde2e8;
+    color: var(--app-status-neutral-fg);
+
+    .status-indicator-dot {
+      background-color: var(--app-text-muted);
+    }
+
+    &:hover {
+      background-color: #e6e9ee;
+      transform: scale(1.05);
+    }
+
+    &:active {
+      transform: scale(0.95);
+    }
+  }
+
+  &.is-readonly {
+    cursor: default;
+    pointer-events: none;
+  }
+}
+
+.status-label-text {
+  letter-spacing: 0.02em;
+}
+
+// 表單內狀態單選按鈕群組（Driver／Region／Vehicle 三頁共用，原本各頁各寫一份）
+.status-radio-group {
+  :deep(.el-radio-button__inner) {
+    padding: 8px 16px;
+    border-radius: var(--app-radius-xs) !important;
+    margin-right: var(--app-space-2);
+    border: 1px solid var(--app-border-color) !important;
+  }
+
+  :deep(.el-radio-button:first-child .el-radio-button__inner) {
+    border-left: 1px solid var(--app-border-color) !important;
+  }
+
+  :deep(.el-radio-button.is-active .el-radio-button__inner) {
+    background-color: var(--app-status-success-bg);
+    border-color: var(--app-status-success-fg) !important;
+    color: var(--app-status-success-fg);
+    box-shadow: none !important;
+  }
+}
+
+.radio-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.radio-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--app-text-muted);
+}
+
+.active-pill .radio-dot {
+  background-color: var(--app-status-success-fg);
+}
+
+.inactive-pill .radio-dot {
+  background-color: var(--app-text-muted);
+}
+
+// ── 營運面板共用樣式（儀表板、清單頁面板共用，勿在各頁另寫一份） ──
+
+// 大寫微標籤：KPI 標籤與側欄分組標題共用。中文字沒有大小寫，靠字距與字重拉出層級
+.app-micro-label {
+  display: block;
+  font-size: var(--app-label-size);
+  font-weight: 700;
+  letter-spacing: var(--app-label-tracking);
+  line-height: 1.4;
+  // 11px 小字用 --app-text-muted 在白底只有 3.05:1，未達 WCAG AA 的 4.5:1
+  color: var(--app-text-secondary);
+  text-transform: uppercase;
+}
+
+// KPI 數值：一張卡只有一個，是卡片裡唯一的強元素
+.app-metric-value {
+  display: block;
+  font-size: var(--app-font-3xl);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+// 容量長條列：標籤 + 軌道 + 右側數值，欄寬固定讓多列數值垂直對齊
+.app-capacity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2.2fr) auto;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-height: 30px;
+}
+
+.app-capacity-label {
+  font-size: var(--app-font-sm);
+  color: var(--app-text-regular);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-capacity-track {
+  // 用 span 承載，必須自行轉成 block，否則 inline 盒子吃不到 height
+  display: block;
+  width: 100%;
+  height: var(--app-bar-height);
+  border-radius: var(--app-radius-full);
+  background: var(--app-bar-track);
+  overflow: hidden;
+}
+
+.app-capacity-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: var(--app-radius-full);
+  background: var(--app-primary);
+  transition: width 0.3s ease-out;
+}
+
+.app-capacity-fill.is-high { background: var(--app-status-danger-fg); }
+.app-capacity-fill.is-mid { background: var(--app-status-warning-fg); }
+.app-capacity-fill.is-low { background: var(--app-status-success-fg); }
+
+.app-capacity-value {
+  font-size: var(--app-font-sm);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+// 面板底部行動：置中、與內容以細線分隔，取代擠在標題列右上的「查看全部」
+.app-panel-footer {
+  margin-top: var(--app-space-4);
+  padding-top: var(--app-space-3);
+  border-top: 1px solid var(--app-border-light);
+  text-align: center;
+}
+
+.app-panel-footer-link {
+  display: inline-block;
+  padding: var(--app-space-1) var(--app-space-3);
+  border-radius: var(--app-radius-xs);
+  font-size: var(--app-label-size);
+  font-weight: 700;
+  letter-spacing: var(--app-label-tracking);
+  text-transform: uppercase;
+  color: var(--app-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+
+  &:hover {
+    background: var(--app-primary-light);
+    color: var(--app-primary-dark);
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgba(12, 112, 237, 0.24);
+    outline-offset: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-capacity-fill { transition: none; }
+}
+
+// ── 全站元件風格：對話框、下拉、切換、選取、輔助元件 ──
+// 延續同一套語言：柔和藍主色、加大圓角、安靜邊框、去除預設的生硬直角與重陰影
+
+// 所有浮層（下拉選單、日期時間選擇器、tooltip）共用同一種懸浮卡片外觀，
+// 不逐一元件分開寫，維持全站浮層質感一致
+.el-popper,
+.el-dropdown-menu,
+.el-select-dropdown,
+.el-picker-panel {
+  border-radius: var(--app-radius-md) !important;
+  border-color: var(--app-border-color) !important;
+  box-shadow: var(--app-shadow-md) !important;
+  overflow: hidden;
+}
+
+.el-dropdown-menu__item {
+  font-size: var(--app-font-sm);
+
+  &:not(.is-disabled):hover,
+  &:not(.is-disabled):focus {
+    background: var(--app-primary-light);
+    color: var(--app-primary-dark);
+  }
+}
+
+.el-select-dropdown__item {
+  &.is-hovering {
+    background: var(--app-primary-light);
+  }
+
+  &.is-selected {
+    color: var(--app-primary);
+    font-weight: 600;
+  }
+}
+
+// 對話框／抽屜：圓角跟卡片同一階，標題加粗跟頁面標題呼應
+.el-dialog {
+  border-radius: var(--app-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--app-shadow-shell);
+
+  .el-dialog__header {
+    padding: 20px 48px 16px 24px;
+    margin-right: 0;
+    border-bottom: 1px solid var(--app-border-light);
+  }
+
+  .el-dialog__title {
+    display: block;
+    font-size: var(--app-font-lg);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  .el-dialog__body {
+    padding: 20px 24px;
+  }
+
+  .el-dialog__footer {
+    padding: 16px 24px 20px;
+  }
+
+  .el-dialog__headerbtn {
+    top: 18px;
+    right: 18px;
+
+    .el-dialog__close {
+      border-radius: var(--app-radius-full);
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    &:hover .el-dialog__close {
+      background: var(--app-status-neutral-bg);
+      color: var(--app-text-primary);
+    }
+  }
+}
+
+.el-drawer {
+  box-shadow: var(--app-shadow-shell);
+
+  .el-drawer__header {
+    margin-bottom: 0;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--app-border-light);
+
+    :is(.el-drawer__title) {
+      font-size: var(--app-font-lg);
+      font-weight: 700;
+      color: var(--app-text-primary);
+    }
+  }
+
+  .el-drawer__body {
+    padding: 20px 24px;
+  }
+}
+
+.el-drawer.rtl,
+.el-drawer.ltr {
+  border-radius: var(--app-radius-lg) 0 0 var(--app-radius-lg);
+}
+
+// 頁籤：底線改用主色，選取狀態加粗，未選取項目 hover 給輕量提示
+.el-tabs__header {
+  margin-bottom: var(--app-space-4);
+}
+
+.el-tabs__nav-wrap::after {
+  background-color: var(--app-border-light);
+}
+
+.el-tabs__active-bar {
+  background-color: var(--app-primary);
+  height: 3px;
+  border-radius: var(--app-radius-full);
+}
+
+.el-tabs__item {
+  font-weight: 500;
+  color: var(--app-text-secondary);
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--app-primary);
+  }
+
+  &.is-active {
+    color: var(--app-primary);
+    font-weight: 700;
+  }
+}
+
+// border-card 變體（個案管理「個案清單／待維護」這類頁籤）用不同 DOM，
+// 底線樣式套不上，另外收斂圓角與選取狀態，不維持 Element Plus 預設的方框直角
+.el-tabs--border-card {
+  border: 1px solid var(--app-border-light);
+  border-radius: var(--app-radius-md);
+  box-shadow: none;
+  overflow: hidden;
+
+  > .el-tabs__header {
+    margin: 0;
+    background: var(--app-status-neutral-bg);
+    border-bottom: 1px solid var(--app-border-light);
+
+    .el-tabs__item {
+      border: 0;
+      font-weight: 500;
+
+      &.is-active {
+        background: var(--app-surface);
+        color: var(--app-primary);
+        font-weight: 700;
+      }
+    }
+  }
+
+  > .el-tabs__content {
+    padding: var(--app-space-4);
+  }
+}
+
+// 分頁器：頁碼按鈕改圓角，當頁用實心藍取代預設的方塊選取
+.el-pagination {
+  .btn-prev,
+  .btn-next,
+  .el-pager li {
+    border-radius: var(--app-radius-sm);
+  }
+
+  .el-pager li.is-active {
+    background: var(--app-primary);
+    color: #ffffff;
+    font-weight: 700;
+  }
+
+  .el-select .el-select__wrapper {
+    border-radius: var(--app-radius-sm);
+  }
+}
+
+// 開關：沿用 Element Plus 內建主色，只加大尺寸辨識度並統一 focus 樣式
+.el-switch {
+  --el-switch-on-color: var(--app-primary);
+
+  &:focus-within .el-switch__core {
+    box-shadow: 0 0 0 3px rgba(12, 112, 237, 0.18);
+  }
+}
+
+// 核取方塊／單選鈕：圓角、色彩收斂到主色，跟其餘輸入元件同一套語言
+.el-checkbox__inner {
+  border-radius: 5px;
+  border-color: var(--app-border-color);
+}
+
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-checkbox__input.is-indeterminate .el-checkbox__inner {
+  background-color: var(--app-primary);
+  border-color: var(--app-primary);
+}
+
+.el-radio__inner {
+  border-color: var(--app-border-color);
+}
+
+.el-radio__input.is-checked .el-radio__inner {
+  background-color: var(--app-primary);
+  border-color: var(--app-primary);
+}
+
+.el-checkbox__input.is-focus .el-checkbox__inner,
+.el-radio__input.is-focus .el-radio__inner {
+  box-shadow: 0 0 0 3px rgba(12, 112, 237, 0.18);
+}
+
+// 提示框：跟頁面浮層同一套圓角語言，深色底不吃 .el-popper 的白底覆寫
+.el-tooltip__popper.is-dark {
+  border-radius: var(--app-radius-sm) !important;
+  background: var(--app-text-primary) !important;
+  font-size: var(--app-font-xs);
+  padding: 6px 10px;
+}
+
+// 內嵌提醒：語意色一律取自 status token，不用 Element Plus 內建色階
+.el-alert {
+  border-radius: var(--app-radius-sm);
+  padding: 12px 14px;
+
+  &--success.is-light {
+    background: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
+  }
+
+  &--warning.is-light {
+    background: var(--app-status-warning-bg);
+    color: var(--app-status-warning-fg);
+  }
+
+  &--error.is-light {
+    background: var(--app-status-danger-bg);
+    color: var(--app-status-danger-fg);
+  }
+
+  &--info.is-light {
+    background: var(--app-status-info-bg);
+    color: var(--app-status-info-fg);
+  }
+
+  .el-alert__title {
+    font-weight: 600;
+  }
+}
+
+.el-divider {
+  border-color: var(--app-border-light);
+}
+
+.el-empty__description {
+  color: var(--app-text-muted);
+}
+
+.el-link.el-link--primary:not(.is-underline) {
+  color: var(--app-primary);
+
+  &:hover {
+    color: var(--app-primary-dark);
+  }
+}
+
+.el-collapse {
+  border-color: var(--app-border-light);
+
+  .el-collapse-item__header {
+    font-weight: 600;
+    color: var(--app-text-primary);
+    border-color: var(--app-border-light);
+  }
+
+  .el-collapse-item__wrap {
+    border-color: var(--app-border-light);
+  }
+}
+
+.el-upload-dragger {
+  border-radius: var(--app-radius-md);
+  border: 1px dashed var(--app-border-color);
+  background: var(--app-status-neutral-bg);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+
+  &:hover {
+    border-color: var(--app-primary);
+    background: var(--app-primary-light);
   }
 }

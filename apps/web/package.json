@@ -8,7 +8,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
-    "gen:types": "openapi-typescript $VITE_API_SPEC_URL -o src/types/api.d.ts"
+    "gen:types": "openapi-typescript $VITE_API_SPEC_URL -o src/types/api.d.ts",
+    "test:e2e:live": "playwright test --config=playwright.config.live.ts"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
@@ -24,8 +25,8 @@
     "vue-router": "^5.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@vitejs/plugin-vue": "^6.0.8",
-    "msw": "^2.15.0",
     "openapi-typescript": "^7.13.0",
     "sass": "^1.103.1",
     "typescript": "^5.9.3",
@@ -33,10 +34,5 @@
     "unplugin-vue-components": "^32.1.0",
     "vite": "^8.2.2",
     "vue-tsc": "^3.3.11"
-  },
-  "msw": {
-    "workerDirectory": [
-      "public"
-    ]
   }
 }

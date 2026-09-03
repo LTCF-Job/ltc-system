@@ -1,6 +1,8 @@
 <template>
   <div class="user-management-view">
     <DataTablePage
+      title="使用者管理"
+      :max-width="1230"
       :loading="loading"
       :total="total"
       :page="page"
@@ -30,56 +32,55 @@
             :label="r.name"
             :value="r.key"
           >
-            <el-tag :type="r.tagType" size="small" effect="plain">
+            <span class="role-text" :class="`role-${r.key}`">
+              <span class="role-dot" :class="`dot-${r.key}`"></span>
               {{ r.name }}
-            </el-tag>
+            </span>
           </el-option>
         </el-select>
 
-        <el-button type="primary" icon="Search" @click="fetchUsers">查詢</el-button>
+        <el-button type="primary" @click="fetchUsers">查詢</el-button>
         <el-button @click="handleReset">重設</el-button>
       </template>
 
       <template #actions>
-        <el-button type="primary" icon="Plus" @click="openCreateDialog">
+        <el-button type="primary" :icon="Plus" @click="openCreateDialog">
           新增使用者
         </el-button>
       </template>
 
       <template #table>
-        <el-table :data="users" border stripe style="width: 100%">
-          <el-table-column prop="displayName" label="使用者姓名" min-width="140">
+        <el-table :data="users" border stripe table-layout="auto" style="width: 100%">
+          <el-table-column prop="displayName" label="使用者姓名" min-width="170" class-name="user-name-col">
             <template #default="{ row }">
               <div class="user-name-cell">
-                <el-avatar :size="26" icon="UserFilled" class="user-avatar" />
                 <span class="font-bold">{{ row.displayName }}</span>
               </div>
             </template>
           </el-table-column>
 
-          <el-table-column prop="email" label="電子郵件 / 帳號" min-width="200" />
+          <el-table-column prop="email" label="電子郵件 / 帳號" min-width="200" class-name="user-email-col" show-overflow-tooltip />
 
           <el-table-column label="身分角色" width="140" align="center">
             <template #default="{ row }">
-              <el-tag :type="getRoleTagType((row as any).role)">
+              <span class="role-text" :class="`role-${(row as any).role}`">
+                <span class="role-dot" :class="`dot-${(row as any).role}`"></span>
                 {{ getRoleDisplayName((row as any).role) }}
-              </el-tag>
+              </span>
             </template>
           </el-table-column>
 
           <el-table-column label="權限模式" width="140" align="center">
             <template #default="{ row }">
-              <el-tag
+              <span
                 v-if="(row as any).customPermissions && Object.keys((row as any).customPermissions).length > 0"
-                type="warning"
-                effect="plain"
-                size="small"
+                class="perm-mode-custom"
               >
                 個人自訂權限
-              </el-tag>
-              <el-tag v-else type="info" effect="plain" size="small">
+              </span>
+              <span v-else class="perm-mode-default">
                 套用角色預設
-              </el-tag>
+              </span>
             </template>
           </el-table-column>
 
@@ -101,23 +102,25 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="操作" width="190" fixed="right" align="center">
+          <el-table-column label="操作" width="220" fixed="right" align="center">
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
-                編輯
-              </el-button>
-              <el-button link type="warning" size="small" @click="openPermissionDrawer(row as any)">
-                設定權限
-              </el-button>
-              <el-button
-                v-if="(row as any).id !== currentUserId"
-                link
-                type="danger"
-                size="small"
-                @click="handleDelete(row as any)"
-              >
-                刪除
-              </el-button>
+              <TableRowActions>
+                <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
+                  編輯
+                </el-button>
+                <el-button link type="primary" size="small" @click="openPermissionDrawer(row as any)">
+                  設定權限
+                </el-button>
+                <el-button
+                  v-if="(row as any).id !== currentUserId"
+                  link
+                  type="danger"
+                  size="small"
+                  @click="handleDelete(row as any)"
+                >
+                  刪除
+                </el-button>
+              </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
@@ -128,7 +131,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯使用者基本資料' : '新增系統使用者'"
-      width="520px"
+      width="min(480px, calc(100vw - 32px))"
       destroy-on-close
     >
       <el-form
@@ -162,9 +165,10 @@
               :label="r.name"
               :value="r.key"
             >
-              <el-tag :type="r.tagType" size="small" effect="plain">
+              <span class="role-text" :class="`role-${r.key}`">
+                <span class="role-dot" :class="`dot-${r.key}`"></span>
                 {{ r.name }}
-              </el-tag>
+              </span>
             </el-option>
           </el-select>
         </el-form-item>
@@ -180,17 +184,14 @@
 
         <el-form-item label="帳號狀態" prop="status">
           <el-radio-group v-model="form.status">
-            <el-radio value="active">啟用中</el-radio>
+            <el-radio value="active">啟用</el-radio>
             <el-radio value="inactive">停用</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          儲存
-        </el-button>
+        <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
       </template>
     </el-dialog>
 
@@ -198,7 +199,7 @@
     <el-drawer
       v-model="drawerVisible"
       title="自訂功能模組權限"
-      size="620px"
+      size="min(620px, 92vw)"
       destroy-on-close
     >
       <div v-if="selectedUser" class="perm-drawer-content">
@@ -236,7 +237,7 @@
         >
           <el-table-column prop="categoryName" label="分類" width="110" align="center">
             <template #default="{ row }">
-              <el-tag size="small" effect="plain" type="info">{{ row.categoryName }}</el-tag>
+              <span>{{ row.categoryName }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="name" label="功能區塊模組" min-width="160" />
@@ -253,6 +254,16 @@
               <el-checkbox
                 v-model="tempPermissions[row.id].edit"
                 :disabled="!tempPermissions[row.id].view"
+                @change="onEditPermChange(row.id)"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="刪除" width="105" align="center">
+            <template #default="{ row }">
+              <el-checkbox
+                v-model="tempPermissions[row.id].delete"
+                :disabled="!tempPermissions[row.id].edit"
+                @change="onDeletePermChange(row.id)"
               />
             </template>
           </el-table-column>
@@ -260,12 +271,7 @@
       </div>
 
       <template #footer>
-        <div style="display: flex; justify-content: flex-end; gap: 10px">
-          <el-button @click="drawerVisible = false">取消</el-button>
-          <el-button type="primary" :loading="savingPerms" @click="handleSavePermissions">
-            儲存權限設定
-          </el-button>
-        </div>
+        <DialogFooter :loading="savingPerms" @confirm="handleSavePermissions" @cancel="drawerVisible = false" />
       </template>
     </el-drawer>
   </div>
@@ -273,8 +279,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import {
   listUsers,
   createUser,
@@ -289,10 +298,8 @@ import type { UserDTO, RoleDTO } from '@/types/api'
 import {
   ROLE_LABELS,
   SYSTEM_MODULES,
-  DEFAULT_ROLE_PERMISSIONS,
   type UserRole,
-  type SystemPermissions,
-  type RoleTagType
+  type SystemPermissions
 } from '@/types/domain'
 
 const authStore = useAuthStore()
@@ -317,7 +324,7 @@ const form = reactive({
   email: '',
   displayName: '',
   phone: '',
-  role: 'dispatcher' as UserRole,
+  role: 'viewer' as UserRole,
   password: '',
   status: 'active' as 'active' | 'inactive'
 })
@@ -355,30 +362,16 @@ function getRoleDisplayName(roleKey?: string): string {
   return (ROLE_LABELS as any)[roleKey] || roleKey
 }
 
-function getRoleTagType(roleKey?: string): RoleTagType {
-  if (!roleKey) return 'info'
-  const role = roleList.value.find((r) => r.key === roleKey)
-  if (role && role.tagType) return role.tagType
-  switch (roleKey) {
-    case 'admin':
-      return 'danger'
-    case 'dispatcher':
-    case 'staff':
-      return 'primary'
-    case 'driver':
-      return 'success'
-    case 'viewer':
-    default:
-      return 'info'
-  }
-}
+const rolesLoadError = ref(false)
 
 async function fetchRoles() {
+  rolesLoadError.value = false
   try {
     const list = await listRoles()
     roleList.value = list
   } catch {
-    // 若載入失敗維持空清單
+    rolesLoadError.value = true
+    ElMessage.error('載入角色清單失敗，個人自訂權限暫時無法設定，請重試')
   }
 }
 
@@ -417,7 +410,7 @@ function openCreateDialog() {
   form.email = ''
   form.displayName = ''
   form.phone = ''
-  form.role = 'dispatcher'
+  form.role = 'viewer'
   form.password = ''
   form.status = 'active'
   dialogVisible.value = true
@@ -468,13 +461,15 @@ async function handleSubmit() {
 }
 
 async function handleToggleStatus(user: UserDTO) {
+  const previousStatus = user.status === 'active' ? 'inactive' : 'active'
   try {
     await updateUser(user.id, {
       status: user.status
     })
     ElMessage.success(`已將「${user.displayName}」帳號設定為 ${user.status === 'active' ? '啟用' : '停用'}`)
   } catch {
-    user.status = user.status === 'active' ? 'inactive' : 'active'
+    user.status = previousStatus
+    ElMessage.error(`更新「${user.displayName}」帳號狀態失敗，請重試`)
   }
 }
 
@@ -484,7 +479,7 @@ async function handleDelete(user: UserDTO) {
       `確定要刪除使用者「${user.displayName} (${user.email})」嗎？此動作無法復原。`,
       '確認刪除使用者',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning'
       }
@@ -497,29 +492,30 @@ async function handleDelete(user: UserDTO) {
   }
 }
 
-// 權限設定邏輯
-function getRoleDefaultPermissions(roleKey: string): SystemPermissions {
+// 權限設定邏輯：角色預設權限一律以後端 /roles 回傳為準，找不到時視為資料不足，不得用前端猜測值頂替
+function getRoleDefaultPermissions(roleKey: string): SystemPermissions | null {
   const role = roleList.value.find((r) => r.key === roleKey)
-  if (role && role.permissions) {
-    return role.permissions
-  }
-  return DEFAULT_ROLE_PERMISSIONS[roleKey as UserRole] || DEFAULT_ROLE_PERMISSIONS.viewer
+  return role?.permissions || null
 }
 
 function openPermissionDrawer(user: UserDTO) {
+  const roleDefault = getRoleDefaultPermissions(user.role)
+  if (!roleDefault) {
+    ElMessage.error('無法取得該角色的預設權限，請重新載入角色清單後再試')
+    return
+  }
+
   selectedUser.value = user
   const initialPerms: SystemPermissions = {}
-
-  // 取得角色預設
-  const roleDefault = getRoleDefaultPermissions(user.role)
   const custom = user.customPermissions || {}
 
   for (const m of SYSTEM_MODULES) {
     const isCustomized = custom[m.id] !== undefined
-    const base = isCustomized ? custom[m.id] : roleDefault[m.id] || { view: false, edit: false }
+    const base = isCustomized ? custom[m.id] : roleDefault[m.id] || { view: false, edit: false, delete: false }
     initialPerms[m.id] = {
       view: !!base.view,
-      edit: !!base.edit
+      edit: !!base.edit,
+      delete: !!base.delete
     }
   }
 
@@ -527,20 +523,40 @@ function openPermissionDrawer(user: UserDTO) {
   drawerVisible.value = true
 }
 
+// 三個層級是包含關係：delete 需要 edit，edit 需要 view；同一組聯動規則見 RoleManagementView.vue
 function onViewPermChange(modId: string) {
-  // 若關閉檢視權限，自動關閉編輯權限
   if (!tempPermissions.value[modId].view) {
     tempPermissions.value[modId].edit = false
+    tempPermissions.value[modId].delete = false
+  }
+}
+
+function onEditPermChange(modId: string) {
+  if (tempPermissions.value[modId].edit) {
+    tempPermissions.value[modId].view = true
+  } else {
+    tempPermissions.value[modId].delete = false
+  }
+}
+
+function onDeletePermChange(modId: string) {
+  if (tempPermissions.value[modId].delete) {
+    tempPermissions.value[modId].edit = true
+    tempPermissions.value[modId].view = true
   }
 }
 
 function handleResetToRoleDefault() {
   if (!selectedUser.value) return
   const roleDefault = getRoleDefaultPermissions(selectedUser.value.role)
+  if (!roleDefault) {
+    ElMessage.error('無法取得該角色的預設權限，請重新載入角色清單後再試')
+    return
+  }
   const resetPerms: SystemPermissions = {}
   for (const m of SYSTEM_MODULES) {
-    const base = roleDefault[m.id] || { view: false, edit: false }
-    resetPerms[m.id] = { view: !!base.view, edit: !!base.edit }
+    const base = roleDefault[m.id] || { view: false, edit: false, delete: false }
+    resetPerms[m.id] = { view: !!base.view, edit: !!base.edit, delete: !!base.delete }
   }
   tempPermissions.value = resetPerms
   ElMessage.info(`已載入【${getRoleDisplayName(selectedUser.value.role)}】角色之預設權限配置`)
@@ -576,15 +592,58 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 
   .user-avatar {
-    background-color: var(--el-color-primary-light-8);
-    color: var(--el-color-primary);
+    background-color: var(--app-primary-light);
+    color: var(--app-primary);
   }
 }
 
-.font-bold {
-  font-weight: bold;
+:deep(.user-name-col .cell) {
+  min-width: 170px;
+}
+
+:deep(.user-email-col .cell) {
+  min-width: 200px;
+}
+
+.role-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+
+  &.role-admin { color: var(--app-role-admin-fg); }
+  &.role-dispatcher { color: var(--app-role-dispatcher-fg); }
+  &.role-staff { color: var(--app-role-staff-fg); }
+  &.role-driver { color: var(--app-role-driver-fg); }
+  &.role-viewer { color: var(--app-role-viewer-fg); }
+}
+
+.role-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+
+  &.dot-admin { background-color: var(--app-role-admin-dot); }
+  &.dot-dispatcher { background-color: var(--app-role-dispatcher-dot); }
+  &.dot-staff { background-color: var(--app-role-staff-dot); }
+  &.dot-driver { background-color: var(--app-role-driver-dot); }
+  &.dot-viewer { background-color: var(--app-role-viewer-dot); }
+}
+
+.perm-mode-custom {
+  color: #d97706;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.perm-mode-default {
+  color: var(--app-text-secondary);
+  font-size: 13px;
 }
 
 .perm-drawer-content {
@@ -598,18 +657,18 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background-color: var(--el-fill-color-light);
+  background-color: var(--app-status-neutral-bg);
   border-radius: 6px;
 
   .perm-user-name {
     font-size: 15px;
     font-weight: bold;
-    color: var(--el-text-color-primary);
+    color: var(--app-text-primary);
   }
 
   .perm-user-email {
     font-size: 13px;
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-secondary);
     margin-left: 6px;
   }
 }

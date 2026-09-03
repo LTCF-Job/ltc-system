@@ -1,16 +1,16 @@
 -- Migration: 000001_init_schema.up.sql
--- Description: 初始化長照交通接送系統核心資料表
+-- Description: 初始化長照交通接送系統核心資料表（整合自原 000001~000006 全部結構性變更）
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "btree_gist";
 
--- 1. 據點表 (sites)
+-- 1. 單位表 (sites)
 CREATE TABLE sites (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     code TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     address TEXT NOT NULL,
-    region TEXT NOT NULL CHECK (region IN ('miaoli', 'hsinchu')),
+    region TEXT NOT NULL,
     open_days SMALLINT[] NOT NULL DEFAULT '{1,2,3,4,5}',
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -23,7 +23,7 @@ CREATE TABLE vehicles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     plate_no TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL UNIQUE,
-    region TEXT NOT NULL CHECK (region IN ('miaoli', 'hsinchu')),
+    region TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'maintenance', 'retired')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -39,7 +39,7 @@ CREATE TABLE drivers (
     national_id_hmac BYTEA NOT NULL UNIQUE,
     national_id_masked TEXT NOT NULL,
     email TEXT,
-    region TEXT NOT NULL CHECK (region IN ('miaoli', 'hsinchu')),
+    region TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'resigned')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -69,13 +69,19 @@ CREATE TABLE cases (
     national_id_hmac BYTEA NOT NULL UNIQUE,
     national_id_masked TEXT NOT NULL,
     home_address TEXT NOT NULL,
-    region TEXT NOT NULL CHECK (region IN ('miaoli', 'hsinchu')),
+    region TEXT NOT NULL,
     ltc_level TEXT,
     service_category SMALLINT NOT NULL DEFAULT 1 CHECK (service_category IN (1, 2)),
     service_usage_type SMALLINT NOT NULL DEFAULT 2 CHECK (service_usage_type IN (1, 2, 3, 4)),
     claim_start_date DATE NOT NULL,
     claim_end_date DATE,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'closed')),
+    household_type TEXT,
+    gender TEXT,
+    birth_date DATE,
+    care_contact_role TEXT,
+    care_contact_name TEXT,
+    registered_address TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT chk_claim_date_range CHECK (claim_end_date IS NULL OR claim_end_date >= claim_start_date)
@@ -102,7 +108,16 @@ CREATE TABLE case_schedules (
     )
 );
 
--- 7. 排班趟次時段明細 (schedule_legs)
+-- 7. 個案交通偏好設定 (case_transport_preferences)
+CREATE TABLE case_transport_preferences (
+    case_id UUID PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+    site_id UUID REFERENCES sites(id) ON DELETE SET NULL,
+    outbound_vehicle_id UUID REFERENCES vehicles(id) ON DELETE SET NULL,
+    inbound_vehicle_id UUID REFERENCES vehicles(id) ON DELETE SET NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 8. 排班趟次時段明細 (schedule_legs)
 CREATE TABLE schedule_legs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     schedule_id UUID NOT NULL REFERENCES case_schedules(id) ON DELETE CASCADE,
@@ -117,7 +132,7 @@ CREATE TABLE schedule_legs (
     CONSTRAINT uq_schedule_leg_seq UNIQUE (schedule_id, leg_seq)
 );
 
--- 8. Google 表單註冊表 (google_forms)
+-- 9. Google 表單註冊表 (google_forms)
 CREATE TABLE google_forms (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE RESTRICT,
@@ -130,7 +145,7 @@ CREATE TABLE google_forms (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 9. 表單欄位對應表 (form_columns)
+-- 10. 表單欄位對應表 (form_columns)
 CREATE TABLE form_columns (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     form_id UUID NOT NULL REFERENCES google_forms(id) ON DELETE CASCADE,
@@ -148,7 +163,7 @@ CREATE TABLE form_columns (
     CONSTRAINT uq_form_column_idx UNIQUE (form_id, column_index)
 );
 
--- 10. 表單原始回報提交紀錄 (form_submissions)
+-- 11. 表單原始回報提交紀錄 (form_submissions)
 CREATE TABLE form_submissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     form_id UUID NOT NULL REFERENCES google_forms(id) ON DELETE CASCADE,
@@ -164,7 +179,7 @@ CREATE TABLE form_submissions (
     CONSTRAINT uq_form_submission UNIQUE (form_id, service_date, submitted_at)
 );
 
--- 11. 回報搭乘來源紀錄 (ride_sources)
+-- 12. 回報搭乘來源紀錄 (ride_sources)
 CREATE TABLE ride_sources (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     submission_id UUID NOT NULL REFERENCES form_submissions(id) ON DELETE CASCADE,
@@ -179,7 +194,7 @@ CREATE TABLE ride_sources (
 );
 CREATE INDEX idx_ride_sources_case_date ON ride_sources(case_id, service_date, leg_seq);
 
--- 12. 搭乘紀錄合併主表 (ride_records)
+-- 13. 搭乘紀錄合併主表 (ride_records)
 CREATE TABLE ride_records (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     case_id UUID NOT NULL REFERENCES cases(id) ON DELETE RESTRICT,
@@ -208,12 +223,12 @@ CREATE TABLE ride_records (
 );
 CREATE INDEX idx_ride_records_date_effective ON ride_records(service_date, effective_status);
 
--- 13. 匯出工作主表 (export_jobs)
+-- 14. 匯出工作主表 (export_jobs)
 CREATE TABLE export_jobs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     job_type TEXT NOT NULL CHECK (job_type IN ('gov_claim', 'trip_summary', 'hsinchu_schedule', 'maintenance_blank')),
     period_ym CHAR(5) NOT NULL,
-    region TEXT NOT NULL CHECK (region IN ('miaoli', 'hsinchu')),
+    region TEXT NOT NULL,
     format TEXT NOT NULL DEFAULT 'xlsx' CHECK (format IN ('xlsx', 'zip')),
     filter_case_ids UUID[],
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'succeeded', 'failed')),
@@ -226,7 +241,7 @@ CREATE TABLE export_jobs (
     finished_at TIMESTAMPTZ
 );
 
--- 14. 匯出快照行明細 (export_lines)
+-- 15. 匯出快照行明細 (export_lines)
 CREATE TABLE export_lines (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     job_id UUID NOT NULL REFERENCES export_jobs(id) ON DELETE CASCADE,
@@ -239,7 +254,7 @@ CREATE TABLE export_lines (
     CONSTRAINT uq_export_job_line UNIQUE (job_id, line_no)
 );
 
--- 15. 系統稽核日誌 (audit_log - 只可新增)
+-- 16. 系統稽核日誌 (audit_log - 只可新增)
 CREATE TABLE audit_log (
     id BIGSERIAL PRIMARY KEY,
     actor_id UUID,
@@ -256,7 +271,7 @@ CREATE TABLE audit_log (
 CREATE INDEX idx_audit_log_entity ON audit_log(entity_type, entity_id);
 CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
 
--- 16. 通知收件人管理表 (notification_recipients)
+-- 17. 通知收件人管理表 (notification_recipients)
 CREATE TABLE notification_recipients (
     id BIGSERIAL PRIMARY KEY,
     topic TEXT NOT NULL CHECK (topic IN ('missing_report', 'driver_leave', 'month_end', 'export_failed')),
@@ -268,16 +283,36 @@ CREATE TABLE notification_recipients (
     CONSTRAINT uq_notification_topic_email UNIQUE (topic, email)
 );
 
--- 17. 國定假日與停駛日表 (holidays)
+-- 18. 通知歷史日誌 (notification_log)
+CREATE TABLE notification_log (
+    id BIGSERIAL PRIMARY KEY,
+    topic TEXT NOT NULL CHECK (topic IN ('missing_report', 'driver_leave', 'month_end', 'export_failed')),
+    channel TEXT NOT NULL DEFAULT 'email' CHECK (channel IN ('email', 'sms', 'system')),
+    recipient_emails TEXT[] NOT NULL DEFAULT '{}',
+    subject TEXT NOT NULL,
+    content_summary TEXT,
+    payload JSONB,
+    status TEXT NOT NULL CHECK (status IN ('sent', 'failed')),
+    error_message TEXT,
+    triggered_by UUID,
+    triggered_by_name TEXT,
+    sent_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_notification_log_topic ON notification_log(topic);
+CREATE INDEX idx_notification_log_sent_at ON notification_log(sent_at);
+
+-- 19. 國定假日與停駛日表 (holidays)
 CREATE TABLE holidays (
     holiday_date DATE PRIMARY KEY,
     name TEXT NOT NULL,
-    region TEXT CHECK (region IS NULL OR region IN ('miaoli', 'hsinchu')),
+    region TEXT,
     source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('gov_calendar', 'manual')),
+    is_day_off BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+COMMENT ON COLUMN holidays.is_day_off IS 'TRUE for leave days, FALSE for government-designated make-up workdays';
 
--- 18. 出勤紀錄表 (attendance_records)
+-- 20. 出勤紀錄表 (attendance_records)
 CREATE TABLE attendance_records (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     driver_id UUID NOT NULL REFERENCES drivers(id) ON DELETE RESTRICT,
@@ -289,7 +324,7 @@ CREATE TABLE attendance_records (
     CONSTRAINT uq_driver_attendance_date UNIQUE (driver_id, record_date)
 );
 
--- 19. 車輛維修保養紀錄 (maintenance_logs)
+-- 21. 車輛維修保養紀錄 (maintenance_logs)
 CREATE TABLE maintenance_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE RESTRICT,
@@ -304,7 +339,7 @@ CREATE TABLE maintenance_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 20. 車輛油資紀錄 (fuel_logs)
+-- 22. 車輛油資紀錄 (fuel_logs)
 CREATE TABLE fuel_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE RESTRICT,
@@ -317,11 +352,22 @@ CREATE TABLE fuel_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 21. 應用程式設定 (app_settings)
+-- 23. 應用程式設定 (app_settings)
 CREATE TABLE app_settings (
     key TEXT PRIMARY KEY,
     value JSONB NOT NULL,
     description TEXT,
     updated_by UUID,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 24. 區域表 (regions)
+CREATE TABLE regions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

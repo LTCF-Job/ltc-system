@@ -4,18 +4,22 @@ import type {
   CaseStatus,
   Direction,
   TripPattern,
+  CalendarTripPattern,
   EffectiveRideStatus,
   RideReportedStatus,
   MappingStatus,
   ColumnKind,
   ExportJobType,
   ExportJobStatus,
+  ExportMode,
   ServiceCategory,
   ServiceUsageType,
   NotificationTopic,
   AuditAction,
   AuditEntityType,
-  SystemPermissions
+  SystemPermissions,
+  CaregiverType,
+  DriverLicenseClass
 } from './domain'
 
 // 共通分頁與錯誤結構
@@ -120,6 +124,26 @@ export interface UpdateRoleRequest {
 }
 
 // 個案與排班
+export type ScheduleMode = 'monthly' | 'by_weekday' | 'unified'
+
+export interface WeekdayScheduleConfig {
+  weekday: number
+  label?: string
+  tripCount: number
+  departTime?: string
+  returnTime?: string
+  vehicleId?: string
+}
+
+export interface DayScheduleConfig {
+  date: string
+  tripCount: number
+  departTime?: string
+  returnTime?: string
+  vehicleId?: string
+  note?: string
+}
+
 export interface ScheduleLegDTO {
   id: string
   legSeq: number
@@ -146,23 +170,39 @@ export interface CaseScheduleDTO {
   serviceCode: string
   note?: string
   legs: ScheduleLegDTO[]
+  scheduleMode?: ScheduleMode
+  weeklyConfigs?: WeekdayScheduleConfig[]
+  monthlyConfigs?: Record<string, DayScheduleConfig>
 }
 
 export interface CaseDTO {
   id: string
-  code: string
   name: string
   nameNormalized?: string
-  nationalId: string
-  phone?: string
-  homeAddress: string
-  region: Region
+  nationalId?: string
+  homeAddress?: string
+  region?: Region
   ltcLevel?: string
-  serviceCategory: ServiceCategory
-  serviceUsageType: ServiceUsageType
-  claimStartDate: string
+  serviceCategory?: ServiceCategory
+  serviceUsageType?: ServiceUsageType
   claimEndDate?: string
   status: CaseStatus
+  householdType?: string
+  gender?: string
+  birthDate?: string
+  careContactRole?: string
+  careContactName?: string
+  registeredAddress?: string
+  remarks?: string
+  siteId?: string
+  siteName?: string
+  siteNameRaw?: string
+  outboundVehicleId?: string
+  outboundVehicle?: string
+  outboundVehicleNameRaw?: string
+  inboundVehicleId?: string
+  inboundVehicle?: string
+  inboundVehicleNameRaw?: string
   createdAt: string
   updatedAt: string
   activeSchedule?: CaseScheduleDTO
@@ -170,19 +210,31 @@ export interface CaseDTO {
 
 export interface CreateCaseRequest {
   name: string
-  nationalId: string
-  phone?: string
-  homeAddress: string
-  region: Region
+  nationalId?: string
+  homeAddress?: string
+  region?: Region
   ltcLevel?: string
-  serviceCategory: ServiceCategory
-  serviceUsageType: ServiceUsageType
-  claimStartDate: string
+  serviceCategory?: ServiceCategory
+  serviceUsageType?: ServiceUsageType
   claimEndDate?: string
   status?: CaseStatus
+  householdType?: string
+  gender?: string
+  birthDate?: string
+  careContactRole?: string
+  careContactName?: string
+  registeredAddress?: string
+  remarks?: string
 }
 
-export interface UpdateCaseRequest extends Partial<CreateCaseRequest> {}
+// 三欄位皆選填：未帶入的欄位維持既有關聯不變，僅更新有帶值的那一項
+export interface UpdateCaseTransportPreferenceRequest {
+  siteId?: string
+  outboundVehicleId?: string
+  inboundVehicleId?: string
+}
+
+export interface UpdateCaseRequest extends Partial<CreateCaseRequest> { }
 
 export interface CreateScheduleRequest {
   siteId: string
@@ -193,8 +245,11 @@ export interface CreateScheduleRequest {
   unitPrice: number
   distanceKm: number
   serviceDurationMin: number
-  serviceCode?: string
+  serviceCode: string
   note?: string
+  scheduleMode?: ScheduleMode
+  weeklyConfigs?: WeekdayScheduleConfig[]
+  monthlyConfigs?: Record<string, DayScheduleConfig>
   legs: Array<{
     legSeq: number
     direction: Direction
@@ -205,10 +260,9 @@ export interface CreateScheduleRequest {
   }>
 }
 
-// 主檔：區域、據點、車輛、司機
+// 主檔：區域、單位、車輛、司機
 export interface RegionDTO {
   id: string
-  code: string
   name: string
   description?: string
   status: 'active' | 'inactive'
@@ -218,7 +272,6 @@ export interface RegionDTO {
 }
 
 export interface CreateRegionRequest {
-  code: string
   name: string
   description?: string
   status?: 'active' | 'inactive'
@@ -238,6 +291,7 @@ export interface SiteDTO {
   region: Region
   address: string
   openDays: number[]
+  status: 'active' | 'inactive'
   createdAt: string
 }
 
@@ -247,27 +301,56 @@ export interface CreateSiteRequest {
   region: Region
   address: string
   openDays: number[]
+  status?: 'active' | 'inactive'
 }
 
-export interface UpdateSiteRequest extends Partial<CreateSiteRequest> {}
+export interface UpdateSiteRequest extends Partial<CreateSiteRequest> { }
 
 export interface VehicleDTO {
   id: string
   plateNo: string
   displayName: string
-  region: Region
-  active: boolean
+  siteId: string | null
+  siteName: string
+  // 由所屬單位帶出的唯讀區域，車輛本身不再自存
+  region: Region | ''
+  brand: string
+  model: string
+  // 出廠年月，格式為 YYYY-MM
+  manufactureYm: string
+  compulsoryInsuranceExpiry: string | null
+  passengerInsuranceExpiry: string | null
+  thirdPartyInsuranceExpiry: string | null
+  lastInspectionDate: string | null
+  wheelchairAccessible: boolean | null
+  status: 'active' | 'inactive'
   createdAt: string
+  drivers?: VehicleDriverDTO[]
+}
+
+// 掛在車輛上的司機摘要。一台車可以有多位司機，一位司機同期只會有一台車。
+export interface VehicleDriverDTO {
+  id: string
+  code?: string
+  name: string
 }
 
 export interface CreateVehicleRequest {
   plateNo: string
-  displayName: string
-  region: Region
-  active?: boolean
+  displayName?: string | null
+  siteId: string
+  brand?: string | null
+  model?: string | null
+  manufactureYm?: string | null
+  compulsoryInsuranceExpiry?: string | null
+  passengerInsuranceExpiry?: string | null
+  thirdPartyInsuranceExpiry?: string | null
+  lastInspectionDate?: string | null
+  wheelchairAccessible: boolean
+  status?: 'active' | 'inactive'
 }
 
-export interface UpdateVehicleRequest extends Partial<CreateVehicleRequest> {}
+export interface UpdateVehicleRequest extends Partial<CreateVehicleRequest> { }
 
 export interface DriverAssignmentDTO {
   id: string
@@ -278,18 +361,20 @@ export interface DriverAssignmentDTO {
   plateNo?: string
   startDate: string
   endDate?: string
-  isPrimary: boolean
 }
 
 export interface DriverDTO {
   id: string
-  code?: string
   name: string
   nameNormalized?: string
   nationalId: string
+  region: string
   phone?: string
   email?: string
-  active: boolean
+  status: 'active' | 'inactive'
+  // 駕照類別與有效日期為選填，未補登時為 null
+  licenseClass?: DriverLicenseClass | null
+  licenseExpiryDate?: string | null
   createdAt: string
   assignments?: DriverAssignmentDTO[]
 }
@@ -297,61 +382,151 @@ export interface DriverDTO {
 export interface CreateDriverRequest {
   name: string
   nationalId: string
+  region: string
   phone?: string
   email?: string
-  active?: boolean
+  status?: 'active' | 'inactive'
+  licenseClass?: DriverLicenseClass | null
+  licenseExpiryDate?: string | null
 }
 
-export interface UpdateDriverRequest extends Partial<CreateDriverRequest> {}
+export interface UpdateDriverRequest extends Partial<CreateDriverRequest> { }
 
-// Google 表單與欄位對應
-export interface FormDTO {
+// 照護人員：siteId 為空但 siteNameRaw 有值時，代表匯入時的單位名稱尚未關聯既有單位
+export interface CaregiverDTO {
   id: string
-  formId: string
+  siteId?: string
+  siteName?: string
+  siteNameRaw?: string
+  name: string
+  type: CaregiverType
+  contact?: string
+  notes?: string
+  status: 'active' | 'inactive'
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateCaregiverRequest {
+  siteId?: string
+  name: string
+  type: CaregiverType
+  contact?: string
+  notes?: string
+  status?: 'active' | 'inactive'
+}
+
+export interface UpdateCaregiverRequest extends Partial<CreateCaregiverRequest> { }
+
+// 司機接送匯報表與欄位對應
+export interface DriverReportFormDTO {
+  id: string
+  vehicleId: string
+  vehicleName: string
   title: string
-  sheetUrl?: string
-  vehicleId?: string
-  vehicleName?: string
   region?: Region
-  sheetTabs?: string[]
-  activeTab?: string
-  syncedMonths?: string[]
-  lastSyncedAt?: string
+  lastImportedAt?: string | null
   totalColumns: number
+  mappedColumns: number
   pendingColumns: number
-  hasSyncAlert?: boolean
+  submissionCount: number
+  status: string
 }
 
-export interface CreateFormAssociationRequest {
+export interface CreateDriverReportFormRequest {
+  vehicleId: string
   title: string
-  sheetUrl: string
-  vehicleId?: string
-  region?: Region
-  sheetTabs?: string[]
-  activeTab?: string
 }
 
-export interface SyncFormOptions {
-  month?: string
-  sheetTab?: string
-  force?: boolean
+// 某份匯報表在某個月已匯入的統計；月份由 service_date 推得，不是資料庫欄位
+export interface DriverReportImportedMonthDTO {
+  formId: string
+  yearMonth: string
+  submissionCount: number
+  lastImportedAt: string
 }
 
-export interface FormColumnDTO {
+export interface DriverReportColumnDTO {
   id: string
   formId: string
-  columnName: string
-  columnSeq: number
+  formTitle: string
+  vehicleName: string
+  columnIndex: number
+  columnHeader: string
+  cleanedName: string
   kind: ColumnKind
   mappingStatus: MappingStatus
+  caseId?: string | null
+  caseName?: string | null
+  legSeq?: number | null
+  suggestedCaseId?: string | null
+  suggestedCaseName?: string | null
+  suggestedLegSeq?: number | null
+  suggestionScore: number
+}
+
+// 匯入預覽的欄位段：每個未對應欄位在此就地確認個案與趟次
+export interface DriverReportPreviewColumn {
+  columnId?: string
+  columnIndex: number
+  columnHeader: string
+  cleanedName: string
+  direction?: Direction
+  mappingStatus: MappingStatus
+  caseId?: string
+  caseName?: string
+  legSeq?: number
   suggestedCaseId?: string
   suggestedCaseName?: string
   suggestedLegSeq?: number
-  suggestionScore?: number
-  mappedCaseId?: string
-  mappedCaseName?: string
-  mappedLegSeq?: number
-  updatedAt: string
+  suggestionScore: number
+  boardedCount: number
+  absentCount: number
+}
+
+// 匯入預覽的資料段：一列一天
+export interface DriverReportPreviewRow {
+  rowIndex: number
+  reportDate: string
+  serviceDate: string
+  driverRaw: string
+  driverId?: string
+  driverName?: string
+  remark?: string
+  boardedCount: number
+  absentCount: number
+  errorMessage?: string
+  warningMessage?: string
+}
+
+export interface DriverReportPreviewDTO {
+  formId: string
+  vehicleId: string
+  vehicleName: string
+  totalRows: number
+  validRows: number
+  errorRows: number
+  warningRows: number
+  unmappedColumns: number
+  columns: DriverReportPreviewColumn[]
+  previewRows: DriverReportPreviewRow[]
+  errors: Array<{ rowIndex: number; field?: string; message: string }>
+  warnings: Array<{ rowIndex: number; field?: string; message: string }>
+}
+
+export interface DriverReportColumnDecision {
+  columnHeader: string
+  mappingStatus: MappingStatus
+  caseId?: string | null
+  legSeq?: number | null
+}
+
+export interface DriverReportCommitResultDTO {
+  importedRows: number
+  rideRecordRows: number
+  mappedColumns: number
+  skippedRows: Array<{ rowIndex: number; reportDate: string; reasons: string[] }>
+  warnings?: Array<{ rowIndex: number; field?: string; message: string }>
 }
 
 export interface UpdateColumnMappingRequest {
@@ -367,6 +542,45 @@ export interface BatchMappingRequest {
     legSeq?: number
     mappingStatus: MappingStatus
   }>
+}
+
+// 待維護資料頁籤：以匯報表列（一天一列）為單位，一列可能同時有個案欄位與駕駛人兩種問題
+export interface SubmissionReviewDTO {
+  submissionId: string
+  formTitle: string
+  vehicleName: string
+  serviceDate: string
+  caseIssues: DriverReportColumnDTO[]
+  driverIssue?: { driverNameRaw: string }
+}
+
+export interface BindDriverRequest {
+  driverNameRaw: string
+  driverId: string
+}
+
+// 總覽頁鑽取單一匯報表、單一月份時的完整內容：逐日回報明細與展開後的個案搭乘紀錄
+export interface DriverReportMonthSubmissionDTO {
+  serviceDate: string
+  driverNameRaw: string
+  remark: string
+  answers: Record<string, string>
+}
+
+export interface DriverReportMonthRideEntryDTO {
+  caseId: string
+  caseName: string
+  serviceDate: string
+  legSeq: number
+  reported: string
+  driverId?: string | null
+  driverName: string
+  vehicleId: string
+}
+
+export interface DriverReportMonthDetailDTO {
+  submissions: DriverReportMonthSubmissionDTO[]
+  rideEntries: DriverReportMonthRideEntryDTO[]
 }
 
 // 搭乘紀錄與月曆矩陣
@@ -412,6 +626,7 @@ export interface RideCalendarCellDTO {
   date: string
   dayOfWeek: number
   isExpected: boolean
+  expectedTripCount?: number
   isHoliday?: boolean
   holidayName?: string
   records: RideRecordDTO[]
@@ -419,10 +634,10 @@ export interface RideCalendarCellDTO {
 
 export interface CaseRideCalendarRowDTO {
   caseId: string
-  caseCode: string
   caseName: string
   region: Region
-  tripPattern: TripPattern
+  tripPattern: CalendarTripPattern
+  tripPatternText?: string
   days: Record<string, RideCalendarCellDTO>
 }
 
@@ -475,6 +690,7 @@ export interface IssueRideDTO {
   description: string
   vehicles?: string[]
   sources?: RideSourceDTO[]
+  rawPayload?: string
 }
 
 // 申報匯出
@@ -506,11 +722,28 @@ export interface PrecheckResultDTO {
 
 export interface CreateExportJobRequest {
   jobType: ExportJobType
-  periodYm: string // RRR-MM 如 115-07
+  periodYm: string // 民國 5 碼，如 11507
   region?: Region
-  mode: 'single_multi_case' | 'case_per_file'
-  caseIds?: string[]
-  vehicleIds?: string[]
+  mode: ExportMode
+  caseIds: string[]
+}
+
+// 匯出結果中的單一個案工作簿（一個個案一個月一份）
+export interface ExportJobFileDTO {
+  caseId: string
+  caseName: string
+  region?: Region
+  rowCount: number
+  fileName: string
+  downloadUrl: string
+}
+
+// 因資料缺漏未納入申報的趟次統計
+export interface ExportJobSkipDTO {
+  caseId: string
+  caseName: string
+  reason: string
+  count: number
 }
 
 export interface ExportJobDTO {
@@ -518,15 +751,19 @@ export interface ExportJobDTO {
   jobType: ExportJobType
   periodYm: string
   region?: Region
-  mode: 'single_multi_case' | 'case_per_file'
+  mode: ExportMode
   status: ExportJobStatus
   totalCases?: number
   totalRows?: number
-  fileName?: string
-  fileSize?: number
+  files?: ExportJobFileDTO[]
+  // skipped 只在建立當下回傳；跳過統計不落地，歷史查詢不會重現
+  skipped?: ExportJobSkipDTO[]
+  zipFileName?: string
+  // 僅壓縮檔模式有值；逐案下載的連結掛在 files 上
   downloadUrl?: string
   precheck?: PrecheckResultDTO
   errorMessage?: string
+  createdByName?: string
   createdAt: string
   completedAt?: string
 }
@@ -566,6 +803,31 @@ export interface DryRunImportResultDTO {
   previewRows: Array<Record<string, any>>
   errors: ImportRowErrorDTO[]
   warnings: ImportRowWarningDTO[]
+}
+
+// 個案匯入預覽列疑似重複所指向的既有個案（欄位型別未確認前對呼叫端一律視為選填）
+export interface CaseImportDuplicateOfDTO {
+  code?: string
+  name?: string
+}
+
+// 個案匯入預覽列：isDuplicate/duplicateOf 之外的欄位沿用 DryRunImportResultDTO.previewRows 的動態結構
+export interface CaseImportPreviewRowDTO extends Record<string, any> {
+  isDuplicate?: boolean
+  duplicateOf?: CaseImportDuplicateOfDTO
+}
+
+export interface CaseImportCommitResult {
+  importedCount: number
+  skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
+  warnings?: Array<{ rowIndex: number; caseName?: string; field?: string; message: string }>
+}
+
+// 照護人員匯入結果：warnings 的 field 為 "site"／"contact"／"notes"，供「待維護」頁籤分類顯示
+export interface CaregiverImportCommitResult {
+  importedCount: number
+  skippedRows: Array<{ rowIndex: number; name: string; reasons: string[] }>
+  warnings?: Array<{ rowIndex: number; name?: string; field?: string; message: string }>
 }
 
 // 7. 系統稽核紀錄 (Audit Log)
@@ -677,7 +939,6 @@ export interface MissingRideDTO {
 // 11. 車輛趟數表報表 (Trip Summary Report)
 export interface TripSummaryCaseRowDTO {
   caseId: string
-  caseCode: string
   caseName: string
   outboundCount: number
   inboundCount: number
@@ -709,7 +970,6 @@ export interface TripSummaryReportDTO {
 export interface HsinchuScheduleItemDTO {
   direction: Direction
   runNo: number
-  caseCode: string
   caseName: string
   note?: string
   departTime: string
@@ -756,18 +1016,17 @@ export interface CreateMaintenanceRequest {
   note?: string
 }
 
-export interface UpdateMaintenanceRequest extends Partial<CreateMaintenanceRequest> {}
+export interface UpdateMaintenanceRequest extends Partial<CreateMaintenanceRequest> { }
 
 // 14. 司機出勤與請假 (Attendance)
 export interface DriverDayAttendanceDTO {
   date: string
-  status: 'work' | 'leave' | 'sick' | 'off'
+  status: 'work' | 'leave' | 'sick' | 'off' | 'absent'
   note?: string
 }
 
 export interface DriverMonthAttendanceDTO {
   driverId: string
-  driverCode: string
   driverName: string
   region: Region
   days: Record<string, DriverDayAttendanceDTO>
@@ -775,6 +1034,7 @@ export interface DriverMonthAttendanceDTO {
   leaveDays: number
   sickDays: number
   offDays: number
+  absentDays: number
 }
 
 export interface MonthAttendanceReportDTO {
@@ -788,6 +1048,22 @@ export interface UpsertAttendanceRequest {
   recordDate: string
   status: 'work' | 'leave' | 'sick' | 'off'
   note?: string
+}
+
+// 司機接送匯報匯入自動同步出勤時，與人工登記不一致的待維護衝突
+export interface AttendanceConflictDTO {
+  id: string
+  driverId: string
+  driverName: string
+  recordDate: string
+  existingStatus: 'work' | 'leave' | 'sick' | 'off'
+  importedStatus: 'work' | 'leave' | 'sick' | 'off'
+  status: 'pending' | 'resolved'
+  resolvedChoice?: 'keep_manual' | 'use_import'
+}
+
+export interface ResolveAttendanceConflictRequest {
+  choice: 'keep_manual' | 'use_import'
 }
 
 // 15. 車輛油資 (Fuel Logs)
@@ -815,7 +1091,7 @@ export interface CreateFuelLogRequest {
   receiptUrl?: string
 }
 
-export interface UpdateFuelLogRequest extends Partial<CreateFuelLogRequest> {}
+export interface UpdateFuelLogRequest extends Partial<CreateFuelLogRequest> { }
 
 // 16. 完整版營運儀表板指標 (Dashboard Advanced Metrics)
 export interface AttendanceDistributionDTO {

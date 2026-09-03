@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     title="修改登入密碼"
-    width="460px"
+    width="min(480px, calc(100vw - 32px))"
     destroy-on-close
     :close-on-click-modal="false"
   >
@@ -28,7 +28,7 @@
         <el-input
           v-model="form.newPassword"
           type="password"
-          placeholder="請輸入新密碼（至少 6 碼）"
+          placeholder="請輸入新密碼（至少 8 碼）"
           show-password
           autocomplete="new-password"
         />
@@ -46,20 +46,16 @@
     </el-form>
 
     <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" :loading="loading" @click="handleSubmit">
-          確認變更
-        </el-button>
-      </div>
+      <DialogFooter :loading="loading" @confirm="handleSubmit" @cancel="visible = false" />
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import { ElMessage, type FormInstance } from 'element-plus'
-import { supabase } from '@/lib/supabase'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import { changeSelfPassword } from '@/api/users'
 
 const visible = ref(false)
@@ -86,7 +82,7 @@ const rules = {
   oldPassword: [{ required: true, message: '請輸入目前密碼', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '請輸入新密碼', trigger: 'blur' },
-    { min: 6, message: '密碼長度至少需為 6 個字元', trigger: 'blur' }
+    { min: 8, message: '密碼長度至少需為 8 個字元', trigger: 'blur' }
   ],
   confirmPassword: [
     { required: true, validator: validateConfirmPassword, trigger: 'blur' }
@@ -106,15 +102,6 @@ async function handleSubmit() {
     if (!valid) return
     loading.value = true
     try {
-      if (supabase) {
-        const { error } = await supabase.auth.updateUser({
-          password: form.newPassword
-        })
-        if (error) {
-          throw new Error(error.message)
-        }
-      }
-      // 呼叫 API 記錄密碼變更留痕與 Mock 支援
       await changeSelfPassword({
         oldPassword: form.oldPassword,
         newPassword: form.newPassword
@@ -123,7 +110,7 @@ async function handleSubmit() {
       ElMessage.success('密碼修改成功，請妥善保管新密碼')
       visible.value = false
     } catch (err: any) {
-      ElMessage.error(err.message || '密碼修改失敗，請檢查目前密碼是否正確')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '密碼修改失敗，請檢查目前密碼是否正確'))
     } finally {
       loading.value = false
     }
@@ -135,10 +122,4 @@ defineExpose({
 })
 </script>
 
-<style scoped>
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-</style>
+

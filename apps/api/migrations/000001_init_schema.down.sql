@@ -1,11 +1,13 @@
 -- Migration: 000001_init_schema.down.sql
 -- Description: 回滾長照交通接送系統核心資料表
 
+DROP TABLE IF EXISTS regions CASCADE;
 DROP TABLE IF EXISTS app_settings CASCADE;
 DROP TABLE IF EXISTS fuel_logs CASCADE;
 DROP TABLE IF EXISTS maintenance_logs CASCADE;
 DROP TABLE IF EXISTS attendance_records CASCADE;
 DROP TABLE IF EXISTS holidays CASCADE;
+DROP TABLE IF EXISTS notification_log CASCADE;
 DROP TABLE IF EXISTS notification_recipients CASCADE;
 DROP TABLE IF EXISTS audit_log CASCADE;
 DROP TABLE IF EXISTS export_lines CASCADE;
@@ -16,6 +18,7 @@ DROP TABLE IF EXISTS form_submissions CASCADE;
 DROP TABLE IF EXISTS form_columns CASCADE;
 DROP TABLE IF EXISTS google_forms CASCADE;
 DROP TABLE IF EXISTS schedule_legs CASCADE;
+DROP TABLE IF EXISTS case_transport_preferences CASCADE;
 DROP TABLE IF EXISTS case_schedules CASCADE;
 DROP TABLE IF EXISTS cases CASCADE;
 DROP TABLE IF EXISTS driver_assignments CASCADE;

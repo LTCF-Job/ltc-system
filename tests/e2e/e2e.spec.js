@@ -62,11 +62,13 @@ async function runE2ESuite() {
     { name: '儀表板統計 (GET /dashboard/stats)', url: `${apiBase}/dashboard/stats`, method: 'GET', expectedStatus: [200] },
     { name: '儀表板指標 (GET /dashboard/metrics)', url: `${apiBase}/dashboard/metrics`, method: 'GET', expectedStatus: [200] },
 
-    // 4. 個案主檔與排班
+    // 4. 個案主檔、排班與匯入範本
     { name: '個案清單查詢 (GET /cases)', url: `${apiBase}/cases?page=1&pageSize=20`, method: 'GET', expectedStatus: [200] },
     { name: '個案明細查詢 (GET /cases/:id)', url: `${apiBase}/cases/${testEntities.caseId}`, method: 'GET', expectedStatus: [200] },
     { name: '個案身分證解密 (POST /cases/:id/reveal)', url: `${apiBase}/cases/${testEntities.caseId}/reveal`, method: 'POST', expectedStatus: [200] },
     { name: '個案排班查詢 (GET /cases/:id/schedule)', url: `${apiBase}/cases/${testEntities.caseId}/schedule`, method: 'GET', expectedStatus: [200] },
+    { name: '個案匯入範本 Excel (GET /cases/template?format=xlsx)', url: `${apiBase}/cases/template?format=xlsx`, method: 'GET', expectedStatus: [200] },
+    { name: '個案匯入範本 CSV (GET /cases/template?format=csv)', url: `${apiBase}/cases/template?format=csv`, method: 'GET', expectedStatus: [200] },
 
     // 5. 主檔管理（據點、車輛、司機）
     { name: '據點清單查詢 (GET /sites)', url: `${apiBase}/sites?page=1&pageSize=20`, method: 'GET', expectedStatus: [200] },
@@ -86,9 +88,10 @@ async function runE2ESuite() {
     { name: '衝突裁決解決 (POST /rides/:id/resolve-conflict)', url: `${apiBase}/rides/ride_conflict_1/resolve-conflict`, method: 'POST', body: { vehicleId: testEntities.vehicleId, driverId: testEntities.driverId }, expectedStatus: [200] },
     { name: '未回報搭乘清單 (GET /rides/missing)', url: `${apiBase}/rides/missing?page=1&pageSize=20`, method: 'GET', expectedStatus: [200] },
 
-    // 8. 營運報表
+    // 8. 營運報表與車輛保養空白表
     { name: '車輛趟數表 (GET /reports/trip-summary)', url: `${apiBase}/reports/trip-summary?periodYm=115-07`, method: 'GET', expectedStatus: [200] },
     { name: '新竹接送時刻表 (GET /reports/hsinchu-schedule)', url: `${apiBase}/reports/hsinchu-schedule?date=2026-07-10`, method: 'GET', expectedStatus: [200] },
+    { name: '車輛保養空白表 (GET /vehicles/maintenance/blank-excel)', url: `${apiBase}/vehicles/maintenance/blank-excel`, method: 'GET', expectedStatus: [200] },
 
     // 9. 維修保養、司機出勤、車輛油資
     { name: '車輛保養清單 (GET /vehicles/maintenance)', url: `${apiBase}/vehicles/maintenance?page=1&pageSize=20`, method: 'GET', expectedStatus: [200] },
@@ -100,8 +103,10 @@ async function runE2ESuite() {
     { name: '通知歷史日誌 (GET /notifications/logs)', url: `${apiBase}/notifications/logs?page=1&pageSize=20`, method: 'GET', expectedStatus: [200] },
     { name: '手動催報任務 (POST /tasks/check-missing-reports)', url: `${apiBase}/tasks/check-missing-reports`, method: 'POST', expectedStatus: [200] },
 
-    // 11. 政府申報匯出與前置檢核
+    // 11. 政府申報匯出、檔案串流下載與前置檢核
     { name: '匯出前置檢核 (POST /exports/precheck)', url: `${apiBase}/exports/precheck`, method: 'POST', body: { periodYm: '115-07', region: 'hsinchu' }, expectedStatus: [200] },
+    { name: '建立申報匯出任務 (POST /exports)', url: `${apiBase}/exports`, method: 'POST', body: { jobType: 'gov_claim', periodYm: '115-07', region: 'hsinchu' }, expectedStatus: [200, 202] },
+    { name: '申報匯出檔案下載 (GET /exports/:id/download)', url: `${apiBase}/exports/job_sample_123/download?periodYm=115-07&region=hsinchu`, method: 'GET', expectedStatus: [200] },
     { name: '匯出工作清單 (GET /exports)', url: `${apiBase}/exports?page=1&pageSize=10`, method: 'GET', expectedStatus: [200] },
 
     // 12. 稽核紀錄

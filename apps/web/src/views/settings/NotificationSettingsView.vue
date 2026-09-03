@@ -1,96 +1,87 @@
 <template>
   <div class="notification-settings-view">
-    <el-card shadow="never" class="settings-card">
-      <!-- 頂部篩選與操作列 -->
-      <div class="toolbar-wrapper">
-        <div class="filter-wrapper">
-          <el-input
-            v-model="searchQuery"
-            placeholder="搜尋信箱／顯示名稱"
-            clearable
-            style="width: 240px;"
-            @keyup.enter="fetchRecipients"
+    <DataTablePage title="通知收件人管理" :max-width="1160" :loading="loading">
+      <template #filter>
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜尋信箱／顯示名稱"
+          clearable
+          style="width: 240px;"
+          @keyup.enter="fetchRecipients"
+        />
+
+        <el-select
+          v-model="selectedTopic"
+          placeholder="通知主題篩選"
+          clearable
+          style="width: 180px;"
+          @change="fetchRecipients"
+        >
+          <el-option
+            v-for="(label, key) in NOTIFICATION_TOPIC_LABELS"
+            :key="key"
+            :label="label"
+            :value="key"
           />
+        </el-select>
 
-          <el-select
-            v-model="selectedTopic"
-            placeholder="通知主題篩選"
-            clearable
-            style="width: 180px;"
-            @change="fetchRecipients"
-          >
-            <el-option
-              v-for="(label, key) in NOTIFICATION_TOPIC_LABELS"
-              :key="key"
-              :label="label"
-              :value="key"
-            />
-          </el-select>
+        <el-button type="primary" @click="fetchRecipients">
+          查詢
+        </el-button>
+        <el-button @click="handleReset">
+          重設
+        </el-button>
+      </template>
 
-          <el-button type="primary" icon="Search" @click="fetchRecipients">
-            查詢
-          </el-button>
-          <el-button icon="Refresh" @click="handleReset">
-            重設
-          </el-button>
-        </div>
+      <template #actions>
+        <el-button
+          v-if="authStore.hasPermission('settings_notifications', 'delete') && selectedTableRows.length > 0"
+          type="danger"
+          plain
+          @click="handleBatchDelete"
+        >
+          批次刪除 ({{ selectedTableRows.length }})
+        </el-button>
 
-        <div class="actions-wrapper">
-          <el-button
-            v-if="authStore.can('admin') && selectedTableRows.length > 0"
-            type="danger"
-            plain
-            icon="Delete"
-            @click="handleBatchDelete"
-          >
-            批次刪除 ({{ selectedTableRows.length }})
-          </el-button>
+        <el-button
+          v-if="authStore.hasPermission('settings_notifications', 'edit')"
+          type="primary"
+          :icon="Plus"
+          @click="openAddDialog"
+        >
+          新增外部信箱
+        </el-button>
+      </template>
 
-          <el-button
-            v-if="authStore.can('admin')"
-            type="primary"
-            icon="Plus"
-            @click="openAddDialog"
-          >
-            新增外部信箱
-          </el-button>
-        </div>
-      </div>
-
-      <!-- 收件人清單表格 -->
+      <template #table>
       <el-table
-        v-loading="loading"
         :data="filteredRecipientList"
         stripe
         border
+        table-layout="auto"
         style="width: 100%;"
         @selection-change="handleTableSelectionChange"
       >
         <el-table-column
-          v-if="authStore.can('admin')"
+          v-if="authStore.hasPermission('settings_notifications', 'delete')"
           type="selection"
           width="48"
           align="center"
         />
 
-        <el-table-column label="通知主題" width="160">
+        <el-table-column label="通知主題" min-width="140" class-name="topic-col">
           <template #default="{ row }">
-            <el-tag :type="getTopicTagType(row.topic as NotificationTopic)">
-              {{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}
-            </el-tag>
+            <span class="topic-label">{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="email" label="通知電子信箱 (Email)" min-width="240">
+        <el-table-column prop="email" label="通知電子信箱" min-width="240" show-overflow-tooltip class-name="email-col">
           <template #default="{ row }">
-            <div class="email-cell">
-              <el-icon class="email-icon"><Message /></el-icon>
-              <span class="email-text">{{ row.email }}</span>
-            </div>
+            <span class="email-text">{{ row.email }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="displayName" label="顯示名稱 / 備註" min-width="180">
+        <el-table-column prop="displayName" label="顯示名稱 / 備註" min-width="180" show-overflow-tooltip class-name="display-name-col">
           <template #default="{ row }">
             <span>{{ row.displayName || '-' }}</span>
           </template>
@@ -100,7 +91,7 @@
           <template #default="{ row }">
             <el-switch
               :model-value="row.active"
-              :disabled="!authStore.can('admin')"
+              :disabled="!authStore.hasPermission('settings_notifications', 'edit')"
               @change="(val: string | number | boolean) => handleToggleActive(row as any, Boolean(val))"
             />
           </template>
@@ -113,29 +104,44 @@
         </el-table-column>
 
         <el-table-column
-          v-if="authStore.can('admin')"
+          v-if="authStore.hasPermission('settings_notifications', 'edit') || authStore.hasPermission('settings_notifications', 'delete')"
           label="操作"
           width="150"
           fixed="right"
           align="center"
         >
           <template #default="{ row }">
-            <el-button type="primary" link icon="Edit" @click="openEditDialog(row as any)">
-              編輯
-            </el-button>
-            <el-button type="danger" link icon="Delete" @click="handleDelete(row as any)">
-              刪除
-            </el-button>
+            <TableRowActions>
+              <el-button
+                v-if="authStore.hasPermission('settings_notifications', 'edit')"
+                link
+                type="primary"
+                size="small"
+                @click="openEditDialog(row as any)"
+              >
+                編輯
+              </el-button>
+              <el-button
+                v-if="authStore.hasPermission('settings_notifications', 'delete')"
+                link
+                type="danger"
+                size="small"
+                @click="handleDelete(row as any)"
+              >
+                刪除
+              </el-button>
+            </TableRowActions>
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+      </template>
+    </DataTablePage>
 
-    <!-- 新增外部信箱彈窗（支援多行換行輸入） -->
+    <!-- 新增外部信箱對話框（支援多行換行輸入） -->
     <el-dialog
       v-model="addDialogVisible"
       title="新增外部信箱"
-      width="620px"
+      width="min(600px, calc(100vw - 32px))"
       destroy-on-close
       top="6vh"
     >
@@ -217,25 +223,21 @@
       </div>
 
       <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="addDialogVisible = false">取消</el-button>
-          <el-button
-            type="primary"
-            :loading="addSubmitting"
-            :disabled="validParsedEmails.length === 0"
-            @click="handleSaveAdd"
-          >
-            確認新增 (共 {{ validParsedEmails.length }} 筆)
-          </el-button>
-        </div>
+        <DialogFooter
+          :confirm-text="`確認新增 (共 ${validParsedEmails.length} 筆)`"
+          :loading="addSubmitting"
+          :confirm-disabled="validParsedEmails.length === 0"
+          @confirm="handleSaveAdd"
+          @cancel="addDialogVisible = false"
+        />
       </template>
     </el-dialog>
 
-    <!-- 單筆編輯外部信箱彈窗 -->
+    <!-- 單筆編輯外部信箱對話框 -->
     <el-dialog
       v-model="editDialogVisible"
       title="編輯外部信箱"
-      width="500px"
+      width="min(480px, calc(100vw - 32px))"
       destroy-on-close
     >
       <el-form
@@ -275,10 +277,7 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editSaving" @click="handleSaveEdit">
-          確定存檔
-        </el-button>
+        <DialogFooter :loading="editSaving" @confirm="handleSaveEdit" @cancel="editDialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -286,9 +285,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import DataTablePage from '@/components/DataTablePage.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Message, CircleCheckFilled, CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue'
+import { Plus, CircleCheckFilled, CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
 import {
@@ -320,13 +322,13 @@ const searchQuery = ref('')
 const selectedTopic = ref<string | undefined>(undefined)
 const selectedTableRows = ref<NotificationRecipientDTO[]>([])
 
-// 新增外部信箱彈窗狀態
+// 新增外部信箱對話框狀態
 const addDialogVisible = ref(false)
 const addTopic = ref<NotificationTopic>('missing_report')
 const rawEmailsInput = ref('')
 const addSubmitting = ref(false)
 
-// 編輯外部信箱彈窗狀態
+// 編輯外部信箱對話框狀態
 const editDialogVisible = ref(false)
 const currentEditId = ref<string | null>(null)
 const editSaving = ref(false)
@@ -415,21 +417,6 @@ const duplicateCount = computed(() => {
 const filteredRecipientList = computed(() => {
   return recipientList.value
 })
-
-function getTopicTagType(topic: NotificationTopic): 'primary' | 'success' | 'warning' | 'info' | 'danger' {
-  switch (topic) {
-    case 'missing_report':
-      return 'warning'
-    case 'driver_leave':
-      return 'primary'
-    case 'month_end':
-      return 'danger'
-    case 'export_failed':
-      return 'danger'
-    default:
-      return 'info'
-  }
-}
 
 // 載入收件信箱清單
 async function fetchRecipients() {
@@ -551,7 +538,7 @@ async function handleDelete(row: any) {
       `確定刪除通知收件信箱「${row.displayName || row.email}」？刪除後無法復原。`,
       '刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning'
       }
@@ -576,7 +563,7 @@ async function handleBatchDelete() {
       `確定要批次刪除選取的 ${count} 筆通知收件信箱嗎？刪除後無法復原。`,
       '批次刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning'
       }
@@ -606,52 +593,27 @@ onMounted(() => {
   gap: 16px;
 }
 
-.settings-card {
-  border-radius: 8px;
+.email-text {
+  font-weight: 500;
 }
 
-.toolbar-wrapper {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-  gap: 12px;
+.topic-label {
+  white-space: nowrap;
 }
 
-.filter-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+:deep(.topic-col .cell) {
+  min-width: 140px;
 }
 
-.actions-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+:deep(.email-col .cell) {
+  min-width: 240px;
 }
 
-.email-cell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-
-  .email-icon {
-    color: var(--el-color-primary);
-    font-size: 15px;
-  }
-
-  .email-text {
-    font-weight: 500;
-  }
+:deep(.display-name-col .cell) {
+  min-width: 180px;
 }
 
-.font-bold {
-  font-weight: bold;
-}
-
-/* 新增外部信箱彈窗樣式 */
+/* 新增外部信箱對話框樣式 */
 .add-dialog-content {
   display: flex;
   flex-direction: column;
@@ -670,8 +632,8 @@ onMounted(() => {
 }
 
 .preview-panel {
-  border: 1px solid var(--el-border-color-light);
-  background-color: var(--el-fill-color-lighter);
+  border: 1px solid var(--app-border-light);
+  background-color: var(--app-status-neutral-bg);
   border-radius: 6px;
   padding: 12px;
   display: flex;
@@ -687,7 +649,7 @@ onMounted(() => {
   .preview-title {
     font-size: 13px;
     font-weight: 600;
-    color: var(--el-text-color-primary);
+    color: var(--app-text-primary);
   }
 
   .preview-counts {
@@ -709,8 +671,8 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background-color: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-extra-light);
+  background-color: var(--app-surface);
+  border: 1px solid var(--app-border-light);
   border-radius: 4px;
   font-size: 13px;
 
@@ -718,28 +680,28 @@ onMounted(() => {
     font-size: 14px;
 
     &.success {
-      color: var(--el-color-success);
+      color: var(--app-status-success-fg);
     }
     &.warning {
-      color: var(--el-color-warning);
+      color: var(--app-status-warning-fg);
     }
     &.danger {
-      color: var(--el-color-danger);
+      color: var(--app-status-danger-fg);
     }
   }
 
   .parsed-name {
-    color: var(--el-text-color-primary);
+    color: var(--app-text-primary);
   }
 
   .parsed-email {
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-secondary);
     font-family: 'Consolas', monospace;
-    font-size: 12px;
+    font-size: var(--app-font-xs);
   }
 
   .parsed-raw {
-    color: var(--el-text-color-secondary);
+    color: var(--app-text-secondary);
   }
 
   .badge-tag {
@@ -747,19 +709,14 @@ onMounted(() => {
   }
 
   &.is-invalid {
-    background-color: var(--el-color-danger-light-9);
-    border-color: var(--el-color-danger-light-7);
+    background-color: var(--app-status-danger-bg);
+    border-color: var(--app-status-danger-border);
   }
 
   &.is-duplicate {
-    background-color: var(--el-color-warning-light-9);
-    border-color: var(--el-color-warning-light-7);
+    background-color: var(--app-status-warning-bg);
+    border-color: var(--app-status-warning-border);
   }
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
 </style>

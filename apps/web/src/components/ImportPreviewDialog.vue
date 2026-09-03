@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     :title="title"
-    width="900px"
+    width="min(960px, calc(100vw - 32px))"
     destroy-on-close
     :before-close="handleClose"
   >
@@ -17,7 +17,7 @@
         >
           <template #default>
             <div class="template-action">
-              <span>依照範本格式填寫個案姓名、身分證字號、區域及排班趟數等必填欄位。</span>
+              <span>依照範本格式填寫個案姓名、身分證字號等必填欄位，戶別、單位與接送車輛請填寫中文名稱，系統會自動比對現有主檔資料。</span>
               <el-button
                 type="primary"
                 plain
@@ -27,7 +27,7 @@
                 style="margin-top: 8px"
               >
                 <el-icon><Download /></el-icon>
-                下載匯入範本 (.csv)
+                下載標準匯入範本
               </el-button>
             </div>
           </template>
@@ -40,30 +40,28 @@
         :auto-upload="false"
         :limit="1"
         :on-change="handleFileChange"
-        accept=".xlsx,.xls,.csv"
+        accept=".xlsx,.xls"
         style="width: 100%; margin-top: 16px;"
       >
         <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
         <div class="el-upload__text">
-          拖曳 Excel / CSV 檔案至此，或 <em>點選上傳</em>
+          拖曳 Excel 檔案至此，或 <em>點選上傳</em>
         </div>
         <template #tip>
           <div class="el-upload__tip">
-            支援 .xlsx、.xls 與 .csv 格式之批次匯入檔案
+            僅支援 .xlsx、.xls 格式之批次匯入檔案
           </div>
         </template>
       </el-upload>
 
-      <div class="dialog-footer">
-        <el-button @click="visible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :disabled="!selectedFile"
+      <div class="import-footer-spacing">
+        <DialogFooter
+          confirm-text="開始解析與預覽"
           :loading="analyzing"
-          @click="startDryRun"
-        >
-          開始解析與預覽
-        </el-button>
+          :confirm-disabled="!selectedFile"
+          @confirm="startDryRun"
+          @cancel="visible = false"
+        />
       </div>
     </div>
 
@@ -87,6 +85,7 @@
         show-icon
         :closable="false"
         title="檔案中含有格式錯誤或缺漏必填欄位，錯誤列無法寫入，請修正後重新上傳。"
+        description="你仍可繼續匯入其餘合法資料；錯誤列與原因會在完成後保留於本畫面。"
         style="margin-bottom: 12px;"
       />
 
@@ -108,11 +107,15 @@
         :row-class-name="getRowClassName"
       >
         <el-table-column type="index" label="#" width="50" />
-        <slot name="columns" />
+        <slot
+          name="columns"
+          :checked-duplicate-rows="checkedDuplicateRows"
+          :toggle-duplicate-row="toggleDuplicateRow"
+        />
       </el-table>
 
       <!-- 錯誤明細展開清單 -->
-      <div v-if="dryRunResult.errors.length > 0" class="error-list">
+      <div v-if="dryRunResult.errors && dryRunResult.errors.length > 0" class="error-list">
         <h4>錯誤明細：</h4>
         <ul>
           <li v-for="(err, idx) in dryRunResult.errors" :key="idx">
@@ -121,16 +124,29 @@
         </ul>
       </div>
 
-      <div class="dialog-footer">
-        <el-button @click="resetToUpload">重新選擇檔案</el-button>
-        <el-button
-          type="primary"
-          :disabled="dryRunResult.errorRows > 0 || dryRunResult.validRows === 0"
+      <div class="import-footer-spacing">
+        <DialogFooter
+          cancel-text="重新選擇檔案"
+          :confirm-text="`匯入 (${dryRunResult.validRows} 筆)`"
           :loading="submitting"
-          @click="confirmImport"
-        >
-          確認寫入 ({{ dryRunResult.validRows }} 筆)
-        </el-button>
+          :confirm-disabled="dryRunResult.validRows === 0"
+          @confirm="confirmImport"
+          @cancel="resetToUpload"
+        />
+      </div>
+
+      <div v-if="commitResult" class="result-list" role="status">
+        <h4>匯入結果：成功 {{ commitResult.importedCount }} 筆，略過 {{ commitResult.skippedRows.length }} 筆</h4>
+        <ul v-if="commitResult.skippedRows.length">
+          <li v-for="row in commitResult.skippedRows" :key="`${row.rowIndex}-${row.caseName}`">
+            第 {{ row.rowIndex }} 列（{{ row.caseName }}）：{{ row.reasons.join('；') }}
+          </li>
+        </ul>
+        <ul v-if="commitResult.warnings && commitResult.warnings.length">
+          <li v-for="(w, idx) in commitResult.warnings" :key="`warning-${idx}`">
+            第 {{ w.rowIndex }} 列{{ w.caseName ? `（${w.caseName}）` : '' }}：{{ w.message }}
+          </li>
+        </ul>
       </div>
     </div>
   </el-dialog>
@@ -138,14 +154,21 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import { UploadFilled, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { DryRunImportResultDTO } from '@/types/api'
 
+interface ImportCommitResult {
+  importedCount: number
+  skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
+  warnings?: Array<{ rowIndex: number; caseName?: string; field?: string; message: string }>
+}
+
 const props = defineProps<{
   title: string
   onDryRun: (file: File) => Promise<DryRunImportResultDTO>
-  onCommit: (file: File) => Promise<void>
+  onCommit: (file: File, includeDuplicateRows: number[]) => Promise<ImportCommitResult>
   onDownloadTemplate?: () => Promise<void> | void
 }>()
 
@@ -159,6 +182,17 @@ const analyzing = ref(false)
 const submitting = ref(false)
 const downloadingTemplate = ref(false)
 const dryRunResult = ref<DryRunImportResultDTO | null>(null)
+const commitResult = ref<ImportCommitResult | null>(null)
+// 疑似重複列預設不勾選（略過），使用者需主動勾選才會一併匯入
+const checkedDuplicateRows = ref<Set<number>>(new Set())
+
+function toggleDuplicateRow(rowIndex: number, checked: boolean) {
+  if (checked) {
+    checkedDuplicateRows.value.add(rowIndex)
+  } else {
+    checkedDuplicateRows.value.delete(rowIndex)
+  }
+}
 
 async function handleDownloadTemplate() {
   if (!props.onDownloadTemplate) return
@@ -173,6 +207,8 @@ async function handleDownloadTemplate() {
 function open() {
   selectedFile.value = null
   dryRunResult.value = null
+  commitResult.value = null
+  checkedDuplicateRows.value = new Set()
   visible.value = true
 }
 
@@ -184,8 +220,17 @@ async function startDryRun() {
   if (!selectedFile.value) return
   analyzing.value = true
   try {
-    const res = await props.onDryRun(selectedFile.value)
-    dryRunResult.value = res
+    const res: any = await props.onDryRun(selectedFile.value)
+    const rawData = res?.data ?? res
+    dryRunResult.value = {
+      totalRows: rawData.totalRows || 0,
+      validRows: rawData.validRows || 0,
+      errorRows: rawData.errorRows || 0,
+      warningRows: rawData.warningRows || 0,
+      previewRows: rawData.previewRows || rawData.rows || [],
+      errors: rawData.errors || [],
+      warnings: rawData.warnings || []
+    }
   } finally {
     analyzing.value = false
   }
@@ -193,7 +238,9 @@ async function startDryRun() {
 
 function resetToUpload() {
   dryRunResult.value = null
+  commitResult.value = null
   selectedFile.value = null
+  checkedDuplicateRows.value = new Set()
 }
 
 function getRowClassName({ row }: { row: any }) {
@@ -206,9 +253,9 @@ async function confirmImport() {
   if (!selectedFile.value) return
   submitting.value = true
   try {
-    await props.onCommit(selectedFile.value)
-    ElMessage.success('批次匯入成功！')
-    visible.value = false
+    const result = await props.onCommit(selectedFile.value, Array.from(checkedDuplicateRows.value))
+    commitResult.value = result
+    ElMessage.success(`已匯入 ${result.importedCount} 筆有效資料`)
     emit('success')
   } finally {
     submitting.value = false
@@ -220,8 +267,15 @@ function handleClose(done: () => void) {
   done()
 }
 
+// 供外部在「匯入完成」提示視窗完成互動後一併關閉本匯入視窗
+function close() {
+  resetToUpload()
+  visible.value = false
+}
+
 defineExpose({
-  open
+  open,
+  close
 })
 </script>
 
@@ -256,11 +310,16 @@ defineExpose({
   }
 }
 
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
+.result-list {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background-color: var(--el-color-info-light-9);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.import-footer-spacing {
+  margin-top: var(--app-space-4);
 }
 
 :deep(.row-error) {

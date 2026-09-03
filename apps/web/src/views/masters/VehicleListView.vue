@@ -1,6 +1,7 @@
 <template>
   <div class="vehicle-list-view">
     <DataTablePage
+      title="車輛管理"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -12,37 +13,43 @@
       <template #filter>
         <el-input
           v-model="filters.q"
-          placeholder="搜尋車牌號碼／顯示車名"
+          placeholder="搜尋車牌號碼／代稱"
           clearable
           style="width: 240px"
           @keyup.enter="handleSearch"
         />
 
         <el-select
-          v-model="filters.region"
-          placeholder="全部區域"
+          v-model="filters.siteId"
+          placeholder="全部單位"
           clearable
           filterable
-          style="width: 140px"
+          style="width: 200px"
           @change="handleSearch"
         >
-          <el-option label="全部區域" value="" />
-          <el-option
-            v-for="(label, key) in REGION_LABELS"
-            :key="key"
-            :label="label"
-            :value="key"
-          />
+          <el-option label="全部單位" value="" />
+          <el-option v-for="s in allSites" :key="s.id" :label="s.name" :value="s.id" />
+        </el-select>
+
+        <el-select
+          v-model="filters.status"
+          placeholder="狀態"
+          clearable
+          style="width: 130px"
+          @change="handleSearch"
+        >
+          <el-option label="全部狀態" value="" />
+          <el-option label="啟用" value="active" />
+          <el-option label="停用" value="inactive" />
         </el-select>
 
         <el-button type="primary" @click="handleSearch">查詢</el-button>
         <el-button @click="handleReset">重設</el-button>
       </template>
 
-      <!-- 操作按鈕 -->
       <template #actions>
         <el-button
-          v-if="authStore.can('staff')"
+          v-if="authStore.hasPermission('masters_vehicles', 'edit')"
           type="primary"
           @click="openCreateDialog"
         >
@@ -57,236 +64,247 @@
           :data="vehicles"
           border
           stripe
+          table-layout="auto"
           style="width: 100%"
-          :row-class-name="getRowClassName"
           @row-dblclick="(row: any) => handleRowDblClick(row)"
         >
-          <el-table-column prop="displayName" label="顯示車名 (表單比對名)" min-width="180">
+          <el-table-column type="index" label="編號" width="70" align="center" :index="rowIndex" />
+
+          <el-table-column prop="plateNo" label="車號" min-width="120" class-name="vehicle-nowrap-col vehicle-plateno-col">
             <template #default="{ row }">
-              <el-input
-                v-if="editingRowId === row.id"
-                v-model="editRowForm.displayName"
-                size="small"
-                placeholder="如：竹北一車"
-                @keyup.enter="saveInlineEdit(row as any)"
-                @keyup.esc="cancelInlineEdit"
-              />
-              <span v-else>{{ row.displayName }}</span>
+              <span class="font-mono text-id">{{ row.plateNo }}</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="plateNo" label="車牌號碼" width="160">
+          <el-table-column prop="displayName" label="代稱" min-width="180" class-name="vehicle-nowrap-col vehicle-displayname-col" />
+
+          <el-table-column prop="siteName" label="所屬單位" min-width="160" class-name="vehicle-nowrap-col vehicle-sitename-col">
             <template #default="{ row }">
-              <el-input
-                v-if="editingRowId === row.id"
-                v-model="editRowForm.plateNo"
-                size="small"
-                placeholder="如：BZG-7915"
-                @keyup.enter="saveInlineEdit(row as any)"
-                @keyup.esc="cancelInlineEdit"
-              />
-              <span v-else class="font-mono">{{ row.plateNo }}</span>
+              <span v-if="row.siteName">{{ row.siteName }}</span>
+              <span v-else class="vehicle-empty-text">未指定</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="region" label="所屬區域" width="130" align="center">
+          <el-table-column prop="brand" label="廠牌" min-width="90" class-name="vehicle-nowrap-col vehicle-brand-col" />
+
+          <el-table-column prop="model" label="車型" min-width="120" class-name="vehicle-nowrap-col vehicle-model-col" />
+
+          <el-table-column label="出廠年月" min-width="120" align="center" class-name="vehicle-nowrap-col vehicle-manufactureym-col">
+            <template #default="{ row }">{{ formatYearMonth(row.manufactureYm) }}</template>
+          </el-table-column>
+
+          <el-table-column label="強制責任險 (年/月/日)" min-width="150" align="center" class-name="vehicle-nowrap-col vehicle-compulsory-col">
+            <template #default="{ row }">{{ formatRocDate(row.compulsoryInsuranceExpiry) }}</template>
+          </el-table-column>
+
+          <el-table-column label="乘客責任險 (年/月/日)" min-width="150" align="center" class-name="vehicle-nowrap-col vehicle-passenger-col">
+            <template #default="{ row }">{{ formatRocDate(row.passengerInsuranceExpiry) }}</template>
+          </el-table-column>
+
+          <el-table-column label="第三人責任險 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col vehicle-thirdparty-col">
+            <template #default="{ row }">{{ formatRocDate(row.thirdPartyInsuranceExpiry) }}</template>
+          </el-table-column>
+
+          <el-table-column label="前次檢驗日期 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col vehicle-inspection-col">
+            <template #default="{ row }">{{ formatRocDate(row.lastInspectionDate) }}</template>
+          </el-table-column>
+
+          <el-table-column label="符合輪椅載運規定" min-width="140" align="center" class-name="vehicle-nowrap-col vehicle-wheelchair-col">
             <template #default="{ row }">
-              <el-select
-                v-if="editingRowId === row.id"
-                v-model="editRowForm.region"
+              <el-tag
+                v-if="row.wheelchairAccessible !== null"
                 size="small"
-                filterable
-                style="width: 100%"
+                :type="row.wheelchairAccessible ? 'success' : 'info'"
+                effect="plain"
               >
-                <el-option
-                  v-for="(label, key) in REGION_LABELS"
-                  :key="key"
-                  :label="label"
-                  :value="key"
-                />
-              </el-select>
-              <el-tag v-else size="small" :type="row.region === 'miaoli' ? 'warning' : 'primary'">
-                {{ REGION_LABELS[row.region as Region] || row.region }}
+                {{ row.wheelchairAccessible ? '是' : '否' }}
               </el-tag>
+              <span v-else class="vehicle-empty-text">未填</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="active" label="狀態" width="130" align="center">
+          <el-table-column label="目前司機" min-width="160" class-name="vehicle-current-driver-col">
             <template #default="{ row }">
-              <template v-if="editingRowId === row.id">
+              <div v-if="row.drivers && row.drivers.length" class="vehicle-driver-tags">
+                <el-tag
+                  v-for="d in row.drivers"
+                  :key="d.id"
+                  size="small"
+                  type="info"
+                  effect="plain"
+                >
+                  {{ d.name }}
+                </el-tag>
+              </div>
+              <span v-else class="vehicle-empty-text">尚未指派</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center" class-name="vehicle-nowrap-col vehicle-createdat-col">
+            <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+          </el-table-column>
+
+          <el-table-column prop="status" label="狀態" width="130" align="center">
+            <template #default="{ row }">
+              <el-tooltip
+                v-if="authStore.hasPermission('masters_vehicles', 'edit')"
+                :content="row.status === 'active' ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
+                placement="top"
+                :show-after="300"
+              >
                 <button
                   type="button"
                   class="status-toggle-pill"
-                  :class="editRowForm.active ? 'is-active' : 'is-inactive'"
-                  @click="editRowForm.active = !editRowForm.active"
+                  :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+                  @click="handleQuickToggleActive(row as any, row.status !== 'active')"
                 >
                   <span class="status-indicator-dot"></span>
-                  <span class="status-label-text">{{ editRowForm.active ? '服役中' : '已停用' }}</span>
+                  <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
                 </button>
-              </template>
-              <template v-else>
-                <el-tooltip
-                  v-if="authStore.can('staff')"
-                  :content="row.active ? '目前為服役中，點選切換為已停用' : '目前為已停用，點選切換為服役中'"
-                  placement="top"
-                  :show-after="300"
-                >
-                  <button
-                    type="button"
-                    class="status-toggle-pill"
-                    :class="row.active ? 'is-active' : 'is-inactive'"
-                    @click="handleQuickToggleActive(row as any, !row.active)"
-                  >
-                    <span class="status-indicator-dot"></span>
-                    <span class="status-label-text">{{ row.active ? '服役中' : '已停用' }}</span>
-                  </button>
-                </el-tooltip>
-                <div
-                  v-else
-                  class="status-toggle-pill is-readonly"
-                  :class="row.active ? 'is-active' : 'is-inactive'"
-                >
-                  <span class="status-indicator-dot"></span>
-                  <span class="status-label-text">{{ row.active ? '服役中' : '已停用' }}</span>
-                </div>
-              </template>
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center">
-            <template #default="{ row }">
-              <span>{{ formatDateTime(row.createdAt) }}</span>
+              </el-tooltip>
+              <div
+                v-else
+                class="status-toggle-pill is-readonly"
+                :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+              >
+                <span class="status-indicator-dot"></span>
+                <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
+              </div>
             </template>
           </el-table-column>
 
           <el-table-column
-            v-if="authStore.can('staff')"
+            v-if="authStore.hasPermission('masters_vehicles', 'edit') || authStore.hasPermission('masters_vehicles', 'delete')"
             label="操作"
-            width="150"
+            width="200"
             fixed="right"
             align="center"
           >
             <template #default="{ row }">
-              <template v-if="editingRowId === row.id">
-                <el-button type="primary" size="small" :loading="savingRow" @click="saveInlineEdit(row as any)">
-                  儲存
-                </el-button>
-                <el-button size="small" :disabled="savingRow" @click="cancelInlineEdit">
-                  取消
-                </el-button>
-              </template>
-              <template v-else>
-                <el-button link type="primary" size="small" @click="startInlineEdit(row as any)">
-                  編輯
-                </el-button>
-                <el-button link type="danger" size="small" @click="handleDeleteVehicle(row as any)">
+              <TableRowActions>
+                <template v-if="authStore.hasPermission('masters_vehicles', 'edit')">
+                  <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
+                    編輯
+                  </el-button>
+                  <el-button link type="primary" size="small" @click="openDriverDialog(row as any)">
+                    司機
+                  </el-button>
+                </template>
+                <el-button
+                  v-if="authStore.hasPermission('masters_vehicles', 'delete')"
+                  link
+                  type="danger"
+                  size="small"
+                  @click="handleDeleteVehicle(row as any)"
+                >
                   刪除
                 </el-button>
-              </template>
+              </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
       </template>
     </DataTablePage>
 
-    <!-- 新增車輛彈窗 -->
+    <!-- 新增／編輯車輛對話框 -->
     <el-dialog
       v-model="dialogVisible"
-      title="新增車輛"
-      width="500px"
+      :title="editingId ? '編輯車輛' : '新增車輛'"
+      width="min(620px, calc(100vw - 32px))"
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
-        <el-form-item label="顯示車名" prop="displayName">
-          <el-input v-model="form.displayName" placeholder="如：竹北一車、竹南2車" />
-        </el-form-item>
-        <el-form-item label="車牌號碼" prop="plateNo">
-          <el-input v-model="form.plateNo" placeholder="如：BZG-7915" />
-        </el-form-item>
-        <el-form-item label="所屬區域" prop="region">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="150px">
+        <VehicleFormFields :form="form" :sites="allSites" show-status />
+      </el-form>
+      <template #footer>
+        <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
+      </template>
+    </el-dialog>
+
+    <!-- 車輛司機維護對話框 -->
+    <el-dialog
+      v-model="driverDialogVisible"
+      :title="`維護司機 - ${driverDialogVehicle?.displayName || ''}`"
+      width="min(480px, calc(100vw - 32px))"
+    >
+      <el-form label-width="110px">
+        <el-form-item label="本車司機">
           <el-select
-            v-model="form.region"
-            placeholder="請選擇區域"
+            v-model="driverDialogForm.driverIds"
+            multiple
             filterable
+            placeholder="可選擇多位司機"
             style="width: 100%"
           >
             <el-option
-              v-for="(label, key) in REGION_LABELS"
-              :key="key"
-              :label="label"
-              :value="key"
+              v-for="d in allDrivers"
+              :key="d.id"
+              :label="d.name"
+              :value="d.id"
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="狀態" prop="active">
-          <el-radio-group v-model="form.active" class="status-radio-group">
-            <el-radio-button :value="true">
-              <div class="radio-pill active-pill">
-                <span class="radio-dot"></span>
-                <span>服役中</span>
-              </div>
-            </el-radio-button>
-            <el-radio-button :value="false">
-              <div class="radio-pill inactive-pill">
-                <span class="radio-dot"></span>
-                <span>已停用</span>
-              </div>
-            </el-radio-button>
-          </el-radio-group>
+        <el-form-item label="生效日期">
+          <el-date-picker
+            v-model="driverDialogForm.effectiveFrom"
+            type="date"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
         </el-form-item>
       </el-form>
+      <div class="driver-dialog-hint">
+        一位司機同一期間只會有一台車：被加入本車的司機，其他車上尚未結束的指派會從生效日起收掉。
+      </div>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          確認儲存
-        </el-button>
+        <DialogFooter :loading="savingDrivers" @confirm="handleSaveDrivers" @cancel="driverDialogVisible = false" />
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
-import { listVehicles, createVehicle, updateVehicle, deleteVehicle } from '@/api/masters'
+import TableRowActions from '@/components/TableRowActions.vue'
+import DialogFooter from '@/components/DialogFooter.vue'
+import VehicleFormFields from '@/components/VehicleFormFields.vue'
+import {
+  listVehicles,
+  createVehicle,
+  updateVehicle,
+  deleteVehicle,
+  listDrivers,
+  listSites,
+  setVehicleDrivers
+} from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
-import { formatDateTime } from '@/utils/formatters'
-import { REGION_LABELS, type Region } from '@/types/domain'
-import type { VehicleDTO, CreateVehicleRequest } from '@/types/api'
+import { formatDateTime, formatRocDate, formatYearMonth } from '@/utils/formatters'
+import { emptyVehicleForm, vehicleFormRules } from '@/utils/vehicleForm'
+import type { VehicleDTO, CreateVehicleRequest, DriverDTO, SiteDTO } from '@/types/api'
 
 const authStore = useAuthStore()
 const vehicles = ref<VehicleDTO[]>([])
+const allDrivers = ref<DriverDTO[]>([])
+const allSites = ref<SiteDTO[]>([])
 const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+const driverDialogVisible = ref(false)
+const driverDialogVehicle = ref<VehicleDTO | null>(null)
+const savingDrivers = ref(false)
+const driverDialogForm = reactive<{ driverIds: string[]; effectiveFrom: string }>({
+  driverIds: [],
+  effectiveFrom: new Date().toISOString().split('T')[0]
+})
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
 
-// 行內編輯狀態
-const editingRowId = ref<string | null>(null)
-const savingRow = ref(false)
-const editRowForm = reactive<CreateVehicleRequest>({
-  displayName: '',
-  plateNo: '',
-  region: 'miaoli',
-  active: true
-})
+const form = reactive<CreateVehicleRequest>(emptyVehicleForm())
 
-const form = reactive<CreateVehicleRequest>({
-  displayName: '',
-  plateNo: '',
-  region: 'miaoli',
-  active: true
-})
-
-const rules = {
-  displayName: [{ required: true, message: '請輸入顯示車名', trigger: 'blur' }],
-  plateNo: [
-    { required: true, message: '請輸入車牌號碼', trigger: 'blur' },
-    { pattern: /^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/, message: '車牌格式錯誤 (例如 BZG-7915)', trigger: 'blur' }
-  ],
-  region: [{ required: true, message: '請選擇區域', trigger: 'change' }]
-}
+const rules = vehicleFormRules
 
 const {
   page,
@@ -302,92 +320,105 @@ const {
 } = useListQuery({
   defaultFilters: {
     q: '',
-    region: ''
+    siteId: '',
+    status: ''
   },
   onFetch: async () => {
     const res = await listVehicles({
       page: page.value,
       pageSize: pageSize.value,
       q: filters.q,
-      region: filters.region
+      siteId: filters.siteId,
+      status: filters.status || undefined
     })
     vehicles.value = res.data
     total.value = res.meta.total
   }
 })
 
-function getRowClassName({ row }: { row: any }) {
-  return editingRowId.value === row.id ? 'editing-row' : ''
+// 表格「編號」是跨頁連續的清冊序號，不是每頁重新從 1 起算
+function rowIndex(index: number) {
+  return (page.value - 1) * pageSize.value + index + 1
+}
+
+async function loadDrivers() {
+  try {
+    const res = await listDrivers({ status: 'active', pageSize: 200 })
+    allDrivers.value = res.data
+  } catch {
+    allDrivers.value = []
+  }
+}
+
+async function loadSites() {
+  try {
+    const res = await listSites({ status: 'active', pageSize: 200 })
+    allSites.value = res.data
+  } catch {
+    allSites.value = []
+  }
+}
+
+onMounted(() => {
+  loadDrivers()
+  loadSites()
+})
+
+function openDriverDialog(row: VehicleDTO) {
+  driverDialogVehicle.value = row
+  driverDialogForm.driverIds = (row.drivers || []).map((d) => d.id)
+  driverDialogForm.effectiveFrom = new Date().toISOString().split('T')[0]
+  driverDialogVisible.value = true
+}
+
+async function handleSaveDrivers() {
+  if (!driverDialogVehicle.value) return
+  savingDrivers.value = true
+  try {
+    await setVehicleDrivers(driverDialogVehicle.value.id, {
+      driverIds: driverDialogForm.driverIds,
+      effectiveFrom: driverDialogForm.effectiveFrom
+    })
+    ElMessage.success(`車輛「${driverDialogVehicle.value.displayName}」司機已更新`)
+    driverDialogVisible.value = false
+    await Promise.all([executeFetch(), loadDrivers()])
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新車輛司機失敗'))
+  } finally {
+    savingDrivers.value = false
+  }
 }
 
 function handleRowDblClick(row: VehicleDTO) {
-  if (authStore.can('staff')) {
-    startInlineEdit(row)
-  }
-}
-
-function startInlineEdit(row: VehicleDTO) {
-  editingRowId.value = row.id
-  editRowForm.displayName = row.displayName
-  editRowForm.plateNo = row.plateNo
-  editRowForm.region = row.region
-  editRowForm.active = row.active
-}
-
-function cancelInlineEdit() {
-  editingRowId.value = null
-}
-
-async function saveInlineEdit(row: VehicleDTO) {
-  if (!editRowForm.displayName.trim()) {
-    ElMessage.warning('請輸入顯示車名')
-    return
-  }
-  if (!editRowForm.plateNo.trim()) {
-    ElMessage.warning('請輸入車牌號碼')
-    return
-  }
-  if (!/^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/.test(editRowForm.plateNo.trim())) {
-    ElMessage.warning('車牌格式錯誤 (例如 BZG-7915)')
-    return
-  }
-
-  savingRow.value = true
-  try {
-    await updateVehicle(row.id, {
-      displayName: editRowForm.displayName.trim(),
-      plateNo: editRowForm.plateNo.trim(),
-      region: editRowForm.region,
-      active: editRowForm.active
-    })
-    row.displayName = editRowForm.displayName.trim()
-    row.plateNo = editRowForm.plateNo.trim()
-    row.region = editRowForm.region
-    row.active = Boolean(editRowForm.active)
-    editingRowId.value = null
-    ElMessage.success(`車輛「${row.displayName}」資料已更新`)
-  } catch (err: any) {
-    ElMessage.error(err.message || '更新車輛資料失敗')
-  } finally {
-    savingRow.value = false
-  }
-}
-
-async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
-  try {
-    await updateVehicle(row.id, { active: newActive })
-    row.active = newActive
-    ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '服役中' : '已停用'}`)
-  } catch (err: any) {
-    ElMessage.error(err.message || '切換狀態失敗')
+  if (authStore.hasPermission('masters_vehicles', 'edit')) {
+    openEditDialog(row)
   }
 }
 
 function openCreateDialog() {
-  form.displayName = ''
-  form.plateNo = ''
-  form.region = 'miaoli'
-  form.active = true
+  editingId.value = null
+  Object.assign(form, emptyVehicleForm())
+  formRef.value?.clearValidate()
+  dialogVisible.value = true
+}
+
+function openEditDialog(row: VehicleDTO) {
+  editingId.value = row.id
+  Object.assign(form, emptyVehicleForm(), {
+    plateNo: row.plateNo,
+    displayName: row.displayName,
+    siteId: row.siteId || '',
+    brand: row.brand,
+    model: row.model,
+    manufactureYm: row.manufactureYm,
+    compulsoryInsuranceExpiry: row.compulsoryInsuranceExpiry || '',
+    passengerInsuranceExpiry: row.passengerInsuranceExpiry || '',
+    thirdPartyInsuranceExpiry: row.thirdPartyInsuranceExpiry || '',
+    lastInspectionDate: row.lastInspectionDate || '',
+    wheelchairAccessible: row.wheelchairAccessible ?? true,
+    status: row.status
+  })
+  formRef.value?.clearValidate()
   dialogVisible.value = true
 }
 
@@ -397,14 +428,48 @@ async function handleSubmit() {
     if (!valid) return
     submitting.value = true
     try {
-      await createVehicle(form)
-      ElMessage.success('車輛新增成功')
+      if (editingId.value) {
+        await updateVehicle(editingId.value, { ...form })
+        ElMessage.success(`車輛「${form.displayName}」資料已更新`)
+      } else {
+        await createVehicle({ ...form })
+        ElMessage.success('車輛新增成功')
+      }
       dialogVisible.value = false
       executeFetch()
+    } catch (err: any) {
+      if (!err.response?.data?.error?.details?.length) {
+        ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存車輛資料失敗'))
+      }
     } finally {
       submitting.value = false
     }
   })
+}
+
+// 快速切換狀態仍送出完整車輛內容：更新 API 是整筆覆寫，只送 status 會清掉其餘欄位
+async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
+  const newStatus = newActive ? 'active' : 'inactive'
+  try {
+    await updateVehicle(row.id, {
+      plateNo: row.plateNo,
+      displayName: row.displayName,
+      siteId: row.siteId || '',
+      brand: row.brand,
+      model: row.model,
+      manufactureYm: row.manufactureYm,
+      compulsoryInsuranceExpiry: row.compulsoryInsuranceExpiry || '',
+      passengerInsuranceExpiry: row.passengerInsuranceExpiry || '',
+      thirdPartyInsuranceExpiry: row.thirdPartyInsuranceExpiry || '',
+      lastInspectionDate: row.lastInspectionDate || '',
+      wheelchairAccessible: row.wheelchairAccessible ?? true,
+      status: newStatus
+    })
+    row.status = newStatus
+    ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '啟用' : '停用'}`)
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '切換狀態失敗'))
+  }
 }
 
 async function handleDeleteVehicle(row: VehicleDTO) {
@@ -413,7 +478,7 @@ async function handleDeleteVehicle(row: VehicleDTO) {
       `確定要刪除車輛「${row.displayName} (${row.plateNo})」？`,
       '刪除確認',
       {
-        confirmButtonText: '確定刪除',
+        confirmButtonText: '刪除',
         cancelButtonText: '取消',
         type: 'warning',
         confirmButtonClass: 'el-button--danger'
@@ -424,7 +489,7 @@ async function handleDeleteVehicle(row: VehicleDTO) {
     executeFetch()
   } catch (err: any) {
     if (err !== 'cancel') {
-      ElMessage.error(err.message || '刪除車輛失敗')
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除車輛失敗'))
     }
   }
 }
@@ -433,122 +498,79 @@ executeFetch()
 </script>
 
 <style scoped>
-:deep(.el-table .editing-row) {
-  background-color: var(--el-color-primary-light-9) !important;
-}
-
-/* 狀態互動切換按鈕 / 膠囊標籤 */
-.status-toggle-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 5px 14px;
-  border-radius: 9999px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid transparent;
-  outline: none;
-  background: transparent;
-  user-select: none;
-  line-height: 1;
-}
-
-.status-toggle-pill.is-active {
-  background-color: #ecfdf5;
-  color: #047857;
-  border-color: #a7f3d0;
-}
-
-.status-toggle-pill.is-active:hover {
-  background-color: #d1fae5;
-  border-color: #6ee7b7;
-  color: #065f46;
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(5, 150, 105, 0.18);
-}
-
-.status-toggle-pill.is-inactive {
-  background-color: #f3f4f6;
-  color: #4b5563;
-  border-color: #e5e7eb;
-}
-
-.status-toggle-pill.is-inactive:hover {
-  background-color: #e5e7eb;
-  border-color: #d1d5db;
-  color: #1f2937;
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
-}
-
-.status-toggle-pill.is-readonly {
-  cursor: default;
-  pointer-events: none;
-}
-
-.status-indicator-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-}
-
-.is-active .status-indicator-dot {
-  background-color: #10b981;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
-}
-
-.is-inactive .status-indicator-dot {
-  background-color: #9ca3af;
-}
-
-.status-label-text {
-  letter-spacing: 0.02em;
-}
-
-/* 彈窗內狀態單選群組 */
-.status-radio-group :deep(.el-radio-button__inner) {
-  padding: 8px 16px;
-  border-radius: 6px !important;
-  margin-right: 8px;
-  border: 1px solid #dcdfe6 !important;
-}
-
-.status-radio-group :deep(.el-radio-button:first-child .el-radio-button__inner) {
-  border-left: 1px solid #dcdfe6 !important;
-}
-
-.status-radio-group :deep(.el-radio-button.is-active .el-radio-button__inner) {
-  background-color: #f0fdf4;
-  border-color: #10b981 !important;
-  color: #047857;
-  box-shadow: none !important;
-}
-
-.radio-pill {
-  display: inline-flex;
+.vehicle-driver-tags {
+  display: flex;
   align-items: center;
   gap: 6px;
-  font-weight: 500;
+  flex-wrap: wrap;
 }
 
-.radio-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background-color: #9ca3af;
+.vehicle-empty-text {
+  color: var(--app-text-muted);
+  font-size: 13px;
 }
 
-.active-pill .radio-dot {
-  background-color: #10b981;
+:deep(.vehicle-nowrap-col .cell) {
+  white-space: nowrap;
 }
 
-.inactive-pill .radio-dot {
-  background-color: #6b7280;
+:deep(.vehicle-plateno-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.vehicle-displayname-col .cell) {
+  min-width: 180px;
+}
+
+:deep(.vehicle-sitename-col .cell) {
+  min-width: 160px;
+}
+
+:deep(.vehicle-brand-col .cell) {
+  min-width: 90px;
+}
+
+:deep(.vehicle-model-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.vehicle-manufactureym-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.vehicle-compulsory-col .cell) {
+  min-width: 150px;
+}
+
+:deep(.vehicle-passenger-col .cell) {
+  min-width: 150px;
+}
+
+:deep(.vehicle-thirdparty-col .cell) {
+  min-width: 160px;
+}
+
+:deep(.vehicle-inspection-col .cell) {
+  min-width: 160px;
+}
+
+:deep(.vehicle-wheelchair-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.vehicle-createdat-col .cell) {
+  min-width: 170px;
+}
+
+:deep(.vehicle-current-driver-col .cell) {
+  min-width: 160px;
+}
+
+.driver-dialog-hint {
+  margin-top: -4px;
+  padding-left: 120px;
+  color: var(--app-text-secondary);
+  font-size: var(--app-font-xs);
+  line-height: 1.6;
 }
 </style>
-

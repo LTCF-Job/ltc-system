@@ -13,13 +13,13 @@
             v-model="searchQuery"
             placeholder="搜尋個案姓名／代碼／地址"
             clearable
-            style="width: 220px"
+            style="width: 240px"
             @keyup.enter="fetchSchedule"
           />
 
           <el-select
             v-model="selectedSiteId"
-            placeholder="全部據點"
+            placeholder="全部單位"
             clearable
             style="width: 150px"
             @change="fetchSchedule"
@@ -47,20 +47,18 @@
             />
           </el-select>
 
-          <el-button type="primary" icon="Search" @click="fetchSchedule">
+          <el-button type="primary" @click="fetchSchedule">
             查詢
           </el-button>
           <el-button @click="handleReset">
             重設
           </el-button>
 
-          <el-button type="success" @click="handleExportExcel" :loading="exporting">
-            <el-icon><Download /></el-icon>
+          <el-button plain @click="handleExportExcel" :loading="exporting">
             匯出 Excel
           </el-button>
 
-          <el-button type="info" @click="handlePrint">
-            <el-icon><Printer /></el-icon>
+          <el-button plain @click="handlePrint">
             列印 (A4 橫式)
           </el-button>
         </div>
@@ -90,39 +88,37 @@
         border
         stripe
         size="small"
+        table-layout="auto"
         :cell-class-name="getCellClass"
       >
         <el-table-column label="趟次" width="90" align="center">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain" type="primary">
-              第 {{ row.runNo }} 趟
-            </el-tag>
+            <span>第 {{ row.runNo }} 趟</span>
           </template>
         </el-table-column>
-        <el-table-column prop="caseCode" label="個案編號" width="100" />
-        <el-table-column prop="caseName" label="個案姓名" width="120">
+        <el-table-column prop="caseName" label="個案姓名" min-width="110" class-name="case-name-col">
           <template #default="{ row }">
-            <span class="font-bold">{{ row.caseName }}</span>
+            <span class="font-bold text-nowrap">{{ row.caseName }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="note" label="備註" min-width="140">
+        <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip class-name="note-col">
           <template #default="{ row }">
             {{ row.note || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="departTime" label="出發時間" width="95" align="center">
           <template #default="{ row }">
-            <el-tag size="small" type="success">{{ row.departTime }}</el-tag>
+            <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="origin" label="出發地 (住家)" min-width="180" />
+        <el-table-column prop="origin" label="出發地 (住家)" min-width="180" show-overflow-tooltip class-name="origin-col" />
         <el-table-column prop="arriveTime" label="抵達時間" width="95" align="center">
           <template #default="{ row }">
             {{ row.arriveTime || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="destination" label="目的地 (據點)" min-width="180" />
-        <el-table-column prop="vehicleName" label="承接車輛" width="110" align="center" />
+        <el-table-column prop="destination" label="目的地 (單位)" min-width="180" show-overflow-tooltip class-name="destination-col" />
+        <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="vehicle-name-col" />
       </el-table>
       <el-empty
         v-if="!scheduleData?.outbound || scheduleData.outbound.length === 0"
@@ -144,39 +140,37 @@
         border
         stripe
         size="small"
+        table-layout="auto"
         :cell-class-name="getCellClass"
       >
         <el-table-column label="趟次" width="90" align="center">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain" type="warning">
-              第 {{ row.runNo }} 趟
-            </el-tag>
+            <span>第 {{ row.runNo }} 趟</span>
           </template>
         </el-table-column>
-        <el-table-column prop="caseCode" label="個案編號" width="100" />
-        <el-table-column prop="caseName" label="個案姓名" width="120">
+        <el-table-column prop="caseName" label="個案姓名" min-width="110" class-name="case-name-col">
           <template #default="{ row }">
-            <span class="font-bold">{{ row.caseName }}</span>
+            <span class="font-bold text-nowrap">{{ row.caseName }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="note" label="備註" min-width="140">
+        <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip class-name="note-col">
           <template #default="{ row }">
             {{ row.note || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="departTime" label="出發時間" width="95" align="center">
           <template #default="{ row }">
-            <el-tag size="small" type="warning">{{ row.departTime }}</el-tag>
+            <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="origin" label="出發地 (據點)" min-width="180" />
+        <el-table-column prop="origin" label="出發地 (單位)" min-width="180" show-overflow-tooltip class-name="origin-col" />
         <el-table-column prop="arriveTime" label="抵達時間" width="95" align="center">
           <template #default="{ row }">
             {{ row.arriveTime || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="destination" label="目的地 (住家)" min-width="180" />
-        <el-table-column prop="vehicleName" label="承接車輛" width="110" align="center" />
+        <el-table-column prop="destination" label="目的地 (住家)" min-width="180" show-overflow-tooltip class-name="destination-col" />
+        <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="vehicle-name-col" />
       </el-table>
       <el-empty
         v-if="!scheduleData?.inbound || scheduleData.inbound.length === 0"
@@ -190,16 +184,16 @@
 import { ref, onMounted } from 'vue'
 import {
   Refresh,
-  Download,
-  Printer,
   Right,
   Back
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import { getHsinchuSchedule, exportHsinchuScheduleExcel } from '@/api/reports'
 import { listSites, listVehicles } from '@/api/masters'
 import { formatDateTime } from '@/utils/formatters'
 import type { HsinchuScheduleReportDTO, SiteDTO, VehicleDTO } from '@/types/api'
+import { downloadBlob } from '@/utils/download'
 
 const loading = ref(false)
 const exporting = ref(false)
@@ -220,7 +214,7 @@ async function fetchFilterOptions() {
     sites.value = siteRes.data.filter(s => s.region === 'hsinchu')
     vehicles.value = vehRes.data.filter(v => v.region === 'hsinchu')
   } catch (err: any) {
-    ElMessage.error(err.message || '載入篩選條件失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入篩選條件失敗'))
   }
 }
 
@@ -233,7 +227,7 @@ async function fetchSchedule() {
       q: searchQuery.value || undefined
     })
   } catch (err: any) {
-    ElMessage.error(err.message || '查詢新竹接送時刻表失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢新竹接送時刻表失敗'))
   } finally {
     loading.value = false
   }
@@ -253,15 +247,10 @@ async function handleExportExcel() {
       siteId: selectedSiteId.value,
       vehicleId: selectedVehicleId.value
     })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'hsinchu-schedule.xlsx'
-    a.click()
-    window.URL.revokeObjectURL(url)
+    downloadBlob(blob, 'hsinchu-schedule.xlsx')
     ElMessage.success('時刻表 Excel 匯出成功')
   } catch (err: any) {
-    ElMessage.error(err.message || '匯出時刻表失敗')
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '匯出時刻表失敗'))
   } finally {
     exporting.value = false
   }
@@ -299,19 +288,20 @@ onMounted(async () => {
     .page-title {
       font-size: 18px;
       font-weight: bold;
-      color: var(--el-color-primary);
+      color: var(--app-text-primary);
       margin: 0 0 4px 0;
     }
 
     .subtitle {
       font-size: 13px;
-      color: var(--el-text-color-secondary);
+      color: var(--app-text-secondary);
     }
   }
 
   .action-section {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
   }
 }
@@ -320,18 +310,20 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-weight: bold;
-  font-size: 14px;
-  color: #ffffff;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13.5px;
+  background-color: var(--app-status-neutral-bg);
+  color: var(--app-text-primary);
+  border: 1px solid var(--app-border-light);
 
   &.bg-outbound {
-    background-color: var(--el-color-primary);
+    border-left: 3px solid var(--app-primary);
   }
 
   &.bg-inbound {
-    background-color: #e67e22;
+    border-left: 3px solid var(--app-status-info-fg);
   }
 }
 
@@ -339,8 +331,26 @@ onMounted(async () => {
   display: none;
 }
 
-.font-bold {
-  font-weight: 600;
+
+:deep(.vehicle-name-col .cell) {
+  white-space: nowrap;
+  min-width: 110px;
+}
+
+:deep(.case-name-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.note-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.origin-col .cell) {
+  min-width: 180px;
+}
+
+:deep(.destination-col .cell) {
+  min-width: 180px;
 }
 
 .mt-4 {

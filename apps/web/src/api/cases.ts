@@ -4,9 +4,11 @@ import type {
   CaseDTO,
   CreateCaseRequest,
   UpdateCaseRequest,
+  UpdateCaseTransportPreferenceRequest,
   CaseScheduleDTO,
   CreateScheduleRequest,
-  DryRunImportResultDTO
+  DryRunImportResultDTO,
+  CaseImportCommitResult
 } from '@/types/api'
 
 export async function listCases(params?: {
@@ -15,6 +17,8 @@ export async function listCases(params?: {
   region?: string
   status?: string
   q?: string
+  unresolvedLink?: boolean
+  excludePending?: boolean
 }): Promise<Paged<CaseDTO>> {
   const res: any = await apiClient.get('/cases', { params })
   const rawData = res?.data ?? res
@@ -57,10 +61,21 @@ export async function deleteCase(id: string): Promise<void> {
   return apiClient.delete(`/cases/${id}`)
 }
 
+export async function updateCaseTransportPreference(
+  id: string,
+  data: UpdateCaseTransportPreferenceRequest
+): Promise<CaseDTO> {
+  const res: any = await apiClient.put(`/cases/${id}/transport-preference`, data)
+  return res?.data ?? res
+}
+
 export async function downloadCaseImportTemplate(): Promise<Blob> {
-  return apiClient.get('/cases/template', {
-    responseType: 'blob'
-  })
+  return apiClient.get('/cases/template', { responseType: 'blob' })
+}
+
+export async function exportCaseProfileWorkbook(caseIds?: string[]): Promise<Blob> {
+  const params = caseIds && caseIds.length > 0 ? { caseIds: caseIds.join(',') } : undefined
+  return apiClient.get('/cases/export', { params, responseType: 'blob' })
 }
 
 export async function revealCaseId(id: string): Promise<{ nationalId: string }> {
@@ -86,9 +101,10 @@ export async function dryRunImportCases(file: File): Promise<DryRunImportResultD
   })
 }
 
-export async function commitImportCases(file: File): Promise<{ count: number }> {
+export async function commitImportCases(file: File, includeDuplicateRows: number[] = []): Promise<CaseImportCommitResult> {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('includeDuplicateRows', JSON.stringify(includeDuplicateRows))
   return apiClient.post('/cases/import?dryRun=false', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })

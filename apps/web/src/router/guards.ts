@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 
 export function setupRouterGuards(router: Router) {
-  router.beforeEach((to, from, next) => {
+  router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore()
     const isPublic = to.meta.public === true
 
@@ -22,16 +22,15 @@ export function setupRouterGuards(router: Router) {
       return
     }
 
-    // 3. 模組與角色權限比對
+    // F5 重整時 /auth/me 可能還沒回來；guard 在此等待既有請求，避免誤判無權限把使用者踢出當前頁面
+    if (authStore.isAuthenticated && !authStore.permissionsLoaded) {
+      await authStore.loadPermissions()
+    }
+
+    // 3. 模組權限比對：畫面顯示與 API 放行一律以後端 /auth/me 回傳的權限矩陣為準
     if (to.meta.module && typeof to.meta.module === 'string') {
       if (!authStore.hasPermission(to.meta.module, 'view')) {
         ElMessage.warning('您的帳號未被授權檢視該功能區塊')
-        next('/')
-        return
-      }
-    } else if (to.meta.roles && Array.isArray(to.meta.roles)) {
-      if (!authStore.can(to.meta.roles as any)) {
-        ElMessage.warning('權限不足，無法存取該頁面')
         next('/')
         return
       }

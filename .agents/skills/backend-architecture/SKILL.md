@@ -1,16 +1,20 @@
 ---
 name: backend-architecture
-description: Use when designing, reviewing, or changing backend application structure, especially boundaries between delivery, application, domain, persistence, and external adapters.
+description: Use when adding, changing, or reviewing anything under apps/api — an endpoint, use case, repository, external adapter, or a boundary between them.
 ---
 
 # Backend architecture
 
 Use this skill to keep backend changes aligned with the repository's existing boundaries. It is architecture guidance, not a mandate to replace the current framework or directory layout.
 
+`apps/api` is a modular monolith: one package trio per business capability under `internal/modules/<capability>/{transport,app,infra}`, plus `internal/platform/*` and `internal/domain/*` as shared kernels. Modules collaborate only through ports that `cmd/server` injects.
+
+**Working in `apps/api` starts by reading [layering-rules.md](references/layering-rules.md)** — the capability map, import matrix, model ownership, cross-module recipe, and the step list for adding an endpoint or a module. Those rules are encoded in `apps/api/internal/arch/arch_test.go`, whose baseline is empty: a boundary violation fails `go test ./...` and is a defect to fix, not an entry to add. The rest of this file is the reasoning behind those rules and applies to backend work generally.
+
 ## Review posture
 
 - Read the target files, nearby same-layer examples, build manifests, tests, and dependency wiring before proposing a boundary change.
-- Use the repository's vocabulary. Names such as `handler`, `service`, `usecase`, `repository`, `domain`, and `adapter` are examples, not required package names.
+- In `apps/api`, use the repository's names: `transport`, `app`, `infra` inside a module; `platform` and `domain` for the shared kernels. Elsewhere, names such as `handler`, `service`, `repository`, and `adapter` are examples, not required package names.
 - Prefer the smallest change that improves ownership, cohesion, or testability.
 - Treat external templates as concepts. Do not introduce a new layer, framework, service, or package split only to match them.
 
@@ -24,7 +28,7 @@ Keep business decisions independent from HTTP, UI, database clients, cache clien
 - Persistence and integration adapters implement data and external-system details.
 - Composition-root code constructs dependencies and wires routes, jobs, or consumers.
 
-Dependencies may point inward from adapters, but inner business code must not import outer delivery or infrastructure details. Follow existing interface ownership when the repository already has a consistent convention.
+Dependencies may point inward from adapters, but inner business code must not import outer delivery or infrastructure details. Follow existing interface ownership when the repository already has a consistent convention — `apps/api` does; see [layering-rules.md](references/layering-rules.md) section 4 for its cross-module recipe.
 
 ## Layer decisions
 

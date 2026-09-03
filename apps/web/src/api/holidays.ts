@@ -6,6 +6,7 @@ export interface HolidayItem {
   name: string
   region?: string
   source: string
+  isDayOff: boolean
   createdAt?: string
 }
 
@@ -22,6 +23,7 @@ export async function createHoliday(data: {
   name: string
   region?: string
   source?: string
+  isDayOff?: boolean
 }): Promise<ApiResponse<HolidayItem>> {
   return apiClient.post('/holidays', data)
 }

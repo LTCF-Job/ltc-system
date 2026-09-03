@@ -7,7 +7,8 @@ export async function getTripSummaryReport(params: {
   vehicleId?: string
   q?: string
 }): Promise<TripSummaryReportDTO> {
-  return apiClient.get('/reports/trip-summary', { params })
+  const res = await apiClient.get('/reports/trip-summary', { params })
+  return (res as any).data ?? (res as any)
 }
 
 export async function exportTripSummaryExcel(params: {
@@ -26,7 +27,8 @@ export async function getHsinchuSchedule(params?: {
   vehicleId?: string
   q?: string
 }): Promise<HsinchuScheduleReportDTO> {
-  return apiClient.get('/reports/hsinchu-schedule', { params })
+  const res = await apiClient.get('/reports/hsinchu-schedule', { params })
+  return (res as any).data ?? (res as any)
 }
 
 export async function exportHsinchuScheduleExcel(params?: {

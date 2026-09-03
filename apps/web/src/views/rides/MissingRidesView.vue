@@ -4,6 +4,7 @@
       <!-- 分頁一：未回報清單 -->
       <el-tab-pane label="未回報清單" name="missing">
         <DataTablePage
+          :max-width="950"
           :loading="loadingMissing"
           :total="missingTotal"
           :page="page"
@@ -16,7 +17,7 @@
               v-model="missingQuery"
               placeholder="搜尋個案姓名／車輛／司機"
               clearable
-              style="width: 220px;"
+              style="width: 240px;"
               @keyup.enter="fetchMissingRides"
             />
 
@@ -35,7 +36,7 @@
               />
             </el-select>
 
-            <el-button type="primary" icon="Search" @click="fetchMissingRides">
+            <el-button type="primary" @click="fetchMissingRides">
               查詢
             </el-button>
             <el-button @click="handleResetMissing">
@@ -46,7 +47,7 @@
           <template #actions>
             <el-button
               type="warning"
-              icon="Bell"
+              plain
               :loading="triggering"
               @click="handleTriggerNotify"
             >
@@ -57,54 +58,49 @@
           <template #table>
             <el-table :data="missingList" stripe border style="width: 100%;">
               <el-table-column prop="serviceDate" label="服務日期" width="120" sortable />
-              <el-table-column prop="caseName" label="個案姓名" width="120" />
-              <el-table-column label="方向 / 趟次" width="130">
+              <el-table-column prop="caseName" label="個案姓名" width="100" />
+              <el-table-column label="方向 / 趟次" width="120">
                 <template #default="{ row }">
-                  <el-tag :type="row.direction === 'outbound' ? 'primary' : 'success'" size="small">
-                    {{ (DIRECTION_LABELS as any)[row.direction] || row.direction }}
-                  </el-tag>
+                  <span>{{ (DIRECTION_LABELS as any)[row.direction] || row.direction }}</span>
                   <span style="margin-left: 6px; font-size: 13px;">第 {{ row.legSeq }} 趟</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="departTime" label="排定出發時間" width="130" />
-              <el-table-column prop="vehicleName" label="負責車輛" width="130">
+              <el-table-column prop="departTime" label="排定出發時間" width="120" />
+              <el-table-column prop="vehicleName" label="負責車輛" width="110">
                 <template #default="{ row }">
-                  <el-tag effect="plain" type="info">{{ row.vehicleName || '未指定' }}</el-tag>
+                  <span>{{ row.vehicleName || '未指定' }}</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="driverName" label="司機" width="120" />
-              <el-table-column label="逾期天數" width="120" align="center">
+              <el-table-column prop="driverName" label="司機" width="100" />
+              <el-table-column label="逾期天數" width="110" align="center">
                 <template #default="{ row }">
-                  <el-tag
-                    :type="(row.daysOverdue || 0) >= 3 ? 'danger' : 'warning'"
-                    effect="dark"
-                    size="small"
+                  <span
+                    class="overdue-days"
+                    :class="(row.daysOverdue || 0) >= 3 ? 'is-danger' : 'is-warning'"
                   >
                     逾期 {{ row.daysOverdue || 0 }} 天
-                  </el-tag>
+                  </span>
                 </template>
               </el-table-column>
-              <el-table-column label="狀態" min-width="120">
-                <template #default>
-                  <el-tag type="danger" size="small">司機未提交回覆</el-tag>
-                </template>
-              </el-table-column>
+              <!-- 人工回報實際呼叫 POST /rides/manual-report，後端以 rides_issues:edit 把關，此處對齊該權限而非本頁的 rides_missing -->
               <el-table-column
-                v-if="authStore.can('staff')"
+                v-if="authStore.hasPermission('rides_issues', 'edit')"
                 label="操作"
                 width="120"
                 align="center"
                 fixed="right"
               >
                 <template #default="{ row }">
-                  <el-button
-                    type="primary"
-                    size="small"
-                    icon="Edit"
-                    @click="openReportDialog(row)"
-                  >
-                    人工回報
-                  </el-button>
+                  <TableRowActions>
+                    <el-button
+                      link
+                      type="primary"
+                      size="small"
+                      @click="openReportDialog(row)"
+                    >
+                      人工回報
+                    </el-button>
+                  </TableRowActions>
                 </template>
               </el-table-column>
             </el-table>
@@ -115,6 +111,7 @@
       <!-- 分頁二：催報通知歷史 -->
       <el-tab-pane label="催報通知歷史" name="history">
         <DataTablePage
+          :max-width="1400"
           :loading="loadingLogs"
           :total="logsTotal"
           :page="logPage"
@@ -127,7 +124,7 @@
               v-model="logQuery"
               placeholder="搜尋標題／收件人／來源"
               clearable
-              style="width: 220px;"
+              style="width: 240px;"
               @keyup.enter="fetchNotificationLogs"
             />
 
@@ -146,7 +143,7 @@
               />
             </el-select>
 
-            <el-button type="primary" icon="Search" @click="fetchNotificationLogs">
+            <el-button type="primary" @click="fetchNotificationLogs">
               查詢
             </el-button>
             <el-button @click="handleResetLogs">
@@ -155,25 +152,25 @@
           </template>
 
           <template #actions>
-            <el-button icon="Refresh" @click="fetchNotificationLogs">
+            <el-button plain @click="fetchNotificationLogs">
               重新整理
             </el-button>
           </template>
 
           <template #table>
-            <el-table :data="logList" stripe border style="width: 100%;">
+            <el-table :data="logList" stripe border table-layout="auto" style="width: 100%;">
               <el-table-column prop="sentAt" label="發送時間" width="170" sortable align="center">
                 <template #default="{ row }">
                   <span>{{ formatDateTime(row.sentAt) }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="主題" width="140">
+              <el-table-column label="主題" min-width="140" class-name="topic-col">
                 <template #default="{ row }">
-                  <el-tag type="info">{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</el-tag>
+                  <span class="topic-label">{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="subject" label="信件標題" min-width="220" show-overflow-tooltip />
-              <el-table-column label="收件人清單" min-width="200" show-overflow-tooltip>
+              <el-table-column prop="subject" label="信件標題" min-width="220" show-overflow-tooltip class-name="subject-col" />
+              <el-table-column label="收件人清單" min-width="200" show-overflow-tooltip class-name="recipients-col">
                 <template #default="{ row }">
                   <span v-if="row.recipientEmails && row.recipientEmails.length">
                     {{ row.recipientEmails.join(', ') }}
@@ -182,18 +179,32 @@
                   <el-tag v-else type="danger" size="small">無設定收件人</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="triggeredByName" label="觸發來源" width="180" />
+              <el-table-column prop="triggeredByName" label="觸發來源" min-width="140" class-name="trigger-source-col" />
               <el-table-column label="狀態" width="100" align="center">
                 <template #default="{ row }">
-                  <el-tag :type="row.status === 'sent' || row.success ? 'success' : 'danger'" effect="dark" size="small">
+                  <el-tag :type="row.status === 'sent' || row.success ? 'success' : 'danger'" size="small">
                     {{ row.status === 'sent' || row.success ? '發送成功' : '失敗' }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="errorMessage" label="備註 / 失敗原因" min-width="180">
+              <el-table-column prop="errorMessage" label="備註 / 失敗原因" min-width="180" show-overflow-tooltip class-name="error-message-col">
                 <template #default="{ row }">
-                  <span v-if="row.errorMessage || row.error" style="color: var(--el-color-danger);">{{ row.errorMessage || row.error }}</span>
+                  <span v-if="row.errorMessage || row.error" style="color: var(--app-status-danger-fg);">{{ row.errorMessage || row.error }}</span>
                   <span v-else class="text-secondary">{{ row.contentSummary || row.body || '-' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="90" align="center" fixed="right">
+                <template #default="{ row }">
+                  <TableRowActions>
+                    <el-button
+                      link
+                      type="info"
+                      size="small"
+                      @click="openLogDetail(row)"
+                    >
+                      詳情
+                    </el-button>
+                  </TableRowActions>
                 </template>
               </el-table-column>
             </el-table>
@@ -202,21 +213,67 @@
       </el-tab-pane>
     </el-tabs>
 
+    <!-- 通知歷史詳情對話框 -->
+    <el-dialog
+      v-model="logDetailVisible"
+      title="通知發送詳情"
+      width="min(820px, calc(100vw - 32px))"
+      destroy-on-close
+    >
+      <el-descriptions v-if="currentLogRow" class="log-detail-descriptions" :column="1" border size="small">
+        <el-descriptions-item label="發送時間">{{ formatDateTime(currentLogRow.sentAt) }}</el-descriptions-item>
+        <el-descriptions-item label="主題">
+          {{ (NOTIFICATION_TOPIC_LABELS as any)[currentLogRow.topic] || currentLogRow.topic }}
+        </el-descriptions-item>
+        <el-descriptions-item label="通知管道">{{ currentLogRow.channel }}</el-descriptions-item>
+        <el-descriptions-item label="信件標題">{{ currentLogRow.subject }}</el-descriptions-item>
+        <el-descriptions-item label="收件人清單">
+          <span v-if="currentLogRow.recipientEmails && currentLogRow.recipientEmails.length">
+            {{ currentLogRow.recipientEmails.join(', ') }}
+          </span>
+          <span v-else-if="(currentLogRow as any).target">{{ (currentLogRow as any).target }}</span>
+          <el-tag v-else type="danger" size="small">無設定收件人</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="觸發來源">{{ currentLogRow.triggeredByName || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="狀態">
+          <el-tag :type="currentLogRow.status === 'sent' || (currentLogRow as any).success ? 'success' : 'danger'" size="small">
+            {{ currentLogRow.status === 'sent' || (currentLogRow as any).success ? '發送成功' : '失敗' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item v-if="currentLogRow.errorMessage || (currentLogRow as any).error" label="失敗原因">
+          <span style="color: var(--app-status-danger-fg);">{{ currentLogRow.errorMessage || (currentLogRow as any).error }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="完整內容">
+          <div class="log-detail-content" :class="{ 'is-expanded': logContentExpanded }">
+            {{ currentLogRow.contentSummary || (currentLogRow as any).body || '-' }}
+          </div>
+          <el-button
+            v-if="isLogContentLong"
+            link
+            type="primary"
+            size="small"
+            class="log-detail-toggle"
+            @click="logContentExpanded = !logContentExpanded"
+          >
+            {{ logContentExpanded ? '收合' : '展開完整內容' }}
+          </el-button>
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
+
     <!-- 人工輸入回報內容對話框 -->
     <el-dialog
       v-model="reportDialogVisible"
       :title="`人工輸入回報 — ${currentReportRow?.caseName || ''} (${currentReportRow?.serviceDate || ''})`"
-      width="560px"
+      width="min(600px, calc(100vw - 32px))"
       destroy-on-close
     >
-      <div v-if="currentReportRow" class="report-dialog-body">
+      <div v-if="currentReportRow" class="report-dialog-body dialog-scroll-form">
         <el-descriptions :column="2" border size="small" class="mb-3">
           <el-descriptions-item label="個案姓名">{{ currentReportRow.caseName }}</el-descriptions-item>
           <el-descriptions-item label="服務日期">{{ currentReportRow.serviceDate }}</el-descriptions-item>
           <el-descriptions-item label="方向與趟次">
-            <el-tag :type="currentReportRow.direction === 'outbound' ? 'primary' : 'success'" size="small">
-              {{ (DIRECTION_LABELS as any)[currentReportRow.direction] || currentReportRow.direction }}
-            </el-tag>
+            <span>{{ (DIRECTION_LABELS as any)[currentReportRow.direction] || currentReportRow.direction }}</span>
             <span style="margin-left: 6px;">第 {{ currentReportRow.legSeq }} 趟</span>
           </el-descriptions-item>
           <el-descriptions-item label="排定出發時間">{{ currentReportRow.departTime || '-' }}</el-descriptions-item>
@@ -225,7 +282,7 @@
         <el-form
           ref="reportFormRef"
           :model="reportForm"
-          label-width="120px"
+          label-width="110px"
           label-position="right"
           style="margin-top: 16px;"
         >
@@ -239,7 +296,8 @@
           <el-form-item label="實際承載車輛">
             <el-select
               v-model="reportForm.vehicleId"
-              placeholder="請選擇承載車輛"
+              :placeholder="isReportAbsent ? '沒坐無須選擇車輛' : '請選擇承載車輛'"
+              :disabled="isReportAbsent"
               filterable
               clearable
               style="width: 100%;"
@@ -256,7 +314,8 @@
           <el-form-item label="實際駕駛司機">
             <el-select
               v-model="reportForm.driverId"
-              placeholder="請選擇駕駛司機"
+              :placeholder="isReportAbsent ? '沒坐無須選擇司機' : '請選擇駕駛司機'"
+              :disabled="isReportAbsent"
               filterable
               clearable
               style="width: 100%;"
@@ -275,7 +334,8 @@
               v-model="reportForm.departTimeOverride"
               format="HH:mm"
               value-format="HH:mm"
-              placeholder="預設沿用排班時間"
+              :placeholder="isReportAbsent ? '沒坐無出發時間' : '預設沿用排班時間'"
+              :disabled="isReportAbsent"
               style="width: 100%;"
             />
           </el-form-item>
@@ -285,13 +345,17 @@
               v-model="reportForm.durationMinOverride"
               :min="1"
               :max="240"
-              placeholder="預設 10 分鐘"
+              :placeholder="isReportAbsent ? '沒坐無服務時長' : '預設 10 分鐘'"
+              :disabled="isReportAbsent"
               style="width: 100%;"
             />
           </el-form-item>
 
           <el-form-item label="不申報 AA09">
-            <el-switch v-model="reportForm.notClaimedAa09" />
+            <el-switch
+              v-model="reportForm.notClaimedAa09"
+              :disabled="isReportAbsent"
+            />
           </el-form-item>
 
           <el-form-item label="回報備註 / 原因">
@@ -318,26 +382,20 @@
       </div>
 
       <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="reportDialogVisible = false">取消</el-button>
-          <el-button
-            type="primary"
-            :loading="savingReport"
-            @click="handleSubmitReport"
-          >
-            確認儲存回報
-          </el-button>
-        </div>
+        <DialogFooter :loading="savingReport" @confirm="handleSubmitReport" @cancel="reportDialogVisible = false" />
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
+import DialogFooter from '@/components/DialogFooter.vue'
 import DataTablePage from '@/components/DataTablePage.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import { formatDateTime } from '@/utils/formatters'
 import { listMissingRides, submitManualRideReport } from '@/api/rides'
 import { listVehicles, listDrivers } from '@/api/masters'
@@ -347,6 +405,7 @@ import type { MissingRideDTO, NotificationLogDTO, VehicleDTO, DriverDTO, ManualR
 import { DIRECTION_LABELS, NOTIFICATION_TOPIC_LABELS } from '@/types/domain'
 
 const authStore = useAuthStore()
+const route = useRoute()
 const activeTab = ref<'missing' | 'history'>('missing')
 
 // 未回報清單資料
@@ -387,6 +446,30 @@ const reportForm = reactive<ManualReportRideRequest>({
   reason: '司機口頭回報'
 })
 
+const isReportAbsent = computed(() => reportForm.effectiveStatus === 'absent')
+
+watch(
+  () => reportForm.effectiveStatus,
+  (newStatus, oldStatus) => {
+    if (newStatus === 'absent') {
+      reportForm.vehicleId = ''
+      reportForm.driverId = ''
+      reportForm.departTimeOverride = null
+      reportForm.durationMinOverride = null
+      reportForm.notClaimedAa09 = false
+    } else if (oldStatus === 'absent' && newStatus === 'boarded' && currentReportRow.value) {
+      reportForm.vehicleId = currentReportRow.value.vehicleId || ''
+      if (currentReportRow.value.driverName && drivers.value.length > 0) {
+        const matched = drivers.value.find((d) => d.name === currentReportRow.value?.driverName)
+        reportForm.driverId = matched ? matched.id : ''
+      }
+      reportForm.departTimeOverride = currentReportRow.value.departTime || null
+      reportForm.durationMinOverride = 10
+      reportForm.notClaimedAa09 = false
+    }
+  }
+)
+
 // 通知歷史資料
 const logQuery = ref('')
 const logList = ref<NotificationLogDTO[]>([])
@@ -398,9 +481,24 @@ const selectedTopic = ref<string | undefined>(undefined)
 
 const triggering = ref(false)
 
+// 通知歷史詳情對話框狀態
+const logDetailVisible = ref(false)
+const currentLogRow = ref<NotificationLogDTO | null>(null)
+const logContentExpanded = ref(false)
+const isLogContentLong = computed(() => {
+  const content = currentLogRow.value?.contentSummary || (currentLogRow.value as any)?.body || ''
+  return content.length > 120
+})
+
+function openLogDetail(row: any) {
+  currentLogRow.value = row
+  logContentExpanded.value = false
+  logDetailVisible.value = true
+}
+
 async function fetchVehicles() {
   try {
-    const res = await listVehicles({ active: true, pageSize: 100 })
+    const res = await listVehicles({ status: 'active', pageSize: 100 })
     vehicles.value = res.data
   } catch (error) {
     // handled by interceptor
@@ -409,7 +507,7 @@ async function fetchVehicles() {
 
 async function fetchDrivers() {
   try {
-    const res = await listDrivers({ active: true, pageSize: 100 })
+    const res = await listDrivers({ status: 'active', pageSize: 100 })
     drivers.value = res.data
   } catch (error) {
     // handled by interceptor
@@ -425,8 +523,8 @@ async function fetchMissingRides() {
       vehicleId: selectedVehicle.value,
       q: missingQuery.value || undefined
     })
-    missingList.value = res.data
-    missingTotal.value = res.meta?.total || res.data.length
+    missingList.value = res.data || []
+    missingTotal.value = res.meta?.total || res.data?.length || 0
   } finally {
     loadingMissing.value = false
   }
@@ -528,11 +626,11 @@ async function handleSubmitReport() {
       serviceDate: reportForm.serviceDate,
       legSeq: reportForm.legSeq,
       effectiveStatus: reportForm.effectiveStatus,
-      vehicleId: reportForm.vehicleId || undefined,
-      driverId: reportForm.driverId || undefined,
-      departTimeOverride: reportForm.departTimeOverride || undefined,
-      durationMinOverride: reportForm.durationMinOverride || undefined,
-      notClaimedAa09: reportForm.notClaimedAa09,
+      vehicleId: isReportAbsent.value ? undefined : (reportForm.vehicleId || undefined),
+      driverId: isReportAbsent.value ? undefined : (reportForm.driverId || undefined),
+      departTimeOverride: isReportAbsent.value ? undefined : (reportForm.departTimeOverride || undefined),
+      durationMinOverride: isReportAbsent.value ? undefined : (reportForm.durationMinOverride || undefined),
+      notClaimedAa09: isReportAbsent.value ? false : reportForm.notClaimedAa09,
       reason: reportForm.reason || undefined
     })
 
@@ -571,7 +669,11 @@ async function handleTriggerNotify() {
   }
 }
 
+// 前置檢核報告的「查看未回報」會帶 ?q=個案姓名 進來，預填搜尋條件讓清單直接只剩該個案
 onMounted(() => {
+  const q = route.query.q
+  if (typeof q === 'string' && q) missingQuery.value = q
+
   fetchVehicles()
   fetchDrivers()
   fetchMissingRides()
@@ -586,9 +688,66 @@ onMounted(() => {
   gap: 16px;
 }
 
+.log-detail-descriptions :deep(.el-descriptions__body .el-descriptions__table .el-descriptions__cell) {
+  font-size: var(--app-font-md);
+}
+
+.log-detail-content {
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-detail-content.is-expanded {
+  max-height: none;
+}
+
+.log-detail-toggle {
+  margin-top: 4px;
+}
+
 .text-secondary {
-  color: var(--el-text-color-secondary);
+  color: var(--app-text-secondary);
   font-size: 13px;
+}
+
+.topic-label {
+  white-space: nowrap;
+}
+
+:deep(.trigger-source-col .cell) {
+  white-space: nowrap;
+  min-width: 140px;
+}
+
+:deep(.topic-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.subject-col .cell) {
+  min-width: 220px;
+}
+
+:deep(.recipients-col .cell) {
+  min-width: 200px;
+}
+
+:deep(.error-message-col .cell) {
+  min-width: 180px;
+}
+
+.overdue-days {
+  font-weight: 600;
+  font-size: var(--app-font-sm);
+
+  &.is-danger {
+    color: var(--app-status-danger-fg);
+  }
+
+  &.is-warning {
+    color: var(--app-status-warning-fg);
+  }
 }
 
 .report-dialog-body {
@@ -607,7 +766,7 @@ onMounted(() => {
   cursor: pointer;
   user-select: none;
   &:hover {
-    background-color: var(--el-color-primary-light-9);
+    background-color: var(--app-primary-light);
   }
 }
 

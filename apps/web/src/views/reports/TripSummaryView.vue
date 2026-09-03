@@ -1,9 +1,10 @@
 <template>
   <div class="trip-summary-view">
+    <PageHeader title="車輛趟數表" />
     <!-- 篩選與操作列 -->
     <el-card class="filter-card" shadow="never">
       <el-row :gutter="16" justify="space-between" align="middle">
-        <el-col :span="18">
+        <el-col :xs="24" :lg="18">
           <div class="filter-wrapper" style="display: flex; gap: 8px; align-items: center;">
             <el-date-picker
               v-model="queryMonth"
@@ -18,7 +19,7 @@
               v-model="queryKeyword"
               placeholder="搜尋車輛／車牌／司機"
               clearable
-              style="width: 200px;"
+              style="width: 240px;"
               @keyup.enter="fetchReport"
             />
 
@@ -53,7 +54,7 @@
               />
             </el-select>
 
-            <el-button type="primary" icon="Search" @click="fetchReport">
+            <el-button type="primary" @click="fetchReport">
               查詢報表
             </el-button>
             <el-button @click="handleReset">
@@ -61,10 +62,9 @@
             </el-button>
           </div>
         </el-col>
-        <el-col :span="6" class="actions-col">
+        <el-col :xs="24" :lg="6" class="actions-col">
           <el-button
-            type="success"
-            icon="Download"
+            plain
             :loading="exporting"
             @click="handleExportExcel"
           >
@@ -76,22 +76,22 @@
 
     <!-- 總覽資料統計卡片 -->
     <el-row :gutter="16">
-      <el-col :span="8">
-        <el-card shadow="hover" class="stat-card">
+      <el-col :xs="24" :sm="8">
+        <el-card shadow="never" class="stat-card">
           <div class="stat-title">全期去程趟數合計</div>
-          <div class="stat-number outbound-color">{{ reportData?.grandTotalOutbound || 0 }} <span>趟</span></div>
+          <div class="stat-number">{{ reportData?.grandTotalOutbound || 0 }} <span>趟</span></div>
         </el-card>
       </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover" class="stat-card">
+      <el-col :xs="24" :sm="8">
+        <el-card shadow="never" class="stat-card">
           <div class="stat-title">全期回程趟數合計</div>
-          <div class="stat-number inbound-color">{{ reportData?.grandTotalInbound || 0 }} <span>趟</span></div>
+          <div class="stat-number">{{ reportData?.grandTotalInbound || 0 }} <span>趟</span></div>
         </el-card>
       </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover" class="stat-card highlight">
+      <el-col :xs="24" :sm="8">
+        <el-card shadow="never" class="stat-card">
           <div class="stat-title">全期車輛總趟數</div>
-          <div class="stat-number total-color">{{ reportData?.grandTotal || 0 }} <span>趟</span></div>
+          <div class="stat-number font-bold">{{ reportData?.grandTotal || 0 }} <span>趟</span></div>
         </el-card>
       </el-col>
     </el-row>
@@ -108,19 +108,17 @@
           <template #header>
             <div class="veh-header">
               <div class="veh-title">
-                <el-icon><Van /></el-icon>
                 <span class="veh-name">{{ veh.vehicleName }}</span>
-                <el-tag size="small" type="info">{{ veh.plateNo }}</el-tag>
+                <span class="veh-plate">({{ veh.plateNo }})</span>
                 <span v-if="veh.driverName" class="veh-driver">主要司機：{{ veh.driverName }}</span>
               </div>
               <div class="veh-subtotal">
-                小計：去程 <b>{{ veh.subtotalOutbound }}</b> 趟 / 回程 <b>{{ veh.subtotalInbound }}</b> 趟 / 合計 <b class="total-text">{{ veh.subtotalTotal }}</b> 趟
+                小計：去程 <b>{{ veh.subtotalOutbound }}</b> 趟 / 回程 <b>{{ veh.subtotalInbound }}</b> 趟 / 合計 <b>{{ veh.subtotalTotal }}</b> 趟
               </div>
             </div>
           </template>
 
-          <el-table :data="veh.rows" border stripe style="width: 100%;">
-            <el-table-column prop="caseCode" label="個案編號" width="120" />
+          <el-table :data="veh.rows" border stripe style="width: fit-content; max-width: 100%;">
             <el-table-column prop="caseName" label="個案姓名" width="140" />
             <el-table-column prop="outboundCount" label="去程趟數" align="right" width="150">
               <template #default="{ row }">
@@ -132,9 +130,9 @@
                 <span class="count-cell">{{ row.inboundCount }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="totalCount" label="個人趟數合計" align="right">
+            <el-table-column prop="totalCount" label="個人趟數合計" align="right" width="150">
               <template #default="{ row }">
-                <b class="count-cell total-text">{{ row.totalCount }}</b>
+                <b class="count-cell">{{ row.totalCount }}</b>
               </template>
             </el-table-column>
           </el-table>
@@ -148,12 +146,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Van, Download, Search } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
 import { ElMessage } from 'element-plus'
 import { getTripSummaryReport, exportTripSummaryExcel } from '@/api/reports'
 import { listVehicles } from '@/api/masters'
 import type { TripSummaryReportDTO, VehicleDTO } from '@/types/api'
 import { REGION_LABELS } from '@/types/domain'
+import { downloadBlob } from '@/utils/download'
 
 const queryMonth = ref('2026-07')
 const queryKeyword = ref('')
@@ -206,14 +205,7 @@ async function handleExportExcel() {
       region: queryRegion.value,
       vehicleId: queryVehicle.value
     })
-    const downloadUrl = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = downloadUrl
-    link.download = `車輛趟數表-${queryMonth.value}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(downloadUrl)
+    downloadBlob(blob, `車輛趟數表-${queryMonth.value}.xlsx`)
     ElMessage.success('趟數表已成功匯出！')
   } catch (error: any) {
     ElMessage.error(error?.message || '匯出 Excel 失敗')
@@ -255,80 +247,74 @@ onMounted(() => {
   border-radius: 8px;
   text-align: center;
   padding: 12px 0;
+  border: 1px solid var(--app-border-light);
 
   .stat-title {
-    font-size: 14px;
-    color: var(--el-text-color-secondary);
+    font-size: 13px;
+    color: var(--app-text-secondary);
     margin-bottom: 8px;
   }
 
   .stat-number {
-    font-size: 28px;
-    font-weight: bold;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--app-text-primary);
 
     span {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: normal;
-      color: var(--el-text-color-secondary);
+      color: var(--app-text-secondary);
       margin-left: 4px;
     }
-  }
-
-  .outbound-color {
-    color: var(--el-color-primary);
-  }
-
-  .inbound-color {
-    color: var(--el-color-success);
-  }
-
-  .total-color {
-    color: #1d5b79;
-  }
-
-  &.highlight {
-    background: linear-gradient(135deg, #f0f7fa 0%, #e1eff5 100%);
   }
 }
 
 .tables-wrapper {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 16px;
 }
 
 .vehicle-card {
+  flex: 0 0 auto;
+  max-width: 100%;
   border-radius: 8px;
 
   .veh-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 24px;
 
     .veh-title {
       display: flex;
       align-items: center;
-      gap: 10px;
+      flex-wrap: wrap;
+      gap: 4px 10px;
       font-size: 16px;
       font-weight: bold;
-      color: #1d5b79;
+      color: var(--app-text-primary);
+
+      .veh-plate {
+        font-size: var(--app-font-md);
+        font-weight: normal;
+        color: var(--app-text-secondary);
+        font-family: var(--el-font-family);
+      }
 
       .veh-driver {
         font-size: 13px;
         font-weight: normal;
-        color: var(--el-text-color-secondary);
+        color: var(--app-text-secondary);
         margin-left: 8px;
       }
     }
 
     .veh-subtotal {
       font-size: 14px;
-      color: var(--el-text-color-regular);
-
-      .total-text {
-        color: var(--el-color-primary);
-        font-size: 16px;
-      }
+      color: var(--app-text-regular);
     }
   }
 }
@@ -336,9 +322,5 @@ onMounted(() => {
 .count-cell {
   font-family: monospace;
   font-size: 14px;
-}
-
-.total-text {
-  color: var(--el-color-primary);
 }
 </style>
