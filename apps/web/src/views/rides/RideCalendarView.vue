@@ -546,9 +546,9 @@ onMounted(() => {
   }
 
   &.status-absent {
-    background-color: var(--app-status-info-bg);
-    color: var(--app-text-secondary);
-    border: 1px solid var(--app-border-color);
+    background-color: var(--app-status-danger-bg);
+    color: var(--app-status-danger-fg);
+    border: 1px solid var(--app-status-danger-border);
   }
 
   &.status-unreported {
