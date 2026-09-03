@@ -7,11 +7,10 @@
 | 服務 | 平台 | 用途 |
 |---|---|---|
 | `apps/api` | Google Cloud Run（service `ltc-api` + migration job `ltc-api-migrate`），region `asia-east1` | Go 後端 API（正式） |
-| `apps/api`（Demo） | Google Cloud Run（service `ltc-api-demo` + migration job `ltc-api-demo-migrate`），同一個 GCP 專案、region `asia-east1` | Go 後端 API（Demo，`DATA_PLANE=demo`） |
-| `apps/web` | Vercel（project `ltc-system`） | Vue 3 前端靜態站台，正式與 Demo 帳號共用同一份前端部署 |
+| `apps/web` | Vercel（project `ltc-system`） | Vue 3 前端靜態站台 |
 | Supabase 專案 `oywacuduaiulnfxzmpxs` | Supabase | PostgreSQL 資料庫、Auth（GoTrue）、Storage |
 
-正式環境（`main` 分支）與 develop 環境（`develop` 分支）目前共用**同一個** Supabase 專案與**同一個** `postgres` 資料庫；沒有各自獨立的資料庫。Demo 帳號（`demo@ltc.example.com`）則不同——它連的是同一個 Supabase 專案底下**另一個獨立資料庫** `ltc_demo`，透過獨立的 `ltc-api-demo` Cloud Run 服務存取，實體隔離、不會讀寫到正式資料。從零建置這一整套 Demo 基礎設施的步驟見 [`environment-bootstrap.md`](environment-bootstrap.md#如果還要建一個-demo-環境選用)。
+系統只有一套環境（正式，由 `main` 分支觸發部署），只用一個 Supabase 專案與一個 `postgres` 資料庫，沒有其他分支或資料平面。
 
 ## Supabase（資料庫與 Auth）
 
@@ -49,31 +48,6 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 
 日後任何新增的入口（例如獨立的 worker、one-off script）只要用同一個 `DATABASE_URL` 連 Supabase pooler，都要照這個寫法，不能直接 `pgxpool.New(ctx, dsn)`。
 
-### 已知坑：連 Supavisor pooler 存取非預設資料庫／非預設角色時，使用者名稱要帶專案 ref
-
-`ltc_demo` 這種另外建立的資料庫，用自訂角色（例如 `ltc_demo_app`）透過 6543 埠的 Supavisor pooler 連線時，`DATABASE_URL` 的使用者名稱不能只寫角色名稱，一定要寫成 `<角色>.<Supabase 專案 ref>`（例如 `ltc_demo_app.oywacuduaiulnfxzmpxs`），否則會連線失敗：
-
-```
-FATAL: (ENOIDENTIFIER) no tenant identifier provided (external_id or sni_hostname required)
-```
-
-這是 Supavisor 用使用者名稱判斷要路由到哪個 Supabase 專案（tenant）的機制，不是這個專案特有的設定錯誤——預設的 `postgres` 使用者本來就長這樣（`postgres.<project-ref>`），只是自訂角色第一次接觸這個規則時容易漏掉。
-
-### 已知坑：`ltc_demo_app` 沒有 CREATE 權限，migration 要用另一組帳號跑
-
-[`demo-db-roles.sql`](../../apps/api/ops/demo-db-roles.sql) 只授予 `ltc_demo_app` 對**既有**資料表的 DML 權限（`SELECT/INSERT/UPDATE/DELETE`），沒有 `CREATE TABLE` 權限——這是刻意的，Demo API 執行期不應該有改 schema 的能力。這代表 `ltc-api-demo-migrate` 這個 job 不能用 `ltc_demo_app` 的 `DATABASE_URL`，直接跑會在建立 `schema_migrations` 表格那步就失敗：
-
-```
-ERROR: permission denied for schema public (SQLSTATE 42501)
-```
-
-正確做法是準備**兩組**指向 `ltc_demo` 的連線字串、存成兩個不同的 Secret Manager secret：
-
-- `DEMO_MIGRATE_DATABASE_URL`：用 Supabase 專案預設的 `postgres` 超級使用者（`postgres.<project-ref>`），只給 `ltc-api-demo-migrate` job 用。
-- `DEMO_DATABASE_URL`：用 `ltc_demo_app`（`ltc_demo_app.<project-ref>`），給 `ltc-api-demo` 服務本體用。
-
-只要執行 `demo-db-roles.sql` 時是用同一個 `postgres` 超級使用者連進 `ltc_demo`（腳本裡的 `ALTER DEFAULT PRIVILEGES` 是綁在「執行腳本的角色」上的），之後用這個超級使用者跑 migration 建的新表格，會自動套用同一組預設權限給 `ltc_demo_app`，不用每次新增 migration 都重跑一次 `demo-db-roles.sql`。
-
 ## `apps/api` 環境變數
 
 | 變數 | 本機 `.env` | Cloud Run | 說明 |
@@ -99,14 +73,13 @@ ERROR: permission denied for schema public (SQLSTATE 42501)
 | `VITE_API_BASE_URL` | 後端 API base URL。本機用 `/api/v1`（走 dev server proxy），部署環境要填完整網址，例如 `https://ltc-api-<hash>.<region>.run.app/api/v1` |
 | `VITE_SUPABASE_URL` | Supabase 專案網址，例如 `https://oywacuduaiulnfxzmpxs.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key（公開金鑰，非機密） |
-| `VITE_DEMO_API_BASE_URL` | Demo 帳號專用的後端 API base URL，指向 `ltc-api-demo` 服務，例如 `https://ltc-api-demo-<hash>.<region>.run.app/api/v1`。未設定時 Demo 帳號登入後所有 API 請求仍會打到 `VITE_API_BASE_URL`（正式 API），被 `data_plane` 檢查拒絕（見 [`client.ts`](../../apps/web/src/api/client.ts)） |
 | `VITE_GOOGLE_CLIENT_ID` / `VITE_GOOGLE_API_KEY` / `VITE_GOOGLE_APP_ID` | Google Picker／Identity Services，選填 |
 
 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 沒設定時，[`apps/web/src/lib/supabase.ts`](../../apps/web/src/lib/supabase.ts) 會讓 `supabase` client 維持 `null`；登入頁看到 `!supabase` 就會直接顯示「帳號密碼錯誤或無此使用者」，不會真的呼叫 Supabase Auth，容易誤判成帳密問題。
 
 ### 已知坑：Vercel Preview 環境變數要另外設
 
-`vercel env ls` 顯示的環境變數清單是分 Production／Preview／Development 各自獨立設定的，兩邊漏設哪個方向都發生過：曾經 Preview 完全沒設 Supabase 相關變數，導致 develop 分支預覽網址永遠無法用真實帳密登入；後來也發生過反過來——`VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 只設在 Preview，`Production`（`ltc-system-inky.vercel.app` 這個正式別名）從缺，導致正式站台的登入頁一律顯示「帳號密碼錯誤或無此使用者」（`supabase` client 為 `null`，根本沒真的呼叫 Supabase Auth）。新增任何 `VITE_` 變數後，養成習慣用 `vercel env ls`（不加參數，列出全部環境）比對 Production／Preview 兩欄是否都有，不要只看其中一個環境正常就當作沒問題。
+`vercel env ls` 顯示的環境變數清單是分 Production／Preview／Development 各自獨立設定的；曾經發生過 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 漏設在 `Production`（`ltc-system-inky.vercel.app` 這個正式別名），導致正式站台的登入頁一律顯示「帳號密碼錯誤或無此使用者」（`supabase` client 為 `null`，根本沒真的呼叫 Supabase Auth）。新增任何 `VITE_` 變數後，養成習慣用 `vercel env ls`（不加參數，列出全部環境）核對 Production 是否已設定，不要只憑印象當作沒問題。
 
 新增或檢查 Preview 環境變數：
 
@@ -127,16 +100,10 @@ vercel env add VITE_API_BASE_URL preview --no-sensitive --value 'https://<cloud-
 `vercel deploy --prebuilt` 這個旗標是「有出現就生效」，`--prebuilt=false` 不會真的關掉它，反而會因為找不到本機預建置產物而報錯。要雲端重新建置，直接不要加這個旗標：
 
 ```bash
-vercel deploy
+vercel deploy --prod
 ```
 
-但這樣建出來的是一個全新、隨機雜湊網址的 Preview 部署（例如 `ltc-system-<hash>-<team>.vercel.app`），**不會**自動指到 `ltc-system-git-<branch>-<team>.vercel.app` 這個固定的分支別名——那個別名只有透過 GitHub 原生 Git 整合（push 觸發）的部署才會自動更新；這個專案走的是 GitHub Actions＋CLI 部署（不是原生 Git 整合），沒有這個機制。
-
-`deploy-web.yml` 已經處理過這件事：`Deploy prebuilt output` 那步把 `vercel deploy` 印出的網址存成 step output，接著的 `Update branch alias` 步驟會自動 `vercel alias set` 到 GitHub Environment variable `VERCEL_ALIAS_DOMAIN`（`production` 分支走 `--prod`、會自動套用專案設定的 Production Domains，不需要這個變數）。沒設這個變數就跳過，不影響部署本身成功與否。手動用 CLI 部署、或這個自動化本身故障時才需要手動補：
-
-```bash
-vercel alias set https://ltc-system-<hash>-<team>.vercel.app ltc-system-git-<branch>-<team>.vercel.app
-```
+`--prod` 部署會自動套用專案設定的 Production Domains，不需要額外處理別名。
 
 ### 已知坑：`vercel` CLI 一律要在 repo 根目錄執行，不能先 `cd apps/web`
 
@@ -193,7 +160,7 @@ gcloud run services update ltc-api --region=asia-east1 \
   --update-env-vars="^;^ALLOWED_ORIGINS=https://a.example.com,https://b.example.com"
 ```
 
-`ALLOWED_ORIGINS` 要包含**每一個**會呼叫這支 API 的前端網域，包括 Vercel 的分支預覽網址（`*-git-<branch>-*.vercel.app`）——測試 develop 分支功能時如果後端一直 CORS 擋掉，先檢查這裡有沒有漏放。
+`ALLOWED_ORIGINS` 要包含**每一個**會呼叫這支 API 的前端網域——前端一直被 CORS 擋掉時，先檢查這裡有沒有漏放。
 
 ### 手動部署（source-based deploy）
 
@@ -234,9 +201,9 @@ gcloud run jobs describe ltc-api-migrate --region=asia-east1 --format="value(spe
 
 查出來若是一串 `D:/...` 就是中招了。解法：把值前面多加一個斜線變成 `--command="//app/migrate"`（雙斜線），Git Bash 就不會轉換；Linux 容器內部會把 `//app/migrate` 正常解析成 `/app/migrate`。改用 PowerShell 或 cmd.exe 執行則不會有這個問題，直接填單斜線即可。
 
-## GitHub Actions 自動部署（`develop`／`main`）
+## GitHub Actions 自動部署（`main`）
 
-`deploy-api.yml` 與 `deploy-web.yml` 各自直接由 `push` 到 `develop`／`main` 觸發（也可以用 `workflow_dispatch` 手動觸發），每個檔案內都有一個 `test` job（vet／test／build 或 type-check／build）跑完才會進 `deploy` job；`ci.yml` 只在 PR 上跑，不重複跑 push 的測試。
+`deploy-api.yml` 與 `deploy-web.yml` 各自直接由 `push` 到 `main` 觸發（也可以用 `workflow_dispatch` 手動觸發），每個檔案內都有一個 `test` job（vet／test／build 或 type-check／build）跑完才會進 `deploy` job；`ci.yml` 只在 PR 上跑，不重複跑 push 的測試。其餘分支的 push 不會觸發任何部署。
 
 `deploy-api.yml` 的 `deploy` job 依序：`gcloud builds submit` 建 image → 更新 `ltc-api-migrate` job 的 image → `gcloud run jobs execute` 跑 migration（`--wait`，失敗會擋住下一步）→ `gcloud run deploy` 部署 API service。
 
@@ -246,13 +213,13 @@ gcloud run jobs describe ltc-api-migrate --region=asia-east1 --format="value(spe
 
 之前 `deploy-api.yml`／`deploy-web.yml` 是用 `workflow_run` 接在 `ci.yml` 後面觸發，這個模式有一個不明顯的陷阱：GitHub Actions 執行 `workflow_run` 觸發的工作流程時，**用的是 repo default branch 上那份工作流程定義檔**，不是 `head_branch`（觸發它的那個分支）上的版本。這個 repo 的 default branch 是 `main`；`deploy-api.yml` 曾經在 `develop` 分支上修好一個 `gcloud builds submit` 串流 log 失敗的 bug，但因為沒回合併到 `main`，`workflow_run` 觸發時永遠讀到 `main` 上沒修過的舊版，導致不管從哪個分支 push，部署都用同一份壞掉的邏輯失敗。
 
-現在改成 `push` 觸發：`push` 事件用的工作流程檔案就是**這次要部署的那個 commit 自己的版本**，不會有這個問題，但代價是這兩個檔案本身的修改也要各自進到 `develop`／`main` 才會對該分支生效——不能只改 `develop` 就期待 `main` 的部署也吃到。
+現在改成 `push` 觸發：`push` 事件用的工作流程檔案就是**這次要部署的那個 commit 自己的版本**，不會有這個問題。這兩個檔案只由 `main` 分支的 push 觸發部署，改這兩個檔案本身也要進到 `main` 才會生效。
 
 ### 已知坑：GitHub Environment 名稱要跟 workflow 裡的字串完全一致（大小寫敏感）
 
-`deploy-api.yml`／`deploy-web.yml` 的 `environment:` 欄位用 `github.ref_name == 'main' && 'Production' || 'develop'` 決定要用哪個 GitHub Environment 的 secrets／variables。這個 repo 建立的 Environment 名稱是 `develop`、`Preview`、`Production`——注意是 `Production`（大寫開頭），不是 `production`。曾經因為 workflow 裡寫成小寫 `production`，導致 push 到 `main` 時 GitHub 自動建立一個全新、空的 `production` Environment（沒有任何 secret），部署卡在「Authenticate to Google Cloud」那步失敗。改 `environment:` 欄位或新增 Environment 時，兩邊名稱要逐字比對。
+`deploy-api.yml`／`deploy-web.yml` 的 `environment:` 欄位固定填 `Production`，決定要用哪個 GitHub Environment 的 secrets／variables。這個 repo 建立的 Environment 名稱是 `Production`——注意是大寫開頭，不是 `production`。曾經因為 workflow 裡寫成小寫 `production`，導致 push 到 `main` 時 GitHub 自動建立一個全新、空的 `production` Environment（沒有任何 secret），部署卡在「Authenticate to Google Cloud」那步失敗。改 `environment:` 欄位或新增 Environment 時，兩邊名稱要逐字比對。
 
-需要的 secrets／variables，**GCP 相關的是設在 `develop`／`Production` 兩個 GitHub Environment 底下**（不是 repo 層級），Vercel 相關的是 repo 層級（不分環境）：
+需要的 secrets／variables，**GCP 相關的是設在 `Production` 這個 GitHub Environment 底下**（不是 repo 層級），Vercel 相關的是 repo 層級（不分環境）：
 
 | 名稱 | 類型 | 設定位置 | 用途 |
 |---|---|---|---|
@@ -260,7 +227,6 @@ gcloud run jobs describe ltc-api-migrate --region=asia-east1 --format="value(spe
 | `API_SERVICE`（預設 `ltc-api`）/ `MIGRATION_JOB`（預設 `ltc-api-migrate`） | Variable | Environment | 服務／job 名稱 |
 | `GCP_WIF_PROVIDER` / `GCP_DEPLOY_SA` | Secret | Environment | Workload Identity Federation 部署身分 |
 | `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | Secret | Repo | Vercel CLI 部署憑證 |
-| `VERCEL_ALIAS_DOMAIN` | Variable | Environment | 非 production 分支部署完自動 `vercel alias set` 的目標網域，見下方已知坑；沒設定就跳過這步 |
 
 從零設定這些值（含 GCP service account、Workload Identity Federation、Artifact Registry 怎麼建）見 [`environment-bootstrap.md`](environment-bootstrap.md)。
 

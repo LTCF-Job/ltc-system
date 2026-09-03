@@ -128,52 +128,13 @@ func TestAuthMiddleware_AcceptsValidSignedToken(t *testing.T) {
 
 	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
 	actorID := uuid.New()
-	signed := signTestToken(t, key, "test-kid", actorID.String(), "staff", "")
+	signed := signTestToken(t, key, "test-kid", actorID.String(), "staff")
 
 	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.False(t, c.IsAborted())
 	assert.Equal(t, "staff", c.GetString(ContextKeyActorRole))
 	assert.Equal(t, actorID, GetActorID(c))
-}
-
-// TestAuthMiddleware_ProductionRejectsDemoToken 驗證正式 API 拒絕帶 app_metadata.data_plane = "demo" 的 JWT。
-func TestAuthMiddleware_ProductionRejectsDemoToken(t *testing.T) {
-	srv, key := newTestJWKSServer(t)
-	defer srv.Close()
-
-	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer, DataPlane: DataPlaneProduction}
-	signed := signTestToken(t, key, "test-kid", uuid.NewString(), "staff", DataPlaneDemo)
-
-	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.True(t, c.IsAborted())
-}
-
-// TestAuthMiddleware_DemoRejectsProductionToken 驗證 Demo API 拒絕沒有 data_plane 或 data_plane = "production" 的 JWT。
-func TestAuthMiddleware_DemoRejectsProductionToken(t *testing.T) {
-	srv, key := newTestJWKSServer(t)
-	defer srv.Close()
-
-	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer, DataPlane: DataPlaneDemo}
-	signed := signTestToken(t, key, "test-kid", uuid.NewString(), "staff", "")
-
-	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.True(t, c.IsAborted())
-}
-
-// TestAuthMiddleware_DemoAcceptsDemoToken 驗證 Demo API 放行帶有 app_metadata.data_plane = "demo" 的 JWT。
-func TestAuthMiddleware_DemoAcceptsDemoToken(t *testing.T) {
-	srv, key := newTestJWKSServer(t)
-	defer srv.Close()
-
-	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer, DataPlane: DataPlaneDemo}
-	signed := signTestToken(t, key, "test-kid", uuid.NewString(), "staff", DataPlaneDemo)
-
-	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, DataPlaneDemo, GetActorDataPlane(c))
 }
 
 // TestAuthMiddleware_IgnoresUserMetadataRole 是本次提權修補的核心迴歸測試：使用者可自行寫入的
@@ -223,7 +184,7 @@ func TestAuthMiddleware_PreservesAppMetadataRoles(t *testing.T) {
 
 	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
 	for _, role := range []string{"admin", "dispatcher", "staff", "driver", "viewer", "dispatcher_1"} {
-		signed := signTestToken(t, key, "test-kid", uuid.NewString(), role, "")
+		signed := signTestToken(t, key, "test-kid", uuid.NewString(), role)
 		w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
 		require.Equal(t, http.StatusOK, w.Code)
 		assert.Equal(t, role, c.GetString(ContextKeyActorRole))
@@ -236,7 +197,7 @@ func TestAuthMiddleware_MissingAppMetadataRoleFallsBackToViewer(t *testing.T) {
 	defer srv.Close()
 
 	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
-	signed := signTestToken(t, key, "test-kid", uuid.NewString(), "", "")
+	signed := signTestToken(t, key, "test-kid", uuid.NewString(), "")
 
 	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -283,7 +244,7 @@ func TestAuthMiddleware_RejectsNonUUIDSubject(t *testing.T) {
 	defer srv.Close()
 
 	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
-	signed := signTestToken(t, key, "test-kid", "not-a-uuid", "staff", "")
+	signed := signTestToken(t, key, "test-kid", "not-a-uuid", "staff")
 
 	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -306,14 +267,11 @@ func forgeUnsignedToken(t *testing.T, role string) string {
 }
 
 // signTestToken 產生一張合法的 Supabase 使用者 token，角色寫在 app_metadata。
-func signTestToken(t *testing.T, key *rsa.PrivateKey, kid, sub, role, dataPlane string) string {
+func signTestToken(t *testing.T, key *rsa.PrivateKey, kid, sub, role string) string {
 	t.Helper()
 	appMetadata := map[string]interface{}{}
 	if role != "" {
 		appMetadata["role"] = role
-	}
-	if dataPlane != "" {
-		appMetadata["data_plane"] = dataPlane
 	}
 	return signClaims(t, key, kid, jwt.MapClaims{
 		"sub":          sub,

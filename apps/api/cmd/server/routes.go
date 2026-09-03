@@ -9,8 +9,6 @@ import (
 	caregivertransport "ltc-system/apps/api/internal/modules/caregiver/transport"
 	importtransport "ltc-system/apps/api/internal/modules/caseimport/transport"
 	casetransport "ltc-system/apps/api/internal/modules/casemgmt/transport"
-	demoapp "ltc-system/apps/api/internal/modules/demo/app"
-	demotransport "ltc-system/apps/api/internal/modules/demo/transport"
 	drtransport "ltc-system/apps/api/internal/modules/driverreport/transport"
 	holidaytransport "ltc-system/apps/api/internal/modules/holiday/transport"
 	identitytransport "ltc-system/apps/api/internal/modules/identity/transport"
@@ -52,11 +50,10 @@ type handlers struct {
 	caregiver    *caregivertransport.CaregiverHandler
 	role         *identitytransport.RoleHandler
 	identity     *identitytransport.IdentityHandler
-	demo         *demotransport.ResetHandler
 }
 
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
-func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *demoapp.ConcurrencyGuard, perm auth.PermissionResolver, customPerm auth.CustomPermissionResolver) *gin.Engine {
+func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.PermissionResolver, customPerm auth.CustomPermissionResolver) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logging.Middleware())
@@ -89,16 +86,6 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *de
 	// 需要 JWT 認證之 API 群組
 	apiV1 := r.Group("/api/v1")
 	apiV1.Use(auth.Middleware(cfg))
-
-	// demo/reset 本身需要獨佔鎖，必須在 ConcurrencyGuardMiddleware 掛載前註冊，
-	// 否則這個請求會先卡在自己持有的共享鎖，永遠等不到獨佔鎖（自我死結）。
-	if h.demo != nil {
-		// 資料平面隔離已由 auth.Middleware 的 enforceDataPlane 處理，這裡只需要已登入
-		apiV1.POST("/demo/reset", h.demo.Reset)
-	}
-	if cfg.DataPlane == "demo" && demoGuard != nil {
-		apiV1.Use(demotransport.ConcurrencyGuardMiddleware(demoGuard))
-	}
 	{
 		// 所有需授權的路由一律走 perm.RequirePermission(module, action) 查角色的模組權限矩陣，
 		// 不再有寫死角色字面值的路由；自訂角色在「角色身分管理」頁調整矩陣後，API 存取範圍會

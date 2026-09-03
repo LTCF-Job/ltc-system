@@ -1,10 +1,11 @@
 name: Deploy Web to Vercel
 
 # push 觸發，理由同 deploy-api.yml：workflow_run 一律讀 default branch 上的
-# 工作流程定義檔，不是觸發它的那個分支，會讓 develop 分支的修正永遠不生效。
+# 工作流程定義檔，不是觸發它的那個分支，會讓修正永遠不生效。
+# 只有 main 分支會觸發部署，其餘分支的測試與 build 交給 ci.yml 的 PR 檢查負責。
 on:
   push:
-    branches: [develop, main]
+    branches: [main]
     paths:
       - 'apps/web/**'
       - '.github/workflows/deploy-web.yml'
@@ -48,7 +49,7 @@ jobs:
     name: Build and deploy
     needs: test
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'main' && 'Production' || 'develop' }}
+    environment: Production
     # 注意：這個 job 故意不設 defaults.run.working-directory: apps/web。
     # Vercel 專案在 dashboard 設定了 Root Directory = apps/web，新版
     # vercel CLI（59.11+）的 `vercel pull` 會把這個值如實回傳在
@@ -64,7 +65,7 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_ENV: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+      VERCEL_ENV: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -95,29 +96,10 @@ jobs:
         # 不能用 $PWD/node_modules/.bin，要指名 apps/web 底下那份）。
         run: |
           export PATH="$PWD/apps/web/node_modules/.bin:$PATH"
-          if [ "$VERCEL_ENV" = "production" ]; then
-            vercel build --prod --token="$VERCEL_TOKEN"
-          else
-            vercel build --token="$VERCEL_TOKEN"
-          fi
+          vercel build --prod --token="$VERCEL_TOKEN"
 
       - name: Deploy prebuilt output
         id: deploy
         run: |
-          if [ "$VERCEL_ENV" = "production" ]; then
-            URL=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
-          else
-            URL=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
-          fi
+          URL=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
           echo "url=$URL" >> "$GITHUB_OUTPUT"
-
-      - name: Update branch alias
-        # vercel deploy 每次都會產生一個新的隨機雜湊網址；--prod 部署會自動套用
-        # 專案設定的 Production Domains，不用額外處理，但非 production（develop
-        # 分支對應的 preview）沒有這種自動機制——這裡是走 CLI／GitHub Actions
-        # 部署，不是 Vercel 原生 Git 整合，不會自動更新
-        # ltc-system-git-<branch>-<team>.vercel.app 這類固定別名，每次都要
-        # 手動 `vercel alias set` 才會反映在那個大家在測試時使用的固定網址上。
-        # VERCEL_ALIAS_DOMAIN 沒設定時跳過，不影響部署本身成功與否。
-        if: env.VERCEL_ENV != 'production' && vars.VERCEL_ALIAS_DOMAIN != ''
-        run: vercel alias set "${{ steps.deploy.outputs.url }}" "${{ vars.VERCEL_ALIAS_DOMAIN }}" --token="$VERCEL_TOKEN"

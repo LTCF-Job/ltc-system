@@ -19,9 +19,6 @@ const (
 	ContextKeyActorRole = "actor_role"
 	ContextKeyUserEmail = "user_email"
 	ContextKeyActorName = "actor_name"
-	ContextKeyDataPlane = "actor_data_plane"
-	DataPlaneProduction = "production"
-	DataPlaneDemo       = "demo"
 )
 
 // newSupabaseJWKS 建立向 Supabase JWKS 端點取金鑰並自動輪替的 Keyfunc；未設定 URL 時回傳 nil。
@@ -33,7 +30,7 @@ func newSupabaseJWKS(jwksURL string) (keyfunc.Keyfunc, error) {
 	return keyfunc.NewDefaultCtx(context.Background(), []string{jwksURL})
 }
 
-// setActorFromClaims 將 JWT claims 中的 sub、角色與 data plane 注入 Gin Context；
+// setActorFromClaims 將 JWT claims 中的 sub 與角色注入 Gin Context；
 // sub 不是合法 UUID 時回應 401 並回傳 false。
 func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) bool {
 	sub, _ := claims.GetSubject()
@@ -52,7 +49,7 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) bool {
 		}
 	}
 
-	// role 與 data_plane 只認 app_metadata：它唯一的寫入路徑是持 service role key 的 Admin API
+	// role 只認 app_metadata：它唯一的寫入路徑是持 service role key 的 Admin API
 	// （見 identity/infra/supabase_admin_client.go），使用者無法自行竄改；user_metadata 則可由使用者
 	// 呼叫 supabase.auth.updateUser 寫入，頂層 role claim 又只是 Postgres role（authenticated／
 	// anon／service_role），兩者都不能當業務角色。
@@ -60,16 +57,12 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) bool {
 	// identity/app/role_service.go 的 Create），寫死清單會讓自訂角色使用者被靜默降級；未知 role
 	// 會在 RequirePermission 查不到權限矩陣而以 403 擋下。
 	role := "viewer"
-	dataPlane := DataPlaneProduction
 	if appMetadata, ok := claims["app_metadata"].(map[string]interface{}); ok {
 		if r, ok := appMetadata["role"].(string); ok {
 			role = r
 		}
 		if n, ok := appMetadata["display_name"].(string); ok {
 			name = n
-		}
-		if dp, ok := appMetadata["data_plane"].(string); ok {
-			dataPlane = dp
 		}
 	}
 	if name == "" {
@@ -80,7 +73,6 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) bool {
 	c.Set(ContextKeyActorRole, role)
 	c.Set(ContextKeyActorName, name)
 	c.Set(ContextKeyUserEmail, email)
-	c.Set(ContextKeyDataPlane, dataPlane)
 	return true
 }
 
@@ -123,10 +115,6 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 			c.Set(ContextKeyActorRole, role)
 			c.Set(ContextKeyUserEmail, role+"@example.com")
 			c.Set(ContextKeyActorName, role+"@example.com")
-			c.Set(ContextKeyDataPlane, DataPlaneProduction)
-			if !enforceDataPlane(c, cfg) {
-				return
-			}
 			c.Next()
 			return
 		}
@@ -140,9 +128,6 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 				return
 			}
 			if !setActorFromClaims(c, claims) {
-				return
-			}
-			if !enforceDataPlane(c, cfg) {
 				return
 			}
 			c.Next()
@@ -169,25 +154,8 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 		if !setActorFromClaims(c, claims) {
 			return
 		}
-		if !enforceDataPlane(c, cfg) {
-			return
-		}
 		c.Next()
 	}
-}
-
-// enforceDataPlane 驗證 JWT 的 data_plane 是否符合目前服務環境，不符則回應 401 並中止請求。
-func enforceDataPlane(c *gin.Context, cfg *config.Config) bool {
-	servicePlane := cfg.DataPlane
-	if servicePlane == "" {
-		servicePlane = DataPlaneProduction
-	}
-	tokenPlane, _ := c.Get(ContextKeyDataPlane)
-	if tokenPlane != servicePlane {
-		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "此憑證不適用於目前環境", nil)
-		return false
-	}
-	return true
 }
 
 // GetActorID 從 Context 安全取出當前使用者 UUID。
@@ -229,14 +197,4 @@ func GetActorName(c *gin.Context) string {
 		}
 	}
 	return ""
-}
-
-// GetActorDataPlane 從 Context 安全取出當前憑證所屬的 data plane。
-func GetActorDataPlane(c *gin.Context) string {
-	if val, exists := c.Get(ContextKeyDataPlane); exists {
-		if dp, ok := val.(string); ok {
-			return dp
-		}
-	}
-	return DataPlaneProduction
 }

@@ -158,40 +158,6 @@ func TestLoadFromEnv_LocalAllowsDevDefaults(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnv_DataPlaneDefaultsToProduction(t *testing.T) {
-	clearEnv(t)
-	t.Setenv("APP_ENV", "local")
-	cfg, err := LoadFromEnv()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if cfg.DataPlane != "production" {
-		t.Fatalf("expected DataPlane to default to production, got %q", cfg.DataPlane)
-	}
-}
-
-func TestLoadFromEnv_RejectsUnknownDataPlane(t *testing.T) {
-	clearEnv(t)
-	t.Setenv("APP_ENV", "local")
-	t.Setenv("DATA_PLANE", "staging")
-	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("expected error for unrecognized DATA_PLANE value, got nil")
-	}
-}
-
-func TestLoadFromEnv_AcceptsDemoDataPlane(t *testing.T) {
-	clearEnv(t)
-	t.Setenv("APP_ENV", "local")
-	t.Setenv("DATA_PLANE", "demo")
-	cfg, err := LoadFromEnv()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if cfg.DataPlane != "demo" {
-		t.Fatalf("expected DataPlane=demo, got %q", cfg.DataPlane)
-	}
-}
-
 // struct tag 的 default 只能寫字面量，與常數脫鉤後 production 的沿用檢查會靜默失效。
 func TestDevDefaultConstantsMatchStructTags(t *testing.T) {
 	typ := reflect.TypeOf(Config{})

@@ -36,7 +36,7 @@ src/
 
 `src/api/client.ts` 是唯一的 axios instance，兩個攔截器做的事：
 
-- **request**：自動帶 `Authorization: Bearer <token>`（從 `stores/auth.ts` 拿）；登入身分的 `dataPlane` 是 `demo` 時改把請求送到 `VITE_DEMO_API_BASE_URL`。
+- **request**：自動帶 `Authorization: Bearer <token>`（從 `stores/auth.ts` 拿）。
 - **response**：直接把 `response.data` 解出來（所以各個 `api/*.ts` 拿到的就是 `{ data, meta }` 那層，不用自己再 `.data.data`）；401 自動登出並導回登入頁；403 跳警告訊息；其他錯誤統一用 `ElMessage` / `ElNotification` 顯示，帶欄位級錯誤的話（後端回傳 `error.details`）會列出每個欄位的錯誤原因。
 
 新增一支 API 就在 `src/api/` 對應資源的檔案加一個 function，回傳型別盡量用 `src/types/api.d.ts` 產生的型別，不要自己重複定義一份跟後端脫鉤的 interface。後端 API 改了要記得跑 `npm run gen:types` 重新產生型別。
@@ -51,35 +51,31 @@ meta: { title: '個案管理', module: 'masters_cases', roles: ['admin', 'staff'
 
 `roles` 只是給人看的標註，實際放不放行看 `module` 對應的模組權限表（角色預設值 ＋ 個人自訂覆蓋），判斷順序跟細節寫在獨立的 [frontend-permission-logic.md](frontend-permission-logic.md)，改權限規則前務必先讀那份，不要以為改 `meta.roles` 就會生效。加新頁面記得同步確認後端對應 API 的 `RequireRoles` 白名單有沒有涵蓋一致的角色（見 [backend-api-reference.md](backend-api-reference.md)），前後端角色定義要對得上，不然會出現「頁面看得到但每支 API 都 403」的狀況；也要注意前端的細粒度權限後端目前接不到，見 [frontend-permission-logic.md](frontend-permission-logic.md) 的落差說明。
 
-## 環境模型（local／demo／production）
+## 環境模型（local／production）
 
-前端**沒有任何 mock 或假資料層**（MSW 已整個移除）。三個環境跑的是同一份程式碼、同一條功能路徑，差別只在連到哪個資料庫：
+前端**沒有任何 mock 或假資料層**（MSW 已整個移除）。兩個環境跑的是同一份程式碼、同一條功能路徑，差別只在連到哪個資料庫：
 
 | 環境 | 資料庫 | 登入 |
 |---|---|---|
 | local | 本機 PostgreSQL | 未設定 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 時不驗證密碼，改發 `mock_jwt_<role>` 給後端的 local 分支解析 |
-| demo | 獨立的 `ltc_demo` 資料庫（另一個 Cloud Run 服務） | Supabase Auth 真實驗證 |
 | production | 正式資料庫 | Supabase Auth 真實驗證 |
 
 local 的登入表單與其他環境完全一樣：照常輸入帳號密碼、照常按「登入系統」，只是不會呼叫 Supabase。角色由輸入的帳號推斷——含 `viewer` 字樣即以檢視人員登入，其餘一律管理員（`LoginView.handleLogin`）。這條路徑只有在 `import.meta.env.DEV` 或 `VITE_APP_ENV=local` 時成立；其餘環境沒接上 Supabase 就直接拒絕登入，不存在任何略過驗證的入口。
 
-後端對應的放行條件見 `apps/api/internal/platform/auth/auth.go`：只有 `APP_ENV=local` 才接受 `mock_jwt_` 前綴的憑證，且仍要通過 data plane 檢查。
+後端對應的放行條件見 `apps/api/internal/platform/auth/auth.go`：只有 `APP_ENV=local` 才接受 `mock_jwt_` 前綴的憑證。
 
-### 登入帳號代稱與展示（demo）帳號
+### 登入帳號代稱
 
-登入表單接受兩個「帳號代稱」，`LoginView.handleLogin` 會在送出前把它換成 Supabase Auth 真正使用的 email。**密碼一律照常送進 `supabase.auth.signInWithPassword` 做真實驗證，沒有任何略過 Supabase 的登入路徑**：
+登入表單接受帳號代稱，`LoginView.handleLogin` 會在送出前把它換成 Supabase Auth 真正使用的 email。**密碼一律照常送進 `supabase.auth.signInWithPassword` 做真實驗證，沒有任何略過 Supabase 的登入路徑**：
 
 | 輸入的帳號 | 實際送出的 email | 判斷依據 |
 |---|---|---|
-| `demo`（或 `demo@` 開頭的字串），密碼為 `demo`／`demo123` | `demo@ltc.example.com` | `LoginView` 內的 `isDemoCredentials()` |
 | `ltcf-admin` | `ltcf-admin@ltc.example.com` | `LoginView.handleLogin` 內的字串比對 |
 
 代稱只是輸入上的方便，不代表帳號存在，也不代表有預設密碼：
 
 - **沒有任何 migration 會建立登入帳號。** `apps/api/migrations/000002_seed_reference_data.up.sql` 現在只寫入 22 個縣市的 `regions`，`000011_backfill_admin_identity.up.sql` 已改成 `SELECT 1;` 的 no-op。管理員帳號必須另行 bootstrap（見 [environment-bootstrap.md](environment-bootstrap.md)），密碼只存在於建立當下使用的 secret 或密碼管理工具，不寫進程式碼、環境變數範本或任何文件。
-- 權限來自 JWT 的 `app_metadata.role`，資料平面來自 `app_metadata.data_plane`（`production`／`demo`）。`LoginView` 把這兩個欄位存進 session，`src/api/client.ts` 再依 `dataPlane` 決定要打 `VITE_API_BASE_URL` 還是 `VITE_DEMO_API_BASE_URL`。
-- 展示站台的資料來自後端獨立的 demo 資料平面（另一個 Cloud Run 服務＋另一個資料庫）；設計與隔離機制見 [demo-data-plane-architecture.md](../decisions/demo-data-plane-architecture.md)。
-- `demo` 這組帳密是公開可猜的固定字串，等同公開的展示入口，所以 demo 資料平面的種子資料裡不能放真實個資或任何敏感內容。
+- 權限來自 JWT 的 `app_metadata.role`。`LoginView` 把這個欄位存進 session。
 
 ## 狀態管理
 

@@ -91,13 +91,6 @@ const rules = {
   password: [{ required: true, message: '請輸入密碼', trigger: 'blur' }]
 }
 
-// "demo" 帳號代稱固定對應到 Supabase 上的 Demo 測試帳號，密碼仍走真實驗證，不是前端假資料
-function isDemoCredentials(email: string, password: string): boolean {
-  const normalizedEmail = email.trim().toLowerCase()
-  const isDemoUser = normalizedEmail === 'demo' || normalizedEmail.startsWith('demo@')
-  return isDemoUser && (password === 'demo' || password === 'demo123')
-}
-
 function goAfterLogin() {
   ElMessage.success('登入成功')
   router.push((route.query.redirect as string) || '/')
@@ -121,8 +114,7 @@ async function handleLogin() {
         id: '00000000-0000-0000-0000-000000000001',
         email: form.email,
         displayName: form.email,
-        role,
-        dataPlane: 'production'
+        role
       })
       goAfterLogin()
       return
@@ -130,11 +122,7 @@ async function handleLogin() {
 
     loading.value = true
     try {
-      const authEmail = isDemoCredentials(form.email, form.password)
-        ? 'demo@ltc.example.com'
-        : form.email === 'ltcf-admin'
-          ? 'ltcf-admin@ltc.example.com'
-          : form.email
+      const authEmail = form.email === 'ltcf-admin' ? 'ltcf-admin@ltc.example.com' : form.email
       const { data, error } = await supabase.auth.signInWithPassword({
         email: authEmail,
         password: form.password
@@ -145,13 +133,11 @@ async function handleLogin() {
       }
 
       const role = (data.user.app_metadata?.role ?? data.user.user_metadata?.role ?? 'viewer') as UserRole
-      const dataPlane = (data.user.app_metadata?.data_plane ?? 'production') as 'production' | 'demo'
       await authStore.setSession(data.session.access_token, {
         id: data.user.id,
         email: data.user.email || form.email,
         displayName: data.user.user_metadata?.display_name || data.user.email || form.email,
-        role,
-        dataPlane
+        role
       })
       goAfterLogin()
     } finally {

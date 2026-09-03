@@ -39,7 +39,6 @@ view 元件呼叫 src/api/*.ts
 - **前後端模組權限不同步**：前端 `hasPermission(module, action)` 與後端 `RequirePermission(module, action)` 現在共用同一份權限矩陣（透過 `GET /api/v1/auth/me` 取得，見 [frontend-permission-logic.md](frontend-permission-logic.md)），但新增頁面時若忘了在路由掛正確的 `meta.module`，或後端忘了在對應路由掛 `RequirePermission`，兩邊還是可能對不上，出現「畫面看得到但 API 403」或反過來。新增頁面或模組時，兩邊要對照 [frontend-pages.md](frontend-pages.md) 與 [backend-api-reference.md](backend-api-reference.md) 一起改。
 - **契約型別脫鉤**：後端 DTO 改了欄位，前端 `src/types/api.d.ts` 沒重新產生（`npm run gen:types`）時不會在編譯期報錯，只會在 runtime 欄位對不上；`error.details` 的欄位陣列格式也只有前端攔截器單方面假設，沒有型別檢查保證後端一定回這個形狀。
 - **本機免驗證憑證外洩到正式環境**：`mock_jwt_` 前綴憑證只在 `APP_ENV=local` 生效，寫死在 `internal/platform/auth/auth.go`；改動這段驗證邏輯時，判斷分支寫錯會讓正式環境也吃這種 token，等同繞過登入。
-- **展示（demo）帳號被誤認為前端 mock**：`demo` 只是登入頁的帳號代稱，會被換成 `demo@ltc.example.com` 送進 Supabase 做真實驗證，資料則來自後端獨立的 demo 資料平面（依 JWT 的 `app_metadata.data_plane` 切換 `VITE_DEMO_API_BASE_URL`），前端已無任何 mock 攔截層；把它當成純前端假資料來排查問題會找錯方向。細節見 `frontend-framework.md` 的登入帳號代稱段落與 [`../decisions/demo-data-plane-architecture.md`](../decisions/demo-data-plane-architecture.md)。
 
 ## 刻意保留的契約落差
 

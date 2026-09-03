@@ -10,7 +10,9 @@ covers:
 
 # 本機 E2E 從 MSW 假資料改打真實 API — 待開發
 
-MSW 已在本輪移除（`apps/web/src/mocks/` 整目錄、`demoMode.ts` 相關死碼皆已刪除），local／demo／production 三環境現在功能路徑一致，只差資料庫。但 `apps/web/tests/e2e/`（`01~12-*.spec.ts`，約 1,276 行）依賴 MSW 攔截與假資料斷言，**目前全部會壞**。本文件記錄調查到的現況與設計方向，供下一輪接續；不是實作紀錄，是待辦。
+MSW 已在本輪移除（`apps/web/src/mocks/` 整目錄、`demoMode.ts` 相關死碼皆已刪除），local／production 兩環境現在功能路徑一致，只差資料庫。但 `apps/web/tests/e2e/`（`01~12-*.spec.ts`，約 1,276 行）依賴 MSW 攔截與假資料斷言，**目前全部會壞**。本文件記錄調查到的現況與設計方向，供下一輪接續；不是實作紀錄，是待辦。
+
+> 更新：demo 資料平面（`apps/api/internal/modules/demo/`、`POST /demo/reset`、`ltc-api-demo` Cloud Run 服務與 `e2e-demo` CI job）已整套移除，系統現在只有 local／production 兩個環境。下方仍提到 demo 的段落是移除前的調查紀錄，供理解歷史脈絡，不能再依賴這些機制。
 
 ## 為什麼還沒做完
 

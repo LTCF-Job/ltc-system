@@ -14,7 +14,6 @@ type meResponse struct {
 	Email       string                         `json:"email"`
 	DisplayName string                         `json:"displayName"`
 	Role        string                         `json:"role"`
-	DataPlane   string                         `json:"dataPlane"`
 	Permissions map[string]modulePermissionDTO `json:"permissions"`
 }
 
@@ -49,7 +48,6 @@ func (h *MeHandler) Me(c *gin.Context) {
 		Email:       auth.GetActorEmail(c),
 		DisplayName: auth.GetActorName(c),
 		Role:        auth.GetActorRole(c),
-		DataPlane:   auth.GetActorDataPlane(c),
 		Permissions: perms,
 	}, nil)
 }

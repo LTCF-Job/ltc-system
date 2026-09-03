@@ -20,7 +20,7 @@ covers:
 
 ## Flow
 
-登入頁 > Supabase 登入（正式／Demo）或本機直接登入 > 建立 session > 導向原目的路由
+登入頁 > Supabase 登入或本機直接登入 > 建立 session > 導向原目的路由
 
 ## Shared state
 
@@ -30,8 +30,7 @@ covers:
 ## Invariants and gotchas
 
 - 本機環境（local）未設定 Supabase 時不強制驗證，可直接以本機開發身分或快速切換登入，避免阻礙本機開發與測試。
-- 正式與預覽環境必須透過真實 Supabase Auth 驗證。
-- Demo 使用者依 JWT 的 `app_metadata.data_plane` 導向獨立的 Demo API 資料平面。
+- 正式環境必須透過真實 Supabase Auth 驗證。
 - 登入頁品牌名稱固定為「好安心關懷協會-後臺系統」。
 
 ## Unverified
