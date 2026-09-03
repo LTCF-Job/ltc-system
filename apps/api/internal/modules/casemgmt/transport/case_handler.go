@@ -182,7 +182,11 @@ func (h *CaseHandler) Get(c *gin.Context) {
 
 	entity, err := h.masterService.GetCaseByID(c.Request.Context(), id)
 	if err != nil {
-		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "找不到此個案", nil)
+		if errors.Is(err, app.ErrCaseNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
@@ -243,7 +247,11 @@ func (h *CaseHandler) Update(c *gin.Context) {
 
 	entity, err := h.masterService.UpdateCase(c.Request.Context(), id, in)
 	if err != nil {
-		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "找不到此個案", nil)
+		if errors.Is(err, app.ErrCaseNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 

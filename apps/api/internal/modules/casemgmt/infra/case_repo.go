@@ -152,6 +152,9 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 		&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, app.ErrCaseNotFound
+		}
 		return nil, err
 	}
 	return &c, nil
