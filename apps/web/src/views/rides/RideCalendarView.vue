@@ -388,7 +388,6 @@ function openManualEntry(row: any, day: number, targetLegSeq?: number) {
   manualEntryDialogRef.value?.open({
     caseId: row.caseId,
     caseName: row.caseName,
-    caseCode: row.caseCode,
     serviceDate: dayKey,
     tripPattern: dayTripCount || 2,
     targetLegSeq,

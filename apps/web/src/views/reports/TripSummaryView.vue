@@ -119,7 +119,6 @@
           </template>
 
           <el-table :data="veh.rows" border stripe style="width: fit-content; max-width: 100%;">
-            <el-table-column prop="caseCode" label="個案編號" width="120" />
             <el-table-column prop="caseName" label="個案姓名" width="140" />
             <el-table-column prop="outboundCount" label="去程趟數" align="right" width="150">
               <template #default="{ row }">

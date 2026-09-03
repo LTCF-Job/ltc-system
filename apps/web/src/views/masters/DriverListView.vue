@@ -471,7 +471,7 @@ async function handleAssignSubmit() {
 async function handleDeleteDriver(row: DriverDTO) {
   try {
     await ElMessageBox.confirm(
-      `確定要刪除司機「${row.name} (${row.code})」？`,
+      `確定要刪除司機「${row.name}」？`,
       '刪除確認',
       {
         confirmButtonText: '刪除',

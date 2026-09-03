@@ -204,7 +204,7 @@
             <template #default="{ row }">
               <div class="target-binding-box">
                 <el-select v-model="row.editCaseId" placeholder="搜尋個案" filterable clearable style="width: 170px">
-                  <el-option v-for="c in cases" :key="c.id" :label="`${c.name}${c.code ? ` (${c.code})` : ''}`" :value="c.id" />
+                  <el-option v-for="c in cases" :key="c.id" :label="c.name" :value="c.id" />
                 </el-select>
                 <el-select v-model="row.editLegSeq" placeholder="趟次" style="width: 150px">
                   <el-option v-for="leg in LEG_SEQ_OPTIONS" :key="leg.value" :value="leg.value" :label="leg.label" />

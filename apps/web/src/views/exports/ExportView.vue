@@ -133,7 +133,6 @@
         stripe
         class="file-table"
       >
-        <el-table-column prop="caseCode" label="個案編號" width="110" align="center" />
         <el-table-column prop="caseName" label="姓名" width="120" />
         <el-table-column prop="region" label="區域" width="110" align="center">
           <template #default="{ row }">
@@ -249,7 +248,6 @@
         stripe
         max-height="360px"
       >
-        <el-table-column prop="caseCode" label="個案編號" width="110" align="center" />
         <el-table-column prop="caseName" label="姓名" width="120" />
         <el-table-column prop="region" label="區域" width="110" align="center">
           <template #default="{ row }">

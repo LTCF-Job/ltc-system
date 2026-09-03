@@ -178,7 +178,6 @@ export interface CaseScheduleDTO {
 
 export interface CaseDTO {
   id: string
-  code: string
   name: string
   nameNormalized?: string
   nationalId?: string
@@ -367,7 +366,6 @@ export interface DriverAssignmentDTO {
 
 export interface DriverDTO {
   id: string
-  code?: string
   name: string
   nameNormalized?: string
   nationalId: string
@@ -598,7 +596,6 @@ export interface RideCalendarCellDTO {
 
 export interface CaseRideCalendarRowDTO {
   caseId: string
-  caseCode: string
   caseName: string
   region: Region
   tripPattern: CalendarTripPattern
@@ -696,7 +693,6 @@ export interface CreateExportJobRequest {
 // 匯出結果中的單一個案工作簿（一個個案一個月一份）
 export interface ExportJobFileDTO {
   caseId: string
-  caseCode: string
   caseName: string
   region?: Region
   rowCount: number
@@ -905,7 +901,6 @@ export interface MissingRideDTO {
 // 11. 車輛趟數表報表 (Trip Summary Report)
 export interface TripSummaryCaseRowDTO {
   caseId: string
-  caseCode: string
   caseName: string
   outboundCount: number
   inboundCount: number
@@ -937,7 +932,6 @@ export interface TripSummaryReportDTO {
 export interface HsinchuScheduleItemDTO {
   direction: Direction
   runNo: number
-  caseCode: string
   caseName: string
   note?: string
   departTime: string
@@ -995,7 +989,6 @@ export interface DriverDayAttendanceDTO {
 
 export interface DriverMonthAttendanceDTO {
   driverId: string
-  driverCode: string
   driverName: string
   region: Region
   days: Record<string, DriverDayAttendanceDTO>

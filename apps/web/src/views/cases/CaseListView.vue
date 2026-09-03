@@ -83,7 +83,6 @@
       <!-- 表格內容 -->
       <template #table>
         <el-table :data="cases" border stripe style="width: 100%">
-          <el-table-column prop="code" label="個案編號" width="95" align="center" />
           <el-table-column prop="name" label="姓名" width="110" align="center" />
           <el-table-column prop="nationalId" label="身分證字號" min-width="150" align="center">
             <template #default="{ row }">
@@ -202,7 +201,6 @@
       <div v-loading="unresolvedLoading" class="pending-panel">
         <el-empty v-if="!unresolvedLoading && unresolvedCases.length === 0" description="目前沒有待維護的個案" />
         <el-table v-else :data="unresolvedCases" border stripe table-layout="auto">
-          <el-table-column prop="code" label="個案編號" width="95" align="center" class-name="unresolved-code-col" />
           <el-table-column prop="name" label="姓名" min-width="90" class-name="unresolved-name-col" />
           <el-table-column label="單位" min-width="220" class-name="unresolved-site-col">
             <template #default="{ row }">
@@ -506,7 +504,7 @@ async function handleQuickUpdateStatus(row: CaseDTO, newStatus: CaseStatus) {
 async function handleDeleteCase(row: CaseDTO) {
   try {
     await ElMessageBox.confirm(
-      `確定要刪除個案「${row.name} (${row.code})」？此操作將一併移除其關聯排班資料，且無法復原。`,
+      `確定要刪除個案「${row.name}」？此操作將一併移除其關聯排班資料，且無法復原。`,
       '刪除確認',
       {
         confirmButtonText: '刪除',
@@ -811,11 +809,6 @@ executeFetch()
 :deep(.unresolved-outbound-col .cell),
 :deep(.unresolved-inbound-col .cell) {
   min-width: 220px;
-}
-
-:deep(.unresolved-code-col .cell) {
-  min-width: 95px;
-  white-space: nowrap;
 }
 
 .inline-value,

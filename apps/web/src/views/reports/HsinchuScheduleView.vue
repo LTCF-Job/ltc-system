@@ -96,7 +96,6 @@
             <span>第 {{ row.runNo }} 趟</span>
           </template>
         </el-table-column>
-        <el-table-column prop="caseCode" label="個案編號" width="100" />
         <el-table-column prop="caseName" label="個案姓名" min-width="110" class-name="case-name-col">
           <template #default="{ row }">
             <span class="font-bold text-nowrap">{{ row.caseName }}</span>
@@ -149,7 +148,6 @@
             <span>第 {{ row.runNo }} 趟</span>
           </template>
         </el-table-column>
-        <el-table-column prop="caseCode" label="個案編號" width="100" />
         <el-table-column prop="caseName" label="個案姓名" min-width="110" class-name="case-name-col">
           <template #default="{ row }">
             <span class="font-bold text-nowrap">{{ row.caseName }}</span>

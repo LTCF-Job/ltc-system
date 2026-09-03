@@ -31,7 +31,6 @@
                 </el-button>
               </div>
             </template>
-            <el-descriptions-item label="個案編號">{{ caseData?.code }}</el-descriptions-item>
             <el-descriptions-item label="身分證字號">
               <span class="font-mono font-bold">{{ caseData?.nationalId }}</span>
             </el-descriptions-item>
@@ -379,7 +378,7 @@ function handleScheduleSaved() {
 async function handleDeleteCase() {
   try {
     await ElMessageBox.confirm(
-      `確定要刪除個案「${caseData.value?.name} (${caseData.value?.code})」？此操作將一併移除其關聯排班資料，且無法復原。`,
+      `確定要刪除個案「${caseData.value?.name}」？此操作將一併移除其關聯排班資料，且無法復原。`,
       '刪除確認',
       {
         confirmButtonText: '刪除',

@@ -109,7 +109,7 @@
               >
                 <template #default="{ row }">
                   <span class="driver-name-text">
-                    {{ row.driverName }}({{ row.driverCode }})
+                    {{ row.driverName }}
                   </span>
                 </template>
               </el-table-column>

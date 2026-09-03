@@ -31,7 +31,6 @@
       @selection-change="handleSelectionChange"
     >
       <el-table-column type="selection" width="45" :reserve-selection="true" />
-      <el-table-column prop="code" label="個案編號" width="95" align="center" />
       <el-table-column prop="name" label="姓名" width="110" />
       <el-table-column prop="region" label="區域" width="100" align="center">
         <template #default="{ row }">{{ REGION_LABELS[row.region as Region] || row.region }}</template>
@@ -98,7 +97,7 @@ const filteredCandidates = computed(() => {
   const text = keyword.value.trim().toLowerCase()
   if (!text) return candidates.value
   return candidates.value.filter(
-    (c) => c.name.toLowerCase().includes(text) || c.code.toLowerCase().includes(text)
+    (c) => c.name.toLowerCase().includes(text)
   )
 })
 

@@ -238,7 +238,7 @@
             <el-option
               v-for="d in allDrivers"
               :key="d.id"
-              :label="d.code ? `${d.name} (${d.code})` : d.name"
+              :label="d.name"
               :value="d.id"
             />
           </el-select>

@@ -11,7 +11,6 @@
       <el-descriptions :column="2" border size="small" class="info-descriptions">
         <el-descriptions-item label="個案姓名">
           <strong>{{ caseInfo.caseName }}</strong>
-          <span v-if="caseInfo.caseCode" class="text-secondary ml-1">({{ caseInfo.caseCode }})</span>
         </el-descriptions-item>
         <el-descriptions-item label="服務日期">
           {{ caseInfo.serviceDate }}
@@ -166,7 +165,6 @@ import type { VehicleDTO, DriverDTO, ManualReportRideRequest } from '@/types/api
 interface OpenOptions {
   caseId: string
   caseName: string
-  caseCode?: string
   serviceDate: string
   tripPattern?: number
   targetLegSeq?: number
@@ -183,7 +181,6 @@ const saving = ref(false)
 const caseInfo = reactive({
   caseId: '',
   caseName: '',
-  caseCode: '',
   serviceDate: '',
   tripPattern: 2,
   existingLegs: [] as number[]
@@ -276,7 +273,6 @@ async function fetchMasterData() {
 function open(options: OpenOptions) {
   caseInfo.caseId = options.caseId
   caseInfo.caseName = options.caseName
-  caseInfo.caseCode = options.caseCode || ''
   caseInfo.serviceDate = options.serviceDate
   caseInfo.tripPattern = options.tripPattern || 2
   caseInfo.existingLegs = options.existingLegs || []

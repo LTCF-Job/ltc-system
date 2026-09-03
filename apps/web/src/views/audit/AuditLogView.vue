@@ -298,8 +298,7 @@ function getEntityDisplayName(row?: AuditLogDTO | null): string {
 
     case 'cases': {
       const name = data.name || data.caseName || data.case_name
-      const code = data.code || data.caseCode || data.case_code
-      if (name) return `${name}${code ? ` (${code})` : ''}`
+      if (name) return name
       return '個案主檔'
     }
 
