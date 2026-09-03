@@ -53,15 +53,15 @@ ON CONFLICT (id) DO UPDATE SET
 -- ============================================================
 -- 3. 司機 (drivers)
 -- ============================================================
-INSERT INTO drivers (id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
+INSERT INTO drivers (id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
     email, region, status, license_class, license_expiry_date) VALUES
-('30000000-0000-4000-8000-000000000001', 'DRV-001', '林建成', '林建成', convert_to('demo-cipher-DRV-001','UTF8'), convert_to('demo-hmac-DRV-001','UTF8'), 'A12***0001', 'driver001@ltc.example.com', '新竹縣', 'active', 'sedan', '2028-06-30'),
-('30000000-0000-4000-8000-000000000002', 'DRV-002', '陳美惠', '陳美惠', convert_to('demo-cipher-DRV-002','UTF8'), convert_to('demo-hmac-DRV-002','UTF8'), 'A22***0002', 'driver002@ltc.example.com', '新竹縣', 'active', 'bus', '2027-11-20'),
-('30000000-0000-4000-8000-000000000003', 'DRV-003', '黃志豪', '黃志豪', convert_to('demo-cipher-DRV-003','UTF8'), convert_to('demo-hmac-DRV-003','UTF8'), 'A32***0003', 'driver003@ltc.example.com', '苗栗縣', 'active', 'sedan', '2026-12-01'),
-('30000000-0000-4000-8000-000000000004', 'DRV-004', '張淑芬', '張淑芬', convert_to('demo-cipher-DRV-004','UTF8'), convert_to('demo-hmac-DRV-004','UTF8'), 'A42***0004', 'driver004@ltc.example.com', '苗栗縣', 'active', NULL, NULL),
-('30000000-0000-4000-8000-000000000005', 'DRV-005', '吳國棟', '吳國棟', convert_to('demo-cipher-DRV-005','UTF8'), convert_to('demo-hmac-DRV-005','UTF8'), 'A52***0005', 'driver005@ltc.example.com', '新竹市', 'resigned', 'sedan', '2025-01-01')
+('30000000-0000-4000-8000-000000000001', '林建成', '林建成', convert_to('demo-cipher-DRV-001','UTF8'), convert_to('demo-hmac-DRV-001','UTF8'), 'A12***0001', 'driver001@ltc.example.com', '新竹縣', 'active', 'sedan', '2028-06-30'),
+('30000000-0000-4000-8000-000000000002', '陳美惠', '陳美惠', convert_to('demo-cipher-DRV-002','UTF8'), convert_to('demo-hmac-DRV-002','UTF8'), 'A22***0002', 'driver002@ltc.example.com', '新竹縣', 'active', 'bus', '2027-11-20'),
+('30000000-0000-4000-8000-000000000003', '黃志豪', '黃志豪', convert_to('demo-cipher-DRV-003','UTF8'), convert_to('demo-hmac-DRV-003','UTF8'), 'A32***0003', 'driver003@ltc.example.com', '苗栗縣', 'active', 'sedan', '2026-12-01'),
+('30000000-0000-4000-8000-000000000004', '張淑芬', '張淑芬', convert_to('demo-cipher-DRV-004','UTF8'), convert_to('demo-hmac-DRV-004','UTF8'), 'A42***0004', 'driver004@ltc.example.com', '苗栗縣', 'active', NULL, NULL),
+('30000000-0000-4000-8000-000000000005', '吳國棟', '吳國棟', convert_to('demo-cipher-DRV-005','UTF8'), convert_to('demo-hmac-DRV-005','UTF8'), 'A52***0005', 'driver005@ltc.example.com', '新竹市', 'resigned', 'sedan', '2025-01-01')
 ON CONFLICT (id) DO UPDATE SET
-  code = EXCLUDED.code, name = EXCLUDED.name, name_normalized = EXCLUDED.name_normalized,
+  name = EXCLUDED.name, name_normalized = EXCLUDED.name_normalized,
   national_id_cipher = EXCLUDED.national_id_cipher, national_id_hmac = EXCLUDED.national_id_hmac,
   national_id_masked = EXCLUDED.national_id_masked, email = EXCLUDED.email, region = EXCLUDED.region,
   status = EXCLUDED.status, license_class = EXCLUDED.license_class, license_expiry_date = EXCLUDED.license_expiry_date;
@@ -83,19 +83,19 @@ ON CONFLICT (id) DO UPDATE SET
 -- ============================================================
 -- 5. 個案 (cases)
 -- ============================================================
-INSERT INTO cases (id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
+INSERT INTO cases (id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
     home_address, region, ltc_level, service_category, service_usage_type, claim_end_date, status,
     household_type, gender, birth_date, care_contact_role, care_contact_name, registered_address, remarks) VALUES
-('40000000-0000-4000-8000-000000000001', 'C-0001', '王秀琴', '王秀琴', convert_to('demo-cipher-C-0001','UTF8'), convert_to('demo-hmac-C-0001','UTF8'), 'A12***0001', '新竹縣竹北市文興路一段1號', '新竹縣', 'CMS 2', 1, 2, NULL, 'active', '一般戶', 'F', '1948-03-12', '女兒', '王小美', '新竹縣竹北市文興路一段1號', NULL),
-('40000000-0000-4000-8000-000000000002', 'C-0002', '李國華', '李國華', convert_to('demo-cipher-C-0002','UTF8'), convert_to('demo-hmac-C-0002','UTF8'), 'A22***0002', '新竹縣竹北市中正西路20號', '新竹縣', 'CMS 4', 2, 1, NULL, 'active', '中低收入戶', 'M', '1955-07-22', '兒子', '李文彬', '新竹縣竹北市中正西路20號', NULL),
-('40000000-0000-4000-8000-000000000003', 'C-0003', '張阿蘭', '張阿蘭', convert_to('demo-cipher-C-0003','UTF8'), convert_to('demo-hmac-C-0003','UTF8'), 'A32***0003', '苗栗縣苗栗市中山路30號', '苗栗縣', 'CMS 3', 1, 3, NULL, 'active', '一般戶', 'F', '1950-11-05', '媳婦', '張林月', '苗栗縣苗栗市中山路30號', NULL),
-('40000000-0000-4000-8000-000000000004', 'C-0004', '陳福來', '陳福來', convert_to('demo-cipher-C-0004','UTF8'), convert_to('demo-hmac-C-0004','UTF8'), 'A42***0004', '苗栗縣頭份市中央路40號', '苗栗縣', 'CMS 3', 1, 2, NULL, 'suspended', '一般戶', 'M', '1952-02-18', '女兒', '陳小玉', '苗栗縣頭份市中央路40號', '暫停服務：住院治療中'),
-('40000000-0000-4000-8000-000000000005', 'C-0005', '劉月娥', '劉月娥', convert_to('demo-cipher-C-0005','UTF8'), convert_to('demo-hmac-C-0005','UTF8'), 'A52***0005', '新竹市東區中央路50號', '新竹市', 'CMS 2', 2, 4, '2026-06-30', 'closed', '一般戶', 'F', '1945-09-30', '配偶', '劉大山', '新竹市東區中央路50號', '個案已轉住機構，結案'),
-('40000000-0000-4000-8000-000000000006', 'C-0006', '許進財', '許進財', convert_to('demo-cipher-C-0006','UTF8'), convert_to('demo-hmac-C-0006','UTF8'), 'A62***0006', '新竹市北區中山路60號', '新竹市', NULL, NULL, NULL, NULL, 'active', '一般戶', 'M', '1958-12-01', '女兒', '許小芬', '新竹市北區中山路60號', '服務類別待社工評估後補齊'),
-('40000000-0000-4000-8000-000000000007', 'C-0007', '楊淑惠', '楊淑惠', convert_to('demo-cipher-C-0007','UTF8'), convert_to('demo-hmac-C-0007','UTF8'), 'A72***0007', '新竹縣竹北市光明一路70號', '新竹縣', 'CMS 4', 1, 1, NULL, 'active', '一般戶', 'F', '1949-04-25', '兒子', '楊文宏', '新竹縣竹北市光明一路70號', NULL),
-('40000000-0000-4000-8000-000000000008', 'C-0008', '蔡明宗', '蔡明宗', NULL, NULL, NULL, '苗栗縣竹南鎮中正路80號', '苗栗縣', NULL, 2, 2, NULL, 'active', '一般戶', 'M', '1960-08-14', '配偶', '蔡林秀', NULL, '新申請個案，尚未排班')
+('40000000-0000-4000-8000-000000000001', '王秀琴', '王秀琴', convert_to('demo-cipher-C-0001','UTF8'), convert_to('demo-hmac-C-0001','UTF8'), 'A12***0001', '新竹縣竹北市文興路一段1號', '新竹縣', 'CMS 2', 1, 2, NULL, 'active', '一般戶', 'F', '1948-03-12', '女兒', '王小美', '新竹縣竹北市文興路一段1號', NULL),
+('40000000-0000-4000-8000-000000000002', '李國華', '李國華', convert_to('demo-cipher-C-0002','UTF8'), convert_to('demo-hmac-C-0002','UTF8'), 'A22***0002', '新竹縣竹北市中正西路20號', '新竹縣', 'CMS 4', 2, 1, NULL, 'active', '中低收入戶', 'M', '1955-07-22', '兒子', '李文彬', '新竹縣竹北市中正西路20號', NULL),
+('40000000-0000-4000-8000-000000000003', '張阿蘭', '張阿蘭', convert_to('demo-cipher-C-0003','UTF8'), convert_to('demo-hmac-C-0003','UTF8'), 'A32***0003', '苗栗縣苗栗市中山路30號', '苗栗縣', 'CMS 3', 1, 3, NULL, 'active', '一般戶', 'F', '1950-11-05', '媳婦', '張林月', '苗栗縣苗栗市中山路30號', NULL),
+('40000000-0000-4000-8000-000000000004', '陳福來', '陳福來', convert_to('demo-cipher-C-0004','UTF8'), convert_to('demo-hmac-C-0004','UTF8'), 'A42***0004', '苗栗縣頭份市中央路40號', '苗栗縣', 'CMS 3', 1, 2, NULL, 'suspended', '一般戶', 'M', '1952-02-18', '女兒', '陳小玉', '苗栗縣頭份市中央路40號', '暫停服務：住院治療中'),
+('40000000-0000-4000-8000-000000000005', '劉月娥', '劉月娥', convert_to('demo-cipher-C-0005','UTF8'), convert_to('demo-hmac-C-0005','UTF8'), 'A52***0005', '新竹市東區中央路50號', '新竹市', 'CMS 2', 2, 4, '2026-06-30', 'closed', '一般戶', 'F', '1945-09-30', '配偶', '劉大山', '新竹市東區中央路50號', '個案已轉住機構，結案'),
+('40000000-0000-4000-8000-000000000006', '許進財', '許進財', convert_to('demo-cipher-C-0006','UTF8'), convert_to('demo-hmac-C-0006','UTF8'), 'A62***0006', '新竹市北區中山路60號', '新竹市', NULL, NULL, NULL, NULL, 'active', '一般戶', 'M', '1958-12-01', '女兒', '許小芬', '新竹市北區中山路60號', '服務類別待社工評估後補齊'),
+('40000000-0000-4000-8000-000000000007', '楊淑惠', '楊淑惠', convert_to('demo-cipher-C-0007','UTF8'), convert_to('demo-hmac-C-0007','UTF8'), 'A72***0007', '新竹縣竹北市光明一路70號', '新竹縣', 'CMS 4', 1, 1, NULL, 'active', '一般戶', 'F', '1949-04-25', '兒子', '楊文宏', '新竹縣竹北市光明一路70號', NULL),
+('40000000-0000-4000-8000-000000000008', '蔡明宗', '蔡明宗', NULL, NULL, NULL, '苗栗縣竹南鎮中正路80號', '苗栗縣', NULL, 2, 2, NULL, 'active', '一般戶', 'M', '1960-08-14', '配偶', '蔡林秀', NULL, '新申請個案，尚未排班')
 ON CONFLICT (id) DO UPDATE SET
-  code = EXCLUDED.code, name = EXCLUDED.name, name_normalized = EXCLUDED.name_normalized,
+  name = EXCLUDED.name, name_normalized = EXCLUDED.name_normalized,
   national_id_cipher = EXCLUDED.national_id_cipher, national_id_hmac = EXCLUDED.national_id_hmac,
   national_id_masked = EXCLUDED.national_id_masked, home_address = EXCLUDED.home_address,
   region = EXCLUDED.region, ltc_level = EXCLUDED.ltc_level, service_category = EXCLUDED.service_category,
