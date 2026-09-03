@@ -5,7 +5,7 @@
       :model="formData"
       :rules="rules"
       label-width="140px"
-      :disabled="!authStore.can('staff')"
+      :disabled="!authStore.hasPermission('masters_cases', 'edit')"
     >
       <!-- 排班優先順序引導說明 -->
       <div class="priority-guide-card">
@@ -507,7 +507,7 @@
         </div>
       </el-card>
 
-      <div v-if="authStore.can('staff')" class="form-actions">
+      <div v-if="authStore.hasPermission('masters_cases', 'edit')" class="form-actions">
         <el-button type="primary" :loading="saving" @click="handleSave">
           儲存排班設定
         </el-button>

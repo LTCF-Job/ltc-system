@@ -76,7 +76,7 @@ API client 會把後端 `details` 裡的具體原因（例如表頭不符）以�
 
 前端不會自己組 Excel，實際產檔在後端（見 [backend-flows.md](backend-flows.md) 的政府申報匯出流程）。
 
-展示模式（MSW）沒有 `ride_records` 資料表，搭乘紀錄由 `mocks/utils/demoRides.ts` 的 `buildDemoCaseMonth` 依個案排班逐日展開後套上示範例外與使用者的人工更正產生。搭乘月曆與申報匯出**讀同一份**：匯出走 `listDemoBoardedRides`，只取 `effectiveStatus === 'boarded'`，與後端的判準一致。因此展示資料裡的請假、缺席、未回報都不會進申報檔，加開趟次、人工更正過的出發時間與「不申報 AA09」標記則會反映。`11-exports.spec.ts` 的「申報列只取月曆上實際成行的趟次」用月曆 API 交叉比對列數守住這件事。
+搭乘月曆與申報匯出**讀同一份**資料：匯出只取實際成行（`boarded`）的趟次，因此請假、缺席、未回報都不會進申報檔，加開趟次、人工更正過的出發時間與「不申報 AA09」標記則會反映。
 
 ## 主檔批次匯入
 

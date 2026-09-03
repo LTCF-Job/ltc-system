@@ -151,3 +151,24 @@ func (h *IdentityHandler) ChangeSelfPassword(c *gin.Context) {
 	}
 	httpx.RespondSuccess(c, http.StatusOK, gin.H{"changed": true}, nil)
 }
+
+// ResetPassword 讓管理員直接設定他人密碼，不需舊密碼。
+func (h *IdentityHandler) ResetPassword(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的使用者 ID", nil)
+		return
+	}
+
+	var req resetUserPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	if err := h.svc.ResetPassword(c.Request.Context(), id, auth.GetActorID(c), auth.GetActorRole(c), req.NewPassword); err != nil {
+		respondIdentityError(c, err)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"changed": true}, nil)
+}

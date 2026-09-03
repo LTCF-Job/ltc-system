@@ -137,6 +137,9 @@ func (s *UserService) UpdatePermissions(ctx context.Context, id uuid.UUID, perms
 	if err := s.requireConfigured(); err != nil {
 		return err
 	}
+	if err := validateModuleKeys(perms); err != nil {
+		return err
+	}
 	if err := s.admin.SetCustomPermissions(ctx, id, perms); err != nil {
 		return err
 	}
@@ -206,6 +209,32 @@ func (s *UserService) ChangeSelfPassword(ctx context.Context, actorID uuid.UUID,
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "change_password",
+			EntityType: "users",
+			EntityID:   &entityIDStr,
+		})
+	}
+	return nil
+}
+
+// ResetPassword 讓管理員直接設定他人密碼，不需驗證舊密碼；不可用來重設自己的帳號。
+func (s *UserService) ResetPassword(ctx context.Context, id, actorID uuid.UUID, actorRole, newPassword string) error {
+	if err := s.requireConfigured(); err != nil {
+		return err
+	}
+	if id == actorID {
+		return ErrCannotResetOwnPassword
+	}
+
+	if err := s.admin.SetPassword(ctx, id, newPassword); err != nil {
+		return fmt.Errorf("failed to reset password: %w", err)
+	}
+
+	if s.auditRepo != nil {
+		entityIDStr := id.String()
+		_ = s.auditRepo.Write(ctx, AuditEntry{
+			ActorID:    &actorID,
+			ActorRole:  &actorRole,
+			Action:     "reset_password",
 			EntityType: "users",
 			EntityID:   &entityIDStr,
 		})

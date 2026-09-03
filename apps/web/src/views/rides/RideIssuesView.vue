@@ -46,7 +46,7 @@
           </el-table-column>
 
           <el-table-column
-            v-if="authStore.can('staff')"
+            v-if="authStore.hasPermission('rides_issues', 'edit')"
             label="操作"
             width="100"
             fixed="right"

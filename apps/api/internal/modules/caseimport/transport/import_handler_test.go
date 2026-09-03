@@ -2,6 +2,7 @@ package transport
 
 import (
 	"bytes"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
 	importinfra "ltc-system/apps/api/internal/modules/caseimport/infra"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 func TestDownloadTemplate_TableDriven(t *testing.T) {
@@ -91,4 +93,29 @@ func TestDownloadTemplate_TableDriven(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestImportExcel_RejectsOversizedUpload 驗證上傳大小上限接在 handler 入口：
+// 超限請求必須在進入 service 解析之前就被擋下並回 413。
+func TestImportExcel_RejectsOversizedUpload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, nil, nil, nil))
+
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	part, err := w.CreateFormFile("file", "huge.xlsx")
+	require.NoError(t, err)
+	_, err = part.Write(bytes.Repeat([]byte("a"), httpx.MaxUploadBytes+1))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/cases/import", &body)
+	c.Request.Header.Set("Content-Type", w.FormDataContentType())
+
+	h.ImportExcel(c)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	assert.Contains(t, rec.Body.String(), "上傳檔案超過")
 }

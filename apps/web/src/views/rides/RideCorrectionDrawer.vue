@@ -236,7 +236,8 @@ async function loadMasterData() {
 }
 
 const canEdit = computed(() => {
-  return authStore.can('staff') || !authStore.isAuthenticated
+  // 對應後端 PATCH /rides/:id 實際檢查的 rides_issues:edit
+  return authStore.hasPermission('rides_issues', 'edit')
 })
 
 const form = reactive<PatchRideRequest>({

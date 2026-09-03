@@ -16,13 +16,13 @@
           ref="editFormRef"
           :model="editForm"
           label-width="140px"
-          :disabled="!authStore.can('staff')"
+          :disabled="!authStore.hasPermission('masters_cases', 'edit')"
         >
           <el-descriptions title="系統與身分資訊" :column="2" border style="margin-bottom: 20px">
             <template #extra>
               <div class="descriptions-actions">
                 <el-button
-                  v-if="authStore.can('staff')"
+                  v-if="authStore.hasPermission('masters_cases', 'delete')"
                   type="danger"
                   plain
                   @click="handleDeleteCase"
@@ -168,7 +168,7 @@
             </el-col>
           </el-row>
 
-          <div v-if="authStore.can('staff')" class="form-actions">
+          <div v-if="authStore.hasPermission('masters_cases', 'edit')" class="form-actions">
             <el-button type="primary" :loading="saving" @click="handleUpdateCase">
               儲存基本資料
             </el-button>
@@ -177,7 +177,7 @@
 
         <el-divider content-position="left">交通偏好</el-divider>
 
-        <el-form label-width="140px" :disabled="!authStore.can('staff')">
+        <el-form label-width="140px" :disabled="!authStore.hasPermission('masters_cases', 'edit')">
           <el-row :gutter="16">
             <el-col :xs="24" :sm="12" :lg="8">
               <el-form-item label="所屬單位">
@@ -217,7 +217,7 @@
             </el-col>
           </el-row>
 
-          <div v-if="authStore.can('staff')" class="form-actions">
+          <div v-if="authStore.hasPermission('masters_cases', 'edit')" class="form-actions">
             <el-button type="primary" :loading="savingTransportPreference" @click="handleUpdateTransportPreference">
               儲存交通偏好
             </el-button>

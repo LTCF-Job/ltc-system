@@ -63,3 +63,7 @@ type changeSelfPasswordRequest struct {
 	OldPassword string `json:"oldPassword" binding:"required"`
 	NewPassword string `json:"newPassword" binding:"required,min=8"`
 }
+
+type resetUserPasswordRequest struct {
+	NewPassword string `json:"newPassword" binding:"required,min=8"`
+}

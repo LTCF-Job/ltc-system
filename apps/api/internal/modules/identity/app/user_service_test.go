@@ -94,6 +94,9 @@ func TestUserService_UnconfiguredReturns503ForEveryMethod(t *testing.T) {
 	err = svc.ChangeSelfPassword(ctx, actorID, "a@example.com", "old", "newpass1")
 	assert.ErrorIs(t, err, ErrIdentityProviderUnconfigured)
 
+	err = svc.ResetPassword(ctx, uuid.New(), actorID, "admin", "newpass1")
+	assert.ErrorIs(t, err, ErrIdentityProviderUnconfigured)
+
 	assert.False(t, admin.setPasswordCalled, "未設定金鑰時不應呼叫 Admin API")
 	assert.False(t, admin.deleteCalled)
 }
@@ -136,4 +139,27 @@ func TestUserService_ChangeSelfPassword_Success(t *testing.T) {
 	assert.True(t, admin.setPasswordCalled)
 	require.Len(t, audit.entries, 1)
 	assert.Equal(t, "change_password", audit.entries[0].Action)
+}
+
+func TestUserService_ResetPassword_CannotResetOwnAccount(t *testing.T) {
+	admin := &fakeAdminProvider{configured: true}
+	svc := NewUserService(admin, newFakeRoleStore(), nil)
+	actorID := uuid.New()
+
+	err := svc.ResetPassword(context.Background(), actorID, actorID, "admin", "newpass1")
+	assert.ErrorIs(t, err, ErrCannotResetOwnPassword)
+	assert.False(t, admin.setPasswordCalled, "重設自己的密碼應被拒絕，不應呼叫 Admin API")
+}
+
+func TestUserService_ResetPassword_Success(t *testing.T) {
+	admin := &fakeAdminProvider{configured: true}
+	audit := &fakeIdentityAuditWriter{}
+	svc := NewUserService(admin, newFakeRoleStore(), audit)
+	targetID := uuid.New()
+
+	err := svc.ResetPassword(context.Background(), targetID, uuid.New(), "admin", "newpass1")
+	require.NoError(t, err)
+	assert.True(t, admin.setPasswordCalled, "重設他人密碼不需驗證舊密碼，應直接呼叫 Admin API")
+	require.Len(t, audit.entries, 1)
+	assert.Equal(t, "reset_password", audit.entries[0].Action)
 }

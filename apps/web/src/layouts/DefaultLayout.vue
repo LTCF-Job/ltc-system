@@ -161,7 +161,7 @@
             <template #title>系統操作紀錄</template>
           </el-menu-item>
 
-          <el-sub-menu v-if="authStore.hasPermission('settings_users') || authStore.hasPermission('settings_roles') || authStore.hasPermission('settings_notifications')" index="settings">
+          <el-sub-menu v-if="authStore.hasPermission('settings_users') || authStore.hasPermission('settings_roles') || authStore.hasPermission('settings_notifications') || authStore.hasPermission('settings_holidays')" index="settings">
             <template #title>
               <el-icon><Setting /></el-icon>
               <span>系統設定</span>
@@ -178,7 +178,7 @@
               <el-icon><Message /></el-icon>
               <template #title>通知收件人</template>
             </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('settings_notifications')" index="/settings/holidays">
+            <el-menu-item v-if="authStore.hasPermission('settings_holidays')" index="/settings/holidays">
               <el-icon><Timer /></el-icon>
               <template #title>政府假日與工作日設定</template>
             </el-menu-item>

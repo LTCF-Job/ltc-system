@@ -10,7 +10,7 @@
       <el-form
         :model="form"
         label-width="140px"
-        :disabled="!authStore.can('staff')"
+        :disabled="!authStore.hasPermission('exports', 'edit')"
       >
         <el-row :gutter="16">
           <el-col :xs="24" :sm="12">
@@ -74,7 +74,7 @@
 
         <el-row :gutter="16">
           <el-col :span="24">
-            <div v-if="authStore.can('staff')" class="action-buttons">
+            <div v-if="authStore.hasPermission('exports', 'edit')" class="action-buttons">
               <el-button
                 plain
                 :loading="checking"

@@ -128,9 +128,8 @@ func (h *DriverReportHandler) ImportExcel(c *gin.Context) {
 		return
 	}
 
-	fileHeader, err := c.FormFile("file")
-	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "未提供上傳檔案", nil)
+	fileHeader, ok := httpx.BindUploadFile(c, "file")
+	if !ok {
 		return
 	}
 

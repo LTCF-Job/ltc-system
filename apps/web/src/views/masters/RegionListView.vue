@@ -38,7 +38,7 @@
 
       <template #actions>
         <el-button
-          v-if="authStore.can('staff')"
+          v-if="authStore.hasPermission('masters_regions', 'edit')"
           type="primary"
           @click="openCreateDialog"
         >
@@ -109,7 +109,7 @@
           <el-table-column prop="status" label="狀態" width="130" align="center">
             <template #default="{ row }">
               <el-tooltip
-                v-if="authStore.can('staff')"
+                v-if="authStore.hasPermission('masters_regions', 'edit')"
                 :content="row.status === 'active' ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
                 placement="top"
                 :show-after="300"
@@ -142,7 +142,7 @@
           </el-table-column>
 
           <el-table-column
-            v-if="authStore.can('staff')"
+            v-if="authStore.hasPermission('masters_regions', 'edit')"
             label="操作"
             width="140"
             fixed="right"
@@ -154,7 +154,7 @@
                   編輯
                 </el-button>
                 <el-button
-                  v-if="authStore.can('admin')"
+                  v-if="authStore.hasPermission('masters_regions', 'delete')"
                   link
                   type="danger"
                   size="small"

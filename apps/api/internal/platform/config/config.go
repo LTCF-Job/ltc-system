@@ -4,10 +4,16 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
+)
+
+// 這兩把金鑰以字面值寫在原始碼與 struct tag 的 default 中，僅供本機開發與測試使用；
+// struct tag 只接受字面量，故 default 保留字面值，常數用於正式環境的沿用比對。
+const (
+	devDefaultEncryptionKeyB64 = "MDEwMjAzMDQwNTA2MDcwODAxMDIwMzA0MDUwNjA3MDg="
+	devDefaultHMACKeyB64       = "MDkwODAwMDcwNjA1MDQwMzA5MDgwMDA3MDYwNTA0MDM="
 )
 
 // Config 定義系統執行時之全部環境變數設定。
@@ -21,6 +27,7 @@ type Config struct {
 	EncryptionKeyB64            string        `envconfig:"ENCRYPTION_KEY" default:"MDEwMjAzMDQwNTA2MDcwODAxMDIwMzA0MDUwNjA3MDg="` // 32 bytes base64 for dev
 	HMACKeyB64                  string        `envconfig:"HMAC_KEY" default:"MDkwODAwMDcwNjA1MDQwMzA5MDgwMDA3MDYwNTA0MDM="`       // 32 bytes base64 for dev
 	SupabaseJWKSURL             string        `envconfig:"SUPABASE_JWKS_URL"`
+	SupabaseJWTIssuer           string        `envconfig:"SUPABASE_JWT_ISSUER"`
 	SupabaseProjectRef          string        `envconfig:"SUPABASE_PROJECT_REF"`
 	AllowedOrigins              string        `envconfig:"ALLOWED_ORIGINS"`
 	StorageBucket               string        `envconfig:"STORAGE_BUCKET" default:"ltc-exports"`
@@ -83,12 +90,30 @@ func LoadFromEnv() (*Config, error) {
 		return nil, errors.New("ENCRYPTION_KEY and HMAC_KEY must not be identical")
 	}
 
+	// dev default 金鑰公開在原始碼中，正式環境沿用等同任何人都能解開身分證等欄位的密文、並離線反查 HMAC 索引
+	if cfg.AppEnv == "production" && cfg.EncryptionKeyB64 == devDefaultEncryptionKeyB64 {
+		return nil, errors.New("ENCRYPTION_KEY must not use the development default when APP_ENV=production; the default is published in source code, so encrypted national IDs could be decrypted by anyone")
+	}
+	if cfg.AppEnv == "production" && cfg.HMACKeyB64 == devDefaultHMACKeyB64 {
+		return nil, errors.New("HMAC_KEY must not use the development default when APP_ENV=production; the default is published in source code, so blind-index values could be reversed offline")
+	}
+
 	if cfg.SupabaseURL == "" && cfg.SupabaseProjectRef != "" {
 		cfg.SupabaseURL = fmt.Sprintf("https://%s.supabase.co", cfg.SupabaseProjectRef)
 	}
-	// 金鑰留空時 identity 模組的端點會誠實回 503，不強制擋住啟動——這裡只提醒維運人員。
+
+	if cfg.SupabaseJWTIssuer == "" && cfg.SupabaseProjectRef != "" {
+		cfg.SupabaseJWTIssuer = fmt.Sprintf("https://%s.supabase.co/auth/v1", cfg.SupabaseProjectRef)
+	}
+
+	// issuer 是 AuthMiddleware 驗證 JWT iss claim 的唯一依據，正式環境缺值等於不驗發行者
+	if cfg.AppEnv == "production" && cfg.SupabaseJWTIssuer == "" {
+		return nil, errors.New("SUPABASE_JWT_ISSUER (or SUPABASE_PROJECT_REF to derive it) is required when APP_ENV=production")
+	}
+
+	// 缺金鑰時 userCustomPermissionResolver 會 fail-open，使用者個人層級的權限覆蓋靜默失效，被降權者回復為角色矩陣的完整權限
 	if cfg.AppEnv == "production" && cfg.SupabaseServiceRoleKey == "" {
-		slog.Warn("SUPABASE_SERVICE_ROLE_KEY is not set; user/role management endpoints will return 503")
+		return nil, errors.New("SUPABASE_SERVICE_ROLE_KEY is required when APP_ENV=production; without it user-level custom permissions silently stop applying and down-scoped users fall back to full role-matrix permissions")
 	}
 
 	return &cfg, nil

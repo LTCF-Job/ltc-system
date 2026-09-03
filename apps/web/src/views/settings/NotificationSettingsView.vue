@@ -35,7 +35,7 @@
 
       <template #actions>
         <el-button
-          v-if="authStore.can('admin') && selectedTableRows.length > 0"
+          v-if="authStore.hasPermission('settings_notifications', 'delete') && selectedTableRows.length > 0"
           type="danger"
           plain
           @click="handleBatchDelete"
@@ -44,7 +44,7 @@
         </el-button>
 
         <el-button
-          v-if="authStore.can('admin')"
+          v-if="authStore.hasPermission('settings_notifications', 'edit')"
           type="primary"
           :icon="Plus"
           @click="openAddDialog"
@@ -63,7 +63,7 @@
         @selection-change="handleTableSelectionChange"
       >
         <el-table-column
-          v-if="authStore.can('admin')"
+          v-if="authStore.hasPermission('settings_notifications', 'delete')"
           type="selection"
           width="48"
           align="center"
@@ -91,7 +91,7 @@
           <template #default="{ row }">
             <el-switch
               :model-value="row.active"
-              :disabled="!authStore.can('admin')"
+              :disabled="!authStore.hasPermission('settings_notifications', 'edit')"
               @change="(val: string | number | boolean) => handleToggleActive(row as any, Boolean(val))"
             />
           </template>
@@ -104,7 +104,7 @@
         </el-table-column>
 
         <el-table-column
-          v-if="authStore.can('admin')"
+          v-if="authStore.hasPermission('settings_notifications', 'edit') || authStore.hasPermission('settings_notifications', 'delete')"
           label="操作"
           width="150"
           fixed="right"
@@ -112,10 +112,22 @@
         >
           <template #default="{ row }">
             <TableRowActions>
-              <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
+              <el-button
+                v-if="authStore.hasPermission('settings_notifications', 'edit')"
+                link
+                type="primary"
+                size="small"
+                @click="openEditDialog(row as any)"
+              >
                 編輯
               </el-button>
-              <el-button link type="danger" size="small" @click="handleDelete(row as any)">
+              <el-button
+                v-if="authStore.hasPermission('settings_notifications', 'delete')"
+                link
+                type="danger"
+                size="small"
+                @click="handleDelete(row as any)"
+              >
                 刪除
               </el-button>
             </TableRowActions>

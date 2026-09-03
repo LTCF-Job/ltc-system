@@ -33,11 +33,9 @@ type userCustomPermissionResolver struct {
 	admin identityapp.AdminIdentityProvider
 }
 
-// Resolve 在 Admin API 未設定金鑰時 fail-open 為「沒有個人覆蓋」（回 nil, nil）：這是
-// AdminIdentityProvider「未設定必須 fail-loud」規則的刻意例外——customPermissions 是疊加在
-// 角色矩陣之上的可選層，未設定時退回純角色矩陣判斷，不能讓它拖垮所有走 RequirePermission 的路由。
-// 已設定但查詢本身失敗（網路、逾時等）則正常回傳 error，交由呼叫端視為系統錯誤處理。
+// Resolve 解析使用者個人層級的模組權限覆蓋，未設定 Admin API 金鑰時回傳空覆蓋。
 func (r userCustomPermissionResolver) Resolve(ctx context.Context, actorID uuid.UUID) (map[string]auth.ModulePermission, error) {
+	// 只會在非 production 走到（production 缺 key 已由 config.LoadFromEnv 於啟動時擋下）：此時個人層級的 deny 覆蓋會消失，被降權的使用者回復為角色矩陣的完整權限
 	if !r.admin.Configured() {
 		return nil, nil
 	}

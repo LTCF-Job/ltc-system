@@ -8,7 +8,6 @@ covers:
   - apps/api/migrations/000011_backfill_admin_identity.up.sql
   - .github/workflows/deploy-api.yml
   - apps/web/tests/e2e-live/
-  - apps/web/src/mocks/handlers/supabaseAuth.ts
 ---
 
 # Demo data-plane 從程式碼到可用環境

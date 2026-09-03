@@ -25,15 +25,16 @@
           </template>
 
           <template #actions>
-            <el-button v-if="authStore.can('staff')" plain @click="handleDownloadTemplate">
+            <!-- 下載範本實際呼叫 GET /caregivers/template，後端僅要求 masters_caregivers:view -->
+            <el-button v-if="authStore.hasPermission('masters_caregivers', 'view')" plain @click="handleDownloadTemplate">
               下載匯入範本
             </el-button>
 
-            <el-button v-if="authStore.can('staff')" plain @click="openImportDialog">
+            <el-button v-if="authStore.hasPermission('masters_caregivers', 'edit')" plain @click="openImportDialog">
               批次匯入照護人員
             </el-button>
 
-            <el-button v-if="authStore.can('staff')" type="primary" @click="openCreateDialog">
+            <el-button v-if="authStore.hasPermission('masters_caregivers', 'edit')" type="primary" @click="openCreateDialog">
               <el-icon><Plus /></el-icon>
               新增照護人員
             </el-button>
@@ -83,7 +84,7 @@
                       編輯
                     </el-button>
                     <el-button
-                      v-if="authStore.can('admin')"
+                      v-if="authStore.hasPermission('masters_caregivers', 'delete')"
                       link
                       type="danger"
                       size="small"

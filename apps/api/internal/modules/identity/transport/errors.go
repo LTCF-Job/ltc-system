@@ -16,11 +16,11 @@ func respondIdentityError(c *gin.Context, err error) {
 		httpx.RespondErrorCode(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, err, nil)
 	case errors.Is(err, app.ErrRoleNotFound), errors.Is(err, app.ErrUserNotFound):
 		httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
-	case errors.Is(err, app.ErrSystemRoleImmutable), errors.Is(err, app.ErrCannotDeleteSelf):
+	case errors.Is(err, app.ErrSystemRoleImmutable), errors.Is(err, app.ErrCannotDeleteSelf), errors.Is(err, app.ErrCannotResetOwnPassword):
 		httpx.RespondErrorCode(c, http.StatusForbidden, httpx.CodeForbidden, err, nil)
 	case errors.Is(err, app.ErrRoleInUse):
 		httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
-	case errors.Is(err, app.ErrUnknownRole):
+	case errors.Is(err, app.ErrUnknownRole), errors.Is(err, app.ErrUnknownModuleKey):
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 	case errors.Is(err, app.ErrInvalidCredentials):
 		httpx.RespondErrorCode(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, err, nil)

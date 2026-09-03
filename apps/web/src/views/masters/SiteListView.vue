@@ -43,7 +43,7 @@
 
       <template #actions>
         <el-button
-          v-if="authStore.can('staff')"
+          v-if="authStore.hasPermission('masters_sites', 'edit')"
           type="primary"
           @click="openCreateDialog"
         >
@@ -69,7 +69,7 @@
           </el-table-column>
 
           <el-table-column
-            v-if="authStore.can('staff')"
+            v-if="authStore.hasPermission('masters_sites', 'edit') || authStore.hasPermission('masters_sites', 'delete')"
             label="操作"
             width="140"
             fixed="right"
@@ -77,10 +77,22 @@
           >
             <template #default="{ row }">
               <TableRowActions>
-                <el-button link type="primary" size="small" @click="openEditDialog(row)">
+                <el-button
+                  v-if="authStore.hasPermission('masters_sites', 'edit')"
+                  link
+                  type="primary"
+                  size="small"
+                  @click="openEditDialog(row)"
+                >
                   編輯
                 </el-button>
-                <el-button link type="danger" size="small" @click="handleDelete(row)">
+                <el-button
+                  v-if="authStore.hasPermission('masters_sites', 'delete')"
+                  link
+                  type="danger"
+                  size="small"
+                  @click="handleDelete(row)"
+                >
                   刪除
                 </el-button>
               </TableRowActions>

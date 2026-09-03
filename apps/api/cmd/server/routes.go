@@ -68,7 +68,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *de
 	} else {
 		corsConfig.AllowAllOrigins = true
 	}
-	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Ingest-Token", "X-Mock-Role", "X-Mock-User-ID"}
+	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Ingest-Token"}
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	r.Use(cors.New(corsConfig))
 
@@ -93,16 +93,17 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *de
 	// demo/reset 本身需要獨佔鎖，必須在 ConcurrencyGuardMiddleware 掛載前註冊，
 	// 否則這個請求會先卡在自己持有的共享鎖，永遠等不到獨佔鎖（自我死結）。
 	if h.demo != nil {
-		apiV1.POST("/demo/reset", auth.RequireRoles("viewer", "staff", "admin"), h.demo.Reset)
+		// 資料平面隔離已由 auth.Middleware 的 enforceDataPlane 處理，這裡只需要已登入
+		apiV1.POST("/demo/reset", h.demo.Reset)
 	}
 	if cfg.DataPlane == "demo" && demoGuard != nil {
 		apiV1.Use(demotransport.ConcurrencyGuardMiddleware(demoGuard))
 	}
 	{
-		// 以下路由的授權改依 perm.RequirePermission(module, action) 查角色的模組權限矩陣，
-		// 取代逐路由寫死角色字面值；自訂角色在「角色身分管理」頁調整矩陣後，API 存取範圍會
-		// 跟著變（見 docs/decisions/role-permission-api-authorization.md）。使用者／角色管理、
-		// 排程任務與國定假日（不在模組權限矩陣涵蓋範圍內）維持 RequireRoles 粗粒度白名單。
+		// 所有需授權的路由一律走 perm.RequirePermission(module, action) 查角色的模組權限矩陣，
+		// 不再有寫死角色字面值的路由；自訂角色在「角色身分管理」頁調整矩陣後，API 存取範圍會
+		// 跟著變（見 docs/decisions/role-permission-api-authorization.md）。模組 key 的權威清單
+		// 在 identityapp.ModuleKeys。
 
 		// 0. 區域主檔
 		apiV1.GET("/regions", auth.RequirePermission(perm, customPerm, "masters_regions", "view"), h.region.List)
@@ -178,11 +179,11 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *de
 		apiV1.GET("/exports/:id/download", auth.RequirePermission(perm, customPerm, "exports", "view"), h.export.Download)
 		apiV1.GET("/exports/:id/files/:caseId/download", auth.RequirePermission(perm, customPerm, "exports", "view"), h.export.DownloadCaseFile)
 
-		// 8. 國定假日與行事曆管理 (B5.1)——不在模組權限矩陣涵蓋範圍內，維持角色白名單
-		apiV1.GET("/holidays", auth.RequireRoles("viewer", "staff", "admin"), h.holiday.List)
-		apiV1.POST("/holidays", auth.RequireRoles("staff", "admin"), h.holiday.Create)
-		apiV1.POST("/holidays/import", auth.RequireRoles("staff", "admin"), h.holiday.Import)
-		apiV1.DELETE("/holidays/:date", auth.RequireRoles("admin"), h.holiday.Delete)
+		// 8. 國定假日與行事曆管理 (B5.1)
+		apiV1.GET("/holidays", auth.RequirePermission(perm, customPerm, "settings_holidays", "view"), h.holiday.List)
+		apiV1.POST("/holidays", auth.RequirePermission(perm, customPerm, "settings_holidays", "edit"), h.holiday.Create)
+		apiV1.POST("/holidays/import", auth.RequirePermission(perm, customPerm, "settings_holidays", "edit"), h.holiday.Import)
+		apiV1.DELETE("/holidays/:date", auth.RequirePermission(perm, customPerm, "settings_holidays", "delete"), h.holiday.Delete)
 
 		// 9. 通知收件人管理與通知留痕 (B5.2b)
 		apiV1.GET("/settings/notification-recipients", auth.RequirePermission(perm, customPerm, "settings_notifications", "view"), h.notification.ListRecipients)
@@ -223,9 +224,9 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *de
 		// 15. 稽核紀錄查詢 (B5.5)
 		apiV1.GET("/audit", auth.RequirePermission(perm, customPerm, "audit_logs", "view"), h.audit.List)
 
-		// 16. 排程與維運任務端點 (B5.2 / B5.3)——維運觸發端點，不對映任何模組，維持角色白名單
-		apiV1.POST("/tasks/check-missing-reports", auth.RequireRoles("staff", "admin"), h.task.CheckMissingReports)
-		apiV1.POST("/tasks/month-end-reminder", auth.RequireRoles("staff", "admin"), h.task.MonthEndReminder)
+		// 16. 排程與維運任務端點 (B5.2 / B5.3)——手動觸發維運任務屬於異動操作，故用 edit 軸
+		apiV1.POST("/tasks/check-missing-reports", auth.RequirePermission(perm, customPerm, "ops_tasks", "edit"), h.task.CheckMissingReports)
+		apiV1.POST("/tasks/month-end-reminder", auth.RequirePermission(perm, customPerm, "ops_tasks", "edit"), h.task.MonthEndReminder)
 
 		// 17. 照護人員主檔管理
 		apiV1.GET("/caregivers", auth.RequirePermission(perm, customPerm, "masters_caregivers", "view"), h.caregiver.List)
@@ -237,20 +238,24 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *de
 		apiV1.PUT("/caregivers/:id/site", auth.RequirePermission(perm, customPerm, "masters_caregivers", "edit"), h.caregiver.LinkSite)
 
 		// 18. 角色身分管理 roleH
-		apiV1.GET("/roles", auth.RequireRoles("admin"), h.role.ListRoles)
-		apiV1.GET("/roles/:id", auth.RequireRoles("admin"), h.role.GetRole)
-		apiV1.POST("/roles", auth.RequireRoles("admin"), h.role.CreateRole)
-		apiV1.PATCH("/roles/:id", auth.RequireRoles("admin"), h.role.UpdateRole)
-		apiV1.DELETE("/roles/:id", auth.RequireRoles("admin"), h.role.DeleteRole)
+		apiV1.GET("/roles", auth.RequirePermission(perm, customPerm, "settings_roles", "view"), h.role.ListRoles)
+		apiV1.GET("/roles/:id", auth.RequirePermission(perm, customPerm, "settings_roles", "view"), h.role.GetRole)
+		apiV1.POST("/roles", auth.RequirePermission(perm, customPerm, "settings_roles", "edit"), h.role.CreateRole)
+		apiV1.PATCH("/roles/:id", auth.RequirePermission(perm, customPerm, "settings_roles", "edit"), h.role.UpdateRole)
+		apiV1.DELETE("/roles/:id", auth.RequirePermission(perm, customPerm, "settings_roles", "delete"), h.role.DeleteRole)
 
 		// 19. 使用者帳號管理與密碼變更 identityH
-		apiV1.GET("/users", auth.RequireRoles("admin"), h.identity.ListUsers)
-		apiV1.GET("/users/:id", auth.RequireRoles("admin"), h.identity.GetUser)
-		apiV1.POST("/users", auth.RequireRoles("admin"), h.identity.CreateUser)
-		apiV1.PATCH("/users/:id", auth.RequireRoles("admin"), h.identity.UpdateUser)
-		apiV1.PUT("/users/:id/permissions", auth.RequireRoles("admin"), h.identity.UpdateUserPermissions)
-		apiV1.DELETE("/users/:id", auth.RequireRoles("admin"), h.identity.DeleteUser)
-		apiV1.POST("/auth/change-password", auth.RequireRoles("viewer", "staff", "admin"), h.identity.ChangeSelfPassword)
+		apiV1.GET("/users", auth.RequirePermission(perm, customPerm, "settings_users", "view"), h.identity.ListUsers)
+		apiV1.GET("/users/:id", auth.RequirePermission(perm, customPerm, "settings_users", "view"), h.identity.GetUser)
+		apiV1.POST("/users", auth.RequirePermission(perm, customPerm, "settings_users", "edit"), h.identity.CreateUser)
+		apiV1.PATCH("/users/:id", auth.RequirePermission(perm, customPerm, "settings_users", "edit"), h.identity.UpdateUser)
+		apiV1.PUT("/users/:id/permissions", auth.RequirePermission(perm, customPerm, "settings_users", "edit"), h.identity.UpdateUserPermissions)
+		apiV1.POST("/users/:id/reset-password", auth.RequirePermission(perm, customPerm, "settings_users", "edit"), h.identity.ResetPassword)
+		apiV1.DELETE("/users/:id", auth.RequirePermission(perm, customPerm, "settings_users", "delete"), h.identity.DeleteUser)
+
+		// 20. 自助查詢與自助改密碼：只綁「已登入」，不綁任何模組權限
+		apiV1.GET("/auth/me", identitytransport.NewMeHandler(perm, customPerm).Me)
+		apiV1.POST("/auth/change-password", h.identity.ChangeSelfPassword)
 	}
 
 	return r

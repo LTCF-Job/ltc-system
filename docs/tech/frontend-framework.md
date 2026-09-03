@@ -12,7 +12,6 @@
 | 路由 | Vue Router |
 | 狀態管理 | Pinia |
 | HTTP client | Axios |
-| Mock | MSW（Mock Service Worker） |
 | 圖表 | ECharts + vue-echarts |
 | 日期 | dayjs |
 
@@ -27,7 +26,6 @@ src/
   layouts/       版面骨架元件
   components/    跨頁共用元件
   composables/   可重用的 reactive 邏輯（useXxx）
-  mocks/         MSW handler 跟假資料
   types/         TypeScript 型別；api.d.ts 是自動產生的，不要手改
   styles/        共用樣式，含 Element Plus 樣式覆寫
 ```
@@ -38,7 +36,7 @@ src/
 
 `src/api/client.ts` 是唯一的 axios instance，兩個攔截器做的事：
 
-- **request**：自動帶 `Authorization: Bearer <token>`（從 `stores/auth.ts` 拿）；如果 `VITE_ENABLE_MSW=true` 且已登入，額外帶 `X-Mock-Role` / `X-Mock-User-ID`，讓後端本機環境也能吃到對應角色權限（這兩個 header 只在明確開 mock 時才加，正式 build 不會出現）。
+- **request**：自動帶 `Authorization: Bearer <token>`（從 `stores/auth.ts` 拿）；登入身分的 `dataPlane` 是 `demo` 時改把請求送到 `VITE_DEMO_API_BASE_URL`。
 - **response**：直接把 `response.data` 解出來（所以各個 `api/*.ts` 拿到的就是 `{ data, meta }` 那層，不用自己再 `.data.data`）；401 自動登出並導回登入頁；403 跳警告訊息；其他錯誤統一用 `ElMessage` / `ElNotification` 顯示，帶欄位級錯誤的話（後端回傳 `error.details`）會列出每個欄位的錯誤原因。
 
 新增一支 API 就在 `src/api/` 對應資源的檔案加一個 function，回傳型別盡量用 `src/types/api.d.ts` 產生的型別，不要自己重複定義一份跟後端脫鉤的 interface。後端 API 改了要記得跑 `npm run gen:types` 重新產生型別。
@@ -53,26 +51,35 @@ meta: { title: '個案管理', module: 'masters_cases', roles: ['admin', 'staff'
 
 `roles` 只是給人看的標註，實際放不放行看 `module` 對應的模組權限表（角色預設值 ＋ 個人自訂覆蓋），判斷順序跟細節寫在獨立的 [frontend-permission-logic.md](frontend-permission-logic.md)，改權限規則前務必先讀那份，不要以為改 `meta.roles` 就會生效。加新頁面記得同步確認後端對應 API 的 `RequireRoles` 白名單有沒有涵蓋一致的角色（見 [backend-api-reference.md](backend-api-reference.md)），前後端角色定義要對得上，不然會出現「頁面看得到但每支 API 都 403」的狀況；也要注意前端的細粒度權限後端目前接不到，見 [frontend-permission-logic.md](frontend-permission-logic.md) 的落差說明。
 
-## Mock（MSW）
+## 環境模型（local／demo／production）
 
-`VITE_ENABLE_MSW=true` 時，`main.ts` 會啟動 MSW，攔截 `src/mocks/handlers/` 底下定義的請求並回傳假資料；沒被攔到的請求照常打真的後端（`onUnhandledRequest: 'bypass'`）。用途是本機開發、或前端功能要先做但後端 API 還沒好時，先用假資料把畫面跑起來——目前「使用者管理」「角色身分管理」兩個頁面完全靠 MSW 撐著在跑，後端還沒有對應實作（見 [backend-api-reference.md](backend-api-reference.md) 的 gap 標註）。
+前端**沒有任何 mock 或假資料層**（MSW 已整個移除）。三個環境跑的是同一份程式碼、同一條功能路徑，差別只在連到哪個資料庫：
 
-寫 mock handler 時盡量貼近真實 API 的 response 格式（同樣的 `{ data, meta }` envelope、同樣的分頁、同樣的 error 格式），不然開發時看起來沒問題，接上真後端才發現格式對不上。mock 資料放 `src/mocks/data/`，跟 handler 分開，方便共用同一份假資料給多個 handler 用。
+| 環境 | 資料庫 | 登入 |
+|---|---|---|
+| local | 本機 PostgreSQL | 未設定 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 時不驗證密碼，改發 `mock_jwt_<role>` 給後端的 local 分支解析 |
+| demo | 獨立的 `ltc_demo` 資料庫（另一個 Cloud Run 服務） | Supabase Auth 真實驗證 |
+| production | 正式資料庫 | Supabase Auth 真實驗證 |
 
-正式 build（`npm run build`）不會把 MSW 打進去，`VITE_ENABLE_MSW` 正式環境必須是 `false` 或不設定。分類細節見 [`.agents/skills/mock-and-demo-boundaries/SKILL.md`](../../.agents/skills/mock-and-demo-boundaries/SKILL.md)。
+local 的登入表單與其他環境完全一樣：照常輸入帳號密碼、照常按「登入系統」，只是不會呼叫 Supabase。角色由輸入的帳號推斷——含 `viewer` 字樣即以檢視人員登入，其餘一律管理員（`LoginView.handleLogin`）。這條路徑只有在 `import.meta.env.DEV` 或 `VITE_APP_ENV=local` 時成立；其餘環境沒接上 Supabase 就直接拒絕登入，不存在任何略過驗證的入口。
 
-### 正式環境的展示帳號（`src/lib/demoMode.ts`）
+後端對應的放行條件見 `apps/api/internal/platform/auth/auth.go`：只有 `APP_ENV=local` 才接受 `mock_jwt_` 前綴的憑證，且仍要通過 data plane 檢查。
 
-除了上面 build-time 的 `VITE_ENABLE_MSW`，正式環境還有另一條**登入時動態啟用 MSW** 的路徑，讓同一個正式部署輸入固定的展示帳密就能看假資料，其他帳密登入照常打真的後端：
+### 登入帳號代稱與展示（demo）帳號
 
-正式預設管理員帳號由 `apps/api/migrations/000002_seed_reference_data.up.sql` 建立，登入頁接受 `ltcf-admin` 並轉換為 Supabase Auth 使用的 `ltcf-admin@ltc.example.com`；密碼為 `ltcf-admin_1234`，角色寫入 `app_metadata.role=admin`。此帳號不是展示帳號，展示帳號仍為 `demo/demo`。
+登入表單接受兩個「帳號代稱」，`LoginView.handleLogin` 會在送出前把它換成 Supabase Auth 真正使用的 email。**密碼一律照常送進 `supabase.auth.signInWithPassword` 做真實驗證，沒有任何略過 Supabase 的登入路徑**：
 
-- 帳號密碼**都輸入 `demo`**（`isDemoCredentials`，常數寫在 `demoMode.ts`）時，`LoginView.handleLogin` 完全略過 Supabase，直接動態 `import('@/mocks/browser')` 並 `worker.start()`，用一組寫死的假使用者（`role: 'admin'`）建立 session，之後這個分頁的 API 請求全部被 MSW 攔截。
-- 非 `demo/demo` 的帳密才會照原本流程打 `supabase.auth.signInWithPassword`；登入成功後呼叫 `exitDemoModeIfActive()` 確保沒有殘留前一次展示模式的攔截（避免同一分頁先用 demo 登入過，殘留攔截到之後的真實帳號請求）。
-- `main.ts` 開機時呼叫 `restoreDemoModeOnBoot()`，讀 `localStorage` 的 `ltc_demo_mode` 旗標決定要不要在重新整理頁面後還原這個攔截狀態。
-- `stores/auth.ts` 的 `logout()` 會呼叫 `clearDemoModeOnLogout()` 清掉旗標並停用 worker。
+| 輸入的帳號 | 實際送出的 email | 判斷依據 |
+|---|---|---|
+| `demo`（或 `demo@` 開頭的字串），密碼為 `demo`／`demo123` | `demo@ltc.example.com` | `LoginView` 內的 `isDemoCredentials()` |
+| `ltcf-admin` | `ltcf-admin@ltc.example.com` | `LoginView.handleLogin` 內的字串比對 |
 
-要換展示帳密，直接改 `demoMode.ts` 的 `DEMO_ACCOUNT`／`DEMO_PASSWORD` 常數並重新部署；MSW 模組是動態 import，正式 build 不會因為這個機制把 mock 程式碼包進首屏 bundle，只有真的輸入 `demo/demo` 登入那一刻才會下載。因為帳密是任何人都能公開猜到的固定字串，等同公開的展示入口，展示模式的假資料裡不能放真實個資或任何敏感內容。
+代稱只是輸入上的方便，不代表帳號存在，也不代表有預設密碼：
+
+- **沒有任何 migration 會建立登入帳號。** `apps/api/migrations/000002_seed_reference_data.up.sql` 現在只寫入 22 個縣市的 `regions`，`000011_backfill_admin_identity.up.sql` 已改成 `SELECT 1;` 的 no-op。管理員帳號必須另行 bootstrap（見 [environment-bootstrap.md](environment-bootstrap.md)），密碼只存在於建立當下使用的 secret 或密碼管理工具，不寫進程式碼、環境變數範本或任何文件。
+- 權限來自 JWT 的 `app_metadata.role`，資料平面來自 `app_metadata.data_plane`（`production`／`demo`）。`LoginView` 把這兩個欄位存進 session，`src/api/client.ts` 再依 `dataPlane` 決定要打 `VITE_API_BASE_URL` 還是 `VITE_DEMO_API_BASE_URL`。
+- 展示站台的資料來自後端獨立的 demo 資料平面（另一個 Cloud Run 服務＋另一個資料庫）；設計與隔離機制見 [demo-data-plane-architecture.md](../decisions/demo-data-plane-architecture.md)。
+- `demo` 這組帳密是公開可猜的固定字串，等同公開的展示入口，所以 demo 資料平面的種子資料裡不能放真實個資或任何敏感內容。
 
 ## 狀態管理
 

@@ -24,7 +24,7 @@ Demo 與正式環境共用同一個 Supabase 專案（含 Auth），但業務資
 
 - 兩個服務執行同一份 image、同一份 migration，只用 `DATA_PLANE`（`production`／`demo`）與 `DATABASE_URL` 兩個環境變數區分。
 - migration 對 `auth.*` 的操作全部包在 `IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'auth')` 內：`ltc_demo` 沒有 `auth` schema（Auth 只掛在預設 `postgres` 資料庫），業務 schema 仍照跑。
-- 授權層面不能只靠前端挑网址：JWT 的 `app_metadata.data_plane` 必須與服務自己的 `DATA_PLANE` 相符，`internal/platform/auth.Middleware` 對每個請求強制比對，不符就 401——即使有人直接對 Demo API 發送正式帳號的合法 JWT 也會被擋。
+- 授權層面不能只靠前端挑網址：JWT 的 `app_metadata.data_plane` 必須與服務自己的 `DATA_PLANE` 相符，`internal/platform/auth.Middleware` 對每個請求強制比對，不符就 401——即使有人直接對 Demo API 發送正式帳號的合法 JWT 也會被擋。
 - Demo 資料庫的連線角色（`ltc_demo_app`，見 `apps/api/ops/demo-db-roles.sql`）在 Postgres 權限層級被擋掉 `CONNECT` 正式 `postgres` 資料庫的權限，反向亦然；這是比「只在應用層檢查」更底層的一道防線。
 - Demo 重置（`POST /api/v1/demo/reset`）用一個行程內的 `sync.RWMutex` 讓一般請求與重置互斥：重置需要獨佔鎖，必須等所有進行中請求釋放共享鎖才能取得；這個機制只在 Demo 是單一 Cloud Run instance 的前提下成立，多 instance 會需要換成資料庫層級的鎖。
 - 種子資料（`apps/api/seed/demo/0001_baseline.up.sql`）用純 SQL 撰寫、固定 UUID、`ON CONFLICT` 保證可重複執行；但個案／司機的身分證加密欄位無法用靜態 SQL 產生真正密文（金鑰只有執行中的服務持有），改由 `internal/modules/demo/infra` 在每次重置時，用服務自己的 `EncryptionKey`／`HMACKey` 對種子資料重新加密一輪假身分證字號。

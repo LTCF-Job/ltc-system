@@ -57,20 +57,21 @@
 
       <!-- 操作按鈕列 -->
       <template #actions>
-        <el-button v-if="authStore.can('staff')" plain @click="handleDownloadTemplate">
+        <!-- 下載範本／匯出實際呼叫 GET /cases/template、/cases/export，後端僅要求 masters_cases:view -->
+        <el-button v-if="authStore.hasPermission('masters_cases', 'view')" plain @click="handleDownloadTemplate">
           下載匯入範本
         </el-button>
 
-        <el-button v-if="authStore.can('staff')" plain @click="openImportDialog">
+        <el-button v-if="authStore.hasPermission('masters_cases', 'edit')" plain @click="openImportDialog">
           批次匯入個案
         </el-button>
 
-        <el-button v-if="authStore.can('staff')" plain @click="openExportDialog">
+        <el-button v-if="authStore.hasPermission('masters_cases', 'view')" plain @click="openExportDialog">
           匯出個案資料
         </el-button>
 
         <el-button
-          v-if="authStore.can('staff')"
+          v-if="authStore.hasPermission('masters_cases', 'edit')"
           type="primary"
           @click="openCreateDialog"
         >
@@ -92,7 +93,7 @@
           <el-table-column prop="region" label="區域" width="115" align="center">
             <template #default="{ row }">
               <el-dropdown
-                v-if="authStore.can('staff')"
+                v-if="authStore.hasPermission('masters_cases', 'edit')"
                 trigger="click"
                 @command="(val: Region) => handleQuickUpdateRegion(row as any, val)"
               >
@@ -122,7 +123,7 @@
           <el-table-column prop="status" label="狀態" width="115" align="center">
             <template #default="{ row }">
               <el-dropdown
-                v-if="authStore.can('staff')"
+                v-if="authStore.hasPermission('masters_cases', 'edit')"
                 trigger="click"
                 @command="(val: CaseStatus) => handleQuickUpdateStatus(row as any, val)"
               >
@@ -180,7 +181,7 @@
                   編輯
                 </el-button>
                 <el-button
-                  v-if="authStore.can('staff')"
+                  v-if="authStore.hasPermission('masters_cases', 'delete')"
                   link
                   type="danger"
                   size="small"

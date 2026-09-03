@@ -25,9 +25,8 @@ func NewImportHandler(svc *app.ImportService) *ImportHandler {
 
 // ImportExcel 批次上傳解析個案新增資料 Excel 檔案。
 func (h *ImportHandler) ImportExcel(c *gin.Context) {
-	fileHeader, err := c.FormFile("file")
-	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "未提供上傳檔案", nil)
+	fileHeader, ok := httpx.BindUploadFile(c, "file")
+	if !ok {
 		return
 	}
 

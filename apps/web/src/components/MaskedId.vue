@@ -2,7 +2,7 @@
   <span class="masked-id-container">
     <span class="id-text">{{ revealedId || maskedValue }}</span>
     <el-button
-      v-if="authStore.can('staff') && !revealedId"
+      v-if="canReveal && !revealedId"
       link
       type="primary"
       size="small"
@@ -22,14 +22,15 @@
 <script setup lang="ts">
 import { ref, onUnmounted } from 'vue'
 import { View } from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
 
+// 共用元件不綁定特定模組，是否可揭露交由使用它的頁面依自身模組的 edit 權限判斷後傳入
 const props = defineProps<{
   maskedValue: string
+  canReveal?: boolean
   onReveal?: () => Promise<string>
 }>()
 
-const authStore = useAuthStore()
+const canReveal = props.canReveal ?? false
 const revealedId = ref<string | null>(null)
 const loading = ref(false)
 const remainingSec = ref(30)

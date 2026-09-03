@@ -78,6 +78,9 @@ type CreateRoleInput struct {
 
 // Create 新增自訂角色。
 func (s *RoleService) Create(ctx context.Context, in CreateRoleInput, actorID uuid.UUID, actorRole string) (*Role, error) {
+	if err := validateModuleKeys(in.Permissions); err != nil {
+		return nil, err
+	}
 	key := strings.TrimSpace(in.Key)
 	if key == "" {
 		key = slugify(in.Name)
@@ -126,6 +129,10 @@ type UpdateRoleInput struct {
 
 // Update 更新自訂角色；系統角色不可修改。
 func (s *RoleService) Update(ctx context.Context, id uuid.UUID, in UpdateRoleInput, actorID uuid.UUID, actorRole string) (*Role, error) {
+	if err := validateModuleKeys(in.Permissions); err != nil {
+		return nil, err
+	}
+
 	before, err := s.store.GetByID(ctx, id)
 	if err != nil {
 		return nil, err

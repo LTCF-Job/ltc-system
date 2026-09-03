@@ -101,7 +101,6 @@ ERROR: permission denied for schema public (SQLSTATE 42501)
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key（公開金鑰，非機密） |
 | `VITE_DEMO_API_BASE_URL` | Demo 帳號專用的後端 API base URL，指向 `ltc-api-demo` 服務，例如 `https://ltc-api-demo-<hash>.<region>.run.app/api/v1`。未設定時 Demo 帳號登入後所有 API 請求仍會打到 `VITE_API_BASE_URL`（正式 API），被 `data_plane` 檢查拒絕（見 [`client.ts`](../../apps/web/src/api/client.ts)） |
 | `VITE_GOOGLE_CLIENT_ID` / `VITE_GOOGLE_API_KEY` / `VITE_GOOGLE_APP_ID` | Google Picker／Identity Services，選填 |
-| `VITE_ENABLE_MSW` | 是否啟用 mock service worker，部署環境一律 `false` |
 
 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 沒設定時，[`apps/web/src/lib/supabase.ts`](../../apps/web/src/lib/supabase.ts) 會讓 `supabase` client 維持 `null`；登入頁看到 `!supabase` 就會直接顯示「帳號密碼錯誤或無此使用者」，不會真的呼叫 Supabase Auth，容易誤判成帳密問題。
 

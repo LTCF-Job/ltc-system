@@ -105,8 +105,8 @@ func (c *CachedCustomPermissionResolver) Resolve(ctx context.Context, actorID uu
 }
 
 // RequirePermission 依角色的模組權限矩陣驗證請求是否具備指定模組的 view／edit／delete 權限；
-// 與 RequireRoles 的路由層級粗粒度白名單不同，這裡的授權結果會隨「角色身分管理」頁的設定變動，
-// 讓自訂角色也能在 API 層拿到與其權限矩陣一致的存取範圍。個人層級的 customPermissions 覆蓋透過
+// 授權結果會隨「角色身分管理」頁的設定變動，讓自訂角色也能在 API 層拿到與其權限矩陣一致的
+// 存取範圍，不需要在路由上寫死角色字面值。個人層級的 customPermissions 覆蓋透過
 // customResolver 疊加在角色矩陣之上，兩者採同一套「查詢＋TTL 快取」機制，取捨見
 // docs/decisions/custom-permission-admin-api-enforcement.md。
 func RequirePermission(resolver PermissionResolver, customResolver CustomPermissionResolver, module, action string) gin.HandlerFunc {
@@ -118,25 +118,33 @@ func RequirePermission(resolver PermissionResolver, customResolver CustomPermiss
 		}
 		roleKey, _ := roleVal.(string)
 
-		perms, err := resolver.Resolve(c.Request.Context(), roleKey)
+		effective, err := ResolveEffectivePermissions(c.Request.Context(), resolver, customResolver, roleKey, GetActorID(c))
 		if err != nil {
-			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "無法解析角色權限", nil)
+			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "無法解析權限", nil)
 			return
 		}
 
-		custom, err := customResolver.Resolve(c.Request.Context(), GetActorID(c))
-		if err != nil {
-			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "無法解析個人權限覆蓋", nil)
-			return
-		}
-
-		effective := mergeCustomPermissions(perms, custom)
 		if !hasAction(effective[module], action) {
 			httpx.RespondError(c, http.StatusForbidden, httpx.CodeForbidden, "權限不足，拒絕存取", nil)
 			return
 		}
 		c.Next()
 	}
+}
+
+// ResolveEffectivePermissions 解析某個使用者最終生效的模組權限矩陣：先取角色矩陣，再疊上
+// 個人層級覆蓋。RequirePermission 與 GET /auth/me 共用這一份邏輯，確保前端拿到的權限與
+// API 實際放行的範圍一致。
+func ResolveEffectivePermissions(ctx context.Context, resolver PermissionResolver, customResolver CustomPermissionResolver, roleKey string, actorID uuid.UUID) (map[string]ModulePermission, error) {
+	perms, err := resolver.Resolve(ctx, roleKey)
+	if err != nil {
+		return nil, err
+	}
+	custom, err := customResolver.Resolve(ctx, actorID)
+	if err != nil {
+		return nil, err
+	}
+	return mergeCustomPermissions(perms, custom), nil
 }
 
 // mergeCustomPermissions 用「整個模組物件覆蓋」語意疊加個人權限，對齊前端

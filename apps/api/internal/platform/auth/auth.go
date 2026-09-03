@@ -33,35 +33,33 @@ func newSupabaseJWKS(jwksURL string) (keyfunc.Keyfunc, error) {
 	return keyfunc.NewDefaultCtx(context.Background(), []string{jwksURL})
 }
 
-// setActorFromClaims 將 JWT claims 中的 sub 與角色資訊注入 Gin Context。
-func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
+// setActorFromClaims 將 JWT claims 中的 sub、角色與 data plane 注入 Gin Context；
+// sub 不是合法 UUID 時回應 401 並回傳 false。
+func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) bool {
 	sub, _ := claims.GetSubject()
 	actorID, err := uuid.Parse(sub)
 	if err != nil {
-		actorID = uuid.Nil
+		// uuid.Nil 會流進稽核紀錄與「不可刪除自己」等以 actor 為準的判斷，靜默放行等同錯誤授權。
+		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "憑證未包含可識別的使用者 ID", nil)
+		return false
 	}
 
-	// role 一律以 app_metadata 為準：這是使用者無法自行編輯的伺服器端欄位，符合 Supabase RBAC 慣例，
-	// 也與 migrations/000002_seed_reference_data.up.sql 寫入 raw_app_meta_data.role 的方式一致；
-	// user_metadata 僅補齊 app_metadata 未提供時的角色與顯示名稱。
-	role := "viewer"
+	email, _ := claims["email"].(string)
 	name := ""
-	email := ""
-	if r, ok := claims["role"].(string); ok {
-		role = r
-	}
-	if e, ok := claims["email"].(string); ok {
-		email = e
-	}
 	if userMetadata, ok := claims["user_metadata"].(map[string]interface{}); ok {
-		if r, ok := userMetadata["role"].(string); ok {
-			role = r
-		}
 		if n, ok := userMetadata["display_name"].(string); ok {
 			name = n
 		}
 	}
-	// data_plane 只信任 app_metadata，理由與上方 role 相同：user_metadata 使用者可自行竄改。
+
+	// role 與 data_plane 只認 app_metadata：它唯一的寫入路徑是持 service role key 的 Admin API
+	// （見 identity/infra/supabase_admin_client.go），使用者無法自行竄改；user_metadata 則可由使用者
+	// 呼叫 supabase.auth.updateUser 寫入，頂層 role claim 又只是 Postgres role（authenticated／
+	// anon／service_role），兩者都不能當業務角色。
+	// 這裡不做角色白名單：管理員可從「角色身分管理」自建角色，合法 key 是動態的（見
+	// identity/app/role_service.go 的 Create），寫死清單會讓自訂角色使用者被靜默降級；未知 role
+	// 會在 RequirePermission 查不到權限矩陣而以 403 擋下。
+	role := "viewer"
 	dataPlane := DataPlaneProduction
 	if appMetadata, ok := claims["app_metadata"].(map[string]interface{}); ok {
 		if r, ok := appMetadata["role"].(string); ok {
@@ -75,9 +73,7 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
 		}
 	}
 	if name == "" {
-		if email, ok := claims["email"].(string); ok {
-			name = email
-		}
+		name = email
 	}
 
 	c.Set(ContextKeyActorID, actorID)
@@ -85,6 +81,7 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) {
 	c.Set(ContextKeyActorName, name)
 	c.Set(ContextKeyUserEmail, email)
 	c.Set(ContextKeyDataPlane, dataPlane)
+	return true
 }
 
 // Middleware 驗證傳入的 Supabase JWT Token 簽章並將使用者角色與 ID 注入 Gin Context。
@@ -96,23 +93,6 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		// 開發模式支援 Mock Header 方便本機測試與端點驗收
-		if cfg.AppEnv == "local" {
-			if mockRole := c.GetHeader("X-Mock-Role"); mockRole != "" {
-				actorIDStr := c.GetHeader("X-Mock-User-ID")
-				actorID, err := uuid.Parse(actorIDStr)
-				if err != nil {
-					actorID = uuid.New()
-				}
-				c.Set(ContextKeyActorID, actorID)
-				c.Set(ContextKeyActorRole, mockRole)
-				c.Set(ContextKeyUserEmail, "dev@example.com")
-				c.Set(ContextKeyActorName, "dev@example.com")
-				c.Next()
-				return
-			}
-		}
-
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "未提供認證憑證", nil)
@@ -143,6 +123,10 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 			c.Set(ContextKeyActorRole, role)
 			c.Set(ContextKeyUserEmail, role+"@example.com")
 			c.Set(ContextKeyActorName, role+"@example.com")
+			c.Set(ContextKeyDataPlane, DataPlaneProduction)
+			if !enforceDataPlane(c, cfg) {
+				return
+			}
 			c.Next()
 			return
 		}
@@ -152,14 +136,12 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 			claims := jwt.MapClaims{}
 			token, _, err := new(jwt.Parser).ParseUnverified(tokenStr, claims)
 			if err != nil || token == nil {
-				c.Set(ContextKeyActorID, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
-				c.Set(ContextKeyActorRole, "admin")
-				c.Set(ContextKeyUserEmail, "admin@example.com")
-				c.Set(ContextKeyActorName, "admin@example.com")
-				c.Next()
+				httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "無效的 JWT Token", nil)
 				return
 			}
-			setActorFromClaims(c, claims)
+			if !setActorFromClaims(c, claims) {
+				return
+			}
 			if !enforceDataPlane(c, cfg) {
 				return
 			}
@@ -175,13 +157,18 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 		claims := jwt.MapClaims{}
 		token, err := jwt.ParseWithClaims(tokenStr, claims, jwks.Keyfunc,
 			jwt.WithValidMethods([]string{"RS256", "ES256"}),
-			jwt.WithExpirationRequired())
+			jwt.WithExpirationRequired(),
+			// 綁定簽發者與受眾，避免其他 Supabase 專案或非使用者流程（如 service_role）的 token 被接受。
+			jwt.WithIssuer(cfg.SupabaseJWTIssuer),
+			jwt.WithAudience("authenticated"))
 		if err != nil || !token.Valid {
 			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "無效的 JWT Token", nil)
 			return
 		}
 
-		setActorFromClaims(c, claims)
+		if !setActorFromClaims(c, claims) {
+			return
+		}
 		if !enforceDataPlane(c, cfg) {
 			return
 		}
@@ -201,27 +188,6 @@ func enforceDataPlane(c *gin.Context, cfg *config.Config) bool {
 		return false
 	}
 	return true
-}
-
-// RequireRoles 依據角色權限矩陣驗證當前請求是否具有執行權限。
-func RequireRoles(allowedRoles ...string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		roleVal, exists := c.Get(ContextKeyActorRole)
-		if !exists {
-			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "未登入或無法識別角色", nil)
-			return
-		}
-
-		currentRole := roleVal.(string)
-		for _, allowed := range allowedRoles {
-			if currentRole == allowed {
-				c.Next()
-				return
-			}
-		}
-
-		httpx.RespondError(c, http.StatusForbidden, httpx.CodeForbidden, "權限不足，拒絕存取", nil)
-	}
 }
 
 // GetActorID 從 Context 安全取出當前使用者 UUID。

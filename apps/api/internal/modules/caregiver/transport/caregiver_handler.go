@@ -137,9 +137,8 @@ func (h *CaregiverHandler) LinkSite(c *gin.Context) {
 
 // ImportExcel 批次上傳解析照護人員新增資料 Excel 檔案。
 func (h *CaregiverHandler) ImportExcel(c *gin.Context) {
-	fileHeader, err := c.FormFile("file")
-	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "未提供上傳檔案", nil)
+	fileHeader, ok := httpx.BindUploadFile(c, "file")
+	if !ok {
 		return
 	}
 

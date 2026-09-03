@@ -358,8 +358,10 @@ export const SYSTEM_MODULES: SystemModuleInfo[] = [
   { id: 'exports', name: '政府申報匯出', category: 'reports', categoryName: '申報匯出' },
   { id: 'audit_logs', name: '系統操作紀錄', category: 'system', categoryName: '系統管理' },
   { id: 'settings_notifications', name: '通知收件人管理', category: 'system', categoryName: '系統管理' },
+  { id: 'settings_holidays', name: '國定假日管理', category: 'system', categoryName: '系統管理' },
   { id: 'settings_users', name: '使用者與權限管理', category: 'system', categoryName: '系統管理' },
-  { id: 'settings_roles', name: '角色身分管理', category: 'system', categoryName: '系統管理' }
+  { id: 'settings_roles', name: '角色身分管理', category: 'system', categoryName: '系統管理' },
+  { id: 'ops_tasks', name: '排程維運任務', category: 'system', categoryName: '系統管理' }
 ]
 
 export interface ModulePermission {
@@ -369,23 +371,6 @@ export interface ModulePermission {
 }
 
 export type SystemPermissions = Record<string, ModulePermission>
-
-// 角色預設權限設定表
-export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, SystemPermissions> = {
-  admin: SYSTEM_MODULES.reduce((acc, m) => {
-    acc[m.id] = { view: true, edit: true, delete: true }
-    return acc
-  }, {} as SystemPermissions),
-
-  viewer: SYSTEM_MODULES.reduce((acc, m) => {
-    acc[m.id] = {
-      view: !['audit_logs', 'settings_users', 'settings_roles'].includes(m.id),
-      edit: false,
-      delete: false
-    }
-    return acc
-  }, {} as SystemPermissions)
-}
 
 // 稽核日誌欄位名稱中文化字典
 export const AUDIT_FIELD_LABELS: Record<string, string> = {

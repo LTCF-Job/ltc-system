@@ -37,7 +37,7 @@
 
       <template #actions>
         <el-button
-          v-if="authStore.can('staff')"
+          v-if="authStore.hasPermission('masters_vehicles', 'edit')"
           type="primary"
           @click="openCreateDialog"
         >
@@ -114,7 +114,7 @@
           <el-table-column prop="active" label="狀態" width="130" align="center">
             <template #default="{ row }">
               <el-tooltip
-                v-if="authStore.can('staff')"
+                v-if="authStore.hasPermission('masters_vehicles', 'edit')"
                 :content="row.active ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
                 placement="top"
                 :show-after="300"
@@ -162,7 +162,7 @@
           </el-table-column>
 
           <el-table-column
-            v-if="authStore.can('staff')"
+            v-if="authStore.hasPermission('masters_vehicles', 'edit') || authStore.hasPermission('masters_vehicles', 'delete')"
             label="操作"
             width="200"
             fixed="right"
@@ -170,13 +170,21 @@
           >
             <template #default="{ row }">
               <TableRowActions>
-                <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
-                  編輯
-                </el-button>
-                <el-button link type="primary" size="small" @click="openDriverDialog(row as any)">
-                  司機
-                </el-button>
-                <el-button link type="danger" size="small" @click="handleDeleteVehicle(row as any)">
+                <template v-if="authStore.hasPermission('masters_vehicles', 'edit')">
+                  <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
+                    編輯
+                  </el-button>
+                  <el-button link type="primary" size="small" @click="openDriverDialog(row as any)">
+                    司機
+                  </el-button>
+                </template>
+                <el-button
+                  v-if="authStore.hasPermission('masters_vehicles', 'delete')"
+                  link
+                  type="danger"
+                  size="small"
+                  @click="handleDeleteVehicle(row as any)"
+                >
                   刪除
                 </el-button>
               </TableRowActions>
@@ -368,7 +376,7 @@ async function handleSaveDrivers() {
 }
 
 function handleRowDblClick(row: VehicleDTO) {
-  if (authStore.can('staff')) {
+  if (authStore.hasPermission('masters_vehicles', 'edit')) {
     openEditDialog(row)
   }
 }

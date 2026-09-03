@@ -18,6 +18,9 @@ import (
 	"ltc-system/apps/api/internal/platform/config"
 )
 
+// testIssuer 對應 config.SupabaseJWTIssuer，與測試 token 的 iss claim 一致。
+const testIssuer = "https://test-project.supabase.co/auth/v1"
+
 func performAuthRequest(t *testing.T, h gin.HandlerFunc, authHeader string) (*httptest.ResponseRecorder, *gin.Context) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -44,7 +47,8 @@ func TestAuthMiddleware_MalformedHeader(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestAuthMiddleware_LocalMockHeaderBypassesJWT(t *testing.T) {
+// X-Mock-Role 曾是本機用的身分後門，已移除；帶著它但沒有 Authorization 仍必須被拒絕。
+func TestAuthMiddleware_LocalMockHeaderNoLongerBypassesJWT(t *testing.T) {
 	cfg := &config.Config{AppEnv: "local"}
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -55,8 +59,16 @@ func TestAuthMiddleware_LocalMockHeaderBypassesJWT(t *testing.T) {
 
 	Middleware(cfg)(c)
 
-	assert.False(t, c.IsAborted())
-	assert.Equal(t, "admin", c.GetString(ContextKeyActorRole))
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Empty(t, c.GetString(ContextKeyActorRole))
+}
+
+// 本機無 JWKS 時的 ParseUnverified 降級不得在解析失敗時放行成 admin。
+func TestAuthMiddleware_LocalUnparsableTokenRejected(t *testing.T) {
+	cfg := &config.Config{AppEnv: "local"}
+	w, c := performAuthRequest(t, Middleware(cfg), "Bearer not-a-jwt")
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Empty(t, c.GetString(ContextKeyActorRole))
 }
 
 func TestAuthMiddleware_LocalMockJWTPrefix(t *testing.T) {
@@ -79,7 +91,7 @@ func TestAuthMiddleware_RejectsForgedTokenWhenJWKSConfigured(t *testing.T) {
 	srv, _ := newTestJWKSServer(t)
 	defer srv.Close()
 
-	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL}
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
 	forged := forgeUnsignedToken(t, "admin")
 	w, _ := performAuthRequest(t, Middleware(cfg), "Bearer "+forged)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -89,7 +101,7 @@ func TestAuthMiddleware_AcceptsValidSignedToken(t *testing.T) {
 	srv, key := newTestJWKSServer(t)
 	defer srv.Close()
 
-	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL}
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
 	actorID := uuid.New()
 	signed := signTestToken(t, key, "test-kid", actorID.String(), "staff", "")
 
@@ -105,7 +117,7 @@ func TestAuthMiddleware_ProductionRejectsDemoToken(t *testing.T) {
 	srv, key := newTestJWKSServer(t)
 	defer srv.Close()
 
-	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, DataPlane: DataPlaneProduction}
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer, DataPlane: DataPlaneProduction}
 	signed := signTestToken(t, key, "test-kid", uuid.NewString(), "staff", DataPlaneDemo)
 
 	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
@@ -118,7 +130,7 @@ func TestAuthMiddleware_DemoRejectsProductionToken(t *testing.T) {
 	srv, key := newTestJWKSServer(t)
 	defer srv.Close()
 
-	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, DataPlane: DataPlaneDemo}
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer, DataPlane: DataPlaneDemo}
 	signed := signTestToken(t, key, "test-kid", uuid.NewString(), "staff", "")
 
 	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
@@ -131,12 +143,126 @@ func TestAuthMiddleware_DemoAcceptsDemoToken(t *testing.T) {
 	srv, key := newTestJWKSServer(t)
 	defer srv.Close()
 
-	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, DataPlane: DataPlaneDemo}
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer, DataPlane: DataPlaneDemo}
 	signed := signTestToken(t, key, "test-kid", uuid.NewString(), "staff", DataPlaneDemo)
 
 	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, DataPlaneDemo, GetActorDataPlane(c))
+}
+
+// TestAuthMiddleware_IgnoresUserMetadataRole 是本次提權修補的核心迴歸測試：使用者可自行寫入的
+// user_metadata.role 不得影響授權角色。
+func TestAuthMiddleware_IgnoresUserMetadataRole(t *testing.T) {
+	srv, key := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
+	signed := signClaims(t, key, "test-kid", jwt.MapClaims{
+		"sub":           uuid.NewString(),
+		"iss":           testIssuer,
+		"aud":           "authenticated",
+		"exp":           time.Now().Add(time.Hour).Unix(),
+		"user_metadata": map[string]interface{}{"role": "admin"},
+	})
+
+	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "viewer", c.GetString(ContextKeyActorRole))
+}
+
+// TestAuthMiddleware_IgnoresTopLevelRoleClaim 驗證 Supabase 頂層 role claim（Postgres role）不會被當成業務角色。
+func TestAuthMiddleware_IgnoresTopLevelRoleClaim(t *testing.T) {
+	srv, key := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
+	signed := signClaims(t, key, "test-kid", jwt.MapClaims{
+		"sub":  uuid.NewString(),
+		"iss":  testIssuer,
+		"aud":  "authenticated",
+		"role": "service_role",
+		"exp":  time.Now().Add(time.Hour).Unix(),
+	})
+
+	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "viewer", c.GetString(ContextKeyActorRole))
+}
+
+// TestAuthMiddleware_PreservesAppMetadataRoles 驗證 app_metadata.role 原樣帶入 Context，
+// 包含管理員自建的角色 key——這裡不可加角色白名單，否則自訂角色使用者會被靜默降級為 viewer。
+func TestAuthMiddleware_PreservesAppMetadataRoles(t *testing.T) {
+	srv, key := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
+	for _, role := range []string{"admin", "dispatcher", "staff", "driver", "viewer", "dispatcher_1"} {
+		signed := signTestToken(t, key, "test-kid", uuid.NewString(), role, "")
+		w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
+		require.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, role, c.GetString(ContextKeyActorRole))
+	}
+}
+
+// TestAuthMiddleware_MissingAppMetadataRoleFallsBackToViewer 驗證 app_metadata 未帶 role 時採最小權限預設。
+func TestAuthMiddleware_MissingAppMetadataRoleFallsBackToViewer(t *testing.T) {
+	srv, key := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
+	signed := signTestToken(t, key, "test-kid", uuid.NewString(), "", "")
+
+	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "viewer", c.GetString(ContextKeyActorRole))
+}
+
+// TestAuthMiddleware_RejectsWrongIssuer 驗證他人 Supabase 專案簽出的 token 會被拒絕。
+func TestAuthMiddleware_RejectsWrongIssuer(t *testing.T) {
+	srv, key := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
+	signed := signClaims(t, key, "test-kid", jwt.MapClaims{
+		"sub": uuid.NewString(),
+		"iss": "https://attacker-project.supabase.co/auth/v1",
+		"aud": "authenticated",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+
+	w, _ := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+// TestAuthMiddleware_RejectsWrongAudience 驗證非 authenticated 受眾（如 service_role 憑證）會被拒絕。
+func TestAuthMiddleware_RejectsWrongAudience(t *testing.T) {
+	srv, key := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
+	signed := signClaims(t, key, "test-kid", jwt.MapClaims{
+		"sub": uuid.NewString(),
+		"iss": testIssuer,
+		"aud": "service_role",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+
+	w, _ := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+// TestAuthMiddleware_RejectsNonUUIDSubject 驗證 sub 無法解析為 UUID 時直接拒絕，避免以 uuid.Nil 身分放行。
+func TestAuthMiddleware_RejectsNonUUIDSubject(t *testing.T) {
+	srv, key := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
+	signed := signTestToken(t, key, "test-kid", "not-a-uuid", "staff", "")
+
+	w, c := performAuthRequest(t, Middleware(cfg), "Bearer "+signed)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.True(t, c.IsAborted())
 }
 
 // forgeUnsignedToken 產生「alg 有效但簽章任意偽造」的 token，模擬攻擊者在無簽章驗證時可捏造的憑證。
@@ -154,16 +280,28 @@ func forgeUnsignedToken(t *testing.T, role string) string {
 	return signed
 }
 
+// signTestToken 產生一張合法的 Supabase 使用者 token，角色寫在 app_metadata。
 func signTestToken(t *testing.T, key *rsa.PrivateKey, kid, sub, role, dataPlane string) string {
 	t.Helper()
-	claims := jwt.MapClaims{
-		"sub":  sub,
-		"role": role,
-		"exp":  time.Now().Add(time.Hour).Unix(),
+	appMetadata := map[string]interface{}{}
+	if role != "" {
+		appMetadata["role"] = role
 	}
 	if dataPlane != "" {
-		claims["app_metadata"] = map[string]interface{}{"data_plane": dataPlane}
+		appMetadata["data_plane"] = dataPlane
 	}
+	return signClaims(t, key, kid, jwt.MapClaims{
+		"sub":          sub,
+		"iss":          testIssuer,
+		"aud":          "authenticated",
+		"exp":          time.Now().Add(time.Hour).Unix(),
+		"app_metadata": appMetadata,
+	})
+}
+
+// signClaims 以測試金鑰簽出指定 claims，供需要偽造個別欄位的案例使用。
+func signClaims(t *testing.T, key *rsa.PrivateKey, kid string, claims jwt.MapClaims) string {
+	t.Helper()
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = kid
 	signed, err := token.SignedString(key)

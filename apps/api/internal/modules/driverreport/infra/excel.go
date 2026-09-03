@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/xuri/excelize/v2"
+	"ltc-system/apps/api/internal/platform/spreadsheet"
 )
 
 // ExcelAdapter 是 driverreport 唯一接觸 excelize 的地方：對外只交換位元組與純文字
@@ -18,7 +19,7 @@ func NewExcelAdapter() ExcelAdapter { return ExcelAdapter{} }
 // driverReportSheetName 是範本與匯入檔的工作表名稱。
 const driverReportSheetName = "司機接送匯報"
 
-// ReadTables 將 Excel 位元組解碼為逐工作表的儲存格文字。
+// ReadTables 將 Excel 位元組解碼為逐工作表的儲存格文字；超過解析規模上限時回報錯誤。
 func (r ExcelAdapter) ReadTables(data []byte) ([][][]string, []string, error) {
 	f, err := excelize.OpenReader(bytes.NewReader(data))
 	if err != nil {
@@ -28,9 +29,13 @@ func (r ExcelAdapter) ReadTables(data []byte) ([][][]string, []string, error) {
 
 	var tables [][][]string
 	var sheetNames []string
+	var counter spreadsheet.LimitCounter
 	for _, sheet := range f.GetSheetList() {
-		rows, err := f.GetRows(sheet)
-		if err == nil && len(rows) > 0 {
+		rows, err := readSheetRows(f, sheet, &counter)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(rows) > 0 {
 			tables = append(tables, rows)
 			sheetNames = append(sheetNames, sheet)
 		}
@@ -40,6 +45,32 @@ func (r ExcelAdapter) ReadTables(data []byte) ([][][]string, []string, error) {
 		return nil, nil, errors.New("excel 檔案中無工作表資料")
 	}
 	return tables, sheetNames, nil
+}
+
+// readSheetRows 讀出單一工作表的儲存格文字；無法解析的工作表回傳空表格，沿用既有的略過行為。
+func readSheetRows(f *excelize.File, sheet string, counter *spreadsheet.LimitCounter) ([][]string, error) {
+	if err := counter.BeginSheet(); err != nil {
+		return nil, err
+	}
+	// 逐列串流而非 GetRows：壓縮炸彈必須在展開成完整表格之前就被攔下。
+	it, err := f.Rows(sheet)
+	if err != nil {
+		return nil, nil
+	}
+	defer it.Close()
+
+	var rows [][]string
+	for it.Next() {
+		cols, err := it.Columns()
+		if err != nil {
+			return nil, nil
+		}
+		if err := counter.AddRow(sheet, len(cols)); err != nil {
+			return nil, err
+		}
+		rows = append(rows, cols)
+	}
+	return spreadsheet.TrimTrailingEmptyRows(rows), nil
 }
 
 // RenderDriverReportTemplate 產生司機接送匯報表空白範本。

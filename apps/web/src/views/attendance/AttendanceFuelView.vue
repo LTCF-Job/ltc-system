@@ -250,7 +250,7 @@
           </template>
 
           <template #actions>
-            <el-button v-if="authStore.can('staff')" type="primary" :icon="Plus" @click="openFuelDialog()">
+            <el-button v-if="authStore.hasPermission('attendance_fuel', 'edit')" type="primary" :icon="Plus" @click="openFuelDialog()">
               新增加油紀錄
             </el-button>
           </template>
@@ -321,13 +321,31 @@
                 <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
-            <el-table-column v-if="authStore.can('staff')" label="操作" width="140" align="center" fixed="right">
+            <el-table-column
+              v-if="authStore.hasPermission('attendance_fuel', 'edit') || authStore.hasPermission('attendance_fuel', 'delete')"
+              label="操作"
+              width="140"
+              align="center"
+              fixed="right"
+            >
               <template #default="{ row }">
                 <TableRowActions>
-                  <el-button link type="primary" size="small" @click="openFuelDialog(row)">
+                  <el-button
+                    v-if="authStore.hasPermission('attendance_fuel', 'edit')"
+                    link
+                    type="primary"
+                    size="small"
+                    @click="openFuelDialog(row)"
+                  >
                     編輯
                   </el-button>
-                  <el-button link type="danger" size="small" @click="handleDeleteFuel(row)">
+                  <el-button
+                    v-if="authStore.hasPermission('attendance_fuel', 'delete')"
+                    link
+                    type="danger"
+                    size="small"
+                    @click="handleDeleteFuel(row)"
+                  >
                     刪除
                   </el-button>
                 </TableRowActions>
@@ -700,7 +718,7 @@ function getTooltipContent(driver: any, day: number): string {
 }
 
 function handleCellClick(driver: any, day: number) {
-  if (!authStore.can('staff')) return
+  if (!authStore.hasPermission('attendance_fuel', 'edit')) return
   const dateKey = getDayKey(day)
   const rec = driver.days ? driver.days[dateKey] : undefined
   selectedCell.value = {

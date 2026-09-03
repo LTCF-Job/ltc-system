@@ -82,8 +82,9 @@
                   </span>
                 </template>
               </el-table-column>
+              <!-- 人工回報實際呼叫 POST /rides/manual-report，後端以 rides_issues:edit 把關，此處對齊該權限而非本頁的 rides_missing -->
               <el-table-column
-                v-if="authStore.can('staff')"
+                v-if="authStore.hasPermission('rides_issues', 'edit')"
                 label="操作"
                 width="120"
                 align="center"

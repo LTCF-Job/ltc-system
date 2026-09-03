@@ -38,7 +38,7 @@
 
       <template #actions>
         <el-button
-          v-if="authStore.can('staff')"
+          v-if="authStore.hasPermission('masters_drivers', 'edit')"
           type="primary"
           @click="openCreateDialog"
         >
@@ -92,7 +92,7 @@
           <el-table-column prop="active" label="狀態" width="130" align="center">
             <template #default="{ row }">
               <el-tooltip
-                v-if="authStore.can('staff')"
+                v-if="authStore.hasPermission('masters_drivers', 'edit')"
                 :content="row.active ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
                 placement="top"
                 :show-after="300"
@@ -119,7 +119,7 @@
           </el-table-column>
 
           <el-table-column
-            v-if="authStore.can('staff')"
+            v-if="authStore.hasPermission('masters_drivers', 'edit') || authStore.hasPermission('masters_drivers', 'delete')"
             label="操作"
             width="240"
             fixed="right"
@@ -127,13 +127,21 @@
           >
             <template #default="{ row }">
               <TableRowActions>
-                <el-button link type="primary" size="small" @click="openEditDialog(row)">
-                  編輯
-                </el-button>
-                <el-button link type="primary" size="small" @click="openAssignDialog(row)">
-                  指派車輛
-                </el-button>
-                <el-button link type="danger" size="small" @click="handleDeleteDriver(row as any)">
+                <template v-if="authStore.hasPermission('masters_drivers', 'edit')">
+                  <el-button link type="primary" size="small" @click="openEditDialog(row)">
+                    編輯
+                  </el-button>
+                  <el-button link type="primary" size="small" @click="openAssignDialog(row)">
+                    指派車輛
+                  </el-button>
+                </template>
+                <el-button
+                  v-if="authStore.hasPermission('masters_drivers', 'delete')"
+                  link
+                  type="danger"
+                  size="small"
+                  @click="handleDeleteDriver(row as any)"
+                >
                   刪除
                 </el-button>
               </TableRowActions>

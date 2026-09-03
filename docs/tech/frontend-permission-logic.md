@@ -1,56 +1,45 @@
 # 前端權限判斷邏輯
 
-`frontend-pages.md` 列的「允許角色」只是路由 `meta.roles` 陣列，方便快速掃過各頁大致給哪些角色用；但**實際的權限檢查幾乎都不是走這個陣列**。這份文件寫的是路由守衛實際跑的判斷順序，改權限規則前一定要看這份，不要只改 `meta.roles` 以為就生效了。
+前端不再自行維護任何角色到權限的對照表。所有畫面顯示與操作限制都依據登入時向後端 `GET /api/v1/auth/me` 取得的 effective permissions，這份資料就是後端 `RequirePermission` 實際查詢並合併（角色矩陣＋個人 `customPermissions` 覆蓋）後的同一份結果——前端看到的能不能做，跟 API 實際放不放行必然一致，不會有兩套規則分歧的問題。
 
-## 路由守衛的判斷順序（`router/guards.ts`）
+## 權限的取得與生效時機（`stores/auth.ts`）
 
-`beforeEach` 依序檢查，任一步驟決定放行／攔截後就不看後面的步驟：
+`loadPermissions()` 呼叫 `GET /api/v1/auth/me`，把回傳的 `permissions` 存入 store，並標記 `permissionsLoaded = true`。觸發時機：
 
-1. 這個路由不是 `meta.public` 且使用者未登入 → 導去 `/login`。
+1. 登入成功後（`setSession()` 內部呼叫），涵蓋三條登入路徑：正常 Supabase 登入、demo／`ltcf-admin` email 代稱登入（實際仍走 Supabase）、local 環境的 mock JWT 登入（Supabase 未設定時，表單送出後端直接發一張 `mock_jwt_<role>` token）。
+2. 分頁重新整理時：store 建構階段若偵測到 localStorage 已有 `token`／`user`（沿用既有 session），立即補打一次 `loadPermissions()`。**Permissions 本身不寫入 localStorage**，每次還原 session 都是向後端要最新的一份，避免權限異動後舊分頁還讀到過期快取。
+
+`loadPermissions()` 內部用一個閉包變數快取進行中的 promise，避免 router guard 與 store 初始化同時觸發造成重複請求。
+
+`hasPermission(module, action)`：`permissionsLoaded === false` 時一律回傳 `false`（安全預設，不放行），其餘情況單純查 `permissions[module][action]`。**沒有任何角色字串的短路判斷**——包含 `admin` 在內，都是後端矩陣給 `true` 才會是 `true`，前端不額外開後門。這是刻意的設計：自訂角色與內建角色使用同一套判斷路徑，不會有「前端多信任 admin 一點」的分歧。
+
+`action` 型別是 `'view' | 'edit' | 'delete'`，跟後端 `ModulePermission{View, Edit, Delete}` 三軸對齊。
+
+## 路由守衛（`router/guards.ts`）
+
+`beforeEach` 依序檢查：
+
+1. 路由不是 `meta.public` 且使用者未登入 → 導去 `/login`。
 2. 已登入卻要進 `/login` → 導去首頁。
-3. **`meta.module` 有設定值時**（目前所有非公開路由都有設）→ 呼叫 `authStore.hasPermission(module, 'view')`，**不看 `meta.roles`**，沒權限就導回首頁並跳警告訊息。
-4. 只有 `meta.module` 沒設定時，才會退回看 `meta.roles`，呼叫 `authStore.can(roles)`。
+3. 已登入但權限尚未載入完成（`!permissionsLoaded`，例如剛按 F5）→ `await authStore.loadPermissions()` 待其完成後才繼續判斷，不會因為請求還沒回來就誤判為無權限而把使用者踢出當前頁。
+4. `meta.module` 有設定值 → 呼叫 `authStore.hasPermission(module, 'view')`，沒權限就導回首頁並跳警告訊息。
 
-也就是說：目前 `router/index.ts` 每個路由的 `meta.roles` 陣列，實務上只是文件性質的標註（給人看大概哪些角色會用到），真正決定「這個角色進不進得去這頁」的是 `authStore.hasPermission()` 背後那一整套模組權限表。改一個頁面能不能被哪個角色看到，要改的是下面這套邏輯，不是路由表的 `roles`。
+**沒有 `meta.roles` 這回事了**——`router/index.ts` 的每個路由只保留 `meta.module`，不再有平行存在、且早已跟真實判斷脫鉤的角色字串陣列。過去 `meta.roles` 只是文件性質的標註、不影響實際放行，這個誤導來源已經整個拿掉。
 
-## 模組權限表（`src/types/domain.ts`）
+## 模組定義（`src/types/domain.ts`）
 
-系統把每個功能頁面定義成一個「模組」（`SYSTEM_MODULES`，例如 `masters_cases`、`rides_calendar`、`settings_users`），每個模組對每個角色有一組 `{ view: boolean, edit: boolean }`：
+`SYSTEM_MODULES` 仍是模組 id 到顯示名稱的對照表，供「角色身分管理」頁渲染可勾選的模組清單，例如 `masters_cases`、`rides_calendar`、`settings_users`、`settings_holidays`、`ops_tasks`。**新增頁面／新增模組時只需要做兩件事**：`SYSTEM_MODULES` 加一筆、路由 `meta.module` 指到這個新模組 id——角色的權限值完全由後端 `roles.permissions`（「角色身分管理」頁編輯的那份資料）決定，前端不再需要為每個角色手動列一份預設權限表。
 
-- `DEFAULT_ROLE_PERMISSIONS.admin`：所有模組 `view/edit` 全部 `true`（用程式產生，不用一個個列）。
-- `DEFAULT_ROLE_PERMISSIONS.dispatcher` / `.staff`：手動列出每個模組的權限，兩者目前設定幾乎一樣（都能看能編大部分業務模組），差異在 `dispatcher`／`staff` 這兩個角色本身在後端 `RequireRoles` 裡是分開判斷的，但前端權限表給的預設值目前相同。
-- `DEFAULT_ROLE_PERMISSIONS.driver`：只能看／編「車輛維修保養」「出勤與油資」跟看「搭乘月曆」「車輛主檔」「司機主檔」，個案、單位、表單、報表、匯出、系統設定全部沒有權限。
-- `DEFAULT_ROLE_PERMISSIONS.viewer`：除了 `audit_logs`、`settings_users`、`settings_roles` 這三個系統管理類模組看不到，其他模組都只有 `view`，沒有 `edit`。
+`ops_tasks` 目前沒有對應的前端頁面（純後端排程維運任務），`SYSTEM_MODULES` 收錄它只是讓角色管理頁能夠授權，屬預期行為。
 
-加一個新頁面（新模組）時，記得同時做三件事：`SYSTEM_MODULES` 加一筆、每個角色的 `DEFAULT_ROLE_PERMISSIONS` 補上這個模組的 `view/edit`、路由 `meta.module` 指到這個新模組 id——三個地方漏一個都會導致權限判斷不如預期（漏了模組定義會被 `hasPermission` 當成沒權限，因為 `modPerm` 找不到直接回傳 `false`）。
+## 個人自訂權限覆蓋
 
-## 個人自訂權限覆蓋（`effectivePermissions`）
-
-「角色身分管理」頁允許在角色預設值之外，對單一使用者再設定 `customPermissions`（存在 `UserDTO.customPermissions`）。實際生效的權限是 `stores/auth.ts` 的 `effectivePermissions` computed：
-
-```
-effectivePermissions = roleDefault 複製一份
-                        再用 user.customPermissions 逐模組覆蓋（有設定該模組才覆蓋，沒設定的模組維持角色預設）
-```
-
-覆蓋是**整個模組物件替換**（`{ view, edit, delete }` 一起換掉），不是欄位層級合併——自訂權限只設了 `edit: true` 也會連 `view`／`delete` 一起被覆蓋成該筆自訂資料裡的值，寫自訂權限資料時三個欄位都要給值，不能只給其中一個期待另一個沿用角色預設。
-
-`hasPermission(module, action)` 最終看的就是這個合併後的結果，admin 角色永遠 bypass（不查表，直接 `true`）。
-
-## 角色階層（`can()`，用在沒有 `module` 的少數判斷）
-
-```
-ROLE_HIERARCHY = { admin: 4, dispatcher: 3, staff: 3, driver: 2, viewer: 1 }
-```
-
-`can(requiredRoles)`：admin 永遠 `true`；否則比較「自己角色的等級」是否 ≥ 陣列中任一個要求角色的等級（不是要求完全命中角色名稱，是等級比較，`dispatcher` 跟 `staff` 同等級 3，兩者互相都能通過對方的門檻）。這套階層邏輯目前只在 `meta.roles`（沒設 `module` 時）跟少數元件內部判斷使用，跟上面的模組權限表是兩套獨立機制，不要混著改。
+「使用者管理」頁對單一使用者疊加的 `customPermissions`，後端 `RequirePermission` 已經在合併時套用（整個模組物件覆蓋語意，見 [custom-permission-admin-api-enforcement.md](../decisions/custom-permission-admin-api-enforcement.md)），前端拿到的 `/auth/me` 回應本來就是合併後的最終結果，不需要在前端再合併一次。
 
 ## 跟後端授權的對應關係
 
-前端這套「模組 view/edit/delete」矩陣，**角色層級**已經跟後端對齊：後端 `auth.RequirePermission(module, action)` 直接查角色目前的 `roles.permissions`（同一份資料，「角色身分管理」頁存的就是它），不再是路由層級的粗粒度角色字串白名單，詳見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。`/users`、`/roles`、`/auth/change-password`、`/demo/reset`、`/tasks/*`、`/holidays*` 仍是 `RequireRoles` 白名單，不受角色矩陣控制（理由見該決策文件）。
+前端 `hasPermission(module, action)` 與後端 `auth.RequirePermission(module, action)` 現在是同一套資料的兩個消費端，兩者共用 `auth.ResolveEffectivePermissions`：`RequirePermission` 直接拿它的結果判斷放不放行，`/auth/me` 拿同一個結果回給前端顯示。所有路由（含過去維持 `RequireRoles` 白名單的 `/users`、`/roles`、`/auth/change-password`、`/demo/reset`、`/tasks/*`、`/holidays*`）現在都走這一套，`auth.RequireRoles` 已刪除，詳見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md) 的 2026-09 修訂。
 
-## 個人自訂覆蓋（`customPermissions`）已接上後端，與角色矩陣同一套機制
+## 已知限制
 
-「使用者管理」頁對**單一使用者**再疊加的 `customPermissions` 覆蓋，後端現在會讀取：`auth.RequirePermission` 透過 `CustomPermissionResolver`（查 Supabase Admin API，包一層與角色矩陣相同的 30 秒 TTL 快取）取得該使用者的個人覆蓋，疊加在角色矩陣之上——語意與這裡的 `effectivePermissions` 一致（整個模組物件替換，不是欄位層級合併）。取捨與方案比較見 [custom-permission-admin-api-enforcement.md](../decisions/custom-permission-admin-api-enforcement.md)。
-
-**已知取捨**：`SUPABASE_SERVICE_ROLE_KEY` 未設定時（見 `pending-integrations.md`），後端會 fail-open 為「一律沒有個人覆蓋」，即使「使用者管理」頁已經設定了 customPermissions，後端也不會套用——這種情況下前端顯示的覆蓋值跟後端實際放行的角色矩陣值會不一致，金鑰設定後才會真正生效。
+`SUPABASE_SERVICE_ROLE_KEY` 在 production 環境未設定時，服務會直接拒絕啟動（見 `internal/platform/config/config.go`），不會再有「個人覆蓋悄悄失效」的情況；這條限制只在 local／demo 環境仍成立（fail-open 為「沒有個人覆蓋」），詳見 [custom-permission-admin-api-enforcement.md](../decisions/custom-permission-admin-api-enforcement.md) 的追記。

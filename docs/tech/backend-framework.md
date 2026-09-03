@@ -74,12 +74,9 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 
 正式流程：前端帶 `Authorization: Bearer <supabase JWT>` → `middleware.AuthMiddleware` 用 Supabase JWKS 驗簽 → 從 claim 的 `user_metadata.role`（或 `app_metadata.role`）拿角色，寫進 Gin context（`actor_id`、`actor_role`）→ 路由層用 `middleware.RequireRoles("staff", "admin")` 這種白名單擋。角色目前大致有 `admin` / `staff` / `dispatcher` / `driver` / `viewer`，實際哪個角色能打哪個 API 以 [backend-api-reference.md](backend-api-reference.md) 為準。
 
-`APP_ENV=local` 時額外支援兩種免登入方式，方便本機測試不同角色：
+`APP_ENV=local` 時額外接受 `Authorization: Bearer mock_jwt_admin` 這種 token 字串（token 裡包含角色名稱關鍵字就吃該角色，預設 `staff`），讓本機沒接 Supabase 也能用正常的登入表單進系統；它仍要通過 data plane 檢查。`X-Mock-Role` header 後門已移除。
 
-- header 帶 `X-Mock-Role: admin`（可搭配 `X-Mock-User-ID`）直接跳過 JWT 驗證。
-- `Authorization: Bearer mock_jwt_admin` 這種 token 字串（token 裡包含角色名稱關鍵字就吃該角色，預設 `staff`）。
-
-這兩種只在 `local` 生效，寫死在 `internal/platform/auth/auth.go`，改動時要非常小心不要讓它漏到 production 判斷分支裡。
+這條降級只在 `local` 生效，寫死在 `internal/platform/auth/auth.go`，改動時要非常小心不要讓它漏到 production 判斷分支裡。
 
 司機接送匯報沒有免驗證入口：資料一律由已登入的 staff／admin 透過 `POST /api/v1/driver-reports/:id/import` 上傳 `.xlsx` 進來，走一般的 JWT 驗證。
 

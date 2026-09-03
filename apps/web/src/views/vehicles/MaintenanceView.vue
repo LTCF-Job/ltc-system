@@ -59,7 +59,7 @@
           下載空白保養表 (.xlsx)
         </el-button>
 
-        <el-button v-if="authStore.can('staff')" type="primary" :icon="Plus" @click="openCreateDialog">
+        <el-button v-if="authStore.hasPermission('vehicles_maintenance', 'edit')" type="primary" :icon="Plus" @click="openCreateDialog">
           新增保養紀錄
         </el-button>
       </template>
@@ -107,13 +107,31 @@
             {{ row.note || '-' }}
           </template>
         </el-table-column>
-        <el-table-column v-if="authStore.can('staff')" label="操作" width="140" align="center" fixed="right">
+        <el-table-column
+          v-if="authStore.hasPermission('vehicles_maintenance', 'edit') || authStore.hasPermission('vehicles_maintenance', 'delete')"
+          label="操作"
+          width="140"
+          align="center"
+          fixed="right"
+        >
           <template #default="{ row }">
             <TableRowActions>
-              <el-button link type="primary" size="small" @click="openEditDialog(row)">
+              <el-button
+                v-if="authStore.hasPermission('vehicles_maintenance', 'edit')"
+                link
+                type="primary"
+                size="small"
+                @click="openEditDialog(row)"
+              >
                 編輯
               </el-button>
-              <el-button link type="danger" size="small" @click="handleDelete(row)">
+              <el-button
+                v-if="authStore.hasPermission('vehicles_maintenance', 'delete')"
+                link
+                type="danger"
+                size="small"
+                @click="handleDelete(row)"
+              >
                 刪除
               </el-button>
             </TableRowActions>

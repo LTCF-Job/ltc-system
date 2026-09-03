@@ -3,7 +3,6 @@ import { ElMessage, ElNotification } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
 import type { ApiError } from '@/types/api'
-import { isMockRuntimeEnabled, isDemoModeActive } from '@/lib/demoMode'
 import { resolveErrorMessage } from './errorCodes'
 
 export const apiClient = axios.create({
@@ -14,7 +13,7 @@ export const apiClient = axios.create({
   }
 })
 
-// 請求攔截器：附加 JWT Token 與 Mock 身分標頭
+// 請求攔截器：附加 JWT Token
 apiClient.interceptors.request.use(
   (config) => {
     const authStore = useAuthStore()
@@ -24,10 +23,6 @@ apiClient.interceptors.request.use(
     }
     if (authStore.token) {
       config.headers.Authorization = `Bearer ${authStore.token}`
-    }
-    if ((isMockRuntimeEnabled() || isDemoModeActive()) && authStore.user) {
-      config.headers['X-Mock-Role'] = authStore.user.role
-      config.headers['X-Mock-User-ID'] = authStore.user.id || '00000000-0000-0000-0000-000000000001'
     }
     return config
   },

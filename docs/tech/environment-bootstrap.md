@@ -59,7 +59,7 @@ DATABASE_URL="剛剛記下的資料庫連線字串" APP_ENV=local go run ./cmd/m
 
 > **不想裝終端機工具的話**：也可以到 Supabase Dashboard 左側「SQL Editor」→「New query」，把 [`../../apps/api/migrations/`](../../apps/api/migrations/) 資料夾裡每一個檔名結尾是 `.up.sql` 的檔案，依檔名開頭數字由小到大（`000001_...`、`000002_...`……）依序貼進去按「Run」，一個成功再貼下一個，完全不用裝任何工具。缺點是之後如果想改回終端機那個指令，要自己確認兩邊資料庫版本有沒有對齊。
 
-不管用哪種做法，這一步都會順便建立一組系統預設的管理員登入帳號（帳號 `ltcf-admin@ltc.example.com`）。之後想換成自己的帳密，最簡單的做法是到 Supabase Dashboard 的「Authentication → Users」畫面另外新增一個使用者；只是要注意：新增使用者時 Supabase 通常會自動幫你把登入所需的兩份資料都建好，如果之後登入時卡在「帳號密碼錯誤」，先確認新帳號的認證方式（Providers）裡有勾選「Email」，這是最常見的漏設原因。
+**這一步只會建立資料表與參考資料（全臺 22 個縣市），不會建立任何登入帳號。**（早期版本的 migration 會塞一組預設管理員，現已全面移除：`000002_seed_reference_data.up.sql` 只剩縣市資料，`000011_backfill_admin_identity.up.sql` 已改成不做事的 no-op。）所以初始化完之後你必須自己建一組管理員帳號才能登入：到 Supabase Dashboard 的「Authentication → Users」按「Add user」，填一組**只有你知道的 email 與密碼**，建立後點進該使用者，把 `app_metadata`（有些版本顯示為 Raw App Meta Data）改成 `{"role":"admin","data_plane":"production"}` 並儲存——沒有這個 `role` 欄位的話，登入得進去但每一支 API 都會回 403。密碼請直接存進你自己的密碼管理工具，**不要寫進程式碼、環境變數或任何文件**。如果登入時卡在「帳號密碼錯誤」，先確認專案的認證方式（Authentication → Providers）有啟用「Email」，這是最常見的漏設原因。
 
 ### 如果還要建一個 Demo 環境（選用）
 
@@ -309,12 +309,13 @@ git push origin develop
 
 - 到 GitHub repo 的「Actions」分頁，應該會看到 `Deploy API to Cloud Run` 開始執行，等個幾分鐘確認它全部打勾成功。
 - 到 Vercel 專案的「Deployments」頁面，應該會看到這次上傳觸發了一次新的部署，等它跑完。
-- 都成功後，打開 Vercel 分配給你的網站網址，用步驟一建立的預設管理員帳號（`ltcf-admin@ltc.example.com`）試著登入一次，確認畫面能正常顯示資料。
+- 都成功後，打開 Vercel 分配給你的網站網址，用步驟一在 Supabase「Authentication → Users」自行建立的那組管理員帳號試著登入一次，確認畫面能正常顯示資料。
 
 如果哪一步卡住了，先看下面的檢查清單，逐項核對；更詳細的錯誤排解在 [`deployment.md`](deployment.md)。
 
 ## 檢查清單
 
+- [ ] 已在 Supabase「Authentication → Users」自行建立至少一組管理員帳號，且 `app_metadata` 有 `"role":"admin"`（migration 不會幫你建帳號）
 - [ ] 資料庫初始化跑到最新版本（`schema_migrations` 表對得上 `apps/api/migrations/` 底下最大的檔案編號；若走 SQL Editor 手動貼的方式，自行核對每一支 `.up.sql` 都依序執行成功）
 - [ ] `ltc-api-migrate` 這個工作跟 `ltc-api` 這個服務兩邊都各自設了 `APP_ENV=production`／`SUPABASE_JWKS_URL`／`ALLOWED_ORIGINS`（拼字也要對，打錯字不會有明確的錯誤提示）
 - [ ] `ltc-api-migrate` 工作的「指令」欄位確認是 `/app/migrate`（或 `//app/migrate`），不是一串看起來像 Windows 路徑（`D:/...`）的亂碼

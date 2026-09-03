@@ -53,24 +53,6 @@
               登入系統
             </el-button>
           </el-form>
-
-          <!-- 本機開發快速身分切換：僅在 LOCAL 環境下顯示，其餘環境絕不出現 -->
-          <div v-if="isLocalEnvironment" class="dev-quick-login">
-            <el-divider>
-              <span class="divider-tag">本機快速登入</span>
-            </el-divider>
-            <p class="demo-tip">
-              {{ !supabase ? '本機未連線 Supabase，可直接以測試身分登入操作本機資料庫。' : '本機開發模式，可快速切換測試身分。' }}
-            </p>
-            <div class="quick-btns">
-              <el-button size="default" type="primary" plain @click="quickLogin('admin')">
-                系統管理員
-              </el-button>
-              <el-button size="default" type="info" plain @click="quickLogin('viewer')">
-                檢視人員
-              </el-button>
-            </div>
-          </div>
         </section>
       </div>
     </el-card>
@@ -85,8 +67,7 @@ import { ElMessage, type FormInstance } from 'element-plus'
 import AppLogo from '@/components/AppLogo.vue'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
-import { isDemoCredentials, exitDemoModeIfActive, isMockRuntimeEnabled } from '@/lib/demoMode'
-import { ROLE_LABELS, type UserRole } from '@/types/domain'
+import { type UserRole } from '@/types/domain'
 
 const router = useRouter()
 const route = useRoute()
@@ -95,23 +76,31 @@ const authStore = useAuthStore()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 
-// 嚴格判定是否為本機環境（Vite DEV 模式、E2E Mock、或明確指定 VITE_APP_ENV=local）
-// 非本機環境（正式、預覽、雲端容器等）一律為 false，不論 Supabase 是否設定
-const isLocalEnvironment = computed(() => {
-  if (isMockRuntimeEnabled()) return true
-  if (import.meta.env.DEV) return true
-  if (import.meta.env.VITE_APP_ENV === 'local') return true
-  return false
-})
+// 只有本機環境允許在沒有 Supabase 的情況下發 mock JWT；預覽、正式與雲端容器一律為 false
+const isLocalEnvironment = computed(
+  () => import.meta.env.DEV || import.meta.env.VITE_APP_ENV === 'local'
+)
 
 const form = reactive({
-  email: isLocalEnvironment.value ? 'admin@ltc.example.com' : '',
-  password: isLocalEnvironment.value ? 'password123' : ''
+  email: '',
+  password: ''
 })
 
 const rules = {
   email: [{ required: true, message: '請輸入電子郵件', trigger: 'blur' }],
   password: [{ required: true, message: '請輸入密碼', trigger: 'blur' }]
+}
+
+// "demo" 帳號代稱固定對應到 Supabase 上的 Demo 測試帳號，密碼仍走真實驗證，不是前端假資料
+function isDemoCredentials(email: string, password: string): boolean {
+  const normalizedEmail = email.trim().toLowerCase()
+  const isDemoUser = normalizedEmail === 'demo' || normalizedEmail.startsWith('demo@')
+  return isDemoUser && (password === 'demo' || password === 'demo123')
+}
+
+function goAfterLogin() {
+  ElMessage.success('登入成功')
+  router.push((route.query.redirect as string) || '/')
 }
 
 async function handleLogin() {
@@ -120,21 +109,28 @@ async function handleLogin() {
     if (!valid) return
 
     if (!supabase) {
-      if (isLocalEnvironment.value) {
-        // 本機未設定 Supabase 時，自動以本機開發身分登入直通本機資料庫
-        const role: UserRole = form.email.includes('viewer') ? 'viewer' : 'admin'
-        await quickLogin(role)
+      if (!isLocalEnvironment.value) {
+        // 非本機環境未連線 Supabase 時，嚴禁隨意登入
+        ElMessage.error('系統認證服務未設定，無法登入')
         return
       }
-      // 非本機環境未連線 Supabase 時，嚴禁隨意登入
-      ElMessage.error('系統認證服務未設定，無法登入')
+      // 本機不接 Supabase，改發後端 local 分支認得的 mock JWT，讓登入流程與正式環境一致；
+      // 帳號含 "viewer" 字樣即以檢視人員身分登入，其餘一律管理員
+      const role: UserRole = form.email.includes('viewer') ? 'viewer' : 'admin'
+      await authStore.setSession(`mock_jwt_${role}`, {
+        id: '00000000-0000-0000-0000-000000000001',
+        email: form.email,
+        displayName: form.email,
+        role,
+        dataPlane: 'production'
+      })
+      goAfterLogin()
       return
     }
+
     loading.value = true
     try {
-      // "demo" 帳號代稱固定對應到 Supabase 上的 Demo 測試帳號，密碼仍走真實驗證，不再略過 Supabase
-      const usesDemoAlias = isDemoCredentials(form.email, form.password)
-      const authEmail = usesDemoAlias
+      const authEmail = isDemoCredentials(form.email, form.password)
         ? 'demo@ltc.example.com'
         : form.email === 'ltcf-admin'
           ? 'ltcf-admin@ltc.example.com'
@@ -150,49 +146,18 @@ async function handleLogin() {
 
       const role = (data.user.app_metadata?.role ?? data.user.user_metadata?.role ?? 'viewer') as UserRole
       const dataPlane = (data.user.app_metadata?.data_plane ?? 'production') as 'production' | 'demo'
-      authStore.setSession(data.session.access_token, {
+      await authStore.setSession(data.session.access_token, {
         id: data.user.id,
         email: data.user.email || form.email,
         displayName: data.user.user_metadata?.display_name || data.user.email || form.email,
         role,
         dataPlane
       })
-      // 確保不殘留前一次展示模式的攔截
-      await exitDemoModeIfActive()
-
-      ElMessage.success('登入成功')
-      const redirect = (route.query.redirect as string) || '/'
-      router.push(redirect)
+      goAfterLogin()
     } finally {
       loading.value = false
     }
   })
-}
-
-async function quickLogin(role: UserRole) {
-  if (!isLocalEnvironment.value) {
-    ElMessage.error('非本機環境禁止使用快速登入')
-    return
-  }
-
-  const nameMap: Record<UserRole, string> = {
-    admin: '系統管理員 (王大明)',
-    viewer: '檢視人員 (林督導)'
-  }
-
-  authStore.setSession(`mock_jwt_${role}`, {
-    id: `usr_${role}`,
-    email: `${role}@ltc.example.com`,
-    displayName: nameMap[role] || '測試使用者',
-    role,
-    dataPlane: 'production'
-  })
-  // 退出前端展示模式攔截，讓請求直通本機後端 API 與本機資料庫
-  await exitDemoModeIfActive()
-
-  ElMessage.success(`已快速切換為【${ROLE_LABELS[role] || role}】身分`)
-  const redirect = (route.query.redirect as string) || '/'
-  router.push(redirect)
 }
 </script>
 
@@ -277,34 +242,6 @@ async function quickLogin(role: UserRole) {
   height: 46px;
   margin-top: 4px;
   border-radius: 9px;
-}
-
-.dev-quick-login {
-  margin-top: 30px;
-
-  .divider-tag {
-    color: var(--app-text-secondary);
-    font-size: var(--app-font-xs);
-    font-weight: 600;
-  }
-
-  .demo-tip {
-    margin: 0 0 12px;
-    font-size: var(--app-font-xs);
-    color: var(--app-text-secondary);
-    text-align: center;
-  }
-
-  .quick-btns {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-
-    :deep(.el-button) {
-      flex: 1 1 calc(50% - 8px);
-      margin-left: 0;
-    }
-  }
 }
 
 @media (max-width: 720px) {
