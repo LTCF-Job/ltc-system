@@ -103,9 +103,9 @@ func (r *RideRepository) ListCalendarCases(
 		       sl.vehicle_id, COALESCE(v.display_name, '')
 		FROM schedule_legs sl
 		LEFT JOIN vehicles v ON sl.vehicle_id = v.id
-		WHERE sl.schedule_id = ANY($1)
+		WHERE sl.schedule_id = ANY($1::uuid[])
 		ORDER BY sl.leg_seq ASC
-	`, ids)
+	`, pgxdb.UUIDStrings(ids))
 	if err != nil {
 		return nil, err
 	}
