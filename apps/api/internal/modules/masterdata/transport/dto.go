@@ -92,14 +92,13 @@ type VehicleResponse struct {
 // VehicleDriverBrief 代表掛在車輛上的司機摘要。
 type VehicleDriverBrief struct {
 	ID   uuid.UUID `json:"id"`
-	Code string    `json:"code"`
 	Name string    `json:"name"`
 }
 
 func newVehicleResponse(v app.Vehicle) VehicleResponse {
 	drivers := make([]VehicleDriverBrief, 0, len(v.Drivers))
 	for _, d := range v.Drivers {
-		drivers = append(drivers, VehicleDriverBrief{ID: d.ID, Code: d.Code, Name: d.Name})
+		drivers = append(drivers, VehicleDriverBrief{ID: d.ID, Name: d.Name})
 	}
 	return VehicleResponse{
 		ID:                        v.ID,
@@ -181,7 +180,6 @@ func (f VehicleWriteFields) toInput() app.VehicleInput {
 // DriverResponse 代表回傳給前端的司機資料。身分證密文與 HMAC 索引不對外輸出。
 type DriverResponse struct {
 	ID               uuid.UUID `json:"id"`
-	Code             string    `json:"code"`
 	Name             string    `json:"name"`
 	NameNormalized   string    `json:"nameNormalized"`
 	NationalIDMasked string    `json:"nationalIdMasked"`
@@ -198,7 +196,6 @@ type DriverResponse struct {
 func newDriverResponse(d app.Driver) DriverResponse {
 	return DriverResponse{
 		ID:                d.ID,
-		Code:              d.Code,
 		Name:              d.Name,
 		NameNormalized:    d.NameNormalized,
 		NationalIDMasked:  d.NationalIDMasked,
@@ -252,7 +249,6 @@ func newDriverAssignmentResponse(a app.DriverAssignment) DriverAssignmentRespons
 
 // CreateDriverRequest 代表新增司機請求。
 type CreateDriverRequest struct {
-	Code              string     `json:"code"`
 	Name              string     `json:"name" binding:"required"`
 	NationalID        string     `json:"nationalId" binding:"required"`
 	Email             *string    `json:"email"`

@@ -49,7 +49,6 @@ func (h *DriverHandler) Create(c *gin.Context) {
 	}
 
 	d, err := h.svc.Create(c.Request.Context(), app.CreateDriverInput{
-		Code:              req.Code,
 		Name:              req.Name,
 		NationalID:        req.NationalID,
 		Email:             req.Email,

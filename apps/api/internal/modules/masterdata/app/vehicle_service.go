@@ -42,7 +42,7 @@ func (s *VehicleService) List(ctx context.Context, filter VehicleFilter, page, p
 	}
 	for i := range list {
 		for _, d := range byVehicle[list[i].ID] {
-			list[i].Drivers = append(list[i].Drivers, VehicleDriver{ID: d.ID, Code: d.Code, Name: d.Name})
+			list[i].Drivers = append(list[i].Drivers, VehicleDriver{ID: d.ID, Name: d.Name})
 		}
 	}
 	return list, total, nil

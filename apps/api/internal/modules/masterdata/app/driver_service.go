@@ -54,7 +54,6 @@ func normalizeLicenseClass(in *string) (*string, error) {
 
 // CreateDriverInput 代表新增司機所需之輸入。
 type CreateDriverInput struct {
-	Code              string
 	Name              string
 	NationalID        string
 	Email             *string
@@ -83,7 +82,6 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput) (*Driv
 
 	d := Driver{
 		ID:               uuid.New(),
-		Code:             in.Code,
 		Name:             in.Name,
 		NameNormalized:   namenorm.Normalize(in.Name),
 		NationalIDCipher: cipherText,

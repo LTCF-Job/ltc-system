@@ -14,7 +14,6 @@ import (
 // driverRow 是 drivers 資料表的一列。
 type driverRow struct {
 	ID                uuid.UUID
-	Code              string
 	Name              string
 	NameNormalized    string
 	NationalIDCipher  []byte
@@ -32,7 +31,6 @@ type driverRow struct {
 func (r driverRow) toApp() app.Driver {
 	return app.Driver{
 		ID:                r.ID,
-		Code:              r.Code,
 		Name:              r.Name,
 		NameNormalized:    r.NameNormalized,
 		NationalIDCipher:  r.NationalIDCipher,
@@ -50,15 +48,15 @@ func (r driverRow) toApp() app.Driver {
 
 func (r *driverRow) scanTargets() []interface{} {
 	return []interface{}{
-		&r.ID, &r.Code, &r.Name, &r.NameNormalized, &r.NationalIDCipher, &r.NationalIDHMAC, &r.NationalIDMasked,
+		&r.ID, &r.Name, &r.NameNormalized, &r.NationalIDCipher, &r.NationalIDHMAC, &r.NationalIDMasked,
 		&r.Email, &r.Region, &r.Status, &r.LicenseClass, &r.LicenseExpiryDate, &r.CreatedAt, &r.UpdatedAt,
 	}
 }
 
-const driverColumns = `id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
+const driverColumns = `id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 	       email, region, status, license_class, license_expiry_date, created_at, updated_at`
 
-const driverColumnsWithAlias = `d.id, d.code, d.name, d.name_normalized, d.national_id_cipher, d.national_id_hmac,
+const driverColumnsWithAlias = `d.id, d.name, d.name_normalized, d.national_id_cipher, d.national_id_hmac,
 	       d.national_id_masked, d.email, d.region, d.status, d.license_class, d.license_expiry_date,
 	       d.created_at, d.updated_at`
 
@@ -83,9 +81,9 @@ func (r *DriverRepository) List(ctx context.Context, region, q, status string, p
 		FROM drivers
 		WHERE deleted_at IS NULL
 		  AND ($1 = '' OR region = $1)
-		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR code ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
+		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
 		  AND ($3 = '' OR status = $3)
-		ORDER BY code ASC
+		ORDER BY name ASC
 		LIMIT $4 OFFSET $5
 	`
 	rows, err := r.db.Query(ctx, query, region, q, status, pageSize, offset)
@@ -108,7 +106,7 @@ func (r *DriverRepository) List(ctx context.Context, region, q, status string, p
 		SELECT COUNT(*) FROM drivers
 		WHERE deleted_at IS NULL
 		  AND ($1 = '' OR region = $1)
-		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR code ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
+		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
 		  AND ($3 = '' OR status = $3)
 	`
 	_ = r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total)
@@ -144,16 +142,16 @@ func (r *DriverRepository) getOne(ctx context.Context, query string, args ...int
 func (r *DriverRepository) Create(ctx context.Context, d *app.Driver) error {
 	query := `
 		INSERT INTO drivers (
-			id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
+			id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 			email, region, status, license_class, license_expiry_date
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING created_at, updated_at
 	`
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
 	}
 	return r.db.QueryRow(ctx, query,
-		d.ID, d.Code, d.Name, d.NameNormalized, d.NationalIDCipher, d.NationalIDHMAC, d.NationalIDMasked,
+		d.ID, d.Name, d.NameNormalized, d.NationalIDCipher, d.NationalIDHMAC, d.NationalIDMasked,
 		d.Email, d.Region, d.Status, d.LicenseClass, d.LicenseExpiryDate,
 	).Scan(&d.CreatedAt, &d.UpdatedAt)
 }
@@ -187,7 +185,7 @@ func (r *DriverRepository) AssignVehicle(ctx context.Context, a *app.DriverAssig
 		Scan(&a.CreatedAt)
 }
 
-// ListDriversForVehicleOnDate 查詢某車輛在特定日期生效的所有司機，依司機代碼排序。
+// ListDriversForVehicleOnDate 查詢某車輛在特定日期生效的所有司機，依司機姓名排序。
 func (r *DriverRepository) ListDriversForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) ([]app.Driver, error) {
 	if r.db == nil {
 		return nil, nil
@@ -199,7 +197,7 @@ func (r *DriverRepository) ListDriversForVehicleOnDate(ctx context.Context, vehi
 		WHERE a.vehicle_id = $1
 		  AND a.effective_range @> $2::date
 		  AND d.deleted_at IS NULL
-		ORDER BY d.code ASC
+		ORDER BY d.name ASC
 	`
 	rows, err := r.db.Query(ctx, query, vehicleID, serviceDate)
 	if err != nil {
@@ -231,7 +229,7 @@ func (r *DriverRepository) ListByVehicleIDsOnDate(ctx context.Context, vehicleID
 		WHERE a.vehicle_id = ANY($1::uuid[])
 		  AND a.effective_range @> $2::date
 		  AND d.deleted_at IS NULL
-		ORDER BY d.code ASC
+		ORDER BY d.name ASC
 	`
 	rows, err := r.db.Query(ctx, query, pgxdb.UUIDStrings(vehicleIDs), on)
 	if err != nil {

@@ -55,7 +55,6 @@ type VehicleFilter struct {
 // VehicleDriver 是掛在車輛上的司機摘要，只帶識別用欄位。
 type VehicleDriver struct {
 	ID   uuid.UUID
-	Code string
 	Name string
 }
 
@@ -63,7 +62,6 @@ type VehicleDriver struct {
 // 不得離開 application 層。
 type Driver struct {
 	ID               uuid.UUID
-	Code             string
 	Name             string
 	NameNormalized   string
 	NationalIDCipher []byte

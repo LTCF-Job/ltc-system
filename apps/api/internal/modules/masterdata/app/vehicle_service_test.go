@@ -54,8 +54,8 @@ func TestVehicleService_List(t *testing.T) {
 	driverStore := newFakeDriverStore()
 	driverStore.byVehicle = map[uuid.UUID][]Driver{
 		vehicleA: {
-			{ID: uuid.New(), Code: "DRV001", Name: "郭澤威"},
-			{ID: uuid.New(), Code: "DRV002", Name: "林志豪"},
+			{ID: uuid.New(), Name: "郭澤威"},
+			{ID: uuid.New(), Name: "林志豪"},
 		},
 	}
 	svc := NewVehicleService(&fakeVehicleStore{list: []Vehicle{{ID: vehicleA}, {ID: vehicleB}}}, driverStore, nil)
@@ -65,8 +65,8 @@ func TestVehicleService_List(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int64(2), total)
 	assert.Equal(t, []VehicleDriver{
-		{ID: driverStore.byVehicle[vehicleA][0].ID, Code: "DRV001", Name: "郭澤威"},
-		{ID: driverStore.byVehicle[vehicleA][1].ID, Code: "DRV002", Name: "林志豪"},
+		{ID: driverStore.byVehicle[vehicleA][0].ID, Name: "郭澤威"},
+		{ID: driverStore.byVehicle[vehicleA][1].ID, Name: "林志豪"},
 	}, list[0].Drivers)
 	assert.Empty(t, list[1].Drivers)
 }
