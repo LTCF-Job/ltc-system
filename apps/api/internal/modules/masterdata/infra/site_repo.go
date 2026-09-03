@@ -2,10 +2,12 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
 )
@@ -115,8 +117,16 @@ func (r *SiteRepository) Create(ctx context.Context, s *app.Site) error {
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
 	}
-	return r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.OpenDays, s.Status).
+	err := r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.OpenDays, s.Status).
 		Scan(&s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return app.ErrDuplicateSiteName
+		}
+		return err
+	}
+	return nil
 }
 
 // Update 修改單位。
@@ -127,8 +137,16 @@ func (r *SiteRepository) Update(ctx context.Context, s *app.Site) error {
 		WHERE id = $1
 		RETURNING updated_at
 	`
-	return r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.OpenDays, s.Status).
+	err := r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.OpenDays, s.Status).
 		Scan(&s.UpdatedAt)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return app.ErrDuplicateSiteName
+		}
+		return err
+	}
+	return nil
 }
 
 // Delete 刪除單位。若該單位仍被個案排班參照，資料庫外鍵限制會回傳錯誤。

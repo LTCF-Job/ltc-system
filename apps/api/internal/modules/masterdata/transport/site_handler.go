@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -42,7 +43,8 @@ func (h *SiteHandler) List(c *gin.Context) {
 func (h *SiteHandler) Create(c *gin.Context) {
 	var req CreateSiteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		details := httpx.ExtractValidationDetails(err)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, details)
 		return
 	}
 
@@ -54,7 +56,31 @@ func (h *SiteHandler) Create(c *gin.Context) {
 		Status:   req.Status,
 	})
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		if errors.Is(err, app.ErrSiteNameRequired) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "name", Reason: "請輸入單位名稱"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrSiteAddressRequired) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "address", Reason: "請輸入單位地址"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrSiteRegionRequired) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "region", Reason: "請選擇所屬區域"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateSiteName) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "name", Reason: "該區域已存在相同名稱的單位"},
+			})
+			return
+		}
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "建立單位失敗", nil)
 		return
 	}
 
@@ -71,7 +97,8 @@ func (h *SiteHandler) Update(c *gin.Context) {
 
 	var req UpdateSiteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		details := httpx.ExtractValidationDetails(err)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, details)
 		return
 	}
 
@@ -83,7 +110,35 @@ func (h *SiteHandler) Update(c *gin.Context) {
 		Status:   req.Status,
 	})
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		if errors.Is(err, app.ErrSiteNotFound) {
+			respondNotFound(c, "查無此單位")
+			return
+		}
+		if errors.Is(err, app.ErrSiteNameRequired) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "name", Reason: "請輸入單位名稱"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrSiteAddressRequired) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "address", Reason: "請輸入單位地址"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrSiteRegionRequired) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "region", Reason: "請選擇所屬區域"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateSiteName) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "name", Reason: "該區域已存在相同名稱的單位"},
+			})
+			return
+		}
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "更新單位失敗", nil)
 		return
 	}
 
@@ -99,7 +154,9 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+			{Field: "id", Reason: "該單位仍有相關資料參照，無法刪除"},
+		})
 		return
 	}
 

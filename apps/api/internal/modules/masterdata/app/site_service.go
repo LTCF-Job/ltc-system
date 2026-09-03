@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -30,14 +31,38 @@ type CreateSiteInput struct {
 	Status   string
 }
 
-// Create 新增單位。
+// Create 新增單位主檔。
 func (s *SiteService) Create(ctx context.Context, in CreateSiteInput) (*Site, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, ErrSiteNameRequired
+	}
+	address := strings.TrimSpace(in.Address)
+	if address == "" {
+		return nil, ErrSiteAddressRequired
+	}
+	region := strings.TrimSpace(in.Region)
+	if region == "" {
+		return nil, ErrSiteRegionRequired
+	}
+
+	// 確保 status 符合資料庫 check constraint，空值或非法值預設 active
+	status := strings.TrimSpace(in.Status)
+	if status != "active" && status != "inactive" {
+		status = "active"
+	}
+
+	openDays := in.OpenDays
+	if len(openDays) == 0 {
+		openDays = []int16{1, 2, 3, 4, 5}
+	}
+
 	site := Site{
-		Name:     in.Name,
-		Address:  in.Address,
-		Region:   in.Region,
-		OpenDays: in.OpenDays,
-		Status:   in.Status,
+		Name:     name,
+		Address:  address,
+		Region:   region,
+		OpenDays: openDays,
+		Status:   status,
 	}
 	if err := s.store.Create(ctx, &site); err != nil {
 		return nil, err
@@ -54,15 +79,38 @@ type UpdateSiteInput struct {
 	Status   string
 }
 
-// Update 更新單位。
+// Update 更新單位主檔。
 func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInput) (*Site, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, ErrSiteNameRequired
+	}
+	address := strings.TrimSpace(in.Address)
+	if address == "" {
+		return nil, ErrSiteAddressRequired
+	}
+	region := strings.TrimSpace(in.Region)
+	if region == "" {
+		return nil, ErrSiteRegionRequired
+	}
+
+	status := strings.TrimSpace(in.Status)
+	if status != "active" && status != "inactive" {
+		status = "active"
+	}
+
+	openDays := in.OpenDays
+	if len(openDays) == 0 {
+		openDays = []int16{1, 2, 3, 4, 5}
+	}
+
 	site := Site{
 		ID:       id,
-		Name:     in.Name,
-		Address:  in.Address,
-		Region:   in.Region,
-		OpenDays: in.OpenDays,
-		Status:   in.Status,
+		Name:     name,
+		Address:  address,
+		Region:   region,
+		OpenDays: openDays,
+		Status:   status,
 	}
 	if err := s.store.Update(ctx, &site); err != nil {
 		return nil, err

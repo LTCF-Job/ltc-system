@@ -48,20 +48,20 @@ func newSiteResponses(list []app.Site) []SiteResponse {
 	return out
 }
 
-// CreateSiteRequest 代表新增單位請求。既有 API 未對任何欄位強制必填，維持不變。
+// CreateSiteRequest 代表新增單位請求。
 type CreateSiteRequest struct {
-	Name     string  `json:"name"`
-	Address  string  `json:"address"`
-	Region   string  `json:"region"`
+	Name     string  `json:"name" binding:"required"`
+	Address  string  `json:"address" binding:"required"`
+	Region   string  `json:"region" binding:"required"`
 	OpenDays []int16 `json:"openDays"`
 	Status   string  `json:"status"`
 }
 
 // UpdateSiteRequest 代表更新單位請求。
 type UpdateSiteRequest struct {
-	Name     string  `json:"name"`
-	Address  string  `json:"address"`
-	Region   string  `json:"region"`
+	Name     string  `json:"name" binding:"required"`
+	Address  string  `json:"address" binding:"required"`
+	Region   string  `json:"region" binding:"required"`
 	OpenDays []int16 `json:"openDays"`
 	Status   string  `json:"status"`
 }

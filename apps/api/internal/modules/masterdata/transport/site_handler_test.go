@@ -147,3 +147,61 @@ func TestSiteHandler_Create_ResponseShape(t *testing.T) {
 	}
 	assert.Len(t, envelope.Data, 8, "response must not gain or lose fields")
 }
+
+func TestSiteHandler_Create_WithoutStatus_DefaultsToActive(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &fakeSiteStore{}
+	h := newTestSiteHandler(store)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	// 模擬前端送出的請求：未帶 status 與 openDays
+	body := `{"name":"竹北日照中心","address":"竹北市光明六路1號","region":"hsinchu"}`
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/sites", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	h.Create(c)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	require.NotNil(t, store.created)
+	assert.Equal(t, "active", store.created.Status, "未提供 status 時應自動預設為 active")
+	assert.Equal(t, []int16{1, 2, 3, 4, 5}, store.created.OpenDays, "未提供 openDays 時應自動預設為週一至週五")
+}
+
+func TestSiteHandler_Create_MissingRequiredFields_ReturnsValidationDetails(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &fakeSiteStore{}
+	h := newTestSiteHandler(store)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	// 故意缺少 name 與 region
+	body := `{"address":"竹北市光明六路1號"}`
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/sites", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	h.Create(c)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	var resp struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+			Details []struct {
+				Field  string `json:"field"`
+				Reason string `json:"reason"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "VALIDATION_FAILED", resp.Error.Code)
+	require.NotEmpty(t, resp.Error.Details, "驗證失敗時必須回傳詳細 details 條列錯誤欄位")
+
+	fieldMap := make(map[string]string)
+	for _, d := range resp.Error.Details {
+		fieldMap[d.Field] = d.Reason
+	}
+	assert.Contains(t, fieldMap, "name", "必須指名 name 欄位錯誤")
+	assert.Contains(t, fieldMap, "region", "必須指名 region 欄位錯誤")
+}
