@@ -2,18 +2,12 @@
 
 export type UserRole =
   | 'admin'
-  | 'dispatcher'
-  | 'driver'
-  | 'staff'
   | 'viewer'
   | (string & {})
 
 export const ROLE_LABELS: Record<string, string> = {
   admin: '系統管理員',
-  dispatcher: '調度員',
-  driver: '司機',
-  staff: '行政人員',
-  viewer: '檢視者'
+  viewer: '檢視人員'
 }
 
 export type RoleTagType = 'danger' | 'primary' | 'success' | 'warning' | 'info'
@@ -382,81 +376,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, SystemPermissions> = {
     acc[m.id] = { view: true, edit: true, delete: true }
     return acc
   }, {} as SystemPermissions),
-
-  // delete 只在 driver_reports／vehicles_maintenance／attendance_fuel 跟隨 edit——這三個模組的
-  // 刪除路由本來就跟編輯同層級（staff/admin），其餘模組的刪除路由僅限 admin，見
-  // docs/decisions/role-permission-api-authorization.md
-  dispatcher: {
-    dashboard: { view: true, edit: false, delete: false },
-    masters_regions: { view: true, edit: true, delete: false },
-    masters_cases: { view: true, edit: true, delete: false },
-    masters_sites: { view: true, edit: true, delete: false },
-    masters_vehicles: { view: true, edit: true, delete: false },
-    masters_drivers: { view: true, edit: true, delete: false },
-    masters_caregivers: { view: true, edit: true, delete: false },
-    driver_reports: { view: true, edit: true, delete: true },
-    driver_report_mappings: { view: true, edit: true, delete: false },
-    rides_calendar: { view: true, edit: true, delete: false },
-    rides_issues: { view: true, edit: true, delete: false },
-    rides_missing: { view: true, edit: true, delete: false },
-    reports_trip_summary: { view: true, edit: false, delete: false },
-    reports_hsinchu_schedule: { view: true, edit: false, delete: false },
-    vehicles_maintenance: { view: true, edit: true, delete: true },
-    attendance_fuel: { view: true, edit: true, delete: true },
-    exports: { view: true, edit: true, delete: false },
-    audit_logs: { view: false, edit: false, delete: false },
-    settings_notifications: { view: true, edit: false, delete: false },
-    settings_users: { view: false, edit: false, delete: false },
-    settings_roles: { view: false, edit: false, delete: false }
-  },
-
-  driver: {
-    dashboard: { view: true, edit: false, delete: false },
-    masters_regions: { view: false, edit: false, delete: false },
-    masters_cases: { view: false, edit: false, delete: false },
-    masters_sites: { view: false, edit: false, delete: false },
-    masters_vehicles: { view: true, edit: false, delete: false },
-    masters_drivers: { view: true, edit: false, delete: false },
-    masters_caregivers: { view: false, edit: false, delete: false },
-    driver_reports: { view: false, edit: false, delete: false },
-    driver_report_mappings: { view: false, edit: false, delete: false },
-    rides_calendar: { view: true, edit: false, delete: false },
-    rides_issues: { view: false, edit: false, delete: false },
-    rides_missing: { view: false, edit: false, delete: false },
-    reports_trip_summary: { view: false, edit: false, delete: false },
-    reports_hsinchu_schedule: { view: false, edit: false, delete: false },
-    vehicles_maintenance: { view: true, edit: true, delete: true },
-    attendance_fuel: { view: true, edit: true, delete: true },
-    exports: { view: false, edit: false, delete: false },
-    audit_logs: { view: false, edit: false, delete: false },
-    settings_notifications: { view: false, edit: false, delete: false },
-    settings_users: { view: false, edit: false, delete: false },
-    settings_roles: { view: false, edit: false, delete: false }
-  },
-
-  staff: {
-    dashboard: { view: true, edit: false, delete: false },
-    masters_regions: { view: true, edit: true, delete: false },
-    masters_cases: { view: true, edit: true, delete: false },
-    masters_sites: { view: true, edit: true, delete: false },
-    masters_vehicles: { view: true, edit: true, delete: false },
-    masters_drivers: { view: true, edit: true, delete: false },
-    masters_caregivers: { view: true, edit: true, delete: false },
-    driver_reports: { view: true, edit: true, delete: true },
-    driver_report_mappings: { view: true, edit: true, delete: false },
-    rides_calendar: { view: true, edit: true, delete: false },
-    rides_issues: { view: true, edit: true, delete: false },
-    rides_missing: { view: true, edit: true, delete: false },
-    reports_trip_summary: { view: true, edit: false, delete: false },
-    reports_hsinchu_schedule: { view: true, edit: false, delete: false },
-    vehicles_maintenance: { view: true, edit: true, delete: true },
-    attendance_fuel: { view: true, edit: true, delete: true },
-    exports: { view: true, edit: true, delete: false },
-    audit_logs: { view: false, edit: false, delete: false },
-    settings_notifications: { view: true, edit: false, delete: false },
-    settings_users: { view: false, edit: false, delete: false },
-    settings_roles: { view: false, edit: false, delete: false }
-  },
 
   viewer: SYSTEM_MODULES.reduce((acc, m) => {
     acc[m.id] = {

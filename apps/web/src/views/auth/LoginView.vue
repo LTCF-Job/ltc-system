@@ -55,18 +55,20 @@
             </el-button>
           </el-form>
 
-          <!-- 展示模式快速身分切換：僅在明確啟用 mock 的開發／展示環境顯示 -->
-          <div v-if="isMockLoginEnabled" class="dev-quick-login">
+          <!-- 本機開發快速身分切換：僅在 LOCAL 環境下顯示，其餘環境絕不出現 -->
+          <div v-if="isLocalEnvironment" class="dev-quick-login">
             <el-divider>
-              <span class="divider-tag">展示模式快速登入</span>
+              <span class="divider-tag">本機快速登入</span>
             </el-divider>
-            <p class="demo-tip">系統已預載展示資料，可快速切換測試身分。</p>
+            <p class="demo-tip">
+              {{ !supabase ? '本機未連線 Supabase，可直接以測試身分登入操作本機資料庫。' : '本機開發模式，可快速切換測試身分。' }}
+            </p>
             <div class="quick-btns">
-              <el-button size="default" type="danger" plain @click="quickLogin('admin')">
+              <el-button size="default" type="primary" plain @click="quickLogin('admin')">
                 系統管理員
               </el-button>
               <el-button size="default" type="info" plain @click="quickLogin('viewer')">
-                檢視者
+                檢視人員
               </el-button>
             </div>
           </div>
@@ -77,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance } from 'element-plus'
@@ -93,11 +95,19 @@ const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
-const isMockLoginEnabled = isMockRuntimeEnabled()
+
+// 嚴格判定是否為本機環境（Vite DEV 模式、E2E Mock、或明確指定 VITE_APP_ENV=local）
+// 非本機環境（正式、預覽、雲端容器等）一律為 false，不論 Supabase 是否設定
+const isLocalEnvironment = computed(() => {
+  if (isMockRuntimeEnabled()) return true
+  if (import.meta.env.DEV) return true
+  if (import.meta.env.VITE_APP_ENV === 'local') return true
+  return false
+})
 
 const form = reactive({
-  email: isMockLoginEnabled ? 'admin@ltc.example.com' : '',
-  password: isMockLoginEnabled ? 'password123' : ''
+  email: isLocalEnvironment.value ? 'admin@ltc.example.com' : '',
+  password: isLocalEnvironment.value ? 'password123' : ''
 })
 
 const rules = {
@@ -111,7 +121,14 @@ async function handleLogin() {
     if (!valid) return
 
     if (!supabase) {
-      ElMessage.error('帳號密碼錯誤或無此使用者')
+      if (isLocalEnvironment.value) {
+        // 本機未設定 Supabase 時，自動以本機開發身分登入直通本機資料庫
+        const role: UserRole = form.email.includes('viewer') ? 'viewer' : 'admin'
+        await quickLogin(role)
+        return
+      }
+      // 非本機環境未連線 Supabase 時，嚴禁隨意登入
+      ElMessage.error('系統認證服務未設定，無法登入')
       return
     }
     loading.value = true
@@ -153,21 +170,27 @@ async function handleLogin() {
   })
 }
 
-function quickLogin(role: UserRole) {
+async function quickLogin(role: UserRole) {
+  if (!isLocalEnvironment.value) {
+    ElMessage.error('非本機環境禁止使用快速登入')
+    return
+  }
+
   const nameMap: Record<UserRole, string> = {
     admin: '系統管理員 (王大明)',
-    dispatcher: '調度員 (李調度)',
-    driver: '司機 (張司機)',
-    staff: '行政人員 (陳專員)',
-    viewer: '主管檢視者 (林督導)'
+    viewer: '檢視人員 (林督導)'
   }
 
   authStore.setSession(`mock_jwt_${role}`, {
     id: `usr_${role}`,
     email: `${role}@ltc.example.com`,
     displayName: nameMap[role] || '測試使用者',
-    role
+    role,
+    dataPlane: 'production'
   })
+  // 退出前端展示模式攔截，讓請求直通本機後端 API 與本機資料庫
+  await exitDemoModeIfActive()
+
   ElMessage.success(`已快速切換為【${ROLE_LABELS[role] || role}】身分`)
   const redirect = (route.query.redirect as string) || '/'
   router.push(redirect)

@@ -26,46 +26,7 @@ INSERT INTO roles (key, name, description, tag_type, is_system, base_role, permi
   "settings_notifications": {"view": true, "edit": true}, "settings_users": {"view": true, "edit": true},
   "settings_roles": {"view": true, "edit": true}
 }'::jsonb),
-('dispatcher', '調度員', '負責日常排班調度與司機接送匯報維護', 'primary', true, 'staff', '{
-  "dashboard": {"view": true, "edit": false}, "masters_regions": {"view": true, "edit": true},
-  "masters_cases": {"view": true, "edit": true}, "masters_sites": {"view": true, "edit": true},
-  "masters_vehicles": {"view": true, "edit": true}, "masters_drivers": {"view": true, "edit": true},
-  "masters_caregivers": {"view": true, "edit": true}, "driver_reports": {"view": true, "edit": true},
-  "driver_report_mappings": {"view": true, "edit": true}, "rides_calendar": {"view": true, "edit": true},
-  "rides_issues": {"view": true, "edit": true}, "rides_missing": {"view": true, "edit": true},
-  "reports_trip_summary": {"view": true, "edit": false}, "reports_hsinchu_schedule": {"view": true, "edit": false},
-  "vehicles_maintenance": {"view": true, "edit": true}, "attendance_fuel": {"view": true, "edit": true},
-  "exports": {"view": true, "edit": true}, "audit_logs": {"view": false, "edit": false},
-  "settings_notifications": {"view": true, "edit": false}, "settings_users": {"view": false, "edit": false},
-  "settings_roles": {"view": false, "edit": false}
-}'::jsonb),
-('staff', '一般行政人員', '負責主檔維護與日常申報作業', 'success', true, 'staff', '{
-  "dashboard": {"view": true, "edit": false}, "masters_regions": {"view": true, "edit": true},
-  "masters_cases": {"view": true, "edit": true}, "masters_sites": {"view": true, "edit": true},
-  "masters_vehicles": {"view": true, "edit": true}, "masters_drivers": {"view": true, "edit": true},
-  "masters_caregivers": {"view": true, "edit": true}, "driver_reports": {"view": true, "edit": true},
-  "driver_report_mappings": {"view": true, "edit": true}, "rides_calendar": {"view": true, "edit": true},
-  "rides_issues": {"view": true, "edit": true}, "rides_missing": {"view": true, "edit": true},
-  "reports_trip_summary": {"view": true, "edit": false}, "reports_hsinchu_schedule": {"view": true, "edit": false},
-  "vehicles_maintenance": {"view": true, "edit": true}, "attendance_fuel": {"view": true, "edit": true},
-  "exports": {"view": true, "edit": true}, "audit_logs": {"view": false, "edit": false},
-  "settings_notifications": {"view": true, "edit": false}, "settings_users": {"view": false, "edit": false},
-  "settings_roles": {"view": false, "edit": false}
-}'::jsonb),
-('driver', '司機', '僅可檢視自己的車輛出勤與月曆資訊', 'warning', true, 'viewer', '{
-  "dashboard": {"view": true, "edit": false}, "masters_regions": {"view": false, "edit": false},
-  "masters_cases": {"view": false, "edit": false}, "masters_sites": {"view": false, "edit": false},
-  "masters_vehicles": {"view": true, "edit": false}, "masters_drivers": {"view": true, "edit": false},
-  "masters_caregivers": {"view": false, "edit": false}, "driver_reports": {"view": false, "edit": false},
-  "driver_report_mappings": {"view": false, "edit": false}, "rides_calendar": {"view": true, "edit": false},
-  "rides_issues": {"view": false, "edit": false}, "rides_missing": {"view": false, "edit": false},
-  "reports_trip_summary": {"view": false, "edit": false}, "reports_hsinchu_schedule": {"view": false, "edit": false},
-  "vehicles_maintenance": {"view": true, "edit": true}, "attendance_fuel": {"view": true, "edit": true},
-  "exports": {"view": false, "edit": false}, "audit_logs": {"view": false, "edit": false},
-  "settings_notifications": {"view": false, "edit": false}, "settings_users": {"view": false, "edit": false},
-  "settings_roles": {"view": false, "edit": false}
-}'::jsonb),
-('viewer', '唯讀檢視者', '僅能檢視系統資料，無法進行任何異動', 'info', true, 'viewer', '{
+('viewer', '檢視人員', '僅能檢視系統資料，無法進行任何異動', 'info', true, 'viewer', '{
   "dashboard": {"view": true, "edit": false}, "masters_regions": {"view": true, "edit": false},
   "masters_cases": {"view": true, "edit": false}, "masters_sites": {"view": true, "edit": false},
   "masters_vehicles": {"view": true, "edit": false}, "masters_drivers": {"view": true, "edit": false},

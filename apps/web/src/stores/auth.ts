@@ -12,10 +12,7 @@ const TOKEN_KEY = 'ltc_auth_token'
 const USER_KEY = 'ltc_auth_user'
 
 const ROLE_HIERARCHY: Record<UserRole, number> = {
-  admin: 4,
-  dispatcher: 3,
-  staff: 3,
-  driver: 2,
+  admin: 2,
   viewer: 1
 }
 

@@ -324,7 +324,7 @@ const form = reactive({
   email: '',
   displayName: '',
   phone: '',
-  role: 'dispatcher' as UserRole,
+  role: 'viewer' as UserRole,
   password: '',
   status: 'active' as 'active' | 'inactive'
 })
@@ -410,7 +410,7 @@ function openCreateDialog() {
   form.email = ''
   form.displayName = ''
   form.phone = ''
-  form.role = 'dispatcher'
+  form.role = 'viewer'
   form.password = ''
   form.status = 'active'
   dialogVisible.value = true

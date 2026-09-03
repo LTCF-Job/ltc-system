@@ -1,5 +1,5 @@
 -- Migration: 000002_seed_reference_data.up.sql
--- Description: 載入正式參考資料（全台灣 22 縣市）與預設 Supabase Auth 管理員帳號
+-- Description: 載入正式參考資料（全台灣 22 縣市）
 
 INSERT INTO regions (name, description, status, sort_order) VALUES
 ('新竹縣', '新竹縣營運區域', 'active', 1),
@@ -29,77 +29,3 @@ ON CONFLICT (name) DO UPDATE SET
   status = EXCLUDED.status,
   sort_order = EXCLUDED.sort_order;
 
--- ltc_demo 等未附掛 Supabase Auth 的資料庫沒有 auth schema，此區塊整段略過，
--- 業務參考資料（regions）仍照常寫入。
-DO $$
-BEGIN
-IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'auth') THEN
-
-INSERT INTO auth.users (
-    id,
-    instance_id,
-    aud,
-    role,
-    email,
-    encrypted_password,
-    email_confirmed_at,
-    raw_app_meta_data,
-    raw_user_meta_data,
-    created_at,
-    updated_at,
-    confirmation_token,
-    recovery_token,
-    email_change_token_new,
-    email_change
-)
-VALUES (
-    '00000000-0000-0000-0000-000000000002',
-    '00000000-0000-0000-0000-000000000000',
-    'authenticated',
-    'authenticated',
-    'ltcf-admin@ltc.example.com',
-    '$2a$10$IKiM.bIaxDYbD/.cl.b8MODthsuQ0WhLDcvox90gC3H3TDHaHFVYe',
-    now(),
-    '{"provider":"email","providers":["email"],"role":"admin"}'::jsonb,
-    '{"display_name":"系統管理員"}'::jsonb,
-    now(),
-    now(),
-    '', '', '', ''
-)
-ON CONFLICT (id) DO UPDATE SET
-    email = EXCLUDED.email,
-    encrypted_password = EXCLUDED.encrypted_password,
-    email_confirmed_at = EXCLUDED.email_confirmed_at,
-    raw_app_meta_data = EXCLUDED.raw_app_meta_data,
-    raw_user_meta_data = EXCLUDED.raw_user_meta_data,
-    updated_at = now();
-
--- Supabase Auth（GoTrue）驗證 email/password 登入時，除了 auth.users 還要求
--- 對應的 auth.identities（provider = 'email'）存在，否則密碼比對正確也會回傳
--- Invalid login credentials。
-INSERT INTO auth.identities (
-    id,
-    provider_id,
-    user_id,
-    identity_data,
-    provider,
-    last_sign_in_at,
-    created_at,
-    updated_at
-)
-VALUES (
-    '00000000-0000-0000-0000-000000000002',
-    '00000000-0000-0000-0000-000000000002',
-    '00000000-0000-0000-0000-000000000002',
-    '{"sub":"00000000-0000-0000-0000-000000000002","email":"ltcf-admin@ltc.example.com","email_verified":true,"phone_verified":false}'::jsonb,
-    'email',
-    now(),
-    now(),
-    now()
-)
-ON CONFLICT (provider_id, provider) DO UPDATE SET
-    identity_data = EXCLUDED.identity_data,
-    updated_at = now();
-
-END IF;
-END $$;
