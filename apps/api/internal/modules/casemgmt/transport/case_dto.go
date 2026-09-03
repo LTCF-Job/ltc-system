@@ -9,7 +9,6 @@ import (
 
 // CreateCaseRequest 代表新增個案主檔請求。僅姓名為必要欄位；其餘欄位皆選填。
 type CreateCaseRequest struct {
-	Code              string     `json:"code"`
 	Name              string     `json:"name" binding:"required"`
 	NationalID        string     `json:"nationalId"`
 	HouseholdType     *string    `json:"householdType"`
@@ -31,7 +30,6 @@ type CreateCaseRequest struct {
 // ToService 轉換為 service 層的建立個案輸入。
 func (r CreateCaseRequest) ToService() app.CreateCaseRequest {
 	return app.CreateCaseRequest{
-		Code:              r.Code,
 		Name:              r.Name,
 		NationalID:        r.NationalID,
 		HouseholdType:     r.HouseholdType,
@@ -105,7 +103,6 @@ func (r CreateScheduleRequest) ToService() app.CreateScheduleRequest {
 // CaseResponse 代表回傳給前端的個案主檔資料。身分證密文與 HMAC 索引不對外輸出。
 type CaseResponse struct {
 	ID                uuid.UUID  `json:"id"`
-	Code              string     `json:"code"`
 	Name              string     `json:"name"`
 	NameNormalized    string     `json:"nameNormalized"`
 	NationalIDMasked  string     `json:"nationalIdMasked"`
@@ -136,7 +133,6 @@ type CaseResponse struct {
 func newCaseResponse(c app.Case) CaseResponse {
 	return CaseResponse{
 		ID:                c.ID,
-		Code:              c.Code,
 		Name:              c.Name,
 		NameNormalized:    c.NameNormalized,
 		NationalIDMasked:  c.NationalIDMasked,

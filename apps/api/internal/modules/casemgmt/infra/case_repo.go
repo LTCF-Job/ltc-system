@@ -28,7 +28,7 @@ func NewCaseRepository(db *pgxpool.Pool) *CaseRepository {
 func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
-		SELECT c.id, c.code, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
+		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
 		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
 		       p.site_id, COALESCE(st.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.inbound_vehicle_id, COALESCE(vi.display_name, ''),
 		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
@@ -41,7 +41,7 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		WHERE c.deleted_at IS NULL
 		  AND ($1 = '' OR c.region = $1)
 		  AND ($2 = '' OR c.status = $2)
-		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.code ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
+		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
 		  AND ($6 = false OR (
 		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
 		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
@@ -52,7 +52,7 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
 		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
 		      ))
-		ORDER BY c.code ASC
+		ORDER BY c.created_at DESC, c.name ASC
 		LIMIT $4 OFFSET $5
 	`
 	rows, err := r.db.Query(ctx, query, region, status, q, pageSize, offset, unresolvedLink, excludePending)
@@ -65,7 +65,7 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 	for rows.Next() {
 		var c app.Case
 		if err := rows.Scan(
-			&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
+			&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
 			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
 			&c.SiteID, &c.SiteName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.InboundVehicleID, &c.InboundVehicle,
 			&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
@@ -83,7 +83,7 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		WHERE c.deleted_at IS NULL
 		  AND ($1 = '' OR c.region = $1)
 		  AND ($2 = '' OR c.status = $2)
-		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.code ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
+		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
 		  AND ($4 = false OR (
 		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
 		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
@@ -130,7 +130,7 @@ func nullIfEmpty(v string) *string {
 // GetByID 依 UUID 取得個案。
 func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, error) {
 	query := `
-		SELECT c.id, c.code, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
+		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
 		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
 		       p.site_id, COALESCE(st.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.inbound_vehicle_id, COALESCE(vi.display_name, ''),
 		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
@@ -145,7 +145,7 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 	var c app.Case
 	db := pgxdb.FromContext(ctx, r.db)
 	err := db.QueryRow(ctx, query, id).Scan(
-		&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
+		&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
 		&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
 		&c.SiteID, &c.SiteName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.InboundVehicleID, &c.InboundVehicle,
 		&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
@@ -160,7 +160,7 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 // GetByHMAC 依 HMAC 索引檢查是否已存在。
 func (r *CaseRepository) GetByHMAC(ctx context.Context, hmac []byte) (*app.Case, error) {
 	query := `
-		SELECT id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
+		SELECT id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 		       home_address, region, ltc_level, service_category, service_usage_type, claim_end_date,
 		       status, created_at, updated_at
 		FROM cases WHERE national_id_hmac = $1 AND deleted_at IS NULL LIMIT 1
@@ -168,7 +168,7 @@ func (r *CaseRepository) GetByHMAC(ctx context.Context, hmac []byte) (*app.Case,
 	var c app.Case
 	db := pgxdb.FromContext(ctx, r.db)
 	err := db.QueryRow(ctx, query, hmac).Scan(
-		&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
+		&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
 		&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
 		&c.Status, &c.CreatedAt, &c.UpdatedAt,
 	)
@@ -181,7 +181,7 @@ func (r *CaseRepository) GetByHMAC(ctx context.Context, hmac []byte) (*app.Case,
 // GetByNameNormalized 依正規化姓名搜尋個案。
 func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm string) ([]app.Case, error) {
 	query := `
-		SELECT id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
+		SELECT id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 		       home_address, region, ltc_level, service_category, service_usage_type, claim_end_date,
 		       status, created_at, updated_at
 		FROM cases WHERE name_normalized = $1 AND deleted_at IS NULL
@@ -196,7 +196,7 @@ func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm strin
 	for rows.Next() {
 		var c app.Case
 		if err := rows.Scan(
-			&c.ID, &c.Code, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
+			&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
 			&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
 			&c.Status, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
@@ -211,10 +211,10 @@ func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm strin
 func (r *CaseRepository) Create(ctx context.Context, c *app.Case) error {
 	query := `
 		INSERT INTO cases (
-			id, code, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
+			id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 			household_type, gender, birth_date, care_contact_role, care_contact_name, registered_address,
 			home_address, region, ltc_level, service_category, service_usage_type, claim_end_date, status, remarks
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		RETURNING created_at, updated_at
 	`
 	if c.ID == uuid.Nil {
@@ -222,7 +222,7 @@ func (r *CaseRepository) Create(ctx context.Context, c *app.Case) error {
 	}
 	db := pgxdb.FromContext(ctx, r.db)
 	return db.QueryRow(ctx, query,
-		c.ID, c.Code, c.Name, c.NameNormalized, c.NationalIDCipher, c.NationalIDHMAC, c.NationalIDMasked,
+		c.ID, c.Name, c.NameNormalized, c.NationalIDCipher, c.NationalIDHMAC, c.NationalIDMasked,
 		c.HouseholdType, c.Gender, c.BirthDate, c.CareContactRole, c.CareContactName, c.RegisteredAddress,
 		c.HomeAddress, c.Region, c.LTCLevel, c.ServiceCategory, c.ServiceUsageType, c.ClaimEndDate, c.Status, c.Remarks,
 	).Scan(&c.CreatedAt, &c.UpdatedAt)
@@ -384,7 +384,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 	lastDay := firstDay.AddDate(0, 1, -1)
 
 	query := `
-		SELECT c.id, c.code, c.name, COALESCE(c.region, ''), c.claim_end_date,
+		SELECT c.id, c.name, COALESCE(c.region, ''), c.claim_end_date,
 		       s.id as schedule_id, s.site_id, st.open_days,
 		       lower(s.effective_range) as eff_from,
 		       CASE WHEN upper_inf(s.effective_range) THEN NULL ELSE to_char(upper(s.effective_range), 'YYYY-MM-DD') END as eff_to_str,
@@ -395,7 +395,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 		WHERE c.status = 'active' AND c.deleted_at IS NULL
 		  AND ($1 = '' OR c.region = $1)
 		  AND s.effective_range && daterange($2, $3, '[]')
-		ORDER BY c.code ASC
+		ORDER BY c.created_at DESC, c.name ASC
 	`
 	rows, err := r.db.Query(ctx, query, region, firstDay, lastDay)
 	if err != nil {
@@ -413,7 +413,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 		var sr scheduleRow
 		var effToStr *string
 		if err := rows.Scan(
-			&sr.info.CaseID, &sr.info.CaseCode, &sr.info.CaseName, &sr.info.Region,
+			&sr.info.CaseID, &sr.info.CaseName, &sr.info.Region,
 			&sr.info.ClaimEndDate,
 			&sr.scheduleID, &sr.info.SiteID, &sr.info.SiteOpenDays,
 			&sr.info.EffectiveFrom, &effToStr,
@@ -470,10 +470,10 @@ func (r *CaseRepository) ListNameIndex(ctx context.Context) ([]app.CaseNameRef, 
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT id, code, name, name_normalized
+		SELECT id, name, name_normalized
 		FROM cases
 		WHERE status = 'active' AND deleted_at IS NULL
-		ORDER BY code ASC
+		ORDER BY name ASC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query case name index: %w", err)
@@ -483,7 +483,7 @@ func (r *CaseRepository) ListNameIndex(ctx context.Context) ([]app.CaseNameRef, 
 	var list []app.CaseNameRef
 	for rows.Next() {
 		var c app.CaseNameRef
-		if err := rows.Scan(&c.ID, &c.Code, &c.Name, &c.NameNormalized); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.NameNormalized); err != nil {
 			return nil, err
 		}
 		list = append(list, c)

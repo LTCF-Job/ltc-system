@@ -9,7 +9,6 @@ import (
 // CaseNameRef 是個案的姓名索引，供跨模組以姓名比對個案時使用。
 type CaseNameRef struct {
 	ID             uuid.UUID
-	Code           string
 	Name           string
 	NameNormalized string
 }
@@ -17,7 +16,6 @@ type CaseNameRef struct {
 // Case 代表 cases 資料表實體。
 type Case struct {
 	ID                uuid.UUID
-	Code              string
 	Name              string
 	NameNormalized    string
 	NationalIDCipher  []byte
@@ -67,11 +65,11 @@ type CaseSchedule struct {
 	UpdatedAt          time.Time
 }
 
-// ScheduleLeg 代表 schedule_legs 實體。
+// ScheduleLeg 代表單一趟次之時段與車輛指派。
 type ScheduleLeg struct {
 	ID          uuid.UUID
 	ScheduleID  uuid.UUID
-	LegSeq      int16
+	LegSeq      int16 // 1..4
 	Direction   string
 	Period      string
 	DepartTime  string // "09:40"
@@ -85,7 +83,6 @@ type ScheduleLeg struct {
 // ActiveCaseScheduleInfo 代表個案於指定月份之有效排班與關聯基本資訊。
 type ActiveCaseScheduleInfo struct {
 	CaseID         uuid.UUID
-	CaseCode       string
 	CaseName       string
 	Region         string
 	ClaimEndDate   *time.Time

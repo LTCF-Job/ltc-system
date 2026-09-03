@@ -89,7 +89,6 @@ func newTestCaseHandler(store *fakeCaseStore) *CaseHandler {
 func caseWithSecrets() app.Case {
 	return app.Case{
 		ID:               uuid.New(),
-		Code:             "C01",
 		Name:             "王小明",
 		NationalIDCipher: []byte("secret-cipher-bytes"),
 		NationalIDHMAC:   []byte("secret-hmac-bytes"),

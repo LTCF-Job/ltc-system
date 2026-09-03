@@ -49,7 +49,6 @@ func NewCaseService(
 
 // CreateCaseRequest 代表新增個案之請求參數。
 type CreateCaseRequest struct {
-	Code              string
 	Name              string
 	NationalID        string
 	HouseholdType     *string
@@ -96,7 +95,6 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 	}
 
 	entity := Case{
-		Code:              req.Code,
 		Name:              req.Name,
 		NameNormalized:    normName,
 		NationalIDCipher:  cipherText,
