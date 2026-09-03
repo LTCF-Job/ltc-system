@@ -113,6 +113,140 @@ func (r *RideRepository) InsertRideSource(
 	return err
 }
 
+// ListSubmissionAnswersForColumn 取出某表單既有回報中，指定欄位表頭留在 payload 的原始
+// 儲存格文字；欄位當初上傳時尚未對應個案也會存在 payload 裡，回填時不需要原始檔案。
+func (r *RideRepository) ListSubmissionAnswersForColumn(ctx context.Context, formID uuid.UUID, columnHeader string) ([]app.SubmissionAnswer, error) {
+	query := `
+		SELECT id, service_date, driver_id, payload->'answers'->>$2
+		FROM form_submissions
+		WHERE form_id = $1 AND payload->'answers' ? $2
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, formID, columnHeader)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []app.SubmissionAnswer
+	for rows.Next() {
+		var a app.SubmissionAnswer
+		if err := rows.Scan(&a.SubmissionID, &a.ServiceDate, &a.DriverID, &a.Value); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// ListSubmissionsForForms 取出指定表單目前存在的所有回報列，含每欄留在 payload 的
+// 原始儲存格文字，供 driverreport 彙整待維護清單時比對哪些欄位這一列「有回報」但仍
+// 待對應個案。
+func (r *RideRepository) ListSubmissionsForForms(ctx context.Context, formIDs []uuid.UUID) ([]app.SubmissionFull, error) {
+	if len(formIDs) == 0 {
+		return nil, nil
+	}
+	query := `
+		SELECT fs.id, fs.form_id, COALESCE(df.title, ''), COALESCE(v.display_name, ''),
+		       fs.service_date, fs.payload->'answers'
+		FROM form_submissions fs
+		LEFT JOIN driver_report_forms df ON fs.form_id = df.id
+		LEFT JOIN vehicles v ON df.vehicle_id = v.id
+		WHERE fs.form_id = ANY($1::uuid[])
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, pgxdb.UUIDStrings(formIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []app.SubmissionFull
+	for rows.Next() {
+		var s app.SubmissionFull
+		var answersRaw []byte
+		if err := rows.Scan(&s.SubmissionID, &s.FormID, &s.FormTitle, &s.VehicleName, &s.ServiceDate, &answersRaw); err != nil {
+			return nil, err
+		}
+		s.Answers = map[string]string{}
+		if len(answersRaw) > 0 {
+			if err := json.Unmarshal(answersRaw, &s.Answers); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// ListUnmatchedDriverSubmissions 取出目前駕駛人姓名比對不到司機主檔的既有回報。
+func (r *RideRepository) ListUnmatchedDriverSubmissions(ctx context.Context) ([]app.UnmatchedDriverSubmission, error) {
+	query := `
+		SELECT fs.id, fs.form_id, COALESCE(df.title, ''), COALESCE(v.display_name, ''),
+		       fs.service_date, fs.driver_name_raw
+		FROM form_submissions fs
+		LEFT JOIN driver_report_forms df ON fs.form_id = df.id
+		LEFT JOIN vehicles v ON df.vehicle_id = v.id
+		WHERE fs.driver_id IS NULL AND COALESCE(fs.driver_name_raw, '') <> ''
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []app.UnmatchedDriverSubmission
+	for rows.Next() {
+		var u app.UnmatchedDriverSubmission
+		if err := rows.Scan(&u.SubmissionID, &u.FormID, &u.FormTitle, &u.VehicleName, &u.ServiceDate, &u.DriverNameRaw); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// UpdateSubmissionDriverID 回填某筆提交紀錄的司機。
+func (r *RideRepository) UpdateSubmissionDriverID(ctx context.Context, submissionID, driverID uuid.UUID) error {
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx,
+		`UPDATE form_submissions SET driver_id = $2 WHERE id = $1`, submissionID, driverID)
+	return err
+}
+
+// ListRideSourcesForSubmission 取出某筆提交紀錄已展開的搭乘來源，回填司機時需要逐筆
+// 更新來源與重算搭乘紀錄。
+func (r *RideRepository) ListRideSourcesForSubmission(ctx context.Context, submissionID uuid.UUID) ([]app.RideSourceForSubmission, error) {
+	query := `
+		SELECT id, case_id, service_date, leg_seq, vehicle_id
+		FROM ride_sources
+		WHERE submission_id = $1
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, submissionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []app.RideSourceForSubmission
+	for rows.Next() {
+		var s app.RideSourceForSubmission
+		if err := rows.Scan(&s.ID, &s.CaseID, &s.ServiceDate, &s.LegSeq, &s.VehicleID); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// UpdateRideSourceDriverID 回填某筆搭乘來源的司機。
+func (r *RideRepository) UpdateRideSourceDriverID(ctx context.Context, sourceID, driverID uuid.UUID) error {
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx,
+		`UPDATE ride_sources SET driver_id = $2 WHERE id = $1`, sourceID, driverID)
+	return err
+}
+
 // GetRideRecordForSlot 查詢指定個案、日期、時段之既有搭乘主紀錄。
 func (r *RideRepository) GetRideRecordForSlot(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) (*app.RideRecord, error) {
 	query := `
@@ -296,6 +430,72 @@ func (r *RideRepository) ListImportedMonths(ctx context.Context) ([]app.Imported
 		months = append(months, m)
 	}
 	return months, rows.Err()
+}
+
+// ListSubmissionsForFormMonth 取出某份匯報表在 [monthStart, monthEnd) 區間內的逐日原始回報，
+// 供總覽頁鑽取單一月份時直接顯示原始儲存格文字，不需重新開啟原始檔案。
+func (r *RideRepository) ListSubmissionsForFormMonth(ctx context.Context, formID uuid.UUID, monthStart, monthEnd time.Time) ([]app.MonthSubmissionDetail, error) {
+	query := `
+		SELECT service_date, COALESCE(driver_name_raw, ''), COALESCE(payload->>'remark', ''), payload->'answers'
+		FROM form_submissions
+		WHERE form_id = $1 AND service_date >= $2 AND service_date < $3
+		ORDER BY service_date ASC
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, formID, monthStart, monthEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []app.MonthSubmissionDetail
+	for rows.Next() {
+		var d app.MonthSubmissionDetail
+		var answersRaw []byte
+		if err := rows.Scan(&d.ServiceDate, &d.DriverNameRaw, &d.Remark, &answersRaw); err != nil {
+			return nil, err
+		}
+		d.Answers = map[string]string{}
+		if len(answersRaw) > 0 {
+			if err := json.Unmarshal(answersRaw, &d.Answers); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// ListRideEntriesForFormMonth 取出某份匯報表在 [monthStart, monthEnd) 區間內展開後的個案搭乘
+// 紀錄，供總覽頁鑽取單一月份實際寫入了哪些個案與趟次。
+func (r *RideRepository) ListRideEntriesForFormMonth(ctx context.Context, formID uuid.UUID, monthStart, monthEnd time.Time) ([]app.MonthRideEntry, error) {
+	query := `
+		SELECT rs.case_id, COALESCE(c.name, ''), rs.service_date, rs.leg_seq, rs.reported,
+		       rs.driver_id, COALESCE(d.name, ''), rs.vehicle_id
+		FROM ride_sources rs
+		JOIN form_submissions fs ON fs.id = rs.submission_id
+		LEFT JOIN cases c ON c.id = rs.case_id
+		LEFT JOIN drivers d ON d.id = rs.driver_id
+		WHERE fs.form_id = $1 AND rs.service_date >= $2 AND rs.service_date < $3
+		ORDER BY rs.service_date ASC, rs.leg_seq ASC
+	`
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, query, formID, monthStart, monthEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []app.MonthRideEntry
+	for rows.Next() {
+		var e app.MonthRideEntry
+		if err := rows.Scan(&e.CaseID, &e.CaseName, &e.ServiceDate, &e.LegSeq, &e.Reported,
+			&e.DriverID, &e.DriverName, &e.VehicleID); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 // DeleteDerivedRideRecord 刪除純由匯入衍生的搭乘紀錄；帶有人工更正、衝突裁決或

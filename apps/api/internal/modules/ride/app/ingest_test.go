@@ -23,6 +23,7 @@ type fakeRecordStore struct {
 	sources          map[slotKey][]fakeSource
 	records          map[slotKey]*RideRecord
 	submissions      map[uuid.UUID]submissionKey
+	payloads         map[uuid.UUID]map[string]interface{}
 	submission       uuid.UUID
 	lastSource       string
 	lastAnomalyFlags []string
@@ -35,6 +36,34 @@ type fakeRecordStore struct {
 	importErrors     []ImportErrorSubmission
 	getByIDResult    *RideRecord
 	getByIDErr       error
+
+	submissionsForForms         []SubmissionFull
+	submissionsForFormsErr      error
+	unmatchedDrivers            []UnmatchedDriverSubmission
+	unmatchedDriversErr         error
+	updateSubmissionDriverErr   error
+	updatedSubmissionDrivers    []submissionDriverUpdate
+	rideSourcesForSubmission    map[uuid.UUID][]RideSourceForSubmission
+	rideSourcesForSubmissionErr error
+	updateRideSourceDriverErr   error
+	updatedRideSourceDrivers    []sourceDriverUpdate
+
+	monthSubmissions    []MonthSubmissionDetail
+	monthSubmissionsErr error
+	monthRideEntries    []MonthRideEntry
+	monthRideEntriesErr error
+}
+
+// submissionDriverUpdate 保留一次提交紀錄司機回填的參數，供測試斷言。
+type submissionDriverUpdate struct {
+	submissionID uuid.UUID
+	driverID     uuid.UUID
+}
+
+// sourceDriverUpdate 保留一次搭乘來源司機回填的參數，供測試斷言。
+type sourceDriverUpdate struct {
+	sourceID uuid.UUID
+	driverID uuid.UUID
 }
 
 // submissionKey 讓 fake 能像資料庫一樣依 form 與服務日期刪除提交紀錄。
@@ -55,6 +84,7 @@ func newFakeRecordStore(columns []FormColumn) *fakeRecordStore {
 		sources:     map[slotKey][]fakeSource{},
 		records:     map[slotKey]*RideRecord{},
 		submissions: map[uuid.UUID]submissionKey{},
+		payloads:    map[uuid.UUID]map[string]interface{}{},
 	}
 }
 
@@ -82,12 +112,35 @@ func (f *fakeRecordStore) ListRideRecordsInRange(context.Context, time.Time, tim
 	return nil, nil
 }
 
-func (f *fakeRecordStore) SaveFormSubmission(_ context.Context, formID uuid.UUID, serviceDate, _ time.Time, _ string, _ *uuid.UUID, source string, _ map[string]interface{}, _ string, anomalyFlags []string) (uuid.UUID, error) {
+func (f *fakeRecordStore) SaveFormSubmission(_ context.Context, formID uuid.UUID, serviceDate, _ time.Time, _ string, driverID *uuid.UUID, source string, payload map[string]interface{}, _ string, anomalyFlags []string) (uuid.UUID, error) {
 	f.submission = uuid.New()
 	f.lastSource = source
 	f.lastAnomalyFlags = anomalyFlags
 	f.submissions[f.submission] = submissionKey{formID: formID, date: serviceDate.Format("2006-01-02")}
+	f.payloads[f.submission] = payload
 	return f.submission, nil
+}
+
+// ListSubmissionAnswersForColumn 重現真實 SQL 的 payload->'answers'->>header 查詢，
+// 只回傳這個表單裡、這一欄留有原始儲存格文字的既有提交。
+func (f *fakeRecordStore) ListSubmissionAnswersForColumn(_ context.Context, formID uuid.UUID, columnHeader string) ([]SubmissionAnswer, error) {
+	var out []SubmissionAnswer
+	for id, sub := range f.submissions {
+		if sub.formID != formID {
+			continue
+		}
+		answers, _ := f.payloads[id]["answers"].(map[string]string)
+		value, ok := answers[columnHeader]
+		if !ok {
+			continue
+		}
+		date, err := time.Parse("2006-01-02", sub.date)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, SubmissionAnswer{SubmissionID: id, ServiceDate: date, Value: value})
+	}
+	return out, nil
 }
 
 func (f *fakeRecordStore) InsertRideSource(_ context.Context, submissionID, caseID uuid.UUID, serviceDate time.Time, legSeq int16, vehicleID uuid.UUID, driverID *uuid.UUID, reported string, _ int) error {
@@ -127,6 +180,36 @@ func (f *fakeRecordStore) ListRideSourceSlotsForForm(_ context.Context, formID u
 
 func (f *fakeRecordStore) ListImportedMonths(context.Context) ([]ImportedMonth, error) {
 	return f.importedMonths, f.importedErr
+}
+
+func (f *fakeRecordStore) ListSubmissionsForForms(context.Context, []uuid.UUID) ([]SubmissionFull, error) {
+	return f.submissionsForForms, f.submissionsForFormsErr
+}
+
+func (f *fakeRecordStore) ListUnmatchedDriverSubmissions(context.Context) ([]UnmatchedDriverSubmission, error) {
+	return f.unmatchedDrivers, f.unmatchedDriversErr
+}
+
+func (f *fakeRecordStore) UpdateSubmissionDriverID(_ context.Context, submissionID, driverID uuid.UUID) error {
+	f.updatedSubmissionDrivers = append(f.updatedSubmissionDrivers, submissionDriverUpdate{submissionID: submissionID, driverID: driverID})
+	return f.updateSubmissionDriverErr
+}
+
+func (f *fakeRecordStore) ListRideSourcesForSubmission(_ context.Context, submissionID uuid.UUID) ([]RideSourceForSubmission, error) {
+	return f.rideSourcesForSubmission[submissionID], f.rideSourcesForSubmissionErr
+}
+
+func (f *fakeRecordStore) UpdateRideSourceDriverID(_ context.Context, sourceID, driverID uuid.UUID) error {
+	f.updatedRideSourceDrivers = append(f.updatedRideSourceDrivers, sourceDriverUpdate{sourceID: sourceID, driverID: driverID})
+	return f.updateRideSourceDriverErr
+}
+
+func (f *fakeRecordStore) ListSubmissionsForFormMonth(context.Context, uuid.UUID, time.Time, time.Time) ([]MonthSubmissionDetail, error) {
+	return f.monthSubmissions, f.monthSubmissionsErr
+}
+
+func (f *fakeRecordStore) ListRideEntriesForFormMonth(context.Context, uuid.UUID, time.Time, time.Time) ([]MonthRideEntry, error) {
+	return f.monthRideEntries, f.monthRideEntriesErr
 }
 
 func (f *fakeRecordStore) DeleteFormSubmissions(_ context.Context, formID uuid.UUID, dates []time.Time) (int, error) {
@@ -310,6 +393,88 @@ func TestIngestSubmission_RequiresServiceDate(t *testing.T) {
 
 	_, err := svc.IngestSubmission(context.Background(), uuid.New(), uuid.New(), ProcessSubmissionRequest{})
 	assert.Error(t, err)
+}
+
+func TestBackfillColumn_WritesFromStoredAnswersWithoutOriginalFile(t *testing.T) {
+	caseID := uuid.New()
+	vehicleID := uuid.New()
+	formID := uuid.New()
+	store := newFakeRecordStore(nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	// 模擬上一次上傳時這一欄還在待維護，payload 已存但完全沒有寫入搭乘來源。
+	_, err := store.SaveFormSubmission(
+		context.Background(), formID, time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), time.Now().UTC(),
+		"林彥衡", nil, "import",
+		map[string]interface{}{"answers": map[string]string{"1.吳桂 [去程]": "有坐"}}, "", nil,
+	)
+	require.NoError(t, err)
+
+	written, err := svc.BackfillColumn(context.Background(), formID, vehicleID, "1.吳桂 [去程]", 3, caseID, 1)
+	require.NoError(t, err)
+	assert.Equal(t, 1, written, "已存的原始回答要能直接補寫，不需要重新上傳檔案")
+
+	rec := store.records[slotKey{caseID, "2026-03-02", 1}]
+	require.NotNil(t, rec)
+	assert.Equal(t, "boarded", rec.EffectiveStatus)
+}
+
+func TestBackfillColumn_SkipsSubmissionsWithoutThisColumn(t *testing.T) {
+	formID := uuid.New()
+	store := newFakeRecordStore(nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	_, err := store.SaveFormSubmission(
+		context.Background(), formID, time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), time.Now().UTC(),
+		"林彥衡", nil, "import",
+		map[string]interface{}{"answers": map[string]string{"1.吳桂 [去程]": "有坐"}}, "", nil,
+	)
+	require.NoError(t, err)
+
+	written, err := svc.BackfillColumn(context.Background(), formID, uuid.New(), "2.李四 [去程]", 4, uuid.New(), 1)
+	require.NoError(t, err)
+	assert.Zero(t, written)
+	assert.Empty(t, store.records)
+}
+
+func TestBackfillDriver_BackfillsOnlySubmissionsWithMatchingNormalizedName(t *testing.T) {
+	caseID := uuid.New()
+	vehicleID := uuid.New()
+	formID := uuid.New()
+	driverID := uuid.New()
+	matchingSubmission := uuid.New()
+	otherSubmission := uuid.New()
+	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+
+	store := newFakeRecordStore(nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	// 模擬這筆回報當初匯入時已展開成搭乘來源，但駕駛人比對不到司機主檔。
+	require.NoError(t, store.InsertRideSource(context.Background(), matchingSubmission, caseID, serviceDate, 1, vehicleID, nil, "有坐", 1))
+
+	store.unmatchedDrivers = []UnmatchedDriverSubmission{
+		{SubmissionID: matchingSubmission, FormID: formID, ServiceDate: serviceDate, DriverNameRaw: "林彥衡"},
+		{SubmissionID: otherSubmission, FormID: formID, ServiceDate: serviceDate, DriverNameRaw: "陳大明"},
+	}
+	store.rideSourcesForSubmission = map[uuid.UUID][]RideSourceForSubmission{
+		matchingSubmission: {{ID: uuid.New(), CaseID: caseID, ServiceDate: serviceDate, LegSeq: 1, VehicleID: vehicleID}},
+	}
+
+	affected, dates, err := svc.BackfillDriver(context.Background(), "林彥衡", driverID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, affected, "只回填正規化姓名相符的那一筆，不影響其他姓名")
+	assert.Equal(t, []time.Time{serviceDate}, dates, "回傳涉及的服務日期，供呼叫端同步司機出勤")
+
+	require.Len(t, store.updatedSubmissionDrivers, 1)
+	assert.Equal(t, matchingSubmission, store.updatedSubmissionDrivers[0].submissionID)
+	assert.Equal(t, driverID, store.updatedSubmissionDrivers[0].driverID)
+
+	require.Len(t, store.updatedRideSourceDrivers, 1)
+	assert.Equal(t, driverID, store.updatedRideSourceDrivers[0].driverID)
+
+	rec := store.records[slotKey{caseID, "2026-03-02", 1}]
+	assert.NotNil(t, rec, "回填後要重算搭乘紀錄，不需要重新上傳檔案")
 }
 
 func TestExpandLegSeqs(t *testing.T) {

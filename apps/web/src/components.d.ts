@@ -12,10 +12,12 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppLogo: typeof import('./components/AppLogo.vue')['default']
+    CaseCreateDialog: typeof import('./components/cases/CaseCreateDialog.vue')['default']
     CaseSelectDialog: typeof import('./components/CaseSelectDialog.vue')['default']
     ChangePasswordDialog: typeof import('./components/ChangePasswordDialog.vue')['default']
     DataTablePage: typeof import('./components/DataTablePage.vue')['default']
     DialogFooter: typeof import('./components/DialogFooter.vue')['default']
+    DriverCreateDialog: typeof import('./components/masters/DriverCreateDialog.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']

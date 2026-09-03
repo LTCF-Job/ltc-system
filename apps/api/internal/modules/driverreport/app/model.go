@@ -131,11 +131,34 @@ type ColumnMappingUpdate struct {
 	LegSeq        *int16  `json:"legSeq"`
 }
 
+// SubmissionReview 是一筆匯報提交紀錄（一天一列）目前尚待處理的問題彙整，供待維護
+// 資料頁籤以匯報表列為單位顯示：同一列可能同時有個案欄位比對不到、駕駛人也比對不到。
+type SubmissionReview struct {
+	SubmissionID string
+	FormTitle    string
+	VehicleName  string
+	ServiceDate  string
+	CaseIssues   []ColumnMapping
+	DriverIssue  *DriverIssue
+}
+
+// DriverIssue 代表這一列的駕駛人姓名比對不到司機主檔。
+type DriverIssue struct {
+	DriverNameRaw string
+}
+
 // SkippedRow 保留未寫入資料庫的來源列與原因。
 type SkippedRow struct {
 	RowIndex   int      `json:"rowIndex"`
 	ReportDate string   `json:"reportDate"`
 	Reasons    []string `json:"reasons"`
+}
+
+// MonthDetail 是總覽頁鑽取單一匯報表、單一月份時的完整內容：逐日原始回報與展開後
+// 的個案搭乘紀錄各一段。
+type MonthDetail struct {
+	Submissions []MonthSubmissionDetail
+	RideEntries []MonthRideEntry
 }
 
 // CommitResult 回傳正式匯入寫入與略過的結果。

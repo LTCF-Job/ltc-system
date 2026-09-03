@@ -212,22 +212,32 @@ func (r *DriverReportRepository) UpsertColumns(ctx context.Context, formID uuid.
 	return nil
 }
 
-// UpdateColumnMappingByID 更新指定欄位的對應狀態與個案綁定。
-func (r *DriverReportRepository) UpdateColumnMappingByID(ctx context.Context, colID, status string, caseID *string, legSeq *int16) error {
+// UpdateColumnMappingByID 更新指定欄位的對應狀態與個案綁定，並回傳更新前的狀態、
+// 所屬表單與欄號，供呼叫端判斷是否為「剛從待維護變成已對應」以觸發回填。
+func (r *DriverReportRepository) UpdateColumnMappingByID(ctx context.Context, colID, status string, caseID *string, legSeq *int16) (formID uuid.UUID, columnHeader string, columnIndex int, previousStatus string, err error) {
 	if r.db == nil {
-		return ErrNoDatabase
+		err = ErrNoDatabase
+		return
 	}
 
 	query := `
+		WITH prev AS (
+			SELECT form_id, column_header, column_index, mapping_status
+			FROM form_columns
+			WHERE id = $1::uuid
+		)
 		UPDATE form_columns
 		SET mapping_status = $2,
 		    case_id = NULLIF($3, '')::uuid,
 		    leg_seq = $4,
 		    updated_at = now()
-		WHERE id = $1::uuid
+		FROM prev
+		WHERE form_columns.id = $1::uuid
+		RETURNING prev.form_id, prev.column_header, prev.column_index, prev.mapping_status
 	`
-	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, query, colID, status, caseID, legSeq)
-	return err
+	err = pgxdb.FromContext(ctx, r.db).QueryRow(ctx, query, colID, status, caseID, legSeq).
+		Scan(&formID, &columnHeader, &columnIndex, &previousStatus)
+	return
 }
 
 // UpdateColumnMappingByHeader 以表頭文字定位欄位並更新對應，供匯入預覽的就地確認使用。

@@ -26,6 +26,23 @@
 單列日期無法解析時只略過該列並回報原因，其餘日期照常寫入，不會讓一整個月的匯報因為
 一列打錯而全部匯不進來。
 
+`CommitDriverReport` 逐列呼叫 `RideService.IngestSubmission` 之後，若這一列比對到司機
+（`driver_id` 有值），會在同一個交易內接著呼叫 `AttendanceService.SyncFromImport`（透過
+`AttendanceRegistrar` port，adapter 見 `cmd/server/module_adapters.go` 的
+`driverReportAttendanceRegistrar`）同步該司機當天的出勤月曆：
+
+- 當天沒有出勤紀錄：直接寫入出勤（`work`），`attendance_records.source = 'import'`。
+- 當天既有紀錄本身也是上次匯入寫入的（`source = 'import'`）：直接刷新，不算衝突。
+- 當天既有人工登記（`source = 'manual'`）且狀態剛好也是出勤：不需處理。
+- 當天既有人工登記且狀態不同：**不覆蓋**，改在 `attendance_import_conflicts` 記一筆待維護
+  衝突（`UNIQUE(driver_id, record_date)`），交給司機接送匯報「待維護資料」頁籤的「出勤待維護」
+  區塊處理——使用者可選擇 `keep_manual`（保留人工登記，不動 `attendance_records`）或
+  `use_import`（改採匯入判斷覆蓋，`source` 一併改回 `import`）。已解決且人工狀態未再變動時
+  維持已解決，不會因為重匯同一批資料反覆跳出來打擾使用者。比對不到司機的列走另一條既有的
+  「司機待維護」流程（見下方司機回填段落），不會產生出勤衝突。
+- `GET /api/v1/attendance/conflicts` 查詢目前待處理清單；
+  `POST /api/v1/attendance/conflicts/:id/resolve` 提交使用者的選擇。
+
 ### 覆蓋語意與交易邊界
 
 匯入是覆蓋不是疊加：重匯同一份檔案的結果與只匯一次相同。`clearPreviousImport` 在寫入前呼叫

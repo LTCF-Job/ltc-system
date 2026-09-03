@@ -8,7 +8,10 @@ import type {
   DriverReportCommitResultDTO,
   DriverReportColumnDecision,
   UpdateColumnMappingRequest,
-  BatchMappingRequest
+  BatchMappingRequest,
+  SubmissionReviewDTO,
+  BindDriverRequest,
+  DriverReportMonthDetailDTO
 } from '@/types/api'
 
 export async function listDriverReportForms(params?: { q?: string }): Promise<DriverReportFormDTO[]> {
@@ -86,7 +89,7 @@ export async function listDriverReportColumns(params?: {
 export async function updateColumnMapping(
   columnId: string,
   data: UpdateColumnMappingRequest
-): Promise<DriverReportColumnDTO> {
+): Promise<{ backfilledRows: number }> {
   const res = await apiClient.patch(`/driver-reports/columns/${columnId}/mapping`, data)
   return (res as any)?.data ?? res
 }
@@ -95,5 +98,35 @@ export async function batchUpdateColumnMappings(
   data: BatchMappingRequest
 ): Promise<{ updatedCount: number }> {
   const res = await apiClient.post('/driver-reports/columns/batch-mapping', data)
+  return (res as any)?.data ?? res
+}
+
+// matchPendingColumnsByName 找出目前待維護欄位中姓名與傳入姓名相符（含近似）的欄位，
+// 供新建個案後主動詢問使用者這批欄位是否也是同一人。
+export async function matchPendingColumnsByName(name: string): Promise<DriverReportColumnDTO[]> {
+  const res = await apiClient.get('/driver-reports/columns/name-matches', { params: { name } })
+  return (res as any)?.data ?? []
+}
+
+// listSubmissionReview 以匯報表列為單位列出待維護資料，一列可能同時有個案欄位與駕駛人兩種問題。
+export async function listSubmissionReview(): Promise<SubmissionReviewDTO[]> {
+  const res = await apiClient.get('/driver-reports/submissions/review')
+  return (res as any)?.data ?? []
+}
+
+// bindPendingDriver 把某個比對不到司機主檔的原始姓名綁定到指定司機，立即回填既有回報
+// 已寫入的搭乘紀錄，不需要重新上傳原始檔案。
+export async function bindPendingDriver(data: BindDriverRequest): Promise<{ affectedCount: number }> {
+  const res = await apiClient.post('/driver-reports/drivers/bind', data)
+  return (res as any)?.data ?? res
+}
+
+// getDriverReportMonthDetail 取回某份匯報表指定月份（YYYY-MM）已匯入的完整內容，
+// 供總覽頁鑽取單一月份時顯示逐日回報明細與展開後的個案搭乘紀錄。
+export async function getDriverReportMonthDetail(
+  formId: string,
+  yearMonth: string
+): Promise<DriverReportMonthDetailDTO> {
+  const res = await apiClient.get(`/driver-reports/${formId}/months/${yearMonth}`)
   return (res as any)?.data ?? res
 }

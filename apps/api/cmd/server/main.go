@@ -135,6 +135,8 @@ func main() {
 	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, nil)
 	taskSvc := taskapp.NewTaskService(taskRepo, taskScheduleReader{repo: caseRepo}, holidayRepo, notificationSvc)
 	rideSvc := rideapp.NewRideService(rideRepo, rideDriverResolver{repo: mdDriverRepo}, rideScheduleReader{repo: caseRepo}, rideAuditWriter{svc: auditSvc}, rideMissingReportProvider{svc: taskSvc})
+	opsAudit := opsAuditWriter{svc: auditSvc}
+	attendanceSvc := opsapp.NewAttendanceService(attendanceRepo, opsDriverLister{repo: mdDriverRepo}, opsAudit, holidayRepo)
 	driverReportExcel := drinfra.NewExcelAdapter()
 	driverReportSvc := drapp.NewDriverReportService(
 		drinfra.NewDriverReportRepository(pool),
@@ -143,6 +145,7 @@ func main() {
 		driverReportCaseLookup{repo: caseRepo},
 		driverReportDriverResolver{repo: mdDriverRepo},
 		driverReportRideIngestor{svc: rideSvc},
+		driverReportAttendanceRegistrar{svc: attendanceSvc},
 		driverReportAuditWriter{svc: auditSvc},
 		txRunner,
 	)
@@ -155,9 +158,7 @@ func main() {
 	})
 	holidaySvc := holidayapp.NewHolidaySyncService(holidayRepo, holidayAuditWriter{svc: auditSvc}, holidayProvider)
 	reportSvc := reportapp.NewReportService(reportRepo, excelRenderer)
-	opsAudit := opsAuditWriter{svc: auditSvc}
 	maintenanceSvc := opsapp.NewMaintenanceService(maintenanceRepo, opsVehicleLister{repo: mdVehicleRepo}, opsAudit, opsinfra.NewExcelRenderer())
-	attendanceSvc := opsapp.NewAttendanceService(attendanceRepo, opsDriverLister{repo: mdDriverRepo}, opsAudit, holidayRepo)
 	fuelSvc := opsapp.NewFuelService(fuelRepo, opsAudit)
 	dashboardSvc := reportapp.NewDashboardService(dashboardRepo, exportJobRepo)
 	caregiverExcelAdapter := caregiverinfra.NewExcelAdapter()

@@ -63,7 +63,6 @@ export interface UserDTO {
   customPermissions?: SystemPermissions | null
   lastLoginAt?: string
   createdAt?: string
-  dataPlane?: 'production' | 'demo'
 }
 
 export interface CreateUserRequest {
@@ -545,6 +544,45 @@ export interface BatchMappingRequest {
   }>
 }
 
+// 待維護資料頁籤：以匯報表列（一天一列）為單位，一列可能同時有個案欄位與駕駛人兩種問題
+export interface SubmissionReviewDTO {
+  submissionId: string
+  formTitle: string
+  vehicleName: string
+  serviceDate: string
+  caseIssues: DriverReportColumnDTO[]
+  driverIssue?: { driverNameRaw: string }
+}
+
+export interface BindDriverRequest {
+  driverNameRaw: string
+  driverId: string
+}
+
+// 總覽頁鑽取單一匯報表、單一月份時的完整內容：逐日回報明細與展開後的個案搭乘紀錄
+export interface DriverReportMonthSubmissionDTO {
+  serviceDate: string
+  driverNameRaw: string
+  remark: string
+  answers: Record<string, string>
+}
+
+export interface DriverReportMonthRideEntryDTO {
+  caseId: string
+  caseName: string
+  serviceDate: string
+  legSeq: number
+  reported: string
+  driverId?: string | null
+  driverName: string
+  vehicleId: string
+}
+
+export interface DriverReportMonthDetailDTO {
+  submissions: DriverReportMonthSubmissionDTO[]
+  rideEntries: DriverReportMonthRideEntryDTO[]
+}
+
 // 搭乘紀錄與月曆矩陣
 export interface RideSourceDTO {
   id: string
@@ -1010,6 +1048,22 @@ export interface UpsertAttendanceRequest {
   recordDate: string
   status: 'work' | 'leave' | 'sick' | 'off'
   note?: string
+}
+
+// 司機接送匯報匯入自動同步出勤時，與人工登記不一致的待維護衝突
+export interface AttendanceConflictDTO {
+  id: string
+  driverId: string
+  driverName: string
+  recordDate: string
+  existingStatus: 'work' | 'leave' | 'sick' | 'off'
+  importedStatus: 'work' | 'leave' | 'sick' | 'off'
+  status: 'pending' | 'resolved'
+  resolvedChoice?: 'keep_manual' | 'use_import'
+}
+
+export interface ResolveAttendanceConflictRequest {
+  choice: 'keep_manual' | 'use_import'
 }
 
 // 15. 車輛油資 (Fuel Logs)

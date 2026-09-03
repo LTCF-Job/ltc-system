@@ -41,7 +41,10 @@ func (r *RideRepository) ListRideSourcesForSlot(
 	return sources, rows.Err()
 }
 
-// ListCalendarCases 取得該月份有生效排班的個案與其趟次時段。
+// ListCalendarCases 取得該月份有生效排班的個案，加上「沒有排班但當月已有實際搭乘紀錄」
+// 的個案（後者以零值排班帶入，逐日推算會全部落在非應搭日，但實際紀錄仍會疊上去顯示）。
+// 有沒有排班跟有沒有被司機接送是兩回事：只要當月有搭乘紀錄關聯到這個個案，就要出現在
+// 月曆上，不能因為個案還沒設定排班就整列不見。
 //
 // effective_range 與查詢區間有交集即納入，個案是否真的要出車由 domain/calendar
 // 依 weekdays 與單位營業日逐日推算。
@@ -51,7 +54,7 @@ func (r *RideRepository) ListCalendarCases(
 	region, keyword string,
 ) ([]app.CalendarCase, error) {
 	query := `
-		SELECT c.id, c.name, c.region, c.claim_end_date,
+		SELECT c.id, c.name, COALESCE(c.region, ''), c.claim_end_date,
 		       cs.id, cs.trip_pattern, cs.weekdays, s.open_days,
 		       lower(cs.effective_range), upper(cs.effective_range)
 		FROM cases c
@@ -60,7 +63,27 @@ func (r *RideRepository) ListCalendarCases(
 		WHERE c.status = 'active'
 		  AND ($3 = '' OR c.region = $3)
 		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
-		ORDER BY c.name ASC
+
+		UNION ALL
+
+		SELECT c.id, c.name, COALESCE(c.region, ''), c.claim_end_date,
+		       '00000000-0000-0000-0000-000000000000'::uuid, 0::smallint,
+		       ARRAY[]::smallint[], ARRAY[]::smallint[],
+		       $1::date, NULL::date
+		FROM cases c
+		WHERE c.status = 'active'
+		  AND ($3 = '' OR c.region = $3)
+		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
+		  AND NOT EXISTS (
+		    SELECT 1 FROM case_schedules cs2
+		    WHERE cs2.case_id = c.id AND cs2.effective_range && daterange($1::date, $2::date, '[)')
+		  )
+		  AND EXISTS (
+		    SELECT 1 FROM ride_records rr
+		    WHERE rr.case_id = c.id AND rr.service_date >= $1::date AND rr.service_date < $2::date
+		  )
+
+		ORDER BY name ASC
 	`
 	db := pgxdb.FromContext(ctx, r.db)
 	rows, err := db.Query(ctx, query, start, end, region, keyword)
@@ -93,9 +116,17 @@ func (r *RideRepository) ListCalendarCases(
 		return cases, nil
 	}
 
+	// uuid.Nil 是「這個個案沒有排班」的佔位值（見上方 UNION 的第二段查詢），schedule_legs
+	// 不會有這個 id 的資料，查了也白查，過濾掉以免傳一個查無此類型的空佔位陣列給 pgx。
 	ids := make([]uuid.UUID, 0, len(scheduleIDs))
 	for id := range scheduleIDs {
+		if id == uuid.Nil {
+			continue
+		}
 		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return cases, nil
 	}
 
 	legRows, err := db.Query(ctx, `
@@ -143,7 +174,7 @@ func (r *RideRepository) ListRideRecordsInRange(
 		LEFT JOIN drivers d ON rr.driver_id = d.id
 		WHERE rr.service_date >= $1 AND rr.service_date < $2
 		  AND ($3 = '' OR c.region = $3)
-		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%' OR c.code ILIKE '%' || $4 || '%')
+		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
 		ORDER BY rr.service_date ASC, rr.leg_seq ASC
 	`
 	db := pgxdb.FromContext(ctx, r.db)
@@ -188,7 +219,7 @@ func (r *RideRepository) ListPendingConflicts(ctx context.Context, start, end ti
 		) veh ON true
 		WHERE rr.has_conflict = true AND rr.conflict_resolved_at IS NULL
 		  AND rr.service_date >= $1 AND rr.service_date <= $2
-		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.code ILIKE '%' || $3 || '%')
+		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%')
 		ORDER BY rr.service_date ASC, rr.leg_seq ASC
 		LIMIT $4 OFFSET $5
 	`

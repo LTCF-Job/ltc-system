@@ -107,7 +107,8 @@ export async function listDrivers(params?: {
 }
 
 export async function createDriver(data: CreateDriverRequest): Promise<DriverDTO> {
-  return apiClient.post('/drivers', data)
+  const res: any = await apiClient.post('/drivers', data)
+  return res?.data ?? res
 }
 
 export async function updateDriver(id: string, data: UpdateDriverRequest): Promise<DriverDTO> {

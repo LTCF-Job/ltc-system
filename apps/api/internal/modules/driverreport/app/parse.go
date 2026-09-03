@@ -133,7 +133,7 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 		row.ServiceDate = serviceDate.Format("2006-01-02")
 
 		if monthDeclared && !strings.HasPrefix(row.ServiceDate, monthPrefix) {
-			row.ErrorMessage = fmt.Sprintf("日期 %s 不屬於宣告匯入的 %s，請確認上傳的是該月份的檔案", row.ServiceDate, monthPrefix)
+			row.ErrorMessage = fmt.Sprintf("日期 %s 不屬於本次宣告匯入的 %s，將於所屬月份另行匯入", row.ServiceDate, monthPrefix)
 			result.Errors = append(result.Errors, ImportErrorItem{RowIndex: rowNum, Field: headerReportDate, Message: row.ErrorMessage})
 			result.ErrorRows++
 			result.PreviewRows = append(result.PreviewRows, row)
@@ -271,6 +271,20 @@ func bestCaseMatch(cleanedName string, candidates []CaseRef) (id, name string, s
 		}
 	}
 	return id, name, score
+}
+
+// matchPendingColumnsForName 從目前待維護欄位中，找出清理後姓名與傳入姓名相符（含近似）
+// 的欄位；沿用 bestCaseMatch 同一套 namenorm 評分標準，供新建個案後主動詢問使用者
+// 這批欄位是否也是同一人。
+func matchPendingColumnsForName(pending []ColumnMapping, name string) []ColumnMapping {
+	target := namenorm.Normalize(name)
+	var out []ColumnMapping
+	for _, c := range pending {
+		if namenorm.ScoreCandidate(c.CleanedName, target) > 0 {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // legSeqForDirection 把去程／回程對應到表單趟次；四趟個案的展開由 ride 模組負責。

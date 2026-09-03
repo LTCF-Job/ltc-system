@@ -127,6 +127,112 @@ func (s *RideService) IngestSubmission(ctx context.Context, formID, defaultVehic
 	return written, nil
 }
 
+// BackfillColumn 用某欄位既有回報中已存的原始儲存格文字，補寫剛完成個案對應的搭乘紀錄，
+// 不需要重新上傳原始檔案；只處理這一欄，其他欄位已寫入的搭乘來源不受影響。
+func (s *RideService) BackfillColumn(
+	ctx context.Context,
+	formID, defaultVehicleID uuid.UUID,
+	columnHeader string,
+	columnIndex int,
+	caseID uuid.UUID,
+	legSeq int16,
+) (int, error) {
+	answers, err := s.formRepo.ListSubmissionAnswersForColumn(ctx, formID, columnHeader)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list submission answers: %w", err)
+	}
+
+	written := 0
+	for _, a := range answers {
+		reported, ok := merge.ParseReportedValue(a.Value)
+		if !ok {
+			continue
+		}
+
+		sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, a.ServiceDate)
+		for _, seq := range expandLegSeqs(legSeq, sched) {
+			if err := s.formRepo.InsertRideSource(
+				ctx, a.SubmissionID, caseID, a.ServiceDate, seq, defaultVehicleID, a.DriverID, reported, columnIndex,
+			); err != nil {
+				return written, fmt.Errorf("failed to insert ride source for case %s on %s: %w",
+					caseID, a.ServiceDate.Format("2006-01-02"), err)
+			}
+			if err := s.recalculateRideRecord(ctx, caseID, a.ServiceDate, seq, defaultVehicleID, a.DriverID); err != nil {
+				return written, err
+			}
+			written++
+		}
+	}
+	return written, nil
+}
+
+// ListSubmissionsForForms 轉呼叫 repo，供 driverreport 彙整待維護清單。
+func (s *RideService) ListSubmissionsForForms(ctx context.Context, formIDs []uuid.UUID) ([]SubmissionFull, error) {
+	return s.formRepo.ListSubmissionsForForms(ctx, formIDs)
+}
+
+// ListUnmatchedDriverSubmissions 轉呼叫 repo，供 driverreport 彙整待維護清單。
+func (s *RideService) ListUnmatchedDriverSubmissions(ctx context.Context) ([]UnmatchedDriverSubmission, error) {
+	return s.formRepo.ListUnmatchedDriverSubmissions(ctx)
+}
+
+// ListSubmissionsForFormMonth 轉呼叫 repo，供 driverreport 的總覽頁鑽取單一月份的逐日回報明細。
+func (s *RideService) ListSubmissionsForFormMonth(ctx context.Context, formID uuid.UUID, monthStart, monthEnd time.Time) ([]MonthSubmissionDetail, error) {
+	return s.formRepo.ListSubmissionsForFormMonth(ctx, formID, monthStart, monthEnd)
+}
+
+// ListRideEntriesForFormMonth 轉呼叫 repo，供 driverreport 的總覽頁鑽取單一月份的逐個案搭乘紀錄。
+func (s *RideService) ListRideEntriesForFormMonth(ctx context.Context, formID uuid.UUID, monthStart, monthEnd time.Time) ([]MonthRideEntry, error) {
+	return s.formRepo.ListRideEntriesForFormMonth(ctx, formID, monthStart, monthEnd)
+}
+
+// BackfillDriver 把姓名正規化後相符、目前比對不到司機主檔的既有回報一次回填為指定
+// 司機，不需要重新上傳原始檔案；回傳實際回填的提交筆數，以及這些回報涉及的服務日期
+// （去重），供呼叫端同步司機出勤月曆。
+func (s *RideService) BackfillDriver(ctx context.Context, driverNameRaw string, driverID uuid.UUID) (int, []time.Time, error) {
+	target := namenorm.Normalize(driverNameRaw)
+	if target == "" {
+		return 0, nil, nil
+	}
+
+	unmatched, err := s.formRepo.ListUnmatchedDriverSubmissions(ctx)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to list unmatched driver submissions: %w", err)
+	}
+
+	backfilled := 0
+	seenDates := map[string]bool{}
+	var dates []time.Time
+	for _, u := range unmatched {
+		if namenorm.Normalize(u.DriverNameRaw) != target {
+			continue
+		}
+		if err := s.formRepo.UpdateSubmissionDriverID(ctx, u.SubmissionID, driverID); err != nil {
+			return backfilled, dates, fmt.Errorf("failed to update submission driver: %w", err)
+		}
+
+		sources, err := s.formRepo.ListRideSourcesForSubmission(ctx, u.SubmissionID)
+		if err != nil {
+			return backfilled, dates, fmt.Errorf("failed to list ride sources for submission: %w", err)
+		}
+		for _, src := range sources {
+			if err := s.formRepo.UpdateRideSourceDriverID(ctx, src.ID, driverID); err != nil {
+				return backfilled, dates, fmt.Errorf("failed to update ride source driver: %w", err)
+			}
+			if err := s.recalculateRideRecord(ctx, src.CaseID, src.ServiceDate, src.LegSeq, src.VehicleID, &driverID); err != nil {
+				return backfilled, dates, err
+			}
+		}
+		backfilled++
+		dateKey := u.ServiceDate.Format("2006-01-02")
+		if !seenDates[dateKey] {
+			seenDates[dateKey] = true
+			dates = append(dates, u.ServiceDate)
+		}
+	}
+	return backfilled, dates, nil
+}
+
 // ClearImportedDates 移除指定匯報表在這些服務日期已寫入的匯入資料，讓重匯成為覆蓋而非疊加。
 // 回傳刪除的提交紀錄筆數。
 //

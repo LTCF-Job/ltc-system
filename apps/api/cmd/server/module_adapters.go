@@ -252,6 +252,13 @@ func (a driverReportDriverResolver) GetByNameNormalized(ctx context.Context, nam
 	return &drapp.DriverRef{ID: d.ID, Name: d.Name}, nil
 }
 
+// driverReportAttendanceRegistrar 讓 driverreport 比對到司機時，同步該司機當天的出勤登記。
+type driverReportAttendanceRegistrar struct{ svc *opsapp.AttendanceService }
+
+func (a driverReportAttendanceRegistrar) SyncFromImport(ctx context.Context, driverID uuid.UUID, serviceDate time.Time) error {
+	return a.svc.SyncFromImport(ctx, driverID, serviceDate)
+}
+
 // driverReportRideIngestor 讓 driverreport 把每日匯報交給 ride 展開為搭乘紀錄。
 type driverReportRideIngestor struct{ svc *rideapp.RideService }
 
@@ -270,6 +277,52 @@ func (a driverReportRideIngestor) ClearImportedDates(ctx context.Context, formID
 	return a.svc.ClearImportedDates(ctx, formID, dates)
 }
 
+func (a driverReportRideIngestor) BackfillColumn(ctx context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16) (int, error) {
+	return a.svc.BackfillColumn(ctx, formID, vehicleID, columnHeader, columnIndex, caseID, legSeq)
+}
+
+func (a driverReportRideIngestor) ListSubmissionsForForms(ctx context.Context, formIDs []uuid.UUID) ([]drapp.SubmissionAnswerRow, error) {
+	rows, err := a.svc.ListSubmissionsForForms(ctx, formIDs)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]drapp.SubmissionAnswerRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, drapp.SubmissionAnswerRow{
+			SubmissionID: r.SubmissionID,
+			FormID:       r.FormID,
+			FormTitle:    r.FormTitle,
+			VehicleName:  r.VehicleName,
+			ServiceDate:  r.ServiceDate,
+			Answers:      r.Answers,
+		})
+	}
+	return out, nil
+}
+
+func (a driverReportRideIngestor) ListUnmatchedDriverSubmissions(ctx context.Context) ([]drapp.UnmatchedDriverSubmission, error) {
+	rows, err := a.svc.ListUnmatchedDriverSubmissions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]drapp.UnmatchedDriverSubmission, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, drapp.UnmatchedDriverSubmission{
+			SubmissionID:  r.SubmissionID,
+			FormID:        r.FormID,
+			FormTitle:     r.FormTitle,
+			VehicleName:   r.VehicleName,
+			ServiceDate:   r.ServiceDate,
+			DriverNameRaw: r.DriverNameRaw,
+		})
+	}
+	return out, nil
+}
+
+func (a driverReportRideIngestor) BackfillDriver(ctx context.Context, driverNameRaw string, driverID uuid.UUID) (int, []time.Time, error) {
+	return a.svc.BackfillDriver(ctx, driverNameRaw, driverID)
+}
+
 func (a driverReportRideIngestor) ListImportedMonths(ctx context.Context) ([]drapp.ImportedMonth, error) {
 	months, err := a.svc.ListImportedMonths(ctx)
 	if err != nil {
@@ -282,6 +335,44 @@ func (a driverReportRideIngestor) ListImportedMonths(ctx context.Context) ([]dra
 			YearMonth:       m.YearMonth,
 			SubmissionCount: m.SubmissionCount,
 			LastImportedAt:  m.LastImportedAt,
+		})
+	}
+	return out, nil
+}
+
+func (a driverReportRideIngestor) ListSubmissionsForFormMonth(ctx context.Context, formID uuid.UUID, monthStart, monthEnd time.Time) ([]drapp.MonthSubmissionDetail, error) {
+	rows, err := a.svc.ListSubmissionsForFormMonth(ctx, formID, monthStart, monthEnd)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]drapp.MonthSubmissionDetail, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, drapp.MonthSubmissionDetail{
+			ServiceDate:   r.ServiceDate,
+			DriverNameRaw: r.DriverNameRaw,
+			Remark:        r.Remark,
+			Answers:       r.Answers,
+		})
+	}
+	return out, nil
+}
+
+func (a driverReportRideIngestor) ListRideEntriesForFormMonth(ctx context.Context, formID uuid.UUID, monthStart, monthEnd time.Time) ([]drapp.MonthRideEntry, error) {
+	rows, err := a.svc.ListRideEntriesForFormMonth(ctx, formID, monthStart, monthEnd)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]drapp.MonthRideEntry, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, drapp.MonthRideEntry{
+			CaseID:      r.CaseID,
+			CaseName:    r.CaseName,
+			ServiceDate: r.ServiceDate,
+			LegSeq:      r.LegSeq,
+			Reported:    r.Reported,
+			DriverID:    r.DriverID,
+			DriverName:  r.DriverName,
+			VehicleID:   r.VehicleID,
 		})
 	}
 	return out, nil

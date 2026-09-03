@@ -152,12 +152,11 @@
       </template>
     </DataTablePage>
 
-    <!-- 新增/編輯司機對話框 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="editingId ? '編輯司機資料' : '新增司機'"
-      width="min(480px, calc(100vw - 32px))"
-    >
+    <!-- 新增司機對話框：跟待維護資料頁籤的「新增司機並綁定」共用同一個元件與 API -->
+    <DriverCreateDialog v-model="createDialogVisible" @created="handleDriverCreated" />
+
+    <!-- 編輯司機對話框 -->
+    <el-dialog v-model="editDialogVisible" title="編輯司機資料" width="min(480px, calc(100vw - 32px))">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
         <el-form-item label="司機姓名" prop="name">
           <el-input v-model="form.name" placeholder="請輸入姓名" />
@@ -223,7 +222,7 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
+        <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="editDialogVisible = false" />
       </template>
     </el-dialog>
 
@@ -278,9 +277,9 @@ import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
+import DriverCreateDialog from '@/components/masters/DriverCreateDialog.vue'
 import {
   listDrivers,
-  createDriver,
   updateDriver,
   deleteDriver,
   assignDriverVehicle,
@@ -296,7 +295,8 @@ const authStore = useAuthStore()
 const drivers = ref<DriverDTO[]>([])
 const allVehicles = ref<VehicleDTO[]>([])
 
-const dialogVisible = ref(false)
+const createDialogVisible = ref(false)
+const editDialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
@@ -376,16 +376,11 @@ async function handleQuickToggleActive(row: DriverDTO, newActive: boolean) {
 }
 
 function openCreateDialog() {
-  editingId.value = null
-  form.name = ''
-  form.nationalId = ''
-  form.region = 'miaoli'
-  form.phone = ''
-  form.email = ''
-  form.status = 'active'
-  form.licenseClass = null
-  form.licenseExpiryDate = null
-  dialogVisible.value = true
+  createDialogVisible.value = true
+}
+
+function handleDriverCreated() {
+  executeFetch()
 }
 
 function openEditDialog(row: any) {
@@ -398,7 +393,7 @@ function openEditDialog(row: any) {
   form.status = row.status
   form.licenseClass = row.licenseClass ?? null
   form.licenseExpiryDate = row.licenseExpiryDate ?? null
-  dialogVisible.value = true
+  editDialogVisible.value = true
 }
 
 // 一位司機同一期間只會有一台車，取目前生效的那筆指派即可
@@ -432,19 +427,14 @@ function openAssignDialog(row: any) {
 }
 
 async function handleSubmit() {
-  if (!formRef.value) return
+  if (!formRef.value || !editingId.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
     submitting.value = true
     try {
-      if (editingId.value) {
-        await updateDriver(editingId.value, form)
-        ElMessage.success('司機資料已更新')
-      } else {
-        await createDriver(form)
-        ElMessage.success('司機新增成功')
-      }
-      dialogVisible.value = false
+      await updateDriver(editingId.value!, form)
+      ElMessage.success('司機資料已更新')
+      editDialogVisible.value = false
       executeFetch()
     } finally {
       submitting.value = false

@@ -127,7 +127,7 @@
                           </span>
                         </span>
                         <span v-else-if="row.pendingColumnCount > 0" class="text-warning">
-                          已建立待維護欄位
+                          已建立待維護欄位，前往「待維護資料」完成連結後會自動寫入搭乘紀錄
                         </span>
                         <span v-else class="text-muted">沒有可寫入的搭乘資料</span>
                       </template>
@@ -170,17 +170,84 @@
 
       <el-tab-pane name="pending">
         <template #label>
-          <span>待維護資料{{ pendingColumns.length ? `（${pendingColumns.length}）` : '' }}</span>
+          <span>待維護資料{{ pendingTabCount ? `（${pendingTabCount}）` : '' }}</span>
         </template>
 
         <PageHeader
           title="待維護資料"
-          description="這些欄位在匯入時完全比對不到既有個案，請連結既有個案或建立新個案；建立時會自動帶入原始欄位解析出的姓名。"
+          description="以下每一列是一筆匯報日期的提交紀錄，展開可看到這一列有哪些欄位比對不到個案、駕駛人是否比對不到司機主檔；可連結既有資料或建立新資料。個案與司機綁定完成後系統都會立即用當初上傳的資料補寫搭乘紀錄，不需要重新上傳檔案。"
         />
 
-        <el-empty v-if="!pendingLoading && pendingColumns.length === 0" description="目前沒有待維護的欄位" />
+        <el-empty v-if="!reviewLoading && submissionReviews.length === 0" description="目前沒有待處理的匯報列" />
 
-        <el-table v-else :data="pendingColumns" v-loading="pendingLoading" max-height="600" border>
+        <el-table
+          v-else
+          :data="submissionReviews"
+          v-loading="reviewLoading"
+          row-key="submissionId"
+          max-height="600"
+          border
+        >
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="review-detail">
+                <div v-for="issue in row.caseIssues" :key="issue.id" class="review-issue-row">
+                  <div class="review-issue-desc">
+                    <el-tag size="small" type="warning">個案未比對</el-tag>
+                    <span class="raw-name">{{ issue.columnHeader }}</span>
+                    <span v-if="issue.suggestionScore" class="text-secondary small">
+                      系統推薦：{{ issue.suggestedCaseName || '無相符個案' }}
+                      (信心度: {{ (issue.suggestionScore * 100).toFixed(0) }}%)
+                    </span>
+                  </div>
+                  <div class="target-binding-box">
+                    <el-select v-model="issue.editCaseId" placeholder="搜尋個案" filterable clearable style="width: 170px">
+                      <el-option v-for="c in cases" :key="c.id" :label="c.name" :value="c.id" />
+                    </el-select>
+                    <el-select v-model="issue.editLegSeq" placeholder="趟次" style="width: 150px">
+                      <el-option v-for="leg in LEG_SEQ_OPTIONS" :key="leg.value" :value="leg.value" :label="leg.label" />
+                    </el-select>
+                    <TableRowActions>
+                      <el-button link type="primary" size="small" :disabled="!issue.editCaseId" @click="handleBindCase(issue)">
+                        確認綁定
+                      </el-button>
+                      <el-button link type="primary" size="small" @click="openQuickCreateCase(issue)">
+                        新增個案並綁定
+                      </el-button>
+                      <el-button link type="primary" size="small" @click="handleIgnoreCase(issue)">
+                        略過此欄
+                      </el-button>
+                    </TableRowActions>
+                  </div>
+                </div>
+
+                <div v-if="row.driverIssue" class="review-issue-row">
+                  <div class="review-issue-desc">
+                    <el-tag size="small" type="danger">駕駛人未比對</el-tag>
+                    <span class="raw-name">{{ row.driverIssue.driverNameRaw }}</span>
+                  </div>
+                  <div class="target-binding-box">
+                    <el-select v-model="row.editDriverId" placeholder="搜尋司機" filterable clearable style="width: 170px">
+                      <el-option v-for="d in drivers" :key="d.id" :label="d.name" :value="d.id" />
+                    </el-select>
+                    <TableRowActions>
+                      <el-button link type="primary" size="small" :disabled="!row.editDriverId" @click="handleBindDriver(row as SubmissionReviewRow)">
+                        確認綁定
+                      </el-button>
+                      <el-button link type="primary" size="small" @click="openQuickCreateDriver(row as SubmissionReviewRow)">
+                        新增司機並綁定
+                      </el-button>
+                    </TableRowActions>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </el-table-column>
+
+          <el-table-column label="服務日期" width="120">
+            <template #default="{ row }">{{ row.serviceDate }}</template>
+          </el-table-column>
+
           <el-table-column label="車輛／匯報表" min-width="180">
             <template #default="{ row }">
               <div>{{ row.vehicleName }}</div>
@@ -188,44 +255,45 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="原始欄位名稱" min-width="220">
+          <el-table-column label="待處理問題" width="150" align="center">
             <template #default="{ row }">
-              <div class="raw-name">{{ row.columnHeader }}</div>
-              <el-tag v-if="row.suggestionScore" size="small" type="warning">
-                系統推薦：{{ row.suggestedCaseName || '無相符個案' }}
-                (信心度: {{ (row.suggestionScore * 100).toFixed(0) }}%)
-              </el-tag>
+              <el-tag type="warning">{{ issueCount(row as SubmissionReviewRow) }} 個問題待處理</el-tag>
             </template>
           </el-table-column>
+        </el-table>
 
-          <!-- 趟次選項文字含「第 X 趟 (去程／回程)」7 個字，120px 會被逼縮寫成省略號，
-               故加寬到 150px 讓文字完全展開；個案選單同步收斂為 170px 維持欄位總寬平衡 -->
-          <el-table-column label="連結既有個案" min-width="340">
+        <PageHeader
+          title="出勤待維護"
+          description="以下每一列是匯報比對到的司機，當天已有跟系統匯入判斷不同的人工出勤登記；系統不會自動覆蓋人工判斷，請選擇要保留原本的人工登記，還是改採這次匯入判斷的出勤結果。"
+          class="attendance-conflict-header"
+        />
+
+        <el-empty
+          v-if="!attendanceConflictLoading && attendanceConflicts.length === 0"
+          description="目前沒有待處理的出勤衝突"
+        />
+
+        <el-table v-else :data="attendanceConflicts" v-loading="attendanceConflictLoading" row-key="id" border>
+          <el-table-column label="司機" prop="driverName" width="140" />
+          <el-table-column label="日期" prop="recordDate" width="120" />
+          <el-table-column label="人工登記狀態" width="140" align="center">
             <template #default="{ row }">
-              <div class="target-binding-box">
-                <el-select v-model="row.editCaseId" placeholder="搜尋個案" filterable clearable style="width: 170px">
-                  <el-option v-for="c in cases" :key="c.id" :label="c.name" :value="c.id" />
-                </el-select>
-                <el-select v-model="row.editLegSeq" placeholder="趟次" style="width: 150px">
-                  <el-option v-for="leg in LEG_SEQ_OPTIONS" :key="leg.value" :value="leg.value" :label="leg.label" />
-                </el-select>
-              </div>
+              <el-tag type="info" effect="plain">{{ attendanceStatusLabel(row.existingStatus) }}</el-tag>
             </template>
           </el-table-column>
-
-          <!-- 「確認綁定」「新增個案」「略過此欄」三顆各 4 字操作按鈕併排，
-               標準 220px 欄寬會被逼超出版面，故加寬到 300px -->
-          <el-table-column label="操作" width="300" align="center" fixed="right">
+          <el-table-column label="匯入判斷狀態" width="140" align="center">
+            <template #default="{ row }">
+              <el-tag type="success" effect="plain">{{ attendanceStatusLabel(row.importedStatus) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" min-width="220">
             <template #default="{ row }">
               <TableRowActions>
-                <el-button link type="primary" size="small" :disabled="!row.editCaseId" @click="handleBind(row)">
-                  確認綁定
+                <el-button link type="primary" size="small" @click="handleResolveAttendanceConflict(row as AttendanceConflictDTO, 'keep_manual')">
+                  保留人工登記
                 </el-button>
-                <el-button link type="primary" size="small" @click="openQuickCreateCase(row)">
-                  新增個案
-                </el-button>
-                <el-button link type="primary" size="small" @click="handleIgnore(row)">
-                  略過此欄
+                <el-button link type="warning" size="small" @click="handleResolveAttendanceConflict(row as AttendanceConflictDTO, 'use_import')">
+                  改採匯入結果
                 </el-button>
               </TableRowActions>
             </template>
@@ -234,33 +302,19 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 新增個案並直接綁定：帶入匯報表原始欄位解析出的姓名，補完趟次即可送出 -->
-    <el-dialog
-      v-model="quickCreateVisible"
-      title="新增個案並綁定"
-      width="min(420px, calc(100vw - 32px))"
-      destroy-on-close
-    >
-      <el-form label-width="90px">
-        <el-form-item label="個案姓名" required>
-          <el-input v-model="quickCreateForm.name" placeholder="個案姓名" />
-        </el-form-item>
-        <el-form-item label="趟次">
-          <el-select v-model="quickCreateForm.legSeq" style="width: 100%">
-            <el-option v-for="leg in LEG_SEQ_OPTIONS" :key="leg.value" :value="leg.value" :label="leg.label" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <DialogFooter
-          confirm-text="建立並綁定"
-          :loading="quickCreating"
-          :confirm-disabled="!quickCreateForm.name"
-          @confirm="handleQuickCreateAndBind"
-          @cancel="quickCreateVisible = false"
-        />
-      </template>
-    </el-dialog>
+    <!-- 新增個案並綁定：跟個案清單頁的「新增個案基本資料」共用同一個元件與 API -->
+    <CaseCreateDialog
+      v-model="quickCreateCaseVisible"
+      :prefill-name="quickCreateCaseTarget?.cleanedName"
+      @created="handleCaseCreatedFromPending"
+    />
+
+    <!-- 新增司機並綁定：跟司機管理頁的「新增司機」共用同一個元件與 API -->
+    <DriverCreateDialog
+      v-model="quickCreateDriverVisible"
+      :prefill-name="quickCreateDriverTarget?.driverIssue?.driverNameRaw"
+      @created="handleDriverCreatedFromPending"
+    />
 
     <!-- 說明與解析問題檢視彈窗（內建自訂卷軸） -->
     <el-dialog
@@ -362,30 +416,42 @@ import {
   createDriverReportForm,
   commitImportDriverReport,
   dryRunImportDriverReport,
-  listDriverReportColumns,
   listDriverReportForms,
   listDriverReportImportedMonths,
-  updateColumnMapping
+  listSubmissionReview,
+  matchPendingColumnsByName,
+  updateColumnMapping,
+  bindPendingDriver
 } from '@/api/driverReports'
-import { listCases, createCase } from '@/api/cases'
-import { listVehicles } from '@/api/masters'
+import { listAttendanceConflicts, resolveAttendanceConflict } from '@/api/attendance'
+import { listCases } from '@/api/cases'
+import { listVehicles, listDrivers } from '@/api/masters'
 import PageHeader from '@/components/PageHeader.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import CaseCreateDialog from '@/components/cases/CaseCreateDialog.vue'
+import DriverCreateDialog from '@/components/masters/DriverCreateDialog.vue'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import { toColumnDecisionPayload, type ColumnDecisionMap } from './columnDecisions'
 import { LEG_SEQ_OPTIONS } from './legOptions'
 import type {
+  AttendanceConflictDTO,
   CaseDTO,
+  DriverDTO,
   DriverReportColumnDTO,
   DriverReportFormDTO,
   DriverReportImportedMonthDTO,
   DriverReportPreviewDTO,
+  SubmissionReviewDTO,
   VehicleDTO
 } from '@/types/api'
 
-type EditableColumn = DriverReportColumnDTO & { editCaseId?: string; editLegSeq?: number }
+type EditableCaseIssue = DriverReportColumnDTO & { editCaseId?: string; editLegSeq?: number }
+type SubmissionReviewRow = Omit<SubmissionReviewDTO, 'caseIssues'> & {
+  caseIssues: EditableCaseIssue[]
+  editDriverId?: string
+}
 
 const router = useRouter()
 const activeTab = ref<'upload' | 'pending'>('upload')
@@ -788,27 +854,58 @@ async function loadCases() {
 // ---- 待維護資料 ----
 
 const cases = ref<CaseDTO[]>([])
-const pendingColumns = ref<EditableColumn[]>([])
-const pendingLoading = ref(false)
-const quickCreateVisible = ref(false)
-const quickCreating = ref(false)
-const quickCreateForm = ref<{ columnId: string; name: string; legSeq: number }>({
-  columnId: '',
-  name: '',
-  legSeq: 1
-})
+const drivers = ref<DriverDTO[]>([])
+const submissionReviews = ref<SubmissionReviewRow[]>([])
+const reviewLoading = ref(false)
+
+const quickCreateCaseVisible = ref(false)
+const quickCreateCaseTarget = ref<EditableCaseIssue | null>(null)
+const quickCreateDriverVisible = ref(false)
+const quickCreateDriverTarget = ref<SubmissionReviewRow | null>(null)
+
+const attendanceConflicts = ref<AttendanceConflictDTO[]>([])
+const attendanceConflictLoading = ref(false)
+
+const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
+  work: '出勤 (O)',
+  leave: '事假 (事)',
+  sick: '病假 (病)',
+  off: '休假 (休)'
+}
+
+function attendanceStatusLabel(status: string): string {
+  return ATTENDANCE_STATUS_LABELS[status] || status
+}
+
+function issueCount(row: SubmissionReviewRow): number {
+  return row.caseIssues.length + (row.driverIssue ? 1 : 0)
+}
+
+// pendingTabCount 是頁籤上顯示的總數字，個案／駕駛人待維護列與出勤衝突是兩個獨立區塊，
+// 各自的數量都算「待處理」，加總才是使用者實際要處理的項目數。
+const pendingTabCount = computed(() => submissionReviews.value.length + attendanceConflicts.value.length)
+
+async function loadDrivers() {
+  try {
+    const res = await listDrivers({ status: 'active', pageSize: 200 })
+    drivers.value = res.data ?? []
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入司機清單失敗，請重新整理頁面再試'))
+  }
+}
 
 // 切換至待維護頁籤時主動重新整理清單，確保顯示最新待處理項目
 async function handleTabChange(name: string | number) {
   if (name === 'pending') {
-    await fetchPending()
+    await fetchSubmissionReview()
+    await fetchAttendanceConflicts()
   }
 }
 
 // 上傳完成後若有欄位進入待維護，詢問是否直接切過去處理，比照個案管理匯入完成後的提示模式
 async function handleUploadSuccess(result: { pendingColumns: number }) {
   if (result.pendingColumns === 0) return
-  await fetchPending()
+  await fetchSubmissionReview()
   try {
     await ElMessageBox.confirm(
       `本次匯入有 ${result.pendingColumns} 個欄位找不到對應個案，已列入「待維護資料」，是否立即前往處理？`,
@@ -821,76 +918,176 @@ async function handleUploadSuccess(result: { pendingColumns: number }) {
   }
 }
 
-async function fetchPending() {
-  pendingLoading.value = true
+async function fetchSubmissionReview() {
+  reviewLoading.value = true
   try {
-    const cols = await listDriverReportColumns({ mappingStatus: 'pending' })
-    pendingColumns.value = cols.map((c) => ({
-      ...c,
-      editCaseId: c.suggestedCaseId || '',
-      editLegSeq: c.suggestedLegSeq || 1
+    const reviews = await listSubmissionReview()
+    submissionReviews.value = reviews.map((r) => ({
+      ...r,
+      caseIssues: r.caseIssues.map((c) => ({ ...c, editCaseId: c.suggestedCaseId || '', editLegSeq: c.suggestedLegSeq || 1 })),
+      editDriverId: ''
     }))
   } catch (error) {
     ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入待維護清單失敗'))
   } finally {
-    pendingLoading.value = false
+    reviewLoading.value = false
   }
 }
 
-async function handleBind(row: any) {
+async function handleBindCase(issue: EditableCaseIssue) {
   try {
-    await updateColumnMapping(row.id, {
-      caseId: row.editCaseId,
-      legSeq: row.editLegSeq,
+    const { backfilledRows } = await updateColumnMapping(issue.id, {
+      caseId: issue.editCaseId,
+      legSeq: issue.editLegSeq,
       mappingStatus: 'mapped'
     })
-    ElMessage.success(`已將「${row.columnHeader}」成功綁定`)
-    await fetchPending()
+    ElMessage.success(`已將「${issue.columnHeader}」成功綁定，補寫 ${backfilledRows} 筆搭乘紀錄`)
+    await fetchSubmissionReview()
   } catch (error) {
     ElMessage.error(resolveErrorMessage(apiErrorCode(error), '綁定失敗'))
   }
 }
 
-async function handleIgnore(row: any) {
+async function handleIgnoreCase(issue: EditableCaseIssue) {
   try {
-    await updateColumnMapping(row.id, { mappingStatus: 'ignored' })
-    ElMessage.info(`已略過「${row.columnHeader}」`)
-    await fetchPending()
+    await updateColumnMapping(issue.id, { mappingStatus: 'ignored' })
+    ElMessage.info(`已略過「${issue.columnHeader}」`)
+    await fetchSubmissionReview()
   } catch (error) {
     ElMessage.error(resolveErrorMessage(apiErrorCode(error), '略過失敗'))
   }
 }
 
-// openQuickCreateCase 帶入匯報表原始欄位解析出的姓名，讓使用者只需補趟次即可建立並直接綁定
-function openQuickCreateCase(row: any) {
-  quickCreateForm.value = { columnId: row.id, name: row.cleanedName, legSeq: row.editLegSeq || 1 }
-  quickCreateVisible.value = true
+async function fetchAttendanceConflicts() {
+  attendanceConflictLoading.value = true
+  try {
+    attendanceConflicts.value = await listAttendanceConflicts()
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入出勤待維護清單失敗'))
+  } finally {
+    attendanceConflictLoading.value = false
+  }
 }
 
-async function handleQuickCreateAndBind() {
-  quickCreating.value = true
+async function handleResolveAttendanceConflict(conflict: AttendanceConflictDTO, choice: 'keep_manual' | 'use_import') {
   try {
-    const created = await createCase({
-      name: quickCreateForm.value.name
-    })
-    cases.value = [...cases.value, created]
-    await updateColumnMapping(quickCreateForm.value.columnId, {
-      caseId: created.id,
-      legSeq: quickCreateForm.value.legSeq,
-      mappingStatus: 'mapped'
-    })
-    ElMessage.success(`已建立個案「${created.name}」並完成綁定`)
-    quickCreateVisible.value = false
-    await fetchPending()
+    await resolveAttendanceConflict(conflict.id, { choice })
+    ElMessage.success(
+      choice === 'keep_manual'
+        ? `已保留「${conflict.driverName}」${conflict.recordDate} 的人工出勤登記`
+        : `已將「${conflict.driverName}」${conflict.recordDate} 改採匯入判斷的出勤結果`
+    )
+    attendanceConflicts.value = attendanceConflicts.value.filter((c) => c.id !== conflict.id)
   } catch (error) {
-    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '新增個案或綁定失敗'))
-  } finally {
-    quickCreating.value = false
+    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '處理出勤待維護衝突失敗'))
   }
+}
+
+async function handleBindDriver(row: SubmissionReviewRow) {
+  if (!row.driverIssue || !row.editDriverId) return
+  try {
+    const { affectedCount } = await bindPendingDriver({
+      driverNameRaw: row.driverIssue.driverNameRaw,
+      driverId: row.editDriverId
+    })
+    ElMessage.success(`已完成司機綁定，共回填 ${affectedCount} 筆搭乘紀錄`)
+    await fetchSubmissionReview()
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '綁定司機失敗'))
+  }
+}
+
+// openQuickCreateCase 帶入匯報表原始欄位解析出的姓名，讓使用者只需補完其他欄位即可建立並直接綁定
+function openQuickCreateCase(issue: EditableCaseIssue) {
+  quickCreateCaseTarget.value = issue
+  quickCreateCaseVisible.value = true
+}
+
+async function handleCaseCreatedFromPending(created: CaseDTO) {
+  cases.value = [...cases.value, created]
+  const target = quickCreateCaseTarget.value
+  if (target) {
+    try {
+      const { backfilledRows } = await updateColumnMapping(target.id, {
+        caseId: created.id,
+        legSeq: target.editLegSeq || 1,
+        mappingStatus: 'mapped'
+      })
+      ElMessage.success(`已建立個案「${created.name}」並完成綁定，補寫 ${backfilledRows} 筆搭乘紀錄`)
+    } catch (error) {
+      ElMessage.error(resolveErrorMessage(apiErrorCode(error), '綁定失敗'))
+    }
+  }
+  await fetchSubmissionReview()
+  await promptRelatedCaseIssues(created, target)
+}
+
+// 新建個案後，掃描目前待維護清單裡其他姓名相符（含近似）的欄位，詢問是否一併連結到同一個案
+async function promptRelatedCaseIssues(created: CaseDTO, triggerTarget: EditableCaseIssue | null) {
+  let matches: DriverReportColumnDTO[] = []
+  try {
+    matches = await matchPendingColumnsByName(created.name)
+  } catch {
+    return
+  }
+
+  const candidates = matches.filter((m) => !triggerTarget || m.id !== triggerTarget.id)
+  if (candidates.length === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `待維護清單中還有這些欄位的姓名疑似也是「${created.name}」：${candidates.map((c) => c.columnHeader).join('、')}，是否一併連結到這個個案？`,
+      '發現疑似同一人',
+      { confirmButtonText: '一併連結', cancelButtonText: '不用，我自己處理', type: 'info' }
+    )
+  } catch {
+    return
+  }
+
+  let boundCount = 0
+  for (const m of candidates) {
+    try {
+      await updateColumnMapping(m.id, {
+        caseId: created.id,
+        legSeq: m.suggestedLegSeq || 1,
+        mappingStatus: 'mapped'
+      })
+      boundCount++
+    } catch (error) {
+      ElMessage.error(resolveErrorMessage(apiErrorCode(error), `連結「${m.columnHeader}」失敗`))
+    }
+  }
+  if (boundCount > 0) {
+    ElMessage.success(`已一併連結 ${boundCount} 個欄位到「${created.name}」`)
+    await fetchSubmissionReview()
+  }
+}
+
+function openQuickCreateDriver(row: SubmissionReviewRow) {
+  quickCreateDriverTarget.value = row
+  quickCreateDriverVisible.value = true
+}
+
+async function handleDriverCreatedFromPending(created: DriverDTO) {
+  drivers.value = [...drivers.value, created]
+  const target = quickCreateDriverTarget.value
+  if (target?.driverIssue) {
+    try {
+      const { affectedCount } = await bindPendingDriver({
+        driverNameRaw: target.driverIssue.driverNameRaw,
+        driverId: created.id
+      })
+      ElMessage.success(`已建立司機「${created.name}」並完成綁定，共回填 ${affectedCount} 筆搭乘紀錄`)
+    } catch (error) {
+      ElMessage.error(resolveErrorMessage(apiErrorCode(error), '綁定司機失敗'))
+    }
+  }
+  await fetchSubmissionReview()
 }
 
 onMounted(() => {
   void loadCases()
+  void loadDrivers()
   void loadUploadContext()
 })
 </script>
@@ -1285,5 +1482,37 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.review-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.attendance-conflict-header {
+  margin-top: 24px;
+}
+
+.review-issue-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--app-border-light, #ebeef5);
+}
+
+.review-issue-row:last-child {
+  border-bottom: none;
+}
+
+.review-issue-desc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 </style>

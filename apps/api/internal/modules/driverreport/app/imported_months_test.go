@@ -12,7 +12,7 @@ import (
 )
 
 func newImportedMonthsService(ingestor *fakeIngestor) *DriverReportService {
-	return NewDriverReportService(&stubStore{}, stubExcel{}, nil, nil, nil, ingestor, nil, nil)
+	return NewDriverReportService(&stubStore{}, stubExcel{}, nil, nil, nil, ingestor, nil, nil, nil)
 }
 
 func TestListImportedMonths_ReturnsEachFormMonthStat(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -21,11 +22,15 @@ import (
 type DriverReportServiceInterface interface {
 	ListForms(ctx context.Context) ([]app.ReportForm, error)
 	ListImportedMonths(ctx context.Context) ([]app.ImportedMonth, error)
+	GetMonthDetail(ctx context.Context, formID uuid.UUID, yearMonth string) (*app.MonthDetail, error)
 	CreateForm(ctx context.Context, vehicleID, title string) (*app.ReportForm, error)
 	DeleteForm(ctx context.Context, formID string) error
 	ListColumns(ctx context.Context, formID, mappingStatus string) ([]app.ColumnMapping, error)
-	UpdateColumnMapping(ctx context.Context, colID, status string, caseID *string, legSeq *int16) error
+	UpdateColumnMapping(ctx context.Context, colID, status string, caseID *string, legSeq *int16) (int, error)
 	BatchMapping(ctx context.Context, updates []app.ColumnMappingUpdate) (int, error)
+	MatchPendingColumnsByName(ctx context.Context, name string) ([]app.ColumnMapping, error)
+	ListSubmissionReview(ctx context.Context) ([]app.SubmissionReview, error)
+	BindPendingDriver(ctx context.Context, driverNameRaw, driverID string) (int, error)
 	TemplateExcel(ctx context.Context, formID uuid.UUID) ([]byte, string, error)
 	ParseDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, yearMonth string) (*app.PreviewResult, error)
 	CommitDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, decisions []app.ColumnDecision, yearMonth string, actor app.Actor) (*app.CommitResult, error)
@@ -69,6 +74,30 @@ func (h *DriverReportHandler) ListImportedMonths(c *gin.Context) {
 		items = append(items, toImportedMonthDTO(m))
 	}
 	httpx.RespondSuccess(c, http.StatusOK, items, nil)
+}
+
+// yearMonthPattern 驗證路徑參數格式為西元年月（例如 "2026-03"）。
+var yearMonthPattern = regexp.MustCompile(`^\d{4}-\d{2}$`)
+
+// GetMonthDetail 取得某份匯報表指定月份已匯入的完整內容：逐日回報明細與展開後的個案搭乘紀錄。
+func (h *DriverReportHandler) GetMonthDetail(c *gin.Context) {
+	formID, ok := parseFormID(c)
+	if !ok {
+		return
+	}
+
+	yearMonth := c.Param("yearMonth")
+	if !yearMonthPattern.MatchString(yearMonth) {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "月份格式錯誤，應為 YYYY-MM", nil)
+		return
+	}
+
+	detail, err := h.svc.GetMonthDetail(c.Request.Context(), formID, yearMonth)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusOK, toMonthDetailDTO(*detail), nil)
 }
 
 // CreateForm 為一台車建立匯報表。
@@ -196,16 +225,18 @@ func (h *DriverReportHandler) UpdateColumnMapping(c *gin.Context) {
 	}
 
 	colID := c.Param("id")
-	if err := h.svc.UpdateColumnMapping(c.Request.Context(), colID, req.MappingStatus, req.CaseID, req.LegSeq); err != nil {
+	backfilledRows, err := h.svc.UpdateColumnMapping(c.Request.Context(), colID, req.MappingStatus, req.CaseID, req.LegSeq)
+	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
 		return
 	}
 
 	httpx.RespondSuccess(c, http.StatusOK, gin.H{
-		"id":            colID,
-		"mappingStatus": req.MappingStatus,
-		"caseId":        req.CaseID,
-		"legSeq":        req.LegSeq,
+		"id":             colID,
+		"mappingStatus":  req.MappingStatus,
+		"caseId":         req.CaseID,
+		"legSeq":         req.LegSeq,
+		"backfilledRows": backfilledRows,
 	}, nil)
 }
 
@@ -223,6 +254,61 @@ func (h *DriverReportHandler) BatchMapping(c *gin.Context) {
 		return
 	}
 	httpx.RespondSuccess(c, http.StatusOK, gin.H{"updatedCount": updatedCount}, nil)
+}
+
+// MatchPendingColumnsByName 找出待維護欄位中姓名與傳入姓名相符（含近似）的欄位，供新
+// 建個案後主動詢問使用者這批欄位是否也是同一人。
+func (h *DriverReportHandler) MatchPendingColumnsByName(c *gin.Context) {
+	name := strings.TrimSpace(c.Query("name"))
+	if name == "" {
+		httpx.RespondSuccess(c, http.StatusOK, []FormColumnDTO{}, nil)
+		return
+	}
+
+	cols, err := h.svc.MatchPendingColumnsByName(c.Request.Context(), name)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
+		return
+	}
+
+	items := make([]FormColumnDTO, 0, len(cols))
+	for _, col := range cols {
+		items = append(items, toFormColumnDTO(col))
+	}
+	httpx.RespondSuccess(c, http.StatusOK, items, nil)
+}
+
+// ListSubmissionReview 以匯報表列為單位列出待維護資料，一列可能同時有個案欄位與駕駛
+// 人兩種問題。
+func (h *DriverReportHandler) ListSubmissionReview(c *gin.Context) {
+	reviews, err := h.svc.ListSubmissionReview(c.Request.Context())
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
+		return
+	}
+
+	items := make([]SubmissionReviewDTO, 0, len(reviews))
+	for _, r := range reviews {
+		items = append(items, toSubmissionReviewDTO(r))
+	}
+	httpx.RespondSuccess(c, http.StatusOK, items, nil)
+}
+
+// BindDriver 把某個比對不到司機主檔的原始姓名綁定到指定司機，回填既有回報已寫入的
+// 搭乘紀錄，不需要重新上傳原始檔案。
+func (h *DriverReportHandler) BindDriver(c *gin.Context) {
+	var req BindDriverRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	affected, err := h.svc.BindPendingDriver(c.Request.Context(), req.DriverNameRaw, req.DriverID)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"affectedCount": affected}, nil)
 }
 
 func parseFormID(c *gin.Context) (uuid.UUID, bool) {

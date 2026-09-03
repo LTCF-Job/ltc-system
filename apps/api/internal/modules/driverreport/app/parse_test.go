@@ -43,8 +43,8 @@ func (s *stubStore) ListColumnsWithMapping(_ context.Context, _, mappingStatus s
 	return out, nil
 }
 func (s *stubStore) UpsertColumns(context.Context, uuid.UUID, []ColumnDraft) error { return nil }
-func (s *stubStore) UpdateColumnMappingByID(context.Context, string, string, *string, *int16) error {
-	return nil
+func (s *stubStore) UpdateColumnMappingByID(context.Context, string, string, *string, *int16) (uuid.UUID, string, int, string, error) {
+	return uuid.Nil, "", 0, "", nil
 }
 func (s *stubStore) UpdateColumnMappingByHeader(context.Context, uuid.UUID, string, string, *string, *int16) error {
 	return nil
@@ -86,6 +86,7 @@ func newTestService(table [][]string, existing []ColumnMapping) *DriverReportSer
 		nil,
 		stubCases{list: []CaseRef{{ID: testCaseID, Name: "吳桂", NameNormalized: "吳桂"}}},
 		stubDrivers{known: map[string]DriverRef{"林彥衡": {ID: uuid.New(), Name: "林彥衡"}}},
+		nil,
 		nil,
 		nil,
 		nil,
@@ -184,7 +185,7 @@ func TestParseDriverReport_RowsOutsideDeclaredMonthAreErrorRowsNotWholeFileRejec
 	assert.Equal(t, 0, result.ValidRows, "sampleTable 的日期都在三月，宣告 2026-04 時沒有列落在月份內")
 	assert.Equal(t, 3, result.ErrorRows)
 	require.Len(t, result.PreviewRows, 3)
-	assert.Contains(t, result.PreviewRows[0].ErrorMessage, "不屬於宣告匯入的 2026-04")
+	assert.Contains(t, result.PreviewRows[0].ErrorMessage, "不屬於本次宣告匯入的 2026-04")
 	assert.Equal(t, "2026-03-02", result.PreviewRows[0].ServiceDate, "月份不符的列仍保留已解析出的服務日期供畫面顯示")
 }
 

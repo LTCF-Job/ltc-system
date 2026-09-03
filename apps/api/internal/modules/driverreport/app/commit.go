@@ -82,17 +82,13 @@ func (s *DriverReportService) CommitDriverReport(
 		for _, column := range preview.Columns {
 			currentHeaders[column.ColumnHeader] = struct{}{}
 		}
-		mapped := make([]ColumnMapping, 0, len(allMapped))
+		mappedCount := 0
 		for _, column := range allMapped {
 			if _, found := currentHeaders[column.ColumnHeader]; found {
-				mapped = append(mapped, column)
+				mappedCount++
 			}
 		}
-		if len(mapped) == 0 {
-			// 僅保存本次欄位的 pending 對應；舊檔的 mapped 欄位不可套用到新檔並改寫搭乘資料。
-			return nil
-		}
-		result.MappedColumns = len(mapped)
+		result.MappedColumns = mappedCount
 
 		if err := s.clearPreviousImport(txCtx, formID, importable, monthStart, monthDeclared); err != nil {
 			return err
@@ -100,21 +96,32 @@ func (s *DriverReportService) CommitDriverReport(
 
 		submittedAt := time.Now().UTC()
 		for _, row := range importable {
+			// 保留這一列所有欄位的原始值，含尚未對應個案的欄位：日後在待維護頁面完成
+			// 綁定時，直接用這裡存的 form_submissions 回填搭乘紀錄，不必重新上傳檔案。
 			answers := map[string]string{}
-			for _, col := range mapped {
+			for _, col := range preview.Columns {
 				answers[col.ColumnHeader] = cellAt(rows[row.preview.RowIndex-1], col.ColumnIndex-1)
 			}
 
+			driverID := parseOptionalUUID(row.preview.DriverID)
 			written, err := s.rideIngestor.IngestSubmission(txCtx, formID, form.VehicleID, Submission{
 				ServiceDate: row.serviceDate,
 				SubmittedAt: submittedAt,
 				DriverRaw:   row.preview.DriverRaw,
-				DriverID:    parseOptionalUUID(row.preview.DriverID),
+				DriverID:    driverID,
 				Remark:      row.preview.Remark,
 				Answers:     answers,
 			})
 			if err != nil {
 				return fmt.Errorf("第 %d 列寫入搭乘紀錄失敗：%w", row.preview.RowIndex, err)
+			}
+
+			// 比對到司機時順便同步當天出勤月曆；比對不到的維持既有「駕駛人待維護」流程，
+			// 不在這裡處理。
+			if driverID != nil {
+				if err := s.attendanceRegistrar.SyncFromImport(txCtx, *driverID, row.serviceDate); err != nil {
+					return fmt.Errorf("第 %d 列同步司機出勤失敗：%w", row.preview.RowIndex, err)
+				}
 			}
 
 			result.ImportedRows++

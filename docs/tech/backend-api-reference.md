@@ -83,8 +83,11 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/driver-reports/:id/import?dryRun=&yearMonth=` | staff, admin | 上傳匯報檔；`dryRun=true`（預設）回傳預覽，`dryRun=false` 正式寫入。`yearMonth`（`YYYY-MM`）選填，宣告後整月覆蓋並拒收該月以外的日期 |
 | GET | `/driver-reports/imported-months` | viewer, staff, admin | 每份匯報表各月份已匯入的筆數與最後匯入時間 |
 | GET | `/driver-reports/columns` | viewer, staff, admin | 欄位清單與對應狀態（可帶 `formId`、`mappingStatus`） |
-| PATCH | `/driver-reports/columns/:id/mapping` | staff, admin | 設定單一欄位對應到哪個個案的哪一趟 |
+| GET | `/driver-reports/columns/name-matches?name=` | viewer, staff, admin | 找出目前待維護欄位中姓名與傳入姓名相符（含近似）的欄位 |
+| PATCH | `/driver-reports/columns/:id/mapping` | staff, admin | 設定單一欄位對應到哪個個案的哪一趟；剛從待維護變成已對應時同一交易內立即回填搭乘紀錄 |
 | POST | `/driver-reports/columns/batch-mapping` | staff, admin | 批次設定欄位對應 |
+| GET | `/driver-reports/submissions/review` | viewer, staff, admin | 以匯報表列（一天一筆提交）為單位列出待維護資料，一列可能同時有個案欄位與駕駛人兩種問題 |
+| POST | `/driver-reports/drivers/bind` | staff, admin | 把某個比對不到司機主檔的原始姓名綁定到指定司機，立即回填所有正規化姓名相符的既有回報 |
 
 匯入檔的欄位順序固定為：民國日期、駕駛人、各個案趟次欄、備註。個案趟次欄只接受
 「有坐」「沒坐」，其餘（含空白）視為未回報不建立紀錄。`dryRun=false` 時可另外以
@@ -165,6 +168,8 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 |---|---|---|
 | GET | `/attendance` | viewer, staff, admin |
 | POST | `/attendance` | staff, admin |
+| GET | `/attendance/conflicts` | viewer, staff, admin |
+| POST | `/attendance/conflicts/:id/resolve` | staff, admin |
 | GET | `/fuel-logs` | viewer, staff, admin |
 | POST | `/fuel-logs` | staff, admin |
 | PATCH | `/fuel-logs/:id` | staff, admin |

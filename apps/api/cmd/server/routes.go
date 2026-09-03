@@ -154,9 +154,13 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *de
 		apiV1.GET("/driver-reports", auth.RequirePermission(perm, customPerm, "driver_reports", "view"), h.driverReport.ListForms)
 		apiV1.POST("/driver-reports", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.CreateForm)
 		apiV1.GET("/driver-reports/imported-months", auth.RequirePermission(perm, customPerm, "driver_reports", "view"), h.driverReport.ListImportedMonths)
+		apiV1.GET("/driver-reports/:id/months/:yearMonth", auth.RequirePermission(perm, customPerm, "driver_reports", "view"), h.driverReport.GetMonthDetail)
 		apiV1.GET("/driver-reports/columns", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "view"), h.driverReport.ListColumns)
+		apiV1.GET("/driver-reports/columns/name-matches", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "view"), h.driverReport.MatchPendingColumnsByName)
 		apiV1.PATCH("/driver-reports/columns/:id/mapping", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.UpdateColumnMapping)
 		apiV1.POST("/driver-reports/columns/batch-mapping", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.BatchMapping)
+		apiV1.GET("/driver-reports/submissions/review", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "view"), h.driverReport.ListSubmissionReview)
+		apiV1.POST("/driver-reports/drivers/bind", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.BindDriver)
 		apiV1.DELETE("/driver-reports/:id", auth.RequirePermission(perm, customPerm, "driver_reports", "delete"), h.driverReport.DeleteForm)
 		apiV1.GET("/driver-reports/:id/template", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.DownloadTemplate)
 		apiV1.POST("/driver-reports/:id/import", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.ImportExcel)
@@ -210,6 +214,9 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, demoGuard *de
 		// 12. 司機出勤與請假登記 (B6.3)
 		apiV1.GET("/attendance", auth.RequirePermission(perm, customPerm, "attendance_fuel", "view"), h.attendance.GetMonthAttendance)
 		apiV1.POST("/attendance", auth.RequirePermission(perm, customPerm, "attendance_fuel", "edit"), h.attendance.Upsert)
+		// 司機接送匯報匯入自動同步出勤時，與人工登記不一致的待維護衝突
+		apiV1.GET("/attendance/conflicts", auth.RequirePermission(perm, customPerm, "attendance_fuel", "view"), h.attendance.ListConflicts)
+		apiV1.POST("/attendance/conflicts/:id/resolve", auth.RequirePermission(perm, customPerm, "attendance_fuel", "edit"), h.attendance.ResolveConflict)
 
 		// 13. 車輛油資管理 (B6.3)
 		apiV1.GET("/fuel-logs", auth.RequirePermission(perm, customPerm, "attendance_fuel", "view"), h.fuel.List)

@@ -331,55 +331,8 @@
       </template>
     </ImportPreviewDialog>
 
-    <!-- 新增個案彈窗 -->
-    <el-dialog v-model="createDialogVisible" title="新增個案基本資料" width="min(600px, calc(100vw - 32px))">
-      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="110px" class="dialog-scroll-form">
-        <el-form-item label="個案姓名" prop="name">
-          <el-input v-model="createForm.name" placeholder="請輸入姓名（含罕用字）" />
-        </el-form-item>
-        <el-form-item label="身分證字號" prop="nationalId">
-          <el-input v-model="createForm.nationalId" placeholder="1 碼英文字母 + 9 碼數字" />
-        </el-form-item>
-        <el-form-item label="申報區域" prop="region">
-          <el-select
-            v-model="createForm.region"
-            placeholder="請選擇區域"
-            filterable
-            style="width: 100%"
-          >
-            <el-option
-              v-for="(label, key) in REGION_LABELS"
-              :key="key"
-              :label="label"
-              :value="key"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="住家地址" prop="homeAddress">
-          <el-input v-model="createForm.homeAddress" placeholder="請輸入住家地址" />
-        </el-form-item>
-        <el-form-item label="服務類別" prop="serviceCategory">
-          <el-radio-group v-model="createForm.serviceCategory">
-            <el-radio :value="1">1. 補助</el-radio>
-            <el-radio :value="2">2. 自費</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="服務使用類型" prop="serviceUsageType">
-          <el-select v-model="createForm.serviceUsageType" placeholder="未選擇" clearable style="width: 100%">
-            <el-option :value="1" label="1. 社區式長照機構" />
-            <el-option :value="2" label="2. 社區服務據點(不含身障類)" />
-            <el-option :value="3" label="3. 輔具中心" />
-            <el-option :value="4" label="4. 身障日間照顧服務" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="備註" prop="remarks">
-          <el-input v-model="createForm.remarks" type="textarea" :rows="2" placeholder="選填" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <DialogFooter :loading="saving" @confirm="handleCreateCase" @cancel="createDialogVisible = false" />
-      </template>
-    </el-dialog>
+    <!-- 新增個案彈窗：跟待維護資料頁籤的「新增個案並綁定」共用同一個元件與 API -->
+    <CaseCreateDialog v-model="createDialogVisible" @created="handleCaseCreated" />
 
     <!-- 匯出個案資料：勾選欲匯出的個案，欄位維持固定申報格式 -->
     <CaseSelectDialog
@@ -403,9 +356,9 @@ import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import CaseSelectDialog from '@/components/CaseSelectDialog.vue'
 import VehicleFormFields from '@/components/VehicleFormFields.vue'
+import CaseCreateDialog from '@/components/cases/CaseCreateDialog.vue'
 import {
   listCases,
-  createCase,
   updateCase,
   deleteCase,
   downloadCaseImportTemplate,
@@ -429,7 +382,7 @@ import {
   type TripPattern,
   type ServiceUsageType
 } from '@/types/domain'
-import type { CaseDTO, CreateCaseRequest, CreateVehicleRequest, SiteDTO, VehicleDTO } from '@/types/api'
+import type { CaseDTO, CreateVehicleRequest, SiteDTO, VehicleDTO } from '@/types/api'
 
 // 匯入預覽的生日僅供人工核對，改用民國年顯示；後端仍以西元 ISO 日期解析與儲存
 function formatRocBirthDate(birthDate?: string): string {
@@ -585,51 +538,15 @@ function handleImportSuccess() {
     })
 }
 
-// 新增個案表單
+// 新增個案彈窗：欄位、驗證與送出邏輯都在 CaseCreateDialog 元件內，這裡只管開關與成功後的收尾
 const createDialogVisible = ref(false)
-const saving = ref(false)
-const createFormRef = ref<FormInstance>()
-const createForm = reactive<CreateCaseRequest>({
-  name: '',
-  nationalId: '',
-  region: 'miaoli',
-  homeAddress: '',
-  serviceCategory: undefined,
-  serviceUsageType: undefined,
-  status: 'active',
-  remarks: ''
-})
-
-// 除姓名外全部欄位選填：身分證字號、居住地、區域不再是硬性阻擋條件
-const createRules = {
-  name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }]
-}
 
 function openCreateDialog() {
-  createForm.name = ''
-  createForm.nationalId = ''
-  createForm.homeAddress = ''
-  createForm.region = 'miaoli'
-  createForm.serviceCategory = undefined
-  createForm.serviceUsageType = undefined
-  createForm.remarks = ''
   createDialogVisible.value = true
 }
 
-async function handleCreateCase() {
-  if (!createFormRef.value) return
-  await createFormRef.value.validate(async (valid) => {
-    if (!valid) return
-    saving.value = true
-    try {
-      await createCase(createForm)
-      ElMessage.success('個案建立成功')
-      createDialogVisible.value = false
-      executeFetch()
-    } finally {
-      saving.value = false
-    }
-  })
+function handleCaseCreated() {
+  executeFetch()
 }
 
 // 待維護頁籤

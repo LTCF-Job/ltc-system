@@ -31,8 +31,83 @@ func (stubAttendanceStore) GetMonthRecords(context.Context, time.Time, time.Time
 	return nil, nil
 }
 
-func (stubAttendanceStore) Upsert(_ context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string) (*AttendanceRecord, error) {
-	return &AttendanceRecord{ID: uuid.New(), DriverID: driverID, RecordDate: recordDate, Status: status, Note: note}, nil
+func (stubAttendanceStore) GetOne(context.Context, uuid.UUID, time.Time) (*AttendanceRecord, error) {
+	return nil, nil
+}
+
+func (stubAttendanceStore) Upsert(_ context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string, source string) (*AttendanceRecord, error) {
+	return &AttendanceRecord{ID: uuid.New(), DriverID: driverID, RecordDate: recordDate, Status: status, Note: note, Source: source}, nil
+}
+
+func (stubAttendanceStore) UpsertConflict(context.Context, uuid.UUID, time.Time, string, string) error {
+	return nil
+}
+
+func (stubAttendanceStore) ListConflicts(context.Context, string) ([]AttendanceImportConflict, error) {
+	return nil, nil
+}
+
+func (stubAttendanceStore) GetConflict(context.Context, uuid.UUID) (*AttendanceImportConflict, error) {
+	return nil, nil
+}
+
+func (stubAttendanceStore) ResolveConflict(context.Context, uuid.UUID, string, *uuid.UUID) error {
+	return nil
+}
+
+// recordingAttendanceStore 是可設定既有紀錄的 fake，供 SyncFromImport／ResolveConflict
+// 的分支邏輯測試斷言實際寫入了什麼。
+type recordingAttendanceStore struct {
+	existing      *AttendanceRecord
+	conflicts     map[uuid.UUID]*AttendanceImportConflict
+	upsertCalls   []AttendanceRecord
+	conflictCalls []AttendanceImportConflict
+	resolveCalls  []uuid.UUID
+}
+
+func (s *recordingAttendanceStore) GetMonthRecords(context.Context, time.Time, time.Time, *uuid.UUID) ([]AttendanceRecord, error) {
+	return nil, nil
+}
+
+func (s *recordingAttendanceStore) GetOne(context.Context, uuid.UUID, time.Time) (*AttendanceRecord, error) {
+	return s.existing, nil
+}
+
+func (s *recordingAttendanceStore) Upsert(_ context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string, source string) (*AttendanceRecord, error) {
+	item := &AttendanceRecord{ID: uuid.New(), DriverID: driverID, RecordDate: recordDate, Status: status, Note: note, Source: source}
+	s.upsertCalls = append(s.upsertCalls, *item)
+	return item, nil
+}
+
+func (s *recordingAttendanceStore) UpsertConflict(_ context.Context, driverID uuid.UUID, recordDate time.Time, existingStatus, importedStatus string) error {
+	s.conflictCalls = append(s.conflictCalls, AttendanceImportConflict{
+		DriverID: driverID, RecordDate: recordDate, ExistingStatus: existingStatus, ImportedStatus: importedStatus, Status: "pending",
+	})
+	return nil
+}
+
+func (s *recordingAttendanceStore) ListConflicts(context.Context, string) ([]AttendanceImportConflict, error) {
+	out := make([]AttendanceImportConflict, 0, len(s.conflicts))
+	for _, c := range s.conflicts {
+		out = append(out, *c)
+	}
+	return out, nil
+}
+
+func (s *recordingAttendanceStore) GetConflict(_ context.Context, id uuid.UUID) (*AttendanceImportConflict, error) {
+	if s.conflicts == nil {
+		return nil, nil
+	}
+	return s.conflicts[id], nil
+}
+
+func (s *recordingAttendanceStore) ResolveConflict(_ context.Context, id uuid.UUID, choice string, actorID *uuid.UUID) error {
+	s.resolveCalls = append(s.resolveCalls, id)
+	if c, ok := s.conflicts[id]; ok {
+		c.Status = "resolved"
+		c.ResolvedChoice = &choice
+	}
+	return nil
 }
 
 type stubHolidayReader struct{}

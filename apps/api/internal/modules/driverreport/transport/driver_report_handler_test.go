@@ -29,11 +29,16 @@ type stubService struct {
 	parseErr         error
 	importedMonths   []app.ImportedMonth
 	columns          []app.ColumnMapping
+	monthDetail      *app.MonthDetail
+	monthDetailErr   error
 }
 
 func (s *stubService) ListForms(context.Context) ([]app.ReportForm, error) { return nil, nil }
 func (s *stubService) ListImportedMonths(context.Context) ([]app.ImportedMonth, error) {
 	return s.importedMonths, nil
+}
+func (s *stubService) GetMonthDetail(context.Context, uuid.UUID, string) (*app.MonthDetail, error) {
+	return s.monthDetail, s.monthDetailErr
 }
 func (s *stubService) CreateForm(context.Context, string, string) (*app.ReportForm, error) {
 	return nil, nil
@@ -48,10 +53,19 @@ func (s *stubService) ListColumns(_ context.Context, formID, mappingStatus strin
 	}
 	return matched, nil
 }
-func (s *stubService) UpdateColumnMapping(context.Context, string, string, *string, *int16) error {
-	return nil
+func (s *stubService) UpdateColumnMapping(context.Context, string, string, *string, *int16) (int, error) {
+	return 0, nil
 }
 func (s *stubService) BatchMapping(context.Context, []app.ColumnMappingUpdate) (int, error) {
+	return 0, nil
+}
+func (s *stubService) MatchPendingColumnsByName(context.Context, string) ([]app.ColumnMapping, error) {
+	return nil, nil
+}
+func (s *stubService) ListSubmissionReview(context.Context) ([]app.SubmissionReview, error) {
+	return nil, nil
+}
+func (s *stubService) BindPendingDriver(context.Context, string, string) (int, error) {
 	return 0, nil
 }
 func (s *stubService) TemplateExcel(context.Context, uuid.UUID) ([]byte, string, error) {
@@ -80,6 +94,7 @@ func newTestRouter(svc *stubService) *gin.Engine {
 	r.GET("/api/v1/driver-reports/imported-months", h.ListImportedMonths)
 	r.GET("/api/v1/driver-reports/columns", h.ListColumns)
 	r.GET("/api/v1/driver-reports/:id/template", h.DownloadTemplate)
+	r.GET("/api/v1/driver-reports/:id/months/:yearMonth", h.GetMonthDetail)
 	r.DELETE("/api/v1/driver-reports/:id", h.DeleteForm)
 	r.POST("/api/v1/driver-reports/:id/import", h.ImportExcel)
 	return r
@@ -267,6 +282,54 @@ func TestListImportedMonths_NoDataIsAnEmptyArray(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), `"data":[]`)
+}
+
+func TestGetMonthDetail_ReturnsSubmissionsAndRideEntries(t *testing.T) {
+	formID := uuid.New()
+	caseID := uuid.New()
+	svc := &stubService{monthDetail: &app.MonthDetail{
+		Submissions: []app.MonthSubmissionDetail{
+			{ServiceDate: time.Date(2026, 3, 5, 0, 0, 0, 0, time.UTC), DriverNameRaw: "王大明", Remark: "無", Answers: map[string]string{"欄位A": "V"}},
+		},
+		RideEntries: []app.MonthRideEntry{
+			{CaseID: caseID, CaseName: "陳小華", ServiceDate: time.Date(2026, 3, 5, 0, 0, 0, 0, time.UTC), LegSeq: 1, Reported: "boarded"},
+		},
+	}}
+	r := newTestRouter(svc)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/driver-reports/"+formID.String()+"/months/2026-03", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var body struct {
+		Data MonthDetailDTO `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Len(t, body.Data.Submissions, 1)
+	assert.Equal(t, "2026-03-05", body.Data.Submissions[0].ServiceDate)
+	assert.Equal(t, "王大明", body.Data.Submissions[0].DriverNameRaw)
+	require.Len(t, body.Data.RideEntries, 1)
+	assert.Equal(t, "陳小華", body.Data.RideEntries[0].CaseName)
+	assert.Equal(t, caseID.String(), body.Data.RideEntries[0].CaseID)
+}
+
+func TestGetMonthDetail_RejectsMalformedYearMonth(t *testing.T) {
+	r := newTestRouter(&stubService{})
+	formID := uuid.New().String()
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/driver-reports/"+formID+"/months/not-a-month", nil))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestGetMonthDetail_RejectsMalformedFormID(t *testing.T) {
+	r := newTestRouter(&stubService{})
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/driver-reports/not-a-uuid/months/2026-03", nil))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestListColumns_FilterByStatusWithoutFormID(t *testing.T) {

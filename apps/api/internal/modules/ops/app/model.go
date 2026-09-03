@@ -15,8 +15,24 @@ type AttendanceRecord struct {
 	RecordDate time.Time
 	Status     string // work, leave, sick, off
 	Note       *string
+	Source     string // manual, import
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+// AttendanceImportConflict 代表匯報匯入比對到司機出勤，但當天已有人工登記且狀態不同，
+// 需要使用者決定要保留人工登記還是改採匯入結果。
+type AttendanceImportConflict struct {
+	ID             uuid.UUID
+	DriverID       uuid.UUID
+	DriverName     string
+	RecordDate     time.Time
+	ExistingStatus string
+	ImportedStatus string
+	Status         string // pending, resolved
+	ResolvedChoice *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // FuelLog 代表一筆油資紀錄。
@@ -95,7 +111,17 @@ type VehicleLister interface {
 // AttendanceStore 定義司機出勤紀錄的讀寫邊界。
 type AttendanceStore interface {
 	GetMonthRecords(ctx context.Context, startDate, endDate time.Time, driverID *uuid.UUID) ([]AttendanceRecord, error)
-	Upsert(ctx context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string) (*AttendanceRecord, error)
+	// GetOne 查詢單一司機單日的出勤紀錄；不存在時回傳 nil, nil。
+	GetOne(ctx context.Context, driverID uuid.UUID, recordDate time.Time) (*AttendanceRecord, error)
+	// Upsert 寫入或更新一筆出勤紀錄，source 標示是人工登記(manual)還是匯入同步(import)。
+	Upsert(ctx context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string, source string) (*AttendanceRecord, error)
+	// UpsertConflict 記錄一筆匯入與人工登記不一致的待維護衝突；同一司機同一天已有未解決的
+	// 衝突時更新內容，已解決但人工狀態未再變動時維持已解決，不重複打擾使用者。
+	UpsertConflict(ctx context.Context, driverID uuid.UUID, recordDate time.Time, existingStatus, importedStatus string) error
+	ListConflicts(ctx context.Context, status string) ([]AttendanceImportConflict, error)
+	GetConflict(ctx context.Context, id uuid.UUID) (*AttendanceImportConflict, error)
+	// ResolveConflict 把一筆待維護衝突標記為已解決；choice 為 keep_manual 或 use_import。
+	ResolveConflict(ctx context.Context, id uuid.UUID, choice string, actorID *uuid.UUID) error
 }
 
 // HolidayReader 提供出勤月曆判斷休假日所需之最小介面。

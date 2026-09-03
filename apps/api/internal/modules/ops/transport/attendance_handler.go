@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -38,6 +39,46 @@ func (h *AttendanceHandler) GetMonthAttendance(c *gin.Context) {
 	}
 
 	httpx.RespondSuccess(c, http.StatusOK, report, nil)
+}
+
+// ListConflicts 查詢目前待處理的出勤待維護衝突（匯入結果與人工登記不一致）。
+func (h *AttendanceHandler) ListConflicts(c *gin.Context) {
+	conflicts, err := h.attendanceSvc.ListConflicts(c.Request.Context())
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusOK, conflicts, nil)
+}
+
+// ResolveConflict 依使用者選擇解決一筆出勤待維護衝突。
+func (h *AttendanceHandler) ResolveConflict(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "衝突編號格式錯誤", nil)
+		return
+	}
+
+	var req struct {
+		Choice string `json:"choice" binding:"required,oneof=keep_manual use_import"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+	resolved, err := h.attendanceSvc.ResolveConflict(c.Request.Context(), id, req.Choice, &actorID, &actorRole)
+	if err != nil {
+		if errors.Is(err, app.ErrAttendanceConflictNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "", nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusOK, resolved, nil)
 }
 
 // Upsert 登記單日出勤狀態。
