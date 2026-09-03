@@ -2,7 +2,7 @@
   <div class="site-list-view">
     <DataTablePage
       title="單位管理"
-      :max-width="940"
+      :max-width="1020"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -37,6 +37,18 @@
           />
         </el-select>
 
+        <el-select
+          v-model="filters.status"
+          placeholder="狀態"
+          clearable
+          style="width: 130px"
+          @change="handleSearch"
+        >
+          <el-option label="全部狀態" value="" />
+          <el-option label="啟用" value="active" />
+          <el-option label="停用" value="inactive" />
+        </el-select>
+
         <el-button type="primary" @click="handleSearch">查詢</el-button>
         <el-button @click="handleReset">重設</el-button>
       </template>
@@ -61,10 +73,39 @@
               <span>{{ REGION_LABELS[row.region as Region] || row.region }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="address" label="單位地址" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="address" label="單位地址" min-width="180" class-name="site-address-col" show-overflow-tooltip />
           <el-table-column label="開放時間" width="260" class-name="open-days-column">
             <template #default="{ row }">
               {{ row.openDays?.map((d: number) => `週${'一二三四五六日'[d-1]}`).join('、') || '未設定' }}
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="status" label="狀態" width="130" align="center">
+            <template #default="{ row }">
+              <el-tooltip
+                v-if="authStore.hasPermission('masters_sites', 'edit')"
+                :content="row.status === 'active' ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
+                placement="top"
+                :show-after="300"
+              >
+                <button
+                  type="button"
+                  class="status-toggle-pill"
+                  :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+                  @click="handleToggleStatus(row as any, row.status !== 'active')"
+                >
+                  <span class="status-indicator-dot"></span>
+                  <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
+                </button>
+              </el-tooltip>
+              <div
+                v-else
+                class="status-toggle-pill is-readonly"
+                :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+              >
+                <span class="status-indicator-dot"></span>
+                <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
+              </div>
             </template>
           </el-table-column>
 
@@ -143,6 +184,22 @@
             <el-checkbox :value="7">週日</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
+        <el-form-item label="狀態" prop="status">
+          <el-radio-group v-model="form.status" class="status-radio-group">
+            <el-radio-button value="active">
+              <div class="radio-pill active-pill">
+                <span class="radio-dot"></span>
+                <span>啟用</span>
+              </div>
+            </el-radio-button>
+            <el-radio-button value="inactive">
+              <div class="radio-pill inactive-pill">
+                <span class="radio-dot"></span>
+                <span>停用</span>
+              </div>
+            </el-radio-button>
+          </el-radio-group>
+        </el-form-item>
       </el-form>
       <template #footer>
         <DialogFooter
@@ -159,6 +216,7 @@
 import { ref, reactive } from 'vue'
 import { Plus, Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
@@ -179,8 +237,27 @@ const form = reactive<CreateSiteRequest>({
   name: '',
   region: 'miaoli',
   address: '',
-  openDays: [1, 2, 3, 4, 5]
+  openDays: [1, 2, 3, 4, 5],
+  status: 'active'
 })
+
+async function handleToggleStatus(row: SiteDTO, newActive: boolean) {
+  // 快速切換狀態仍送出完整單位內容：更新 API 是整筆覆寫，只送 status 會清掉其餘欄位
+  const newStatus = newActive ? 'active' : 'inactive'
+  try {
+    await updateSite(row.id, {
+      name: row.name,
+      region: row.region,
+      address: row.address,
+      openDays: row.openDays,
+      status: newStatus
+    })
+    row.status = newStatus
+    ElMessage.success(`已將單位「${row.name}」切換為 ${newActive ? '啟用' : '停用'}`)
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
+  }
+}
 
 const rules = {
   name: [{ required: true, message: '請輸入單位名稱', trigger: 'blur' }],
@@ -202,14 +279,16 @@ const {
 } = useListQuery({
   defaultFilters: {
     q: '',
-    region: ''
+    region: '',
+    status: ''
   },
   onFetch: async () => {
     const res = await listSites({
       page: page.value,
       pageSize: pageSize.value,
       q: filters.q,
-      region: filters.region
+      region: filters.region,
+      status: filters.status || undefined
     })
     sites.value = res.data
     total.value = res.meta.total
@@ -222,6 +301,7 @@ function openCreateDialog() {
   form.region = 'miaoli'
   form.address = ''
   form.openDays = [1, 2, 3, 4, 5]
+  form.status = 'active'
   dialogVisible.value = true
 }
 
@@ -231,6 +311,7 @@ function openEditDialog(row: any) {
   form.region = row.region
   form.address = row.address
   form.openDays = [...row.openDays]
+  form.status = row.status || 'active'
   dialogVisible.value = true
 }
 
@@ -298,5 +379,10 @@ executeFetch()
 
 :deep(.site-name-col .cell) {
   white-space: nowrap;
+  min-width: 140px;
+}
+
+:deep(.site-address-col .cell) {
+  min-width: 180px;
 }
 </style>

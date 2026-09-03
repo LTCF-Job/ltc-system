@@ -286,29 +286,29 @@
 
           <!-- 油資表格 -->
           <el-table :data="fuelLogs" border stripe size="small" table-layout="auto" style="width: 100%;">
-            <el-table-column prop="fuelDate" label="加油日期" min-width="120" align="center">
+            <el-table-column prop="fuelDate" label="加油日期" min-width="120" align="center" class-name="fuel-date-col">
               <template #default="{ row }">
                 <span>{{ row.fuelDate?.slice(0, 10) }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="vehicleName" label="車輛名稱" min-width="120" class-name="fuel-vehicle-col" />
-            <el-table-column prop="plateNo" label="車牌號碼" min-width="120" align="center" />
+            <el-table-column prop="plateNo" label="車牌號碼" min-width="120" align="center" class-name="fuel-plate-col" />
             <el-table-column prop="driverName" label="加油司機" min-width="100" align="center" class-name="fuel-driver-col">
               <template #default="{ row }">
                 {{ row.driverName || '-' }}
               </template>
             </el-table-column>
-            <el-table-column prop="liters" label="加油公升數" min-width="130" align="right">
+            <el-table-column prop="liters" label="加油公升數" min-width="130" align="right" class-name="fuel-liters-col">
               <template #default="{ row }">
                 {{ Number(row.liters).toFixed(2) }} L
               </template>
             </el-table-column>
-            <el-table-column prop="cost" label="花費金額" min-width="130" align="right">
+            <el-table-column prop="cost" label="花費金額" min-width="130" align="right" class-name="fuel-cost-col">
               <template #default="{ row }">
                 <span class="font-bold">${{ Number(row.cost).toLocaleString() }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="發票/收據憑證" min-width="130" align="center">
+            <el-table-column label="發票/收據憑證" min-width="130" align="center" class-name="fuel-receipt-col">
               <template #default="{ row }">
                 <el-link
                   v-if="row.receiptUrl"
@@ -594,8 +594,8 @@ const fuelRules = {
 async function fetchOptions() {
   try {
     const [dRes, vRes] = await Promise.all([
-      listDrivers({ pageSize: 100 }),
-      listVehicles({ pageSize: 100 })
+      listDrivers({ status: 'active', pageSize: 100 }),
+      listVehicles({ status: 'active', pageSize: 100 })
     ])
     drivers.value = dRes.data
     vehicles.value = vRes.data
@@ -1139,9 +1139,39 @@ onMounted(async () => {
   }
 }
 
-:deep(.fuel-vehicle-col .cell),
+:deep(.fuel-date-col .cell) {
+  white-space: nowrap;
+  min-width: 120px;
+}
+
+:deep(.fuel-vehicle-col .cell) {
+  white-space: nowrap;
+  min-width: 120px;
+}
+
+:deep(.fuel-plate-col .cell) {
+  white-space: nowrap;
+  min-width: 120px;
+}
+
 :deep(.fuel-driver-col .cell) {
   white-space: nowrap;
+  min-width: 100px;
+}
+
+:deep(.fuel-liters-col .cell) {
+  white-space: nowrap;
+  min-width: 130px;
+}
+
+:deep(.fuel-cost-col .cell) {
+  white-space: nowrap;
+  min-width: 130px;
+}
+
+:deep(.fuel-receipt-col .cell) {
+  white-space: nowrap;
+  min-width: 130px;
 }
 
 .mt-3 {

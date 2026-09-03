@@ -15,11 +15,17 @@ import (
 // recordingStore 在 stubStore 之上記錄寫入行為，讓測試能斷言交易失敗時未留下痕跡。
 type recordingStore struct {
 	*stubStore
-	markedImported bool
+	markedImported  bool
+	upsertedColumns []ColumnDraft
 }
 
 func (s *recordingStore) MarkImported(context.Context, uuid.UUID, time.Time) error {
 	s.markedImported = true
+	return nil
+}
+
+func (s *recordingStore) UpsertColumns(_ context.Context, _ uuid.UUID, drafts []ColumnDraft) error {
+	s.upsertedColumns = append([]ColumnDraft(nil), drafts...)
 	return nil
 }
 
@@ -218,6 +224,24 @@ func TestCommitDriverReport_EmptyFileDoesNotClearAnything(t *testing.T) {
 	assert.Zero(t, result.ImportedRows)
 	assert.Len(t, result.SkippedRows, 1)
 	assert.Empty(t, ingestor.clears, "沒有有效列時不得清空整個月")
+}
+
+func TestCommitDriverReport_PersistsPendingColumnsWithoutWritingRides(t *testing.T) {
+	table := [][]string{
+		{"民國日期", "駕駛人", "1.未知個案 [去程]", "備註"},
+		{"1150302", "林彥衡", "有坐", ""},
+	}
+	ingestor := &fakeIngestor{}
+	svc, store := newCommitService(table, ingestor)
+
+	result, err := commit(svc, "2026-03")
+
+	require.NoError(t, err)
+	assert.Len(t, store.upsertedColumns, 1, "無法對應的欄位仍須保存，供待維護流程處理")
+	assert.Zero(t, result.ImportedRows)
+	assert.Empty(t, ingestor.clears, "沒有已對應欄位時不得清除既有搭乘資料")
+	assert.Empty(t, ingestor.submissions, "沒有已對應欄位時不得寫入搭乘資料")
+	assert.False(t, store.markedImported, "僅建立待維護欄位不算完成匯入")
 }
 
 func TestCommitDriverReport_RequiresTransactionRunner(t *testing.T) {

@@ -24,7 +24,7 @@ type fakeSiteStore struct {
 	deleteErr error
 }
 
-func (f *fakeSiteStore) List(ctx context.Context, region, q string, page, pageSize int) ([]app.Site, int64, error) {
+func (f *fakeSiteStore) List(ctx context.Context, region, q, status string, page, pageSize int) ([]app.Site, int64, error) {
 	return nil, 0, nil
 }
 

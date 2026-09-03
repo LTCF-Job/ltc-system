@@ -50,7 +50,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="已有資料月份" min-width="260">
+        <el-table-column label="已有資料月份" min-width="260" class-name="months-col">
           <template #default="{ row }">
             <div v-if="monthsByForm.get(row.id)?.length" class="month-tags">
               <el-tag v-for="m in monthsByForm.get(row.id)" :key="m.yearMonth" size="small">
@@ -145,6 +145,11 @@ onMounted(fetchForms)
 
 :deep(.vehicle-col .cell) {
   white-space: nowrap;
+  min-width: 140px;
+}
+
+:deep(.months-col .cell) {
+  min-width: 260px;
 }
 
 .month-tags {

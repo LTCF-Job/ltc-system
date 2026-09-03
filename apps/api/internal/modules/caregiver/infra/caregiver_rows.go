@@ -19,6 +19,7 @@ type caregiverRow struct {
 	Type        string
 	Contact     string
 	Notes       string
+	Status      string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -33,6 +34,7 @@ func (r caregiverRow) toApp() app.Caregiver {
 		Type:        r.Type,
 		Contact:     r.Contact,
 		Notes:       r.Notes,
+		Status:      r.Status,
 		CreatedAt:   r.CreatedAt,
 		UpdatedAt:   r.UpdatedAt,
 	}

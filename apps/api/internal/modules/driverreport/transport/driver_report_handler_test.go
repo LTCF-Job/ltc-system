@@ -28,6 +28,7 @@ type stubService struct {
 	commitYearMonth  string
 	parseErr         error
 	importedMonths   []app.ImportedMonth
+	columns          []app.ColumnMapping
 }
 
 func (s *stubService) ListForms(context.Context) ([]app.ReportForm, error) { return nil, nil }
@@ -38,8 +39,14 @@ func (s *stubService) CreateForm(context.Context, string, string) (*app.ReportFo
 	return nil, nil
 }
 func (s *stubService) DeleteForm(context.Context, string) error { return nil }
-func (s *stubService) ListColumns(context.Context, string, string) ([]app.ColumnMapping, error) {
-	return nil, nil
+func (s *stubService) ListColumns(_ context.Context, formID, mappingStatus string) ([]app.ColumnMapping, error) {
+	var matched []app.ColumnMapping
+	for _, c := range s.columns {
+		if (formID == "" || c.FormID == formID) && (mappingStatus == "" || c.MappingStatus == mappingStatus) {
+			matched = append(matched, c)
+		}
+	}
+	return matched, nil
 }
 func (s *stubService) UpdateColumnMapping(context.Context, string, string, *string, *int16) error {
 	return nil
@@ -208,6 +215,20 @@ func TestImportExcel_MissingFile(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Details []struct {
+				Field  string `json:"field"`
+				Reason string `json:"reason"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.Equal(t, "VALIDATION_FAILED", body.Error.Code)
+	require.Len(t, body.Error.Details, 1)
+	assert.Equal(t, "file", body.Error.Details[0].Field)
+	assert.Equal(t, "未提供上傳檔案", body.Error.Details[0].Reason)
 }
 
 func TestListImportedMonths_ReturnsCountAndFormattedLastImportedAt(t *testing.T) {
@@ -246,4 +267,47 @@ func TestListImportedMonths_NoDataIsAnEmptyArray(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), `"data":[]`)
+}
+
+func TestListColumns_FilterByStatusWithoutFormID(t *testing.T) {
+	svc := &stubService{columns: []app.ColumnMapping{
+		{
+			ID:            "col-1",
+			FormID:        uuid.New().String(),
+			FormTitle:     "竹北一車接送匯報",
+			VehicleName:   "竹北一車",
+			ColumnIndex:   3,
+			ColumnHeader:  "1.王小明 [去程]",
+			CleanedName:   "王小明",
+			Kind:          "ride",
+			MappingStatus: "pending",
+		},
+		{
+			ID:            "col-2",
+			FormID:        uuid.New().String(),
+			FormTitle:     "竹北二車接送匯報",
+			VehicleName:   "竹北二車",
+			ColumnIndex:   4,
+			ColumnHeader:  "1.張小華 [去程]",
+			CleanedName:   "張小華",
+			Kind:          "ride",
+			MappingStatus: "mapped",
+		},
+	}}
+	r := newTestRouter(svc)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/driver-reports/columns?mappingStatus=pending", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var body struct {
+		Data []FormColumnDTO `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Len(t, body.Data, 1)
+	assert.Equal(t, "col-1", body.Data[0].ID)
+	assert.Equal(t, "1.王小明 [去程]", body.Data[0].ColumnHeader)
+	assert.Equal(t, "pending", body.Data[0].MappingStatus)
+	assert.Nil(t, body.Data[0].CaseID)
+	assert.Nil(t, body.Data[0].CaseName)
 }

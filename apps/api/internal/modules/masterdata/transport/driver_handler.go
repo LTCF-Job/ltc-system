@@ -27,7 +27,7 @@ func (h *DriverHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 
-	drivers, total, err := h.svc.List(c.Request.Context(), c.Query("region"), c.Query("q"), page, pageSize)
+	drivers, total, err := h.svc.List(c.Request.Context(), c.Query("region"), c.Query("q"), c.Query("status"), page, pageSize)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢司機失敗", nil)
 		return
@@ -55,7 +55,7 @@ func (h *DriverHandler) Create(c *gin.Context) {
 		Email:             req.Email,
 		Region:            req.Region,
 		LicenseClass:      req.LicenseClass,
-		LicenseExpiryDate: req.LicenseExpiryDate,
+		LicenseExpiryDate: req.LicenseExpiryDate.toTimePtr(),
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidDriverNationalID) {
@@ -172,8 +172,8 @@ func (h *DriverHandler) AssignVehicle(c *gin.Context) {
 
 	assignment, err := h.svc.AssignVehicle(c.Request.Context(), driverID, app.AssignVehicleInput{
 		VehicleID:     req.VehicleID,
-		EffectiveFrom: req.EffectiveFrom,
-		EffectiveTo:   req.EffectiveTo,
+		EffectiveFrom: req.EffectiveFrom.toTime(),
+		EffectiveTo:   req.EffectiveTo.toTimePtr(),
 	})
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)

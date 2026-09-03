@@ -135,7 +135,7 @@ func (h *DriverReportHandler) ImportExcel(c *gin.Context) {
 
 	f, err := fileHeader.Open()
 	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無法開啟檔案", nil)
+		respondImportInputError(c, "file", "無法開啟檔案")
 		return
 	}
 	defer f.Close()
@@ -146,7 +146,7 @@ func (h *DriverReportHandler) ImportExcel(c *gin.Context) {
 	if c.DefaultQuery("dryRun", "true") == "false" {
 		decisions, err := parseColumnDecisions(c.PostForm("columnDecisions"))
 		if err != nil {
-			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "columnDecisions 格式錯誤", nil)
+			respondImportInputError(c, "columnDecisions", "欄位對應資料格式錯誤，請重新上傳檔案")
 			return
 		}
 
@@ -232,6 +232,13 @@ func parseFormID(c *gin.Context) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return formID, true
+}
+
+// respondImportInputError 將匯入請求本身的可修正問題放入 details，讓批次頁能在對應檔案列顯示原因。
+func respondImportInputError(c *gin.Context, field, reason string) {
+	httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, errors.New(reason), []httpx.ErrorDetail{
+		{Field: field, Reason: reason},
+	})
 }
 
 // respondReportError 把匯入相關的 sentinel 對應到 HTTP 狀態；其餘一律視為匯入失敗。

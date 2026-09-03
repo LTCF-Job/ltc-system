@@ -102,7 +102,7 @@ Token 定義在 `apps/web/src/styles/tokens.scss`；共用元件在 `apps/web/sr
 | `TableRowActions.vue` | 包住表格列的多顆操作按鈕，統一間距 |
 | `DialogFooter.vue` | 對話框底部按鈕，props `confirmText`／`cancelText`／`confirmType`／`loading`，emits `confirm`／`cancel` |
 | `StatusTag.vue` | 見上一節 |
-| `DataTablePage.vue` | 列表頁版面骨架。新增了 `title`／`description` props 與 `#header` slot（內部渲染 `PageHeader`），`pageSizes` 可覆寫（預設 `[10,20,50,100]`）。`.filter-card` / `.table-card` class 名稱不可改，e2e 測試依賴它們。欄位少、內容短的列表頁可傳 `max-width`（純數字 px＝頁面實際欄寬總和含操作欄 + 約 30-60px 緩衝）讓版面不硬撐滿；`el-table` 本身仍維持 `style="width: 100%"` 不要拿掉，不要改用 `width: fit-content`（會讓 `fixed="right"` 操作欄被裁切，已實測過）。矩陣型表格或欄位內容本身需要大量空間的頁面不套用 `max-width`。 |
+| `DataTablePage.vue` | 列表頁版面骨架。新增了 `title`／`description` props 與 `#header` slot（內部渲染 `PageHeader`），`pageSizes` 可覆寫（預設 `[10,20,50,100]`）。`.filter-card` / `.table-card` class 名稱不可改，e2e 測試依賴它們。欄位少、內容短的列表頁可傳 `max-width`（純數字 px＝頁面實際欄寬總和含操作欄 + 約 30-60px 緩衝）讓版面不硬撐滿；`el-table` 本身仍維持 `style="width: 100%"` 不要拿掉，不要改用 `width: fit-content`（會讓 `fixed="right"` 操作欄被裁切，已實測過）。矩陣型表格或欄位內容本身需要大量空間的頁面不套用 `max-width`。**改動既有頁面的欄位（新增／移除欄、加寬既有欄）時，若該頁已經有 `max-width`，要重新核算欄寬總和並更新這個數字**——它不會隨新增欄位自動放寬。2026-09-03 在 `SiteListView.vue`／`CaregiverListView.vue` 加入啟用停用狀態欄後忘記回頭調整，`max-width="940"`／`"990"` 小於新的欄寬總和，即使視窗還有空間，表格仍被鎖死的容器逼出橫向卷軸；當下曾誤判成「不該限制寬度」直接拿掉 `max-width`，結果表格改成填滿整個視窗寬度，跟「欄位少、內容短維持既有 `max-width`」的設計初衷相反——正確處理是重算總和（改完後兩頁分別是 `1020`／`1070`），不是移除。 |
 
 ## 表格欄位
 
@@ -119,6 +119,7 @@ Token 定義在 `apps/web/src/styles/tokens.scss`；共用元件在 `apps/web/sr
 - 例外：欄位內容本身就需要換行呈現（例如異動前／異動後 diff）或欄位是結構化內容（tag／select 組合，非純文字）時，不套用 `show-overflow-tooltip`——它只會把內容截斷成一行，反而變差。
 - 欄位內容是「原始名稱文字 + 下拉選單 + 按鈕」這種複合結構（例如據點/車輛待關聯的行內編輯列）時，外層 flex 容器要 `flex-wrap: nowrap`（而非 `wrap`，否則欄寬不夠時會把選單/按鈕擠到下一行，即使頁面還有空間也一樣），且容器內每個子元素都要 `flex-shrink: 0`；其中純文字的 span（如「原始名稱：xxx」）額外要鎖 `white-space: nowrap`——`flex-wrap: nowrap` 只防止「元素之間」互相擠壓換行，沒有固定寬度的文字 span 在 flexbox 預設 shrink 行為下，文字本身還是會自己斷行，兩層都要鎖才會真的整行單行顯示。
 - 每個列表表格都要有分頁，用 `DataTablePage` 內建的 `el-pagination`，不要自刻。
+- 有啟用停用設計的主檔表格，狀態欄放在所有資料欄位之後、操作欄之前（即倒數第二欄）。地區／單位／車輛／司機／照護人員管理五個主檔清單頁都依此排列。
 
 ## 對話框與表單
 

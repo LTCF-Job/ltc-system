@@ -53,20 +53,20 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/vehicles` | viewer, staff, admin | 支援 `siteId`、`region`、`q` 篩選；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位），以及所屬單位帶出的 `siteName` 與唯讀 `region` |
-| POST | `/vehicles` | staff, admin | 車籍欄位（`siteId`、`brand`、`model`、`manufactureYm`、三項保險到期日、`lastInspectionDate`、`wheelchairAccessible`）皆為必填 |
-| PATCH | `/vehicles/:id` | staff, admin | 整筆覆寫，必填欄位同 POST |
-| DELETE | `/vehicles/:id` | admin | 軟刪除並標記 `status=retired`；仍有生效中司機指派或排班趟次綁定時回 409（`CodeResourceInUse`） |
+| GET | `/vehicles` | viewer, staff, admin | 支援 `siteId`、`region`、`q`、`status`（`active`／`inactive`）篩選；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位），以及所屬單位帶出的 `siteName` 與唯讀 `region` |
+| POST | `/vehicles` | staff, admin | 僅 `siteId` 與 `plateNo` 為必填，其餘車籍欄位皆為選填（支援 `null` 與空值）；`status` 非 `active`／`inactive` 一律預設 `active`；車號或代稱重複時回 409 並帶 `details` |
+| PATCH | `/vehicles/:id` | staff, admin | 整筆覆寫，必填欄位同 POST；車號或代稱重複時回 409 並帶 `details` |
+| DELETE | `/vehicles/:id` | admin | 軟刪除（僅標記 `deleted_at`，不影響 `status` 啟用/停用狀態）；仍有生效中司機指派或排班趟次綁定時回 409（`CodeResourceInUse`） |
 | PUT | `/vehicles/:id/drivers` | staff, admin | 整批設定本車司機：`{ driverIds: string[], effectiveFrom?: date }`；`driverIds` 為空代表清空 |
 
 ## 司機主檔 `driverH`
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/drivers` | viewer, staff, admin | 每筆帶 `licenseClass`（駕照類別代碼）與 `licenseExpiryDate`（駕照有效日期），未補登為 `null` |
-| POST | `/drivers` | staff, admin | `licenseClass`／`licenseExpiryDate` 選填 |
-| PATCH | `/drivers/:id` | staff, admin | 欄位未提供代表不變更；`licenseExpiryDate` 明確給 `null` 才會清空 |
-| DELETE | `/drivers/:id` | admin | 軟刪除並標記 `status=resigned`，同交易內收斂生效中的司機指派區間 |
+| GET | `/drivers` | viewer, staff, admin | 支援 `region`、`q`、`status`（`active`／`inactive`）篩選；每筆帶 `licenseClass`（駕照類別代碼）與 `licenseExpiryDate`（駕照有效日期），未補登為 `null` |
+| POST | `/drivers` | staff, admin | `licenseClass`／`licenseExpiryDate` 選填，新增一律為 `active` |
+| PATCH | `/drivers/:id` | staff, admin | 欄位未提供代表不變更；`licenseExpiryDate` 明確給 `null` 才會清空；`status` 非 `active`／`inactive` 時保留原值不變更 |
+| DELETE | `/drivers/:id` | admin | 軟刪除（僅標記 `deleted_at`，不影響 `status` 啟用/停用狀態），同交易內收斂生效中的司機指派區間 |
 | POST | `/drivers/:id/reveal` | staff, admin | 明文顯示司機個資 |
 | POST | `/drivers/:id/assignments` | staff, admin | 指派車輛給司機；一位司機同期只會有一台車，指派新車即取代原本的指派 |
 
@@ -194,8 +194,8 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`unresolvedLink`（單位待關聯既有單位）、`incomplete`（聯絡方式或備註缺漏）篩選 |
-| POST | `/caregivers` | staff, admin | 新增照護人員，姓名與類型（`case_manager`＝個管／`specialist`＝專護）皆為必填 |
+| GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）、`unresolvedLink`（單位待關聯既有單位）、`incomplete`（聯絡方式或備註缺漏）篩選 |
+| POST | `/caregivers` | staff, admin | 新增照護人員，姓名與類型（`case_manager`＝個管／`specialist`＝專護）皆為必填；`status` 非 `active`／`inactive` 一律預設 `active` |
 | GET | `/caregivers/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
 | POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx）；姓名或類型缺漏（或類型不是個管／專護）略過，單位比對不到或聯絡方式／備註缺漏仍建立資料並附警告 |
 | PATCH | `/caregivers/:id` | staff, admin | |

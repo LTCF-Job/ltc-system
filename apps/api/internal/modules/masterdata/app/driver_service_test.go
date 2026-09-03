@@ -51,7 +51,7 @@ func newFakeDriverStore() *fakeDriverStore {
 	return &fakeDriverStore{byID: map[uuid.UUID]*Driver{}}
 }
 
-func (f *fakeDriverStore) List(ctx context.Context, region, q string, page, pageSize int) ([]Driver, int64, error) {
+func (f *fakeDriverStore) List(ctx context.Context, region, q, status string, page, pageSize int) ([]Driver, int64, error) {
 	return nil, 0, nil
 }
 
@@ -250,6 +250,30 @@ func TestDriverService_Update(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "trailer", *d.LicenseClass)
 		assert.Equal(t, newExpiry, *d.LicenseExpiryDate)
+	})
+
+	t.Run("接受合法的狀態值", func(t *testing.T) {
+		id := uuid.New()
+		store := newFakeDriverStore()
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active"}
+		svc := NewDriverService(store, cfg, nil)
+
+		d, err := svc.Update(context.Background(), id, UpdateDriverInput{Status: strPtr("inactive")})
+
+		assert.NoError(t, err)
+		assert.Equal(t, "inactive", d.Status)
+	})
+
+	t.Run("非法狀態值不變更既有值", func(t *testing.T) {
+		id := uuid.New()
+		store := newFakeDriverStore()
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active"}
+		svc := NewDriverService(store, cfg, nil)
+
+		d, err := svc.Update(context.Background(), id, UpdateDriverInput{Status: strPtr("resigned")})
+
+		assert.NoError(t, err)
+		assert.Equal(t, "active", d.Status)
 	})
 
 	t.Run("rejects an unknown license class", func(t *testing.T) {

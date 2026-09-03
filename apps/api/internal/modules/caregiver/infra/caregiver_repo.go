@@ -9,7 +9,7 @@ import (
 	"ltc-system/apps/api/internal/modules/caregiver/app"
 )
 
-const caregiverColumns = `c.id, c.site_id, COALESCE(s.name, ''), COALESCE(c.site_name_raw, ''), c.name, c.type, COALESCE(c.contact, ''), COALESCE(c.notes, ''), c.created_at, c.updated_at`
+const caregiverColumns = `c.id, c.site_id, COALESCE(s.name, ''), COALESCE(c.site_name_raw, ''), c.name, c.type, COALESCE(c.contact, ''), COALESCE(c.notes, ''), c.status, c.created_at, c.updated_at`
 
 // CaregiverRepository 提供 caregivers 資料表之存取操作。
 type CaregiverRepository struct {
@@ -21,9 +21,9 @@ func NewCaregiverRepository(db *pgxpool.Pool) *CaregiverRepository {
 	return &CaregiverRepository{db: db}
 }
 
-// List 取得照護人員清單，支援關鍵字、單位待關聯與資料待補齊篩選。excludePending 為 true
+// List 取得照護人員清單，支援關鍵字、狀態、單位待關聯與資料待補齊篩選。excludePending 為 true
 // 時排除單位待關聯或聯絡方式／備註缺漏的資料列，供主列表與「待維護」分頁互斥呈現。
-func (r *CaregiverRepository) List(ctx context.Context, q string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]app.Caregiver, int64, error) {
+func (r *CaregiverRepository) List(ctx context.Context, q, status string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]app.Caregiver, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT ` + caregiverColumns + `
@@ -36,10 +36,11 @@ func (r *CaregiverRepository) List(ctx context.Context, q string, unresolvedLink
 		        (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> '')
 		        OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = ''
 		      ))
+		  AND ($7 = '' OR c.status = $7)
 		ORDER BY c.name ASC
 		LIMIT $4 OFFSET $5
 	`
-	rows, err := r.db.Query(ctx, query, q, unresolvedLink, incomplete, pageSize, offset, excludePending)
+	rows, err := r.db.Query(ctx, query, q, unresolvedLink, incomplete, pageSize, offset, excludePending, status)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query caregivers: %w", err)
 	}
@@ -48,7 +49,7 @@ func (r *CaregiverRepository) List(ctx context.Context, q string, unresolvedLink
 	var list []app.Caregiver
 	for rows.Next() {
 		var row caregiverRow
-		if err := rows.Scan(&row.ID, &row.SiteID, &row.SiteName, &row.SiteNameRaw, &row.Name, &row.Type, &row.Contact, &row.Notes, &row.CreatedAt, &row.UpdatedAt); err != nil {
+		if err := rows.Scan(&row.ID, &row.SiteID, &row.SiteName, &row.SiteNameRaw, &row.Name, &row.Type, &row.Contact, &row.Notes, &row.Status, &row.CreatedAt, &row.UpdatedAt); err != nil {
 			return nil, 0, err
 		}
 		list = append(list, row.toApp())
@@ -64,8 +65,9 @@ func (r *CaregiverRepository) List(ctx context.Context, q string, unresolvedLink
 		        (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> '')
 		        OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = ''
 		      ))
+		  AND ($5 = '' OR c.status = $5)
 	`
-	_ = r.db.QueryRow(ctx, countQuery, q, unresolvedLink, incomplete, excludePending).Scan(&total)
+	_ = r.db.QueryRow(ctx, countQuery, q, unresolvedLink, incomplete, excludePending, status).Scan(&total)
 
 	return list, total, nil
 }
@@ -75,7 +77,7 @@ func (r *CaregiverRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.C
 	var row caregiverRow
 	query := `SELECT ` + caregiverColumns + ` FROM caregivers c LEFT JOIN sites s ON s.id = c.site_id WHERE c.id = $1`
 	err := r.db.QueryRow(ctx, query, id).
-		Scan(&row.ID, &row.SiteID, &row.SiteName, &row.SiteNameRaw, &row.Name, &row.Type, &row.Contact, &row.Notes, &row.CreatedAt, &row.UpdatedAt)
+		Scan(&row.ID, &row.SiteID, &row.SiteName, &row.SiteNameRaw, &row.Name, &row.Type, &row.Contact, &row.Notes, &row.Status, &row.CreatedAt, &row.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -89,11 +91,11 @@ func (r *CaregiverRepository) Create(ctx context.Context, c *app.Caregiver) erro
 		c.ID = uuid.New()
 	}
 	query := `
-		INSERT INTO caregivers (id, site_id, site_name_raw, name, type, contact, notes)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO caregivers (id, site_id, site_name_raw, name, type, contact, notes, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at
 	`
-	return r.db.QueryRow(ctx, query, c.ID, c.SiteID, nullableString(c.SiteNameRaw), c.Name, c.Type, nullableString(c.Contact), nullableString(c.Notes)).
+	return r.db.QueryRow(ctx, query, c.ID, c.SiteID, nullableString(c.SiteNameRaw), c.Name, c.Type, nullableString(c.Contact), nullableString(c.Notes), c.Status).
 		Scan(&c.CreatedAt, &c.UpdatedAt)
 }
 
@@ -101,11 +103,11 @@ func (r *CaregiverRepository) Create(ctx context.Context, c *app.Caregiver) erro
 func (r *CaregiverRepository) Update(ctx context.Context, c *app.Caregiver) error {
 	query := `
 		UPDATE caregivers
-		SET site_id = $2, site_name_raw = $3, name = $4, type = $5, contact = $6, notes = $7, updated_at = now()
+		SET site_id = $2, site_name_raw = $3, name = $4, type = $5, contact = $6, notes = $7, status = $8, updated_at = now()
 		WHERE id = $1
 		RETURNING updated_at
 	`
-	return r.db.QueryRow(ctx, query, c.ID, c.SiteID, nullableString(c.SiteNameRaw), c.Name, c.Type, nullableString(c.Contact), nullableString(c.Notes)).
+	return r.db.QueryRow(ctx, query, c.ID, c.SiteID, nullableString(c.SiteNameRaw), c.Name, c.Type, nullableString(c.Contact), nullableString(c.Notes), c.Status).
 		Scan(&c.UpdatedAt)
 }
 

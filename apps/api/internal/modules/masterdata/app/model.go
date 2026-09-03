@@ -49,6 +49,7 @@ type VehicleFilter struct {
 	SiteID *uuid.UUID
 	Region string
 	Q      string
+	Status string
 }
 
 // VehicleDriver 是掛在車輛上的司機摘要，只帶識別用欄位。

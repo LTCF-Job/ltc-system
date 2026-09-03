@@ -364,7 +364,6 @@ const currentRouteTitle = computed(() => {
 
 async function handleCommand(cmd: string) {
   if (cmd === 'logout') {
-    // 等待展示模式清理（停用 mock、重置展示資料）完成後再導頁，避免與下一次登入競態
     await authStore.logout()
     router.push('/login')
   } else if (cmd === 'change-password') {

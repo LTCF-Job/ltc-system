@@ -18,6 +18,7 @@ type CaregiverResponse struct {
 	Type        string     `json:"type"`
 	Contact     string     `json:"contact,omitempty"`
 	Notes       string     `json:"notes,omitempty"`
+	Status      string     `json:"status"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
 }
@@ -32,6 +33,7 @@ func newCaregiverResponse(c app.Caregiver) CaregiverResponse {
 		Type:        c.Type,
 		Contact:     c.Contact,
 		Notes:       c.Notes,
+		Status:      c.Status,
 		CreatedAt:   c.CreatedAt,
 		UpdatedAt:   c.UpdatedAt,
 	}
@@ -56,6 +58,7 @@ type CreateCaregiverRequest struct {
 	Type    string     `json:"type" binding:"required,oneof=case_manager specialist"`
 	Contact string     `json:"contact"`
 	Notes   string     `json:"notes"`
+	Status  string     `json:"status"`
 }
 
 // UpdateCaregiverRequest 代表更新照護人員請求，欄位為 nil 表示不變更。
@@ -65,6 +68,7 @@ type UpdateCaregiverRequest struct {
 	Type    *string    `json:"type" binding:"omitempty,oneof=case_manager specialist"`
 	Contact *string    `json:"contact"`
 	Notes   *string    `json:"notes"`
+	Status  *string    `json:"status"`
 }
 
 // LinkCaregiverSiteRequest 代表將照護人員關聯至既有單位的請求。

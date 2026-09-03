@@ -30,7 +30,8 @@ export async function createDriverReportForm(
 }
 
 export async function deleteDriverReportForm(formId: string): Promise<{ success: boolean }> {
-  return apiClient.delete(`/driver-reports/${formId}`)
+  const res = await apiClient.delete(`/driver-reports/${formId}`)
+  return (res as any)?.data ?? res
 }
 
 // downloadDriverReportTemplate 取回範本原始位元組；呼叫端負責觸發瀏覽器下載。
@@ -53,9 +54,10 @@ export async function dryRunImportDriverReport(
 ): Promise<DriverReportPreviewDTO> {
   const formData = new FormData()
   formData.append('file', file)
-  return apiClient.post(buildImportUrl(formId, true, yearMonth), formData, {
+  const res = await apiClient.post(buildImportUrl(formId, true, yearMonth), formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
+  return (res as any)?.data ?? res
 }
 
 export async function commitImportDriverReport(
@@ -67,9 +69,10 @@ export async function commitImportDriverReport(
   const formData = new FormData()
   formData.append('file', file)
   formData.append('columnDecisions', JSON.stringify(columnDecisions))
-  return apiClient.post(buildImportUrl(formId, false, yearMonth), formData, {
+  const res = await apiClient.post(buildImportUrl(formId, false, yearMonth), formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
+  return (res as any)?.data ?? res
 }
 
 export async function listDriverReportColumns(params?: {
@@ -84,11 +87,13 @@ export async function updateColumnMapping(
   columnId: string,
   data: UpdateColumnMappingRequest
 ): Promise<DriverReportColumnDTO> {
-  return apiClient.patch(`/driver-reports/columns/${columnId}/mapping`, data)
+  const res = await apiClient.patch(`/driver-reports/columns/${columnId}/mapping`, data)
+  return (res as any)?.data ?? res
 }
 
 export async function batchUpdateColumnMappings(
   data: BatchMappingRequest
 ): Promise<{ updatedCount: number }> {
-  return apiClient.post('/driver-reports/columns/batch-mapping', data)
+  const res = await apiClient.post('/driver-reports/columns/batch-mapping', data)
+  return (res as any)?.data ?? res
 }

@@ -94,15 +94,21 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="name" label="地區名稱" min-width="150" align="center">
+          <el-table-column prop="name" label="地區名稱" min-width="150" align="center" class-name="region-name-col">
             <template #default="{ row }">
               <span class="font-bold text-nowrap">{{ row.name }}</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="description" label="說明與備註" min-width="240" show-overflow-tooltip>
+          <el-table-column prop="description" label="說明與備註" min-width="180" show-overflow-tooltip class-name="region-desc-col">
             <template #default="{ row }">
               <span>{{ row.description || '-' }}</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center" class-name="region-nowrap-col">
+            <template #default="{ row }">
+              <span>{{ formatDateTime(row.createdAt) }}</span>
             </template>
           </el-table-column>
 
@@ -132,12 +138,6 @@
                 <span class="status-indicator-dot"></span>
                 <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
               </div>
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center">
-            <template #default="{ row }">
-              <span>{{ formatDateTime(row.createdAt) }}</span>
             </template>
           </el-table-column>
 
@@ -511,6 +511,19 @@ onMounted(() => {
   font-size: var(--app-font-xs);
   color: var(--app-text-muted);
   margin-left: 10px;
+}
+
+:deep(.region-nowrap-col .cell) {
+  white-space: nowrap;
+  min-width: 170px;
+}
+
+:deep(.region-name-col .cell) {
+  min-width: 150px;
+}
+
+:deep(.region-desc-col .cell) {
+  min-width: 180px;
 }
 
 

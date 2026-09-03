@@ -26,4 +26,9 @@ var (
 	ErrDuplicateSiteName = errors.New("site name already exists in region")
 	// ErrSiteNotFound 代表查無單位資料。
 	ErrSiteNotFound = errors.New("site not found")
+
+	// ErrDuplicateVehiclePlateNo 代表車號已存在。
+	ErrDuplicateVehiclePlateNo = errors.New("vehicle plate number already exists")
+	// ErrDuplicateVehicleDisplayName 代表車輛代稱已存在。
+	ErrDuplicateVehicleDisplayName = errors.New("vehicle display name already exists")
 )

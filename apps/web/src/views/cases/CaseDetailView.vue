@@ -339,8 +339,8 @@ async function fetchDetail() {
 
 async function loadSitesAndVehicles() {
   const [sitesRes, vehiclesRes] = await Promise.all([
-    listSites({ pageSize: 100 }),
-    listVehicles({ active: true, pageSize: 100 })
+    listSites({ status: 'active', pageSize: 100 }),
+    listVehicles({ status: 'active', pageSize: 100 })
   ])
   availableSites.value = sitesRes.data
   availableVehicles.value = vehiclesRes.data

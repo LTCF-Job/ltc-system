@@ -103,8 +103,10 @@ dry run 階段不帶 `yearMonth`，清除範圍只涵蓋檔案實際有的日期
 
 commit 前不再要求使用者逐欄確認：有系統推薦個案（`suggestedCaseId`/`suggestedLegSeq`）的欄位
 直接視為 `mapped` 送出；完全沒有推薦的欄位維持 `pending`，寫入 `form_columns` 供待維護頁籤查詢。
-若整份檔案的欄位都沒有任何推薦（`mapped.size === 0`），後端會拒絕整份 commit（見
-`persistColumnDecisions` 的必要條件），該檔案在上傳頁顯示失敗，需要先手動到待維護頁籤補建個案。
+若整份檔案的欄位都沒有任何推薦（`mapped.size === 0`），後端仍會保存 `form_columns` 的
+pending 對應，並以成功但 0 筆搭乘資料的結果結束；不會清除既有月份或寫入 `ride_records`。
+匯入只會使用本次檔案出現的 mapped 欄位，不能沿用舊檔已對應、但本次未出現的欄位。
+上傳頁會引導使用者前往待維護頁籤補建個案或完成對應後再重新匯入。
 
 ## Unverified
 
@@ -131,11 +133,11 @@ commit 前不再要求使用者逐欄確認：有系統推薦個案（`suggested
 ## 驗證分層
 
 ```text
-unit / browser mock / frontend E2E
+unit / frontend E2E
               !=
 real PostgreSQL migration + transaction + concurrency
               !=
 production import/export observation
 ```
 
-回報時必須分開列出每一層證據。`go test`、type-check、build 或 browser mock 通過，不代表 migration、rollback、duplicate identity 或跨程序 lock 已在真實 PostgreSQL 驗證。
+回報時必須分開列出每一層證據。`go test`、type-check、build 或前端 E2E 通過，不代表 migration、rollback、duplicate identity 或跨程序 lock 已在真實 PostgreSQL 驗證。

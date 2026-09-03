@@ -9,19 +9,6 @@
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
     "gen:types": "openapi-typescript $VITE_API_SPEC_URL -o src/types/api.d.ts",
-    "test:e2e": "playwright test",
-    "test:e2e:auth": "playwright test tests/e2e/01-auth.spec.ts",
-    "test:e2e:dashboard": "playwright test tests/e2e/02-dashboard.spec.ts",
-    "test:e2e:cases": "playwright test tests/e2e/03-cases.spec.ts",
-    "test:e2e:masters": "playwright test tests/e2e/04-masters.spec.ts",
-    "test:e2e:driver-reports": "playwright test tests/e2e/05-driver-reports.spec.ts",
-    "test:e2e:rides": "playwright test tests/e2e/06-rides.spec.ts",
-    "test:e2e:issues": "playwright test tests/e2e/07-ride-issues.spec.ts",
-    "test:e2e:reports": "playwright test tests/e2e/08-reports.spec.ts",
-    "test:e2e:operations": "playwright test tests/e2e/09-operations.spec.ts",
-    "test:e2e:settings": "playwright test tests/e2e/10-settings-and-audit.spec.ts",
-    "test:e2e:exports": "playwright test tests/e2e/11-exports.spec.ts",
-    "test:e2e:responsive": "playwright test tests/e2e/12-responsive-layout.spec.ts",
     "test:e2e:live": "playwright test --config=playwright.config.live.ts"
   },
   "dependencies": {
@@ -35,8 +22,7 @@
     "pinia": "^4.0.3",
     "vue": "^3.5.41",
     "vue-echarts": "^8.1.0",
-    "vue-router": "^5.2.0",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "vue-router": "^5.2.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

@@ -9,7 +9,7 @@ import (
 
 // SiteStore 定義單位主檔的讀寫邊界。
 type SiteStore interface {
-	List(ctx context.Context, region, q string, page, pageSize int) ([]Site, int64, error)
+	List(ctx context.Context, region, q, status string, page, pageSize int) ([]Site, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Site, error)
 	Create(ctx context.Context, s *Site) error
 	Update(ctx context.Context, s *Site) error
@@ -28,7 +28,7 @@ type VehicleStore interface {
 
 // DriverStore 定義司機主檔與車輛指派的讀寫邊界。
 type DriverStore interface {
-	List(ctx context.Context, region, q string, page, pageSize int) ([]Driver, int64, error)
+	List(ctx context.Context, region, q, status string, page, pageSize int) ([]Driver, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Driver, error)
 	Create(ctx context.Context, d *Driver) error
 	Update(ctx context.Context, d *Driver) error

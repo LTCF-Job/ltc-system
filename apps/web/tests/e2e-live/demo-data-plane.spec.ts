@@ -1,6 +1,6 @@
 import { test, expect, request as playwrightRequest } from '@playwright/test'
 
-// 對真正部署的 Supabase Auth 與 Demo Cloud Run API 做 API 層級驗證，不透過瀏覽器、不啟動 MSW。
+// 對真正部署的 Supabase Auth 與 Demo Cloud Run API 做 API 層級驗證。
 // 必要環境變數缺一則整份跳過，本機或還沒設好 CI secrets 時不會讓 pipeline 失敗。
 const SUPABASE_URL = process.env.LIVE_SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.LIVE_SUPABASE_ANON_KEY

@@ -116,7 +116,7 @@ Demo 環境跟正式環境共用同一個 Supabase 專案，但用另一個獨�
    - 環境變數要多加一筆 `DATA_PLANE=demo`（跟 `APP_ENV=production` 是兩個獨立的設定：`APP_ENV` 決定要不要放行開發用的檢查捷徑，`DATA_PLANE` 決定這個服務只認 Demo 帳號的登入憑證、不接受正式帳號的憑證，兩個都要設，缺一個效果都不對）。
    - `ENCRYPTION_KEY`／`HMAC_KEY` 沿用跟正式服務**同一組** secret 即可，這兩把金鑰不區分 data plane。
 7. **前端加一個環境變數**：Vercel 專案的 `VITE_DEMO_API_BASE_URL` 要指向這個新服務網址（`https://ltc-api-demo-<hash>.<region>.run.app/api/v1`），**Production 與 Preview 兩個環境都要各加一次**（`vercel env add VITE_DEMO_API_BASE_URL production --no-sensitive --value '...'`，`preview` 同理），加完要重新觸發一次 build 才會生效（Vite 環境變數是建置期注入的）。細節與 `vercel` CLI 的其他已知坑見 [`deployment.md`](deployment.md#已知坑vercel-cli-一律要在-repo-根目錄執行不能先-cd-appsweb)。
-8. 建好以上兩個 Demo 用的 Cloud Run 資源後，`.github/workflows/deploy-api.yml` 會自動把它們接進部署流程：每次 push 都先建置一次 image，接著 migration／部署 Demo，跑一輪對 Demo 的真實 E2E 測試（[`apps/web/tests/e2e-live/`](../../apps/web/tests/e2e-live/)，直接打真正的 Supabase 與 Demo API，不透過 MSW），測試沒過就不會繼續 migration／部署正式環境。這一段需要在 GitHub 該環境（`develop` 或 `Production`）多設幾個變數與密鑰，見步驟六最後的「Demo／Live E2E 專用設定」。
+8. 建好以上兩個 Demo 用的 Cloud Run 資源後，`.github/workflows/deploy-api.yml` 會自動把它們接進部署流程：每次 push 都先建置一次 image，接著 migration／部署 Demo，跑一輪對 Demo 的真實 E2E 測試（[`apps/web/tests/e2e-live/`](../../apps/web/tests/e2e-live/)），測試沒過就不會繼續 migration／部署正式環境。這一段需要在 GitHub 該環境（`develop` 或 `Production`）多設幾個變數與密鑰，見步驟六最後的「Demo／Live E2E 專用設定」。
 
 ## 步驟二：建立 Google Cloud 專案
 

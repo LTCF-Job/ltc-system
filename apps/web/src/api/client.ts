@@ -13,7 +13,7 @@ export const apiClient = axios.create({
   }
 })
 
-// 請求攔截器：附加 JWT Token
+// 請求攔截器：附加 JWT Token，Demo 帳號仍透過正式的獨立 API 資料平面處理。
 apiClient.interceptors.request.use(
   (config) => {
     const authStore = useAuthStore()
@@ -68,12 +68,39 @@ apiClient.interceptors.response.use(
     // 一律依錯誤碼查表顯示非技術性訊息，不直接信任後端或 axios 回傳的原始 message 字串
     const message = resolveErrorMessage(apiError?.code)
 
+    // 常用欄位代碼轉繁體中文標籤，讓錯誤清單明確告知使用者有問題的欄位
+    const FIELD_LABELS: Record<string, string> = {
+      plateNo: '車號',
+      siteId: '所屬單位',
+      displayName: '代稱',
+      brand: '廠牌',
+      model: '車型',
+      manufactureYm: '出廠年月',
+      compulsoryInsuranceExpiry: '強制責任險',
+      passengerInsuranceExpiry: '乘客責任險',
+      thirdPartyInsuranceExpiry: '第三人責任險',
+      lastInspectionDate: '前次檢驗日期',
+      wheelchairAccessible: '符合輪椅載運規定',
+      status: '狀態',
+      name: '姓名',
+      nationalId: '身分證字號',
+      email: '電子信箱',
+      region: '區域',
+      address: '地址',
+      code: '代碼'
+    }
+
     // 若有詳細欄位錯誤清單，以通知元件條列呈現
     if (apiError?.details && apiError.details.length > 0) {
       ElNotification({
         title: message,
         type: 'error',
-        message: apiError.details.map((d) => `${d.field ? `[${d.field}] ` : ''}${d.reason}`).join('\n'),
+        message: apiError.details
+          .map((d) => {
+            const label = d.field ? FIELD_LABELS[d.field] || d.field : ''
+            return `${label ? `【${label}】` : ''}${d.reason}`
+          })
+          .join('\n'),
         duration: 6000
       })
     } else {

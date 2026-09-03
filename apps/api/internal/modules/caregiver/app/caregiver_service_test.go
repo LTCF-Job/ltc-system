@@ -18,7 +18,7 @@ func newFakeCaregiverStore() *fakeCaregiverStore {
 	return &fakeCaregiverStore{byID: map[uuid.UUID]*Caregiver{}}
 }
 
-func (f *fakeCaregiverStore) List(ctx context.Context, q string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
+func (f *fakeCaregiverStore) List(ctx context.Context, q, status string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
 	var out []Caregiver
 	for _, c := range f.byID {
 		out = append(out, *c)
@@ -85,6 +85,49 @@ func TestCaregiverService_Create_RequiresValidType(t *testing.T) {
 
 	assert.ErrorIs(t, err, ErrCaregiverTypeInvalid)
 }
+
+func TestCaregiverService_Create_NormalizesStatus(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "空字串預設 active", input: "", want: "active"},
+		{name: "非法值預設 active", input: "已離職", want: "active"},
+		{name: "接受 inactive", input: "inactive", want: "inactive"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewCaregiverService(newFakeCaregiverStore(), nil, nil, nil)
+
+			c, err := svc.Create(context.Background(), CreateCaregiverInput{Name: "陳小華", Type: CaregiverTypeCaseManager, Status: tt.input})
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, c.Status)
+		})
+	}
+}
+
+func TestCaregiverService_Update_NormalizesStatus(t *testing.T) {
+	store := newFakeCaregiverStore()
+	existing := Caregiver{ID: uuid.New(), Name: "王大明", Status: "active"}
+	require.NoError(t, store.Create(context.Background(), &existing))
+	svc := NewCaregiverService(store, nil, nil, nil)
+
+	t.Run("接受合法狀態", func(t *testing.T) {
+		c, err := svc.Update(context.Background(), existing.ID, UpdateCaregiverInput{Status: strPtr("inactive")})
+		require.NoError(t, err)
+		assert.Equal(t, "inactive", c.Status)
+	})
+
+	t.Run("非法狀態預設 active", func(t *testing.T) {
+		c, err := svc.Update(context.Background(), existing.ID, UpdateCaregiverInput{Status: strPtr("已離職")})
+		require.NoError(t, err)
+		assert.Equal(t, "active", c.Status)
+	})
+}
+
+func strPtr(v string) *string { return &v }
 
 func TestCaregiverService_LinkSite_ClearsRawName(t *testing.T) {
 	store := newFakeCaregiverStore()

@@ -256,6 +256,9 @@ func TestParseDriverReport_IgnoresColumnsAfterRemark(t *testing.T) {
 	require.Len(t, result.Columns, 1)
 	assert.Equal(t, "1.吳桂(去程竹3) [去程]", result.Columns[0].ColumnHeader)
 	assert.Equal(t, "無", result.PreviewRows[0].Remark)
+	require.Len(t, result.Warnings, 1)
+	assert.Contains(t, result.Warnings[0].Message, "已略過不匯入")
+	assert.Contains(t, result.Warnings[0].Message, "10.李吳素娥 [去程]")
 }
 
 func TestParseDriverReport_RejectsWrongHeader(t *testing.T) {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -21,8 +22,8 @@ func NewCaregiverService(store CaregiverStore, sites SiteLookup, reader Spreadsh
 
 // List 查詢照護人員清單。unresolvedLink 篩選單位名稱待關聯單位主檔的資料列，
 // incomplete 篩選聯絡方式或備註缺漏待補齊的資料列，excludePending 排除以上兩種待維護資料列。
-func (s *CaregiverService) List(ctx context.Context, q string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
-	return s.store.List(ctx, q, unresolvedLink, incomplete, excludePending, page, pageSize)
+func (s *CaregiverService) List(ctx context.Context, q, status string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
+	return s.store.List(ctx, q, status, unresolvedLink, incomplete, excludePending, page, pageSize)
 }
 
 // GetByID 依 UUID 取得照護人員。
@@ -37,6 +38,7 @@ type CreateCaregiverInput struct {
 	Type    string
 	Contact string
 	Notes   string
+	Status  string
 }
 
 // Create 新增照護人員。
@@ -47,7 +49,14 @@ func (s *CaregiverService) Create(ctx context.Context, in CreateCaregiverInput) 
 	if !IsValidCaregiverType(in.Type) {
 		return nil, ErrCaregiverTypeInvalid
 	}
-	c := Caregiver{SiteID: in.SiteID, Name: in.Name, Type: in.Type, Contact: in.Contact, Notes: in.Notes}
+
+	// 確保 status 符合資料庫 check constraint，空值或非法值預設 active
+	status := strings.TrimSpace(in.Status)
+	if status != "active" && status != "inactive" {
+		status = "active"
+	}
+
+	c := Caregiver{SiteID: in.SiteID, Name: in.Name, Type: in.Type, Contact: in.Contact, Notes: in.Notes, Status: status}
 	if err := s.store.Create(ctx, &c); err != nil {
 		return nil, err
 	}
@@ -61,6 +70,7 @@ type UpdateCaregiverInput struct {
 	Type    *string
 	Contact *string
 	Notes   *string
+	Status  *string
 }
 
 // Update 更新照護人員。
@@ -92,6 +102,13 @@ func (s *CaregiverService) Update(ctx context.Context, id uuid.UUID, in UpdateCa
 	}
 	if in.Notes != nil {
 		existing.Notes = *in.Notes
+	}
+	if in.Status != nil {
+		status := strings.TrimSpace(*in.Status)
+		if status != "active" && status != "inactive" {
+			status = "active"
+		}
+		existing.Status = status
 	}
 
 	if err := s.store.Update(ctx, existing); err != nil {

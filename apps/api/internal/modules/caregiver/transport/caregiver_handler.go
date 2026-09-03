@@ -31,7 +31,7 @@ func (h *CaregiverHandler) List(c *gin.Context) {
 	incomplete, _ := strconv.ParseBool(c.DefaultQuery("incomplete", "false"))
 	excludePending, _ := strconv.ParseBool(c.DefaultQuery("excludePending", "false"))
 
-	list, total, err := h.svc.List(c.Request.Context(), c.Query("q"), unresolvedLink, incomplete, excludePending, page, pageSize)
+	list, total, err := h.svc.List(c.Request.Context(), c.Query("q"), c.Query("status"), unresolvedLink, incomplete, excludePending, page, pageSize)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢照護人員失敗", nil)
 		return
@@ -58,6 +58,7 @@ func (h *CaregiverHandler) Create(c *gin.Context) {
 		Type:    req.Type,
 		Contact: req.Contact,
 		Notes:   req.Notes,
+		Status:  req.Status,
 	})
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
@@ -87,6 +88,7 @@ func (h *CaregiverHandler) Update(c *gin.Context) {
 		Type:    req.Type,
 		Contact: req.Contact,
 		Notes:   req.Notes,
+		Status:  req.Status,
 	})
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)

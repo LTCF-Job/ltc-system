@@ -630,11 +630,23 @@ onMounted(() => {
    讓瀏覽器照實際文字寬度分配欄寬；真的超出版面時交給外層既有的 overflow-x: auto 水平捲動，不做裁切省略。 */
 /* 其餘欄位（操作時間／操作者／實體種類）同理：改用 min-width 搭配 nowrap，
    讓欄寬依內容自然撐開，不被固定 width 逼換行。 */
-.audit-log-view :deep(.entity-col .cell),
-.audit-log-view :deep(.entity-type-col .cell),
-.audit-log-view :deep(.op-time-col .cell),
+.audit-log-view :deep(.entity-col .cell) {
+  white-space: nowrap;
+}
+
+.audit-log-view :deep(.op-time-col .cell) {
+  white-space: nowrap;
+  min-width: 170px;
+}
+
 .audit-log-view :deep(.op-actor-col .cell) {
   white-space: nowrap;
+  min-width: 110px;
+}
+
+.audit-log-view :deep(.entity-type-col .cell) {
+  white-space: nowrap;
+  min-width: 110px;
 }
 
 .entity-badge {

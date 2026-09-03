@@ -261,8 +261,8 @@ async function fetchMasterData() {
     masterDataError.value = false
     try {
       const [vRes, dRes] = await Promise.all([
-        listVehicles({ active: true, pageSize: 100 }),
-        listDrivers({ active: true, pageSize: 100 })
+        listVehicles({ status: 'active', pageSize: 100 }),
+        listDrivers({ status: 'active', pageSize: 100 })
       ])
       vehicles.value = vRes.data
       drivers.value = dRes.data

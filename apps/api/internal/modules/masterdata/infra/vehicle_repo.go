@@ -2,10 +2,13 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
 )
@@ -96,6 +99,7 @@ const vehicleFilterSQL = `
 	  AND ($1::uuid IS NULL OR v.site_id = $1)
 	  AND ($2 = '' OR s.region = $2)
 	  AND ($3 = '' OR v.plate_no ILIKE '%' || $3 || '%' OR v.display_name ILIKE '%' || $3 || '%')
+	  AND ($4 = '' OR v.status = $4)
 `
 
 // List 取得車輛清單。
@@ -106,9 +110,9 @@ func (r *VehicleRepository) List(ctx context.Context, filter app.VehicleFilter, 
 	offset := (page - 1) * pageSize
 	query := vehicleSelect + vehicleFilterSQL + `
 		ORDER BY v.display_name ASC
-		LIMIT $4 OFFSET $5
+		LIMIT $5 OFFSET $6
 	`
-	rows, err := r.db.Query(ctx, query, filter.SiteID, filter.Region, filter.Q, pageSize, offset)
+	rows, err := r.db.Query(ctx, query, filter.SiteID, filter.Region, filter.Q, filter.Status, pageSize, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query vehicles: %w", err)
 	}
@@ -128,7 +132,7 @@ func (r *VehicleRepository) List(ctx context.Context, filter app.VehicleFilter, 
 		SELECT COUNT(*) FROM vehicles v
 		LEFT JOIN sites s ON s.id = v.site_id
 	` + vehicleFilterSQL
-	_ = r.db.QueryRow(ctx, countQuery, filter.SiteID, filter.Region, filter.Q).Scan(&total)
+	_ = r.db.QueryRow(ctx, countQuery, filter.SiteID, filter.Region, filter.Q, filter.Status).Scan(&total)
 
 	return list, total, nil
 }
@@ -184,7 +188,7 @@ func (r *VehicleRepository) Create(ctx context.Context, v *app.Vehicle) error {
 		RETURNING created_at, updated_at
 	`
 	if err := r.db.QueryRow(ctx, query, vehicleWriteArgs(v)...).Scan(&v.CreatedAt, &v.UpdatedAt); err != nil {
-		return err
+		return handleVehicleDBError(err)
 	}
 	return r.fillSite(ctx, v)
 }
@@ -202,9 +206,23 @@ func (r *VehicleRepository) Update(ctx context.Context, v *app.Vehicle) error {
 		RETURNING created_at, updated_at
 	`
 	if err := r.db.QueryRow(ctx, query, vehicleWriteArgs(v)...).Scan(&v.CreatedAt, &v.UpdatedAt); err != nil {
-		return err
+		return handleVehicleDBError(err)
 	}
 	return r.fillSite(ctx, v)
+}
+
+func handleVehicleDBError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if strings.Contains(pgErr.ConstraintName, "plate_no") {
+			return app.ErrDuplicateVehiclePlateNo
+		}
+		if strings.Contains(pgErr.ConstraintName, "display_name") {
+			return app.ErrDuplicateVehicleDisplayName
+		}
+		return app.ErrDuplicateVehiclePlateNo
+	}
+	return err
 }
 
 // fillSite 補上寫入結果的所屬單位名稱與區域，讓回應與 List 的形狀一致。
@@ -224,7 +242,7 @@ func (r *VehicleRepository) fillSite(ctx context.Context, v *app.Vehicle) error 
 
 // SoftDelete 軟刪除車輛，回傳 false 代表該筆已被刪除過。
 func (r *VehicleRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
-	tag, err := r.db.Exec(ctx, `UPDATE vehicles SET deleted_at = now(), deleted_by = $2, status = 'retired' WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
+	tag, err := r.db.Exec(ctx, `UPDATE vehicles SET deleted_at = now(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
 	if err != nil {
 		return false, err
 	}

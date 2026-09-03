@@ -94,7 +94,7 @@ func (r *RegionRepository) ListAll(ctx context.Context) ([]app.Region, error) {
 	if r.db == nil {
 		return []app.Region{}, nil
 	}
-	rows, err := r.db.Query(ctx, `SELECT `+regionColumns+` FROM regions ORDER BY sort_order ASC, name ASC`)
+	rows, err := r.db.Query(ctx, `SELECT `+regionColumns+` FROM regions WHERE status = 'active' ORDER BY sort_order ASC, name ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query all regions: %w", err)
 	}

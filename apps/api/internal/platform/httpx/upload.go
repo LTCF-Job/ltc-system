@@ -27,7 +27,9 @@ func BindUploadFile(c *gin.Context, field string) (*multipart.FileHeader, bool) 
 			respondUploadTooLarge(c)
 			return nil, false
 		}
-		RespondError(c, http.StatusBadRequest, CodeValidationFailed, "未提供上傳檔案", nil)
+		RespondError(c, http.StatusBadRequest, CodeValidationFailed, "未提供上傳檔案", []ErrorDetail{
+			{Field: field, Reason: "未提供上傳檔案"},
+		})
 		return nil, false
 	}
 	if fileHeader.Size > MaxUploadBytes {

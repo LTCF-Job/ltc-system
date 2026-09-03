@@ -164,13 +164,13 @@
                   <span>{{ formatDateTime(row.sentAt) }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="主題" min-width="140">
+              <el-table-column label="主題" min-width="140" class-name="topic-col">
                 <template #default="{ row }">
                   <span class="topic-label">{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="subject" label="信件標題" min-width="220" show-overflow-tooltip />
-              <el-table-column label="收件人清單" min-width="200" show-overflow-tooltip>
+              <el-table-column prop="subject" label="信件標題" min-width="220" show-overflow-tooltip class-name="subject-col" />
+              <el-table-column label="收件人清單" min-width="200" show-overflow-tooltip class-name="recipients-col">
                 <template #default="{ row }">
                   <span v-if="row.recipientEmails && row.recipientEmails.length">
                     {{ row.recipientEmails.join(', ') }}
@@ -187,7 +187,7 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="errorMessage" label="備註 / 失敗原因" min-width="180" show-overflow-tooltip>
+              <el-table-column prop="errorMessage" label="備註 / 失敗原因" min-width="180" show-overflow-tooltip class-name="error-message-col">
                 <template #default="{ row }">
                   <span v-if="row.errorMessage || row.error" style="color: var(--app-status-danger-fg);">{{ row.errorMessage || row.error }}</span>
                   <span v-else class="text-secondary">{{ row.contentSummary || row.body || '-' }}</span>
@@ -498,7 +498,7 @@ function openLogDetail(row: any) {
 
 async function fetchVehicles() {
   try {
-    const res = await listVehicles({ active: true, pageSize: 100 })
+    const res = await listVehicles({ status: 'active', pageSize: 100 })
     vehicles.value = res.data
   } catch (error) {
     // handled by interceptor
@@ -507,7 +507,7 @@ async function fetchVehicles() {
 
 async function fetchDrivers() {
   try {
-    const res = await listDrivers({ active: true, pageSize: 100 })
+    const res = await listDrivers({ status: 'active', pageSize: 100 })
     drivers.value = res.data
   } catch (error) {
     // handled by interceptor
@@ -718,6 +718,23 @@ onMounted(() => {
 
 :deep(.trigger-source-col .cell) {
   white-space: nowrap;
+  min-width: 140px;
+}
+
+:deep(.topic-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.subject-col .cell) {
+  min-width: 220px;
+}
+
+:deep(.recipients-col .cell) {
+  min-width: 200px;
+}
+
+:deep(.error-message-col .cell) {
+  min-width: 180px;
 }
 
 .overdue-days {

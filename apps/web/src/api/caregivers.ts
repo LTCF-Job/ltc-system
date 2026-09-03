@@ -13,6 +13,7 @@ export async function listCaregivers(params?: {
   page?: number
   pageSize?: number
   q?: string
+  status?: string
   unresolvedLink?: boolean
   incomplete?: boolean
   excludePending?: boolean

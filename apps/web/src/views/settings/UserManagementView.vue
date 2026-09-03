@@ -51,7 +51,7 @@
 
       <template #table>
         <el-table :data="users" border stripe table-layout="auto" style="width: 100%">
-          <el-table-column prop="displayName" label="使用者姓名" min-width="170">
+          <el-table-column prop="displayName" label="使用者姓名" min-width="170" class-name="user-name-col">
             <template #default="{ row }">
               <div class="user-name-cell">
                 <span class="font-bold">{{ row.displayName }}</span>
@@ -59,7 +59,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="email" label="電子郵件 / 帳號" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="email" label="電子郵件 / 帳號" min-width="200" class-name="user-email-col" show-overflow-tooltip />
 
           <el-table-column label="身分角色" width="140" align="center">
             <template #default="{ row }">
@@ -598,6 +598,14 @@ onMounted(() => {
     background-color: var(--app-primary-light);
     color: var(--app-primary);
   }
+}
+
+:deep(.user-name-col .cell) {
+  min-width: 170px;
+}
+
+:deep(.user-email-col .cell) {
+  min-width: 200px;
 }
 
 .role-text {

@@ -17,7 +17,7 @@
 - 後台 UI 資訊架構、CRUD 工作台、表格、篩選、批次操作、審核流程或稽核頁面：讀 `.agents/skills/admin-ui-design/SKILL.md`。
 - LTC dashboard 視覺語言、後台 Dashboard、KPI 卡片、Sidebar、alerts、charts 或資料面板 UI：讀 `.agents/skills/ltc-dashboard-visual-language/SKILL.md`。
 - 前端 accessibility、鍵盤操作、focus、ARIA、表單錯誤、dialog／drawer、表格或圖表語意：讀 `.agents/skills/accessibility/SKILL.md`。
-- mock、demo、seed、fixture、offline mode 或 MSW：讀 `.agents/skills/mock-and-demo-boundaries/SKILL.md`。
+- demo、seed、fixture 或 offline mode：讀 `.agents/skills/mock-and-demo-boundaries/SKILL.md`。
 - 架構盤點、跨層依賴、模組過大、契約漂移或重構建議：讀 `.agents/skills/architecture-review/SKILL.md`。
 - Excel 匯入、範本下載或匯出功能（本專案僅支援 .xlsx，不支援 CSV）：讀 `.agents/skills/excel-import-export-integrity/SKILL.md`。
 
@@ -28,7 +28,7 @@
 本專案採前後端分離的 modular monolith：
 
 - Go API 已完成模組化：每個業務能力是 `internal/modules/<capability>/{transport,app,infra}`，模組之間只透過 `cmd/server` 注入的 port 協作。邊界由 `internal/arch/arch_test.go` 強制，其 baseline 為空。
-- Vue 3 SPA 逐步朝 `app / features / shared / mocks` 的 feature-oriented 結構遷移。
+- Vue 3 SPA 逐步朝 `app / features / shared` 的 feature-oriented 結構遷移。
 - 前端時間顯示規格：時間一律只顯示到秒數（`YYYY-MM-DD HH:mm:ss`，純時間 `HH:mm:ss`），統一透過 `@/utils/formatters` 格式化，嚴禁直接輸出 raw ISO 8601、毫秒或時區字尾。
 - API DTO、domain model、persistence model 與 mock fixture 保持不同責任。
 - 重構採逐功能切片進行，先建立新邊界，再移動被觸碰的功能；保留既有路由、回應 envelope、權限規則與業務行為。
@@ -49,21 +49,7 @@
 
 - Backend：在 `apps/api` 執行 `go test ./...`，需要編譯檢查時執行 `go build ./...`。
 - Frontend Type Check & Build：在 `apps/web` 執行 `npm run type-check` 與 `npm run build`。
-- Frontend E2E Tests（Playwright + MSW）：
-  - 跑全量 E2E 測試：`npm run test:e2e`（或根目錄 `make test-web-e2e`）。
-  - 單獨跑特定功能模組 E2E 測試：
-    - 認證與權限：`npm run test:e2e:auth`
-    - 總覽儀表板：`npm run test:e2e:dashboard`
-    - 個案與排班：`npm run test:e2e:cases`
-    - 基礎主檔：`npm run test:e2e:masters`
-    - 司機接送匯報：`npm run test:e2e:driver-reports`
-    - 搭乘月曆表：`npm run test:e2e:rides`
-    - 異常集中處理：`npm run test:e2e:issues`
-    - 營運報表：`npm run test:e2e:reports`
-    - 車輛與出勤：`npm run test:e2e:operations`
-    - 系統設定與稽核：`npm run test:e2e:settings`
-    - 政府申報匯出：`npm run test:e2e:exports`
-    - 響應式版面：`npm run test:e2e:responsive`
+- Frontend E2E Tests（Playwright，使用真實 API）：`npm run test:e2e:live`
 
 ## Language
 

@@ -136,14 +136,14 @@ func (r *DriverReportRepository) ListColumnsWithMapping(ctx context.Context, for
 	query := `
 		SELECT fc.id::text, fc.form_id::text, COALESCE(df.title, ''), COALESCE(v.display_name, ''),
 		       fc.column_index, fc.column_header, fc.cleaned_name, fc.kind, fc.mapping_status,
-		       fc.case_id::text, COALESCE(c.name, ''), fc.leg_seq,
-		       fc.suggested_case_id::text, COALESCE(sc.name, ''), fc.suggestion_score
+		       fc.case_id::text, c.name, fc.leg_seq,
+		       fc.suggested_case_id::text, sc.name, fc.suggestion_score
 		FROM form_columns fc
 		LEFT JOIN driver_report_forms df ON fc.form_id = df.id
 		LEFT JOIN vehicles v ON df.vehicle_id = v.id
 		LEFT JOIN cases c ON fc.case_id = c.id
 		LEFT JOIN cases sc ON fc.suggested_case_id = sc.id
-		WHERE ($1 = '' OR fc.form_id = $1::uuid)
+		WHERE ($1 = '' OR fc.form_id = NULLIF($1, '')::uuid)
 		  AND ($2 = '' OR fc.mapping_status = $2)
 		ORDER BY fc.form_id, fc.column_index ASC
 	`
@@ -189,7 +189,7 @@ func (r *DriverReportRepository) UpsertColumns(ctx context.Context, formID uuid.
 	query := `
 		INSERT INTO form_columns (id, form_id, column_index, column_header, cleaned_name, kind,
 		                          mapping_status, suggested_case_id, suggestion_score, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7::uuid, $8, now(), now())
+		VALUES ($1, $2, $3, $4, $5, $6, 'pending', NULLIF($7, '')::uuid, $8, now(), now())
 		ON CONFLICT (form_id, column_header) DO UPDATE
 		SET column_index = EXCLUDED.column_index,
 		    cleaned_name = EXCLUDED.cleaned_name,
@@ -221,7 +221,7 @@ func (r *DriverReportRepository) UpdateColumnMappingByID(ctx context.Context, co
 	query := `
 		UPDATE form_columns
 		SET mapping_status = $2,
-		    case_id = $3::uuid,
+		    case_id = NULLIF($3, '')::uuid,
 		    leg_seq = $4,
 		    updated_at = now()
 		WHERE id = $1::uuid
@@ -239,7 +239,7 @@ func (r *DriverReportRepository) UpdateColumnMappingByHeader(ctx context.Context
 	query := `
 		UPDATE form_columns
 		SET mapping_status = $3,
-		    case_id = $4::uuid,
+		    case_id = NULLIF($4, '')::uuid,
 		    leg_seq = $5,
 		    updated_at = now()
 		WHERE form_id = $1 AND column_header = $2

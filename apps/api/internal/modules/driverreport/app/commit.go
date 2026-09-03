@@ -74,12 +74,23 @@ func (s *DriverReportService) CommitDriverReport(
 			return err
 		}
 
-		mapped, err := s.repo.ListColumnsWithMapping(txCtx, formID.String(), "mapped")
+		allMapped, err := s.repo.ListColumnsWithMapping(txCtx, formID.String(), "mapped")
 		if err != nil {
 			return err
 		}
+		currentHeaders := make(map[string]struct{}, len(preview.Columns))
+		for _, column := range preview.Columns {
+			currentHeaders[column.ColumnHeader] = struct{}{}
+		}
+		mapped := make([]ColumnMapping, 0, len(allMapped))
+		for _, column := range allMapped {
+			if _, found := currentHeaders[column.ColumnHeader]; found {
+				mapped = append(mapped, column)
+			}
+		}
 		if len(mapped) == 0 {
-			return errors.New("尚未有任何欄位對應到個案，請先於預覽畫面完成對應")
+			// 僅保存本次欄位的 pending 對應；舊檔的 mapped 欄位不可套用到新檔並改寫搭乘資料。
+			return nil
 		}
 		result.MappedColumns = len(mapped)
 

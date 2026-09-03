@@ -118,7 +118,7 @@ func (a taskScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year
 type opsDriverLister struct{ repo *masterinfra.DriverRepository }
 
 func (a opsDriverLister) List(ctx context.Context, region, q string, page, pageSize int) ([]opsapp.DriverRef, int64, error) {
-	list, total, err := a.repo.List(ctx, region, q, page, pageSize)
+	list, total, err := a.repo.List(ctx, region, q, "", page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -158,7 +158,7 @@ func (a importSiteLookup) GetByName(ctx context.Context, name string) (*importap
 }
 
 func (a importSiteLookup) List(ctx context.Context, region string, page, pageSize int) ([]importapp.SiteRef, error) {
-	list, _, err := a.repo.List(ctx, region, "", page, pageSize)
+	list, _, err := a.repo.List(ctx, region, "", "", page, pageSize)
 	if err != nil {
 		return nil, err
 	}

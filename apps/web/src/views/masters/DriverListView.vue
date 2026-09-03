@@ -21,15 +21,15 @@
         />
 
         <el-select
-          v-model="filters.active"
+          v-model="filters.status"
           placeholder="狀態"
           clearable
           style="width: 130px"
           @change="handleSearch"
         >
           <el-option label="全部狀態" value="" />
-          <el-option label="啟用" :value="true" />
-          <el-option label="停用" :value="false" />
+          <el-option label="啟用" value="active" />
+          <el-option label="停用" value="inactive" />
         </el-select>
 
         <el-button type="primary" @click="handleSearch">查詢</el-button>
@@ -50,7 +50,7 @@
       <!-- 表格 -->
       <template #table>
         <el-table :data="drivers" border stripe table-layout="auto" style="width: 100%">
-          <el-table-column prop="name" label="司機姓名" min-width="110" align="center">
+          <el-table-column prop="name" label="司機姓名" min-width="110" align="center" class-name="driver-name-col">
             <template #default="{ row }"><span class="driver-name">{{ row.name }}</span></template>
           </el-table-column>
           <el-table-column prop="nationalId" label="身分證字號" width="140" align="center">
@@ -58,14 +58,14 @@
               <span class="driver-data font-mono">{{ row.nationalId || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="licenseClass" label="駕照類別" min-width="120" align="center">
+          <el-table-column prop="licenseClass" label="駕照類別" min-width="120" align="center" class-name="license-class-col">
             <template #default="{ row }">
               <span class="driver-data license-value">
                 {{ licenseClassLabel(row.licenseClass) }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="licenseExpiryDate" label="駕照有效日期" min-width="130" align="center">
+          <el-table-column prop="licenseExpiryDate" label="駕照有效日期" min-width="130" align="center" class-name="license-expiry-col">
             <template #default="{ row }">
               <span class="driver-data license-value">{{ formatDate(row.licenseExpiryDate) }}</span>
             </template>
@@ -75,10 +75,10 @@
               <span class="driver-data">{{ row.phone || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="email" label="電子信箱" min-width="200" show-overflow-tooltip>
+          <el-table-column prop="email" label="電子信箱" min-width="200" show-overflow-tooltip class-name="email-col">
             <template #default="{ row }"><span class="driver-data">{{ row.email || '-' }}</span></template>
           </el-table-column>
-          <el-table-column label="目前指派車輛" min-width="180">
+          <el-table-column label="目前指派車輛" min-width="180" class-name="assigned-vehicle-col">
             <template #default="{ row }">
               <div v-if="getAssignedVehicleDisplay(row)" class="assigned-vehicle-info">
                 <span class="vehicle-name">{{ getAssignedVehicleDisplay(row)?.name }}</span>
@@ -89,31 +89,31 @@
               <span v-else class="assignment-empty">尚未指派</span>
             </template>
           </el-table-column>
-          <el-table-column prop="active" label="狀態" width="130" align="center">
+          <el-table-column prop="status" label="狀態" width="130" align="center">
             <template #default="{ row }">
               <el-tooltip
                 v-if="authStore.hasPermission('masters_drivers', 'edit')"
-                :content="row.active ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
+                :content="row.status === 'active' ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
                 placement="top"
                 :show-after="300"
               >
                 <button
                   type="button"
                   class="status-toggle-pill"
-                  :class="row.active ? 'is-active' : 'is-inactive'"
-                  @click="handleQuickToggleActive(row as any, !row.active)"
+                  :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+                  @click="handleQuickToggleActive(row as any, row.status !== 'active')"
                 >
                   <span class="status-indicator-dot"></span>
-                  <span class="status-label-text">{{ row.active ? '啟用' : '停用' }}</span>
+                  <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
                 </button>
               </el-tooltip>
               <div
                 v-else
                 class="status-toggle-pill is-readonly"
-                :class="row.active ? 'is-active' : 'is-inactive'"
+                :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
               >
                 <span class="status-indicator-dot"></span>
-                <span class="status-label-text">{{ row.active ? '啟用' : '停用' }}</span>
+                <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
               </div>
             </template>
           </el-table-column>
@@ -165,6 +165,16 @@
         <el-form-item label="身分證字號" prop="nationalId">
           <el-input v-model="form.nationalId" placeholder="1 碼英文 + 9 碼數字" />
         </el-form-item>
+        <el-form-item label="所屬區域" prop="region">
+          <el-select v-model="form.region" placeholder="請選擇區域" filterable style="width: 100%">
+            <el-option
+              v-for="(label, key) in REGION_LABELS"
+              :key="key"
+              :label="label"
+              :value="key"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="聯絡電話" prop="phone">
           <el-input v-model="form.phone" placeholder="如：0912345678" />
         </el-form-item>
@@ -195,15 +205,15 @@
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="狀態" prop="active">
-          <el-radio-group v-model="form.active" class="status-radio-group">
-            <el-radio-button :value="true">
+        <el-form-item label="狀態" prop="status">
+          <el-radio-group v-model="form.status" class="status-radio-group">
+            <el-radio-button value="active">
               <div class="radio-pill active-pill">
                 <span class="radio-dot"></span>
                 <span>啟用</span>
               </div>
             </el-radio-button>
-            <el-radio-button :value="false">
+            <el-radio-button value="inactive">
               <div class="radio-pill inactive-pill">
                 <span class="radio-dot"></span>
                 <span>停用</span>
@@ -279,7 +289,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { formatDate } from '@/utils/formatters'
-import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass } from '@/types/domain'
+import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass, REGION_LABELS } from '@/types/domain'
 import type { DriverDTO, CreateDriverRequest, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
@@ -308,16 +318,18 @@ const assignRules = {
 const form = reactive<CreateDriverRequest>({
   name: '',
   nationalId: '',
+  region: 'miaoli',
   phone: '',
   email: '',
-  active: true,
+  status: 'active',
   licenseClass: null,
   licenseExpiryDate: null
 })
 
 const rules = {
   name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }],
-  nationalId: [{ required: true, message: '請輸入身分證字號', trigger: 'blur' }]
+  nationalId: [{ required: true, message: '請輸入身分證字號', trigger: 'blur' }],
+  region: [{ required: true, message: '請選擇所屬區域', trigger: 'change' }]
 }
 
 const {
@@ -334,14 +346,14 @@ const {
 } = useListQuery({
   defaultFilters: {
     q: '',
-    active: ''
+    status: ''
   },
   onFetch: async () => {
     const res = await listDrivers({
       page: page.value,
       pageSize: pageSize.value,
       q: filters.q,
-      active: filters.active === '' ? undefined : Boolean(filters.active)
+      status: filters.status || undefined
     })
     drivers.value = res.data
     total.value = res.meta.total
@@ -353,9 +365,10 @@ function licenseClassLabel(value?: DriverLicenseClass | null): string {
 }
 
 async function handleQuickToggleActive(row: DriverDTO, newActive: boolean) {
+  const newStatus = newActive ? 'active' : 'inactive'
   try {
-    await updateDriver(row.id, { active: newActive })
-    row.active = newActive
+    await updateDriver(row.id, { status: newStatus })
+    row.status = newStatus
     ElMessage.success(`已將司機「${row.name}」狀態更新為 ${newActive ? '啟用' : '停用'}`)
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新司機狀態失敗'))
@@ -366,9 +379,10 @@ function openCreateDialog() {
   editingId.value = null
   form.name = ''
   form.nationalId = ''
+  form.region = 'miaoli'
   form.phone = ''
   form.email = ''
-  form.active = true
+  form.status = 'active'
   form.licenseClass = null
   form.licenseExpiryDate = null
   dialogVisible.value = true
@@ -378,9 +392,10 @@ function openEditDialog(row: any) {
   editingId.value = row.id
   form.name = row.name
   form.nationalId = row.nationalId
+  form.region = row.region
   form.phone = row.phone || ''
   form.email = row.email || ''
-  form.active = row.active
+  form.status = row.status
   form.licenseClass = row.licenseClass ?? null
   form.licenseExpiryDate = row.licenseExpiryDate ?? null
   dialogVisible.value = true
@@ -476,7 +491,7 @@ async function handleDeleteDriver(row: DriverDTO) {
 }
 
 onMounted(async () => {
-  const vRes = await listVehicles({ active: true, pageSize: 100 })
+  const vRes = await listVehicles({ status: 'active', pageSize: 100 })
   allVehicles.value = vRes.data
 })
 
@@ -508,6 +523,27 @@ executeFetch()
 /* table-layout="auto" 下 min-width 欄位需自行鎖 nowrap，否則欄寬吃緊時會逐字換行 */
 .license-value {
   white-space: nowrap;
+}
+
+:deep(.driver-name-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.license-class-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.license-expiry-col .cell) {
+  min-width: 130px;
+}
+
+:deep(.email-col .cell) {
+  min-width: 200px;
+}
+
+:deep(.assigned-vehicle-col .cell) {
+  white-space: nowrap;
+  min-width: 180px;
 }
 
 .assignment-empty {

@@ -293,6 +293,7 @@ export interface SiteDTO {
   region: Region
   address: string
   openDays: number[]
+  status: 'active' | 'inactive'
   createdAt: string
 }
 
@@ -302,6 +303,7 @@ export interface CreateSiteRequest {
   region: Region
   address: string
   openDays: number[]
+  status?: 'active' | 'inactive'
 }
 
 export interface UpdateSiteRequest extends Partial<CreateSiteRequest> { }
@@ -323,7 +325,7 @@ export interface VehicleDTO {
   thirdPartyInsuranceExpiry: string | null
   lastInspectionDate: string | null
   wheelchairAccessible: boolean | null
-  active: boolean
+  status: 'active' | 'inactive'
   createdAt: string
   drivers?: VehicleDriverDTO[]
 }
@@ -337,17 +339,17 @@ export interface VehicleDriverDTO {
 
 export interface CreateVehicleRequest {
   plateNo: string
-  displayName: string
+  displayName?: string | null
   siteId: string
-  brand: string
-  model: string
-  manufactureYm: string
-  compulsoryInsuranceExpiry: string
-  passengerInsuranceExpiry: string
-  thirdPartyInsuranceExpiry: string
-  lastInspectionDate: string
+  brand?: string | null
+  model?: string | null
+  manufactureYm?: string | null
+  compulsoryInsuranceExpiry?: string | null
+  passengerInsuranceExpiry?: string | null
+  thirdPartyInsuranceExpiry?: string | null
+  lastInspectionDate?: string | null
   wheelchairAccessible: boolean
-  active?: boolean
+  status?: 'active' | 'inactive'
 }
 
 export interface UpdateVehicleRequest extends Partial<CreateVehicleRequest> { }
@@ -369,9 +371,10 @@ export interface DriverDTO {
   name: string
   nameNormalized?: string
   nationalId: string
+  region: string
   phone?: string
   email?: string
-  active: boolean
+  status: 'active' | 'inactive'
   // 駕照類別與有效日期為選填，未補登時為 null
   licenseClass?: DriverLicenseClass | null
   licenseExpiryDate?: string | null
@@ -382,9 +385,10 @@ export interface DriverDTO {
 export interface CreateDriverRequest {
   name: string
   nationalId: string
+  region: string
   phone?: string
   email?: string
-  active?: boolean
+  status?: 'active' | 'inactive'
   licenseClass?: DriverLicenseClass | null
   licenseExpiryDate?: string | null
 }
@@ -401,6 +405,7 @@ export interface CaregiverDTO {
   type: CaregiverType
   contact?: string
   notes?: string
+  status: 'active' | 'inactive'
   createdAt: string
   updatedAt: string
 }
@@ -411,6 +416,7 @@ export interface CreateCaregiverRequest {
   type: CaregiverType
   contact?: string
   notes?: string
+  status?: 'active' | 'inactive'
 }
 
 export interface UpdateCaregiverRequest extends Partial<CreateCaregiverRequest> { }

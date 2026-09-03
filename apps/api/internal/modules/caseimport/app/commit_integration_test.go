@@ -191,7 +191,7 @@ func (a siteAdapter) GetByName(ctx context.Context, name string) (*importapp.Sit
 }
 
 func (a siteAdapter) List(ctx context.Context, region string, page, pageSize int) ([]importapp.SiteRef, error) {
-	list, _, err := a.repo.List(ctx, region, "", page, pageSize)
+	list, _, err := a.repo.List(ctx, region, "", "", page, pageSize)
 	if err != nil {
 		return nil, err
 	}

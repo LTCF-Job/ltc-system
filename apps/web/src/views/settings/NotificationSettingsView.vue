@@ -69,19 +69,19 @@
           align="center"
         />
 
-        <el-table-column label="通知主題" min-width="140">
+        <el-table-column label="通知主題" min-width="140" class-name="topic-col">
           <template #default="{ row }">
             <span class="topic-label">{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="email" label="通知電子信箱" min-width="240" show-overflow-tooltip>
+        <el-table-column prop="email" label="通知電子信箱" min-width="240" show-overflow-tooltip class-name="email-col">
           <template #default="{ row }">
             <span class="email-text">{{ row.email }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="displayName" label="顯示名稱 / 備註" min-width="180" show-overflow-tooltip>
+        <el-table-column prop="displayName" label="顯示名稱 / 備註" min-width="180" show-overflow-tooltip class-name="display-name-col">
           <template #default="{ row }">
             <span>{{ row.displayName || '-' }}</span>
           </template>
@@ -599,6 +599,18 @@ onMounted(() => {
 
 .topic-label {
   white-space: nowrap;
+}
+
+:deep(.topic-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.email-col .cell) {
+  min-width: 240px;
+}
+
+:deep(.display-name-col .cell) {
+  min-width: 180px;
 }
 
 /* 新增外部信箱對話框樣式 */

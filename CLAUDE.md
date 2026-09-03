@@ -19,7 +19,7 @@
 - Admin UI design：`.agents/skills/admin-ui-design/SKILL.md`
 - LTC dashboard visual language：`.agents/skills/ltc-dashboard-visual-language/SKILL.md`
 - Frontend accessibility：`.agents/skills/accessibility/SKILL.md`
-- mock／demo／seed／MSW：`.agents/skills/mock-and-demo-boundaries/SKILL.md`
+- demo／seed／fixture：`.agents/skills/mock-and-demo-boundaries/SKILL.md`
 - architecture audit／refactoring review：`.agents/skills/architecture-review/SKILL.md`
 - Excel 匯入匯出、範本下載（僅支援 .xlsx，不支援 CSV）：`.agents/skills/excel-import-export-integrity/SKILL.md`
 
@@ -27,7 +27,7 @@
 
 ## Project scope
 
-這是由 `apps/api` 與 `apps/web` 組成的前後端分離 monorepo。後端是 Go、Gin、PostgreSQL；前端是 Vue 3、TypeScript、Vite、Vue Router、Pinia、Axios、Element Plus 與 MSW。架構改善以 incremental modular-monolith migration 為方向。
+這是由 `apps/api` 與 `apps/web` 組成的前後端分離 monorepo。後端是 Go、Gin、PostgreSQL；前端是 Vue 3、TypeScript、Vite、Vue Router、Pinia、Axios 與 Element Plus。架構改善以 incremental modular-monolith migration 為方向。
 
 ## Working rules
 
@@ -36,6 +36,6 @@
 - 測試執行原則：
   - 不主動執行 E2E 測試：嚴禁主動執行 E2E 測試（如 Playwright、`npm run test:e2e*`），只有在使用者明確指示或要求時才執行。平時前端驗證以 `npm run type-check`、`npm run build` 或單元測試為主。
   - 只有在修改應用程式原始碼（application source code logic）時才執行對應的單元測試（如後端 Go tests）；文件、指令、測試檔案、註解、設定檔等與程式碼無關的任務一律不跑測試。
-- mock、demo、seed 與 production behavior 必須標示清楚的啟用條件。
+- demo、seed 與 production behavior 必須標示清楚的啟用條件。
 - 不自行 commit、push、rebase、merge 或重設使用者修改。
 - 回報驗證結果時區分 static inspection、automated test、build/type-check 與 runtime proof。

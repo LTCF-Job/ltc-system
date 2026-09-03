@@ -224,8 +224,8 @@ async function loadMasterData() {
   masterDataError.value = false
   try {
     const [vRes, dRes] = await Promise.all([
-      listVehicles({ active: true, pageSize: 100 }),
-      listDrivers({ active: true, pageSize: 100 })
+      listVehicles({ status: 'active', pageSize: 100 }),
+      listDrivers({ status: 'active', pageSize: 100 })
     ])
     vehicles.value = (vRes as any)?.data || vRes || []
     drivers.value = (dRes as any)?.data || dRes || []

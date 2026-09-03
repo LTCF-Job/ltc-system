@@ -17,6 +17,7 @@ type Caregiver struct {
 	Type        string
 	Contact     string
 	Notes       string
+	Status      string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

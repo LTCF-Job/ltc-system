@@ -97,12 +97,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="caseCode" label="個案編號" width="100" />
-        <el-table-column prop="caseName" label="個案姓名" min-width="110">
+        <el-table-column prop="caseName" label="個案姓名" min-width="110" class-name="case-name-col">
           <template #default="{ row }">
             <span class="font-bold text-nowrap">{{ row.caseName }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip>
+        <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip class-name="note-col">
           <template #default="{ row }">
             {{ row.note || '-' }}
           </template>
@@ -112,13 +112,13 @@
             <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="origin" label="出發地 (住家)" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="origin" label="出發地 (住家)" min-width="180" show-overflow-tooltip class-name="origin-col" />
         <el-table-column prop="arriveTime" label="抵達時間" width="95" align="center">
           <template #default="{ row }">
             {{ row.arriveTime || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="destination" label="目的地 (單位)" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="destination" label="目的地 (單位)" min-width="180" show-overflow-tooltip class-name="destination-col" />
         <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="vehicle-name-col" />
       </el-table>
       <el-empty
@@ -150,12 +150,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="caseCode" label="個案編號" width="100" />
-        <el-table-column prop="caseName" label="個案姓名" min-width="110">
+        <el-table-column prop="caseName" label="個案姓名" min-width="110" class-name="case-name-col">
           <template #default="{ row }">
             <span class="font-bold text-nowrap">{{ row.caseName }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip>
+        <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip class-name="note-col">
           <template #default="{ row }">
             {{ row.note || '-' }}
           </template>
@@ -165,13 +165,13 @@
             <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="origin" label="出發地 (單位)" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="origin" label="出發地 (單位)" min-width="180" show-overflow-tooltip class-name="origin-col" />
         <el-table-column prop="arriveTime" label="抵達時間" width="95" align="center">
           <template #default="{ row }">
             {{ row.arriveTime || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="destination" label="目的地 (住家)" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="destination" label="目的地 (住家)" min-width="180" show-overflow-tooltip class-name="destination-col" />
         <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="vehicle-name-col" />
       </el-table>
       <el-empty
@@ -336,6 +336,23 @@ onMounted(async () => {
 
 :deep(.vehicle-name-col .cell) {
   white-space: nowrap;
+  min-width: 110px;
+}
+
+:deep(.case-name-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.note-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.origin-col .cell) {
+  min-width: 180px;
+}
+
+:deep(.destination-col .cell) {
+  min-width: 180px;
 }
 
 .mt-4 {

@@ -18,8 +18,8 @@ func NewSiteService(store SiteStore) *SiteService {
 }
 
 // List 查詢單位清單。
-func (s *SiteService) List(ctx context.Context, region, q string, page, pageSize int) ([]Site, int64, error) {
-	return s.store.List(ctx, region, q, page, pageSize)
+func (s *SiteService) List(ctx context.Context, region, q, status string, page, pageSize int) ([]Site, int64, error) {
+	return s.store.List(ctx, region, q, status, page, pageSize)
 }
 
 // CreateSiteInput 代表新增單位所需之輸入。

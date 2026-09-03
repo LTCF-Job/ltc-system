@@ -28,7 +28,7 @@ func (h *VehicleHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 
-	filter := app.VehicleFilter{Region: c.Query("region"), Q: c.Query("q")}
+	filter := app.VehicleFilter{Region: c.Query("region"), Q: c.Query("q"), Status: c.Query("status")}
 	if raw := c.Query("siteId"); raw != "" {
 		siteID, err := uuid.Parse(raw)
 		if err != nil {
@@ -40,7 +40,7 @@ func (h *VehicleHandler) List(c *gin.Context) {
 
 	vehicles, total, err := h.svc.List(c.Request.Context(), filter, page, pageSize)
 	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢車輛失敗", nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
@@ -55,13 +55,25 @@ func (h *VehicleHandler) List(c *gin.Context) {
 func (h *VehicleHandler) Create(c *gin.Context) {
 	var req CreateVehicleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
 	v, err := h.svc.Create(c.Request.Context(), req.toInput())
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		if errors.Is(err, app.ErrDuplicateVehiclePlateNo) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "plateNo", Reason: "車牌號碼已存在"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateVehicleDisplayName) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "displayName", Reason: "車輛代稱已存在"},
+			})
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -78,13 +90,25 @@ func (h *VehicleHandler) Update(c *gin.Context) {
 
 	var req UpdateVehicleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
 	v, err := h.svc.Update(c.Request.Context(), id, req.toInput())
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		if errors.Is(err, app.ErrDuplicateVehiclePlateNo) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "plateNo", Reason: "車牌號碼已存在"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateVehicleDisplayName) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "displayName", Reason: "車輛代稱已存在"},
+			})
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -108,7 +132,7 @@ func (h *VehicleHandler) SetDrivers(c *gin.Context) {
 
 	effectiveFrom := time.Now()
 	if req.EffectiveFrom != nil {
-		effectiveFrom = *req.EffectiveFrom
+		effectiveFrom = req.EffectiveFrom.toTime()
 	}
 
 	if err := h.svc.SetDrivers(c.Request.Context(), id, req.DriverIDs, effectiveFrom); err != nil {

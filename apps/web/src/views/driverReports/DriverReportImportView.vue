@@ -114,17 +114,43 @@
 
               <el-table-column label="說明" min-width="260" class-name="detail-col">
                 <template #default="{ row }">
-                  <span v-if="row.status === 'failed'" class="cell-value text-danger">{{ row.message }}</span>
-                  <span v-else-if="row.status === 'done'" class="cell-value">
-                    可匯入 {{ row.importedCount }} 天
-                    <span v-if="row.pendingColumnCount > 0" class="text-warning">
-                      · {{ row.pendingColumnCount }} 欄待維護
-                    </span>
-                  </span>
-                  <span v-else-if="row.overlapMonths.length" class="cell-value text-warning">
-                    將整月覆蓋 {{ row.overlapMonths.join('、') }} 既有資料
-                  </span>
-                  <span v-else class="cell-value text-muted">-</span>
+                  <div class="detail-cell">
+                    <div class="detail-summary-line">
+                      <span v-if="row.status === 'failed'" class="text-danger truncate-text" :title="row.message">
+                        {{ row.message }}
+                      </span>
+                      <template v-else-if="row.status === 'done'">
+                        <span v-if="row.importedCount > 0" class="text-regular">
+                          可匯入 {{ row.importedCount }} 天
+                          <span v-if="row.pendingColumnCount > 0" class="text-warning">
+                            · {{ row.pendingColumnCount }} 欄待維護
+                          </span>
+                        </span>
+                        <span v-else-if="row.pendingColumnCount > 0" class="text-warning">
+                          已建立待維護欄位
+                        </span>
+                        <span v-else class="text-muted">沒有可寫入的搭乘資料</span>
+                      </template>
+                      <span v-else-if="row.overlapMonths.length" class="text-warning truncate-text" :title="`將整月覆蓋 ${row.overlapMonths.join('、')} 既有資料`">
+                        將整月覆蓋 {{ row.overlapMonths.join('、') }} 既有資料
+                      </span>
+                      <span v-else-if="row.status === 'analyzing'" class="text-muted">解析中…</span>
+                      <span v-else-if="row.status === 'needsVehicle'" class="text-warning">請先選擇對應車輛</span>
+                      <span v-else class="text-muted">-</span>
+                    </div>
+
+                    <el-button
+                      v-if="row.issues.length || row.status === 'failed' || row.overlapMonths.length"
+                      size="small"
+                      type="primary"
+                      link
+                      class="view-detail-btn"
+                      @click="openDetailDialog(row as BatchFileRow)"
+                    >
+                      <el-icon class="btn-icon"><Document /></el-icon>
+                      檢視說明<template v-if="row.issues.length">（{{ row.issues.length }}）</template>
+                    </el-button>
+                  </div>
                 </template>
               </el-table-column>
 
@@ -154,7 +180,7 @@
 
         <el-empty v-if="!pendingLoading && pendingColumns.length === 0" description="目前沒有待維護的欄位" />
 
-        <el-table v-else :data="pendingColumns" v-loading="pendingLoading" border>
+        <el-table v-else :data="pendingColumns" v-loading="pendingLoading" max-height="600" border>
           <el-table-column label="車輛／匯報表" min-width="180">
             <template #default="{ row }">
               <div>{{ row.vehicleName }}</div>
@@ -178,7 +204,7 @@
             <template #default="{ row }">
               <div class="target-binding-box">
                 <el-select v-model="row.editCaseId" placeholder="搜尋個案" filterable clearable style="width: 170px">
-                  <el-option v-for="c in cases" :key="c.id" :label="`${c.name} (${c.code})`" :value="c.id" />
+                  <el-option v-for="c in cases" :key="c.id" :label="`${c.name}${c.code ? ` (${c.code})` : ''}`" :value="c.id" />
                 </el-select>
                 <el-select v-model="row.editLegSeq" placeholder="趟次" style="width: 150px">
                   <el-option v-for="leg in LEG_SEQ_OPTIONS" :key="leg.value" :value="leg.value" :label="leg.label" />
@@ -235,12 +261,101 @@
         />
       </template>
     </el-dialog>
+
+    <!-- 說明與解析問題檢視彈窗（內建自訂卷軸） -->
+    <el-dialog
+      v-model="detailDialogVisible"
+      title="檔案解析說明與問題清單"
+      width="min(680px, calc(100vw - 32px))"
+      destroy-on-close
+      class="detail-modal"
+    >
+      <div v-if="selectedRowForDetail" class="detail-dialog-content">
+        <div class="file-info-bar">
+          <div class="info-group">
+            <span class="info-label">檔案名稱：</span>
+            <span class="info-val file-title">{{ selectedRowForDetail.file.name }}</span>
+          </div>
+          <div class="info-row">
+            <div class="info-item">
+              <span class="info-label">對應車輛：</span>
+              <span class="info-val">{{ selectedRowForDetail.vehicleName || '未指定' }}</span>
+            </div>
+            <div class="info-item" v-if="selectedRowForDetail.months.length">
+              <span class="info-label">涵蓋月份：</span>
+              <span class="info-val">{{ selectedRowForDetail.months.join('、') }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">目前狀態：</span>
+              <StatusTag :status="selectedRowForDetail.status" preset="driverReportImportStatus" variant="chip" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 錯誤告警區 -->
+        <el-alert
+          v-if="selectedRowForDetail.status === 'failed' && selectedRowForDetail.message"
+          :title="selectedRowForDetail.message"
+          type="error"
+          show-icon
+          :closable="false"
+          class="dialog-alert"
+        />
+
+        <!-- 重複覆蓋提示 -->
+        <el-alert
+          v-if="selectedRowForDetail.overlapMonths.length"
+          :title="`匯入時將整月覆蓋 ${selectedRowForDetail.overlapMonths.join('、')} 之既有搭乘紀錄`"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="dialog-alert"
+        />
+
+        <!-- 說明與解析問題清單（具備卷軸設計） -->
+        <div class="issues-box">
+          <div class="issues-header">
+            <span class="issues-title">詳細說明與提醒項目</span>
+            <el-tag v-if="selectedRowForDetail.issues.length" size="small" type="info" round effect="light">
+              共 {{ selectedRowForDetail.issues.length }} 項
+            </el-tag>
+          </div>
+
+          <div class="issues-scroll-body">
+            <div v-if="selectedRowForDetail.issues.length === 0" class="empty-issues text-muted">
+              無其他特殊提醒或問題項目
+            </div>
+            <div
+              v-for="(issue, index) in selectedRowForDetail.issues"
+              :key="`${issue.level}-${index}-${issue.message}`"
+              :class="['issue-row', `is-${issue.level}`]"
+            >
+              <el-tag
+                size="small"
+                :type="issue.level === 'error' ? 'danger' : 'warning'"
+                effect="plain"
+                class="issue-level-tag"
+              >
+                {{ issue.level === 'error' ? '錯誤' : '提醒' }}
+              </el-tag>
+              <span class="issue-text">{{ issue.message }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="dialog-action-footer">
+          <el-button type="primary" @click="detailDialogVisible = false">關閉</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { UploadFilled, Document } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import { useRouter } from 'vue-router'
 import {
@@ -266,6 +381,7 @@ import type {
   DriverReportColumnDTO,
   DriverReportFormDTO,
   DriverReportImportedMonthDTO,
+  DriverReportPreviewDTO,
   VehicleDTO
 } from '@/types/api'
 
@@ -281,6 +397,15 @@ function apiErrorCode(error: unknown): string | undefined {
 // ---- 批次上傳 ----
 
 type RowStatus = 'needsVehicle' | 'queued' | 'analyzing' | 'processing' | 'done' | 'failed'
+type RowIssue = { level: 'error' | 'warning'; message: string }
+
+const IMPORT_FIELD_LABELS: Record<string, string> = {
+  file: '檔案',
+  columnDecisions: '欄位對應',
+  民國日期: '民國日期',
+  駕駛人: '駕駛人',
+  備註: '備註'
+}
 
 interface BatchFileRow {
   key: string
@@ -294,6 +419,7 @@ interface BatchFileRow {
   importedCount: number
   pendingColumnCount: number
   message: string
+  issues: RowIssue[]
 }
 
 const MAX_CONCURRENT = 3
@@ -309,6 +435,14 @@ const summary = ref<{ succeeded: number; failed: number; importedDays: number; p
 const overlapAcknowledged = ref(false)
 // 排隊中 + 執行中的解析數，供自動匯入判斷「整批都解析完了沒」
 const analyzePending = ref(0)
+
+const detailDialogVisible = ref(false)
+const selectedRowForDetail = ref<BatchFileRow | null>(null)
+
+function openDetailDialog(row: BatchFileRow) {
+  selectedRowForDetail.value = row
+  detailDialogVisible.value = true
+}
 
 let rowSeq = 0
 
@@ -386,7 +520,8 @@ function onFileChange(file: UploadFile) {
     overlapMonths: [],
     importedCount: 0,
     pendingColumnCount: 0,
-    message: ''
+    message: '',
+    issues: []
   }
   rows.value.push(row)
   if (vehicle) enqueueAnalyze(rows.value[rows.value.length - 1])
@@ -439,6 +574,21 @@ function computeMonths(previewRows: Array<{ errorMessage?: string; serviceDate: 
     if (!r.errorMessage && r.serviceDate) months.add(r.serviceDate.slice(0, 7))
   }
   return [...months].sort()
+}
+
+function collectPreviewIssues(preview: Pick<DriverReportPreviewDTO, 'errors' | 'warnings'>): RowIssue[] {
+  return [
+    ...preview.errors.map((item) => ({ level: 'error' as const, message: formatPreviewIssue(item) })),
+    ...preview.warnings.map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) }))
+  ]
+}
+
+function formatPreviewIssue(item: { rowIndex: number; field?: string; message: string }): string {
+  const field = item.field ? IMPORT_FIELD_LABELS[item.field] || item.field : ''
+  if (item.rowIndex === 1 && (item.field === '備註' || item.field === '問題回報' || item.field === 'remark')) {
+    return `【表頭欄位】${item.message}`
+  }
+  return `第 ${item.rowIndex} 列${field ? `【${field}】` : ''}：${item.message}`
 }
 
 // 有系統推薦個案的欄位自動視為已對應直接匯入；完全沒有推薦、比對不到個案的欄位
@@ -497,6 +647,7 @@ async function analyzeRow(row: BatchFileRow) {
   try {
     const formId = await ensureForm(row)
     const preview = await dryRunImportDriverReport(formId, row.file)
+    row.issues = collectPreviewIssues(preview)
     const months = computeMonths(preview.previewRows)
     row.months = months
     row.overlapMonths = months.filter((m) => importedByKey.value.has(`${formId}::${m}`))
@@ -513,12 +664,13 @@ async function processRow(row: BatchFileRow) {
   try {
     const formId = await ensureForm(row)
     const preview = await dryRunImportDriverReport(formId, row.file)
+    row.issues = collectPreviewIssues(preview)
     const decisions = buildAutoDecisions(preview.columns)
     const months = computeMonths(preview.previewRows)
 
     if (months.length === 0) {
       row.status = 'failed'
-      row.message = '檔案內沒有可匯入的日期'
+      row.message = row.issues.length ? '檔案沒有可寫入的日期，請依下列原因修正後重新上傳' : '檔案內沒有可匯入的日期'
       return
     }
 
@@ -527,7 +679,20 @@ async function processRow(row: BatchFileRow) {
     for (const month of months) {
       const result = await commitImportDriverReport(formId, row.file, payload, month)
       importedRows += result.importedRows
+      row.issues.push(
+        ...result.skippedRows.flatMap((item) =>
+          item.reasons.map((reason) => ({
+            level: 'error' as const,
+            message: `第 ${item.rowIndex} 列${item.reportDate ? `（${item.reportDate}）` : ''}：${reason}`
+          }))
+        ),
+        ...(result.warnings ?? []).map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) }))
+      )
     }
+    row.issues = row.issues.filter(
+      (issue, index, all) =>
+        all.findIndex((candidate) => candidate.level === issue.level && candidate.message === issue.message) === index
+    )
     row.status = 'done'
     row.importedCount = importedRows
     row.pendingColumnCount = Object.values(decisions).filter((d) => d.mappingStatus === 'pending').length
@@ -538,10 +703,17 @@ async function processRow(row: BatchFileRow) {
 }
 
 function rowErrorMessage(error: unknown): string {
-  const detail = (error as { response?: { data?: { error?: { details?: Array<{ reason: string }>; message?: string } } } })
+  const detail = (error as { response?: { data?: { error?: { details?: Array<{ field?: string; reason: string }>; message?: string } } } })
     ?.response?.data?.error
-  if (detail?.details?.length) return detail.details.map((d) => d.reason).join('；')
-  return detail?.message || '匯入失敗，請確認檔案內容'
+  if (detail?.details?.length) {
+    return detail.details
+      .map((d) => `${d.field ? `【${IMPORT_FIELD_LABELS[d.field] || d.field}】` : ''}${d.reason}`)
+      .join('；')
+  }
+  const code = apiErrorCode(error)
+  if (code) return resolveErrorMessage(code, '匯入失敗，請確認檔案內容')
+  if (error instanceof Error && error.message) return `解析發生錯誤：${error.message}`
+  return '匯入失敗，請確認檔案內容'
 }
 
 async function runWithLimit<T>(items: T[], handler: (item: T) => Promise<void>) {
@@ -589,7 +761,7 @@ async function runImport() {
 async function loadUploadContext() {
   try {
     const [vehiclePage, formList, months] = await Promise.all([
-      listVehicles({ pageSize: 200, active: true }),
+      listVehicles({ pageSize: 200, status: 'active' }),
       listDriverReportForms(),
       listDriverReportImportedMonths()
     ])
@@ -626,9 +798,9 @@ const quickCreateForm = ref<{ columnId: string; name: string; legSeq: number }>(
   legSeq: 1
 })
 
-// 待維護頁籤首次切入時才拉取清單，避免上傳頁多打一次 API
+// 切換至待維護頁籤時主動重新整理清單，確保顯示最新待處理項目
 async function handleTabChange(name: string | number) {
-  if (name === 'pending' && pendingColumns.value.length === 0 && !pendingLoading.value) {
+  if (name === 'pending') {
     await fetchPending()
   }
 }
@@ -658,25 +830,35 @@ async function fetchPending() {
       editCaseId: c.suggestedCaseId || '',
       editLegSeq: c.suggestedLegSeq || 1
     }))
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入待維護清單失敗'))
   } finally {
     pendingLoading.value = false
   }
 }
 
 async function handleBind(row: any) {
-  await updateColumnMapping(row.id, {
-    caseId: row.editCaseId,
-    legSeq: row.editLegSeq,
-    mappingStatus: 'mapped'
-  })
-  ElMessage.success(`已將「${row.columnHeader}」成功綁定`)
-  fetchPending()
+  try {
+    await updateColumnMapping(row.id, {
+      caseId: row.editCaseId,
+      legSeq: row.editLegSeq,
+      mappingStatus: 'mapped'
+    })
+    ElMessage.success(`已將「${row.columnHeader}」成功綁定`)
+    await fetchPending()
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '綁定失敗'))
+  }
 }
 
 async function handleIgnore(row: any) {
-  await updateColumnMapping(row.id, { mappingStatus: 'ignored' })
-  ElMessage.info(`已略過「${row.columnHeader}」`)
-  fetchPending()
+  try {
+    await updateColumnMapping(row.id, { mappingStatus: 'ignored' })
+    ElMessage.info(`已略過「${row.columnHeader}」`)
+    await fetchPending()
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '略過失敗'))
+  }
 }
 
 // openQuickCreateCase 帶入匯報表原始欄位解析出的姓名，讓使用者只需補趟次即可建立並直接綁定
@@ -699,7 +881,9 @@ async function handleQuickCreateAndBind() {
     })
     ElMessage.success(`已建立個案「${created.name}」並完成綁定`)
     quickCreateVisible.value = false
-    fetchPending()
+    await fetchPending()
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '新增個案或綁定失敗'))
   } finally {
     quickCreating.value = false
   }
@@ -874,8 +1058,186 @@ onMounted(() => {
 }
 
 .file-table :deep(.detail-col .cell) {
-  white-space: nowrap;
+  min-width: 280px;
+}
+
+.detail-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   min-width: 260px;
+}
+
+.detail-summary-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.truncate-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+
+.view-detail-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.view-detail-btn .btn-icon {
+  font-size: 14px;
+}
+
+.file-info-bar {
+  background: var(--app-bg-muted, #f8fafc);
+  border: 1px solid var(--app-border-color);
+  border-radius: var(--app-radius-sm, 6px);
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+
+.info-group {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.info-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.info-label {
+  color: var(--app-text-secondary, #64748b);
+}
+
+.info-val {
+  color: var(--app-text-primary, #0f172a);
+  font-weight: 500;
+}
+
+.file-title {
+  font-weight: 600;
+  color: var(--app-color-primary, #2563eb);
+}
+
+.dialog-alert {
+  margin-bottom: 12px;
+}
+
+.issues-box {
+  border: 1px solid var(--app-border-color);
+  border-radius: var(--app-radius-sm, 6px);
+  background: var(--app-surface, #ffffff);
+  overflow: hidden;
+}
+
+.issues-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--app-bg-muted, #f8fafc);
+  border-bottom: 1px solid var(--app-border-color);
+}
+
+.issues-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text-primary, #1e293b);
+}
+
+/* 自訂滑順卷軸設計，防止長清單撐開對話框或整頁 */
+.issues-scroll-body {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.issues-scroll-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.issues-scroll-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.issues-scroll-body::-webkit-scrollbar-thumb {
+  background: var(--app-border-color-dark, #cbd5e1);
+  border-radius: 4px;
+}
+
+.issues-scroll-body::-webkit-scrollbar-thumb:hover {
+  background: var(--app-text-muted, #94a3b8);
+}
+
+.issue-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.issue-row.is-error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.issue-row.is-warning {
+  background: #fffbeb;
+  border-color: #fef3c7;
+  color: #92400e;
+}
+
+.issue-level-tag {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.issue-text {
+  flex: 1;
+  word-break: break-all;
+}
+
+.empty-issues {
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.dialog-action-footer {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .file-table :deep(.action-col .cell) {

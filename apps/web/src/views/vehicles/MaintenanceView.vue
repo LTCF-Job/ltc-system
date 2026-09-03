@@ -78,8 +78,8 @@
             {{ Number(row.mileage).toLocaleString() }}
           </template>
         </el-table-column>
-        <el-table-column prop="items" label="保養／維修項目" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="vendor" label="廠商／車廠" min-width="140" show-overflow-tooltip>
+        <el-table-column prop="items" label="保養／維修項目" min-width="200" class-name="items-col" show-overflow-tooltip />
+        <el-table-column prop="vendor" label="廠商／車廠" min-width="140" class-name="vendor-col" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.vendor || '-' }}
           </template>
@@ -102,7 +102,7 @@
             <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="note" label="備註" min-width="140" show-overflow-tooltip>
+        <el-table-column prop="note" label="備註" min-width="140" class-name="note-col" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.note || '-' }}
           </template>
@@ -286,7 +286,7 @@ const rules = {
 
 async function fetchFilterOptions() {
   try {
-    const res = await listVehicles({ pageSize: 100 })
+    const res = await listVehicles({ status: 'active', pageSize: 100 })
     vehicles.value = res.data
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入車輛清單失敗'))
@@ -415,6 +415,19 @@ onMounted(async () => {
 
 :deep(.vehicle-name-col .cell) {
   white-space: nowrap;
+  min-width: 120px;
+}
+
+:deep(.items-col .cell) {
+  min-width: 200px;
+}
+
+:deep(.vendor-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.note-col .cell) {
+  min-width: 140px;
 }
 
 </style>

@@ -123,6 +123,14 @@ func ExtractValidationDetails(err error) []ErrorDetail {
 		}
 	}
 
+	if strings.Contains(err.Error(), "parsing time") {
+		return []ErrorDetail{
+			{
+				Reason: "日期格式錯誤，格式應為 YYYY-MM-DD",
+			},
+		}
+	}
+
 	return []ErrorDetail{
 		{
 			Reason: "輸入資料不符合格式要求",

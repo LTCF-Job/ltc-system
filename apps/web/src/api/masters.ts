@@ -15,6 +15,7 @@ import type {
   UpdateDriverRequest,
   DryRunImportResultDTO
 } from '@/types/api'
+import { sanitizeVehiclePayload } from '@/utils/vehicleForm'
 
 // 區域 Regions
 export async function listRegions(params?: {
@@ -49,6 +50,7 @@ export async function listSites(params?: {
   page?: number
   pageSize?: number
   region?: string
+  status?: string
   q?: string
 }): Promise<Paged<SiteDTO>> {
   return apiClient.get('/sites', { params })
@@ -73,19 +75,21 @@ export async function listVehicles(params?: {
   pageSize?: number
   siteId?: string
   region?: string
-  active?: boolean
+  status?: string
   q?: string
 }): Promise<Paged<VehicleDTO>> {
   return apiClient.get('/vehicles', { params })
 }
 
 export async function createVehicle(data: CreateVehicleRequest): Promise<VehicleDTO> {
-  const res = await apiClient.post('/vehicles', data)
+  const payload = sanitizeVehiclePayload(data)
+  const res = await apiClient.post('/vehicles', payload)
   return (res as any).data ?? (res as any)
 }
 
 export async function updateVehicle(id: string, data: UpdateVehicleRequest): Promise<VehicleDTO> {
-  return apiClient.patch(`/vehicles/${id}`, data)
+  const payload = sanitizeVehiclePayload(data as CreateVehicleRequest)
+  return apiClient.patch(`/vehicles/${id}`, payload)
 }
 
 export async function deleteVehicle(id: string): Promise<void> {
@@ -96,7 +100,7 @@ export async function deleteVehicle(id: string): Promise<void> {
 export async function listDrivers(params?: {
   page?: number
   pageSize?: number
-  active?: boolean
+  status?: string
   q?: string
 }): Promise<Paged<DriverDTO>> {
   return apiClient.get('/drivers', { params })

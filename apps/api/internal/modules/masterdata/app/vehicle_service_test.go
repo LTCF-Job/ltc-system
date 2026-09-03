@@ -87,6 +87,47 @@ func TestVehicleService_SetDrivers(t *testing.T) {
 	assert.Equal(t, from, driverStore.lastReplace.effectiveFrom)
 }
 
+func TestVehicleService_Create_NormalizesStatus(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "空字串預設 active", input: "", want: "active"},
+		{name: "已收斂的舊列舉值預設 active", input: "maintenance", want: "active"},
+		{name: "接受 active", input: "active", want: "active"},
+		{name: "接受 inactive", input: "inactive", want: "inactive"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewVehicleService(&fakeVehicleStore{}, newFakeDriverStore(), nil)
+			v, err := svc.Create(context.Background(), VehicleInput{Status: tt.input})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, v.Status)
+		})
+	}
+}
+
+func TestVehicleService_Update_NormalizesStatus(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "空字串預設 active", input: "", want: "active"},
+		{name: "已收斂的舊列舉值預設 active", input: "retired", want: "active"},
+		{name: "接受 inactive", input: "inactive", want: "inactive"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewVehicleService(&fakeVehicleStore{}, newFakeDriverStore(), nil)
+			v, err := svc.Update(context.Background(), uuid.New(), VehicleInput{Status: tt.input})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, v.Status)
+		})
+	}
+}
+
 type fakeMasterAuditWriter struct {
 	entries []AuditEntry
 }

@@ -654,8 +654,8 @@ async function fetchUnresolvedCases() {
 
 async function loadSitesAndVehicles() {
   const [sitesRes, vehiclesRes] = await Promise.all([
-    listSites({ pageSize: 100 }),
-    listVehicles({ active: true, pageSize: 100 })
+    listSites({ status: 'active', pageSize: 100 }),
+    listVehicles({ status: 'active', pageSize: 100 })
   ])
   availableSites.value = sitesRes.data
   availableVehicles.value = vehiclesRes.data
@@ -730,7 +730,9 @@ async function handleQuickCreateAndLink() {
     }
     quickCreateVisible.value = false
   } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '新增並關聯失敗'))
+    if (!err.response?.data?.error?.details?.length) {
+      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '新增並關聯失敗'))
+    }
   } finally {
     quickCreateSaving.value = false
   }

@@ -1,6 +1,6 @@
 # 前端框架與專案結構
 
-給要動 `apps/web` 程式碼的人看。技術棧、目錄結構、資料流、路由與權限、Mock 邊界、狀態管理原則。頁面完整清單另見 [frontend-pages.md](frontend-pages.md)，功能流程另見 [frontend-flows.md](frontend-flows.md)。
+給要動 `apps/web` 程式碼的人看。技術棧、目錄結構、資料流、路由與權限、狀態管理原則。頁面完整清單另見 [frontend-pages.md](frontend-pages.md)，功能流程另見 [frontend-flows.md](frontend-flows.md)。
 
 ## 技術棧
 

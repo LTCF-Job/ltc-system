@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // driverRow 是 drivers 資料表的一列。
@@ -72,7 +73,7 @@ func NewDriverRepository(db *pgxpool.Pool) *DriverRepository {
 }
 
 // List 取得司機清單。
-func (r *DriverRepository) List(ctx context.Context, region, q string, page, pageSize int) ([]app.Driver, int64, error) {
+func (r *DriverRepository) List(ctx context.Context, region, q, status string, page, pageSize int) ([]app.Driver, int64, error) {
 	if r.db == nil {
 		return []app.Driver{}, 0, nil
 	}
@@ -83,10 +84,11 @@ func (r *DriverRepository) List(ctx context.Context, region, q string, page, pag
 		WHERE deleted_at IS NULL
 		  AND ($1 = '' OR region = $1)
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR code ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
+		  AND ($3 = '' OR status = $3)
 		ORDER BY code ASC
-		LIMIT $3 OFFSET $4
+		LIMIT $4 OFFSET $5
 	`
-	rows, err := r.db.Query(ctx, query, region, q, pageSize, offset)
+	rows, err := r.db.Query(ctx, query, region, q, status, pageSize, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query drivers: %w", err)
 	}
@@ -107,8 +109,9 @@ func (r *DriverRepository) List(ctx context.Context, region, q string, page, pag
 		WHERE deleted_at IS NULL
 		  AND ($1 = '' OR region = $1)
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR code ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
+		  AND ($3 = '' OR status = $3)
 	`
-	_ = r.db.QueryRow(ctx, countQuery, region, q).Scan(&total)
+	_ = r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total)
 
 	return list, total, nil
 }
@@ -230,7 +233,7 @@ func (r *DriverRepository) ListByVehicleIDsOnDate(ctx context.Context, vehicleID
 		  AND d.deleted_at IS NULL
 		ORDER BY d.code ASC
 	`
-	rows, err := r.db.Query(ctx, query, vehicleIDs, on)
+	rows, err := r.db.Query(ctx, query, pgxdb.UUIDStrings(vehicleIDs), on)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query drivers by vehicles: %w", err)
 	}
@@ -255,18 +258,20 @@ func (r *DriverRepository) ReplaceVehicleDrivers(ctx context.Context, vehicleID 
 	}
 	defer tx.Rollback(ctx)
 
+	driverIDStrings := pgxdb.UUIDStrings(driverIDs)
+
 	// 被移出本車的司機，其指派在 effectiveFrom 當日結束；尚未生效的指派直接刪除
 	if _, err := tx.Exec(ctx, `
 		DELETE FROM driver_assignments
 		WHERE vehicle_id = $1 AND NOT (driver_id = ANY($2::uuid[])) AND lower(effective_range) >= $3::date
-	`, vehicleID, driverIDs, effectiveFrom); err != nil {
+	`, vehicleID, driverIDStrings, effectiveFrom); err != nil {
 		return fmt.Errorf("failed to drop future assignments: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE driver_assignments
 		SET effective_range = daterange(lower(effective_range), $3::date, '[)')
 		WHERE vehicle_id = $1 AND NOT (driver_id = ANY($2::uuid[])) AND effective_range @> $3::date
-	`, vehicleID, driverIDs, effectiveFrom); err != nil {
+	`, vehicleID, driverIDStrings, effectiveFrom); err != nil {
 		return fmt.Errorf("failed to close assignments: %w", err)
 	}
 
@@ -323,7 +328,7 @@ func (r *DriverRepository) ReplaceVehicleDrivers(ctx context.Context, vehicleID 
 
 // SoftDelete 軟刪除司機，回傳 false 代表該筆已被刪除過。
 func (r *DriverRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
-	tag, err := r.db.Exec(ctx, `UPDATE drivers SET deleted_at = now(), deleted_by = $2, status = 'resigned' WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
+	tag, err := r.db.Exec(ctx, `UPDATE drivers SET deleted_at = now(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
 	if err != nil {
 		return false, err
 	}

@@ -49,18 +49,19 @@ func NewSiteRepository(db *pgxpool.Pool) *SiteRepository {
 	return &SiteRepository{db: db}
 }
 
-// List 取得單位清單並支援區域與關鍵字篩選。
-func (r *SiteRepository) List(ctx context.Context, region, q string, page, pageSize int) ([]app.Site, int64, error) {
+// List 取得單位清單並支援區域、狀態與關鍵字篩選。
+func (r *SiteRepository) List(ctx context.Context, region, q, status string, page, pageSize int) ([]app.Site, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT ` + siteColumns + `
 		FROM sites
 		WHERE ($1 = '' OR region = $1)
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR address ILIKE '%' || $2 || '%')
+		  AND ($3 = '' OR status = $3)
 		ORDER BY name ASC
-		LIMIT $3 OFFSET $4
+		LIMIT $4 OFFSET $5
 	`
-	rows, err := r.db.Query(ctx, query, region, q, pageSize, offset)
+	rows, err := r.db.Query(ctx, query, region, q, status, pageSize, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query sites: %w", err)
 	}
@@ -80,8 +81,9 @@ func (r *SiteRepository) List(ctx context.Context, region, q string, page, pageS
 		SELECT COUNT(*) FROM sites
 		WHERE ($1 = '' OR region = $1)
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR address ILIKE '%' || $2 || '%')
+		  AND ($3 = '' OR status = $3)
 	`
-	_ = r.db.QueryRow(ctx, countQuery, region, q).Scan(&total)
+	_ = r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total)
 
 	return sites, total, nil
 }

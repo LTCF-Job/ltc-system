@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -69,8 +70,13 @@ type VehicleInput struct {
 }
 
 func (in VehicleInput) apply(v *Vehicle) {
-	v.PlateNo = in.PlateNo
-	v.DisplayName = in.DisplayName
+	v.PlateNo = strings.TrimSpace(in.PlateNo)
+	// 代稱非必填；未填時以車號代替，滿足 display_name 的 NOT NULL UNIQUE 約束。
+	displayName := strings.TrimSpace(in.DisplayName)
+	if displayName == "" {
+		displayName = v.PlateNo
+	}
+	v.DisplayName = displayName
 	v.SiteID = in.SiteID
 	v.Brand = in.Brand
 	v.Model = in.Model
@@ -80,7 +86,12 @@ func (in VehicleInput) apply(v *Vehicle) {
 	v.ThirdPartyInsuranceExpiry = in.ThirdPartyInsuranceExpiry
 	v.LastInspectionDate = in.LastInspectionDate
 	v.WheelchairAccessible = in.WheelchairAccessible
-	v.Status = in.Status
+	// 確保 status 符合資料庫 check constraint，空值或非法值預設 active
+	status := strings.TrimSpace(in.Status)
+	if status != "active" && status != "inactive" {
+		status = "active"
+	}
+	v.Status = status
 }
 
 // Create 新增車輛。

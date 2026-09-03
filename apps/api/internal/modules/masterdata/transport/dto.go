@@ -2,6 +2,7 @@ package transport
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -144,19 +145,20 @@ type UpdateVehicleRequest struct {
 }
 
 // VehicleWriteFields 是新增與更新車輛共用的可寫欄位。區域不在其中：車輛的區域由所屬單位決定。
+// 除車號與所屬單位外皆非必填。
 type VehicleWriteFields struct {
 	PlateNo                   string     `json:"plateNo" binding:"required"`
-	DisplayName               string     `json:"displayName" binding:"required"`
+	DisplayName               string     `json:"displayName"`
 	SiteID                    *uuid.UUID `json:"siteId" binding:"required"`
-	Brand                     string     `json:"brand" binding:"required"`
-	Model                     string     `json:"model" binding:"required"`
-	ManufactureYM             string     `json:"manufactureYm" binding:"required"`
-	CompulsoryInsuranceExpiry *time.Time `json:"compulsoryInsuranceExpiry" binding:"required"`
-	PassengerInsuranceExpiry  *time.Time `json:"passengerInsuranceExpiry" binding:"required"`
-	ThirdPartyInsuranceExpiry *time.Time `json:"thirdPartyInsuranceExpiry" binding:"required"`
-	LastInspectionDate        *time.Time `json:"lastInspectionDate" binding:"required"`
-	WheelchairAccessible      *bool      `json:"wheelchairAccessible" binding:"required"`
-	Status                    string     `json:"status"`
+	Brand                     string     `json:"brand"`
+	Model                     string     `json:"model"`
+	ManufactureYM             string    `json:"manufactureYm"`
+	CompulsoryInsuranceExpiry *wireDate `json:"compulsoryInsuranceExpiry"`
+	PassengerInsuranceExpiry  *wireDate `json:"passengerInsuranceExpiry"`
+	ThirdPartyInsuranceExpiry *wireDate `json:"thirdPartyInsuranceExpiry"`
+	LastInspectionDate        *wireDate `json:"lastInspectionDate"`
+	WheelchairAccessible      *bool     `json:"wheelchairAccessible"`
+	Status                    string    `json:"status"`
 }
 
 func (f VehicleWriteFields) toInput() app.VehicleInput {
@@ -167,10 +169,10 @@ func (f VehicleWriteFields) toInput() app.VehicleInput {
 		Brand:                     f.Brand,
 		Model:                     f.Model,
 		ManufactureYM:             f.ManufactureYM,
-		CompulsoryInsuranceExpiry: f.CompulsoryInsuranceExpiry,
-		PassengerInsuranceExpiry:  f.PassengerInsuranceExpiry,
-		ThirdPartyInsuranceExpiry: f.ThirdPartyInsuranceExpiry,
-		LastInspectionDate:        f.LastInspectionDate,
+		CompulsoryInsuranceExpiry: f.CompulsoryInsuranceExpiry.toTimePtr(),
+		PassengerInsuranceExpiry:  f.PassengerInsuranceExpiry.toTimePtr(),
+		ThirdPartyInsuranceExpiry: f.ThirdPartyInsuranceExpiry.toTimePtr(),
+		LastInspectionDate:        f.LastInspectionDate.toTimePtr(),
 		WheelchairAccessible:      f.WheelchairAccessible,
 		Status:                    f.Status,
 	}
@@ -254,9 +256,9 @@ type CreateDriverRequest struct {
 	Name              string     `json:"name" binding:"required"`
 	NationalID        string     `json:"nationalId" binding:"required"`
 	Email             *string    `json:"email"`
-	Region            string     `json:"region" binding:"required"`
-	LicenseClass      *string    `json:"licenseClass"`
-	LicenseExpiryDate *time.Time `json:"licenseExpiryDate"`
+	Region            string    `json:"region" binding:"required"`
+	LicenseClass      *string   `json:"licenseClass"`
+	LicenseExpiryDate *wireDate `json:"licenseExpiryDate"`
 }
 
 // UpdateDriverRequest 代表更新司機請求，欄位為 nil 表示不變更。
@@ -282,25 +284,77 @@ func (n *nullableTime) UnmarshalJSON(data []byte) error {
 		n.Value = nil
 		return nil
 	}
-	var t time.Time
-	if err := json.Unmarshal(data, &t); err != nil {
+	t, err := parseWireDate(data)
+	if err != nil {
 		return err
 	}
-	n.Value = &t
+	n.Value = t
 	return nil
+}
+
+// wireDate 解析前端日期選擇器送出的純日期字串（YYYY-MM-DD），並相容完整 RFC3339 時間字串。
+type wireDate time.Time
+
+// UnmarshalJSON 見 wireDate 註解。
+func (d *wireDate) UnmarshalJSON(data []byte) error {
+	t, err := parseWireDate(data)
+	if err != nil {
+		return err
+	}
+	if t != nil {
+		*d = wireDate(*t)
+	} else {
+		*d = wireDate{}
+	}
+	return nil
+}
+
+// parseWireDate 依序嘗試純日期與 RFC3339 時間格式解析。支援空字串與 null，此時回傳 (nil, nil)。
+func parseWireDate(data []byte) (*time.Time, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, err
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return &t, nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (d *wireDate) toTimePtr() *time.Time {
+	if d == nil || time.Time(*d).IsZero() {
+		return nil
+	}
+	t := time.Time(*d)
+	return &t
+}
+
+func (d wireDate) toTime() time.Time {
+	return time.Time(d)
 }
 
 // AssignVehicleRequest 代表指派司機車輛請求。
 type AssignVehicleRequest struct {
-	VehicleID     uuid.UUID  `json:"vehicleId" binding:"required"`
-	EffectiveFrom time.Time  `json:"effectiveFrom" binding:"required"`
-	EffectiveTo   *time.Time `json:"effectiveTo"`
+	VehicleID     uuid.UUID `json:"vehicleId" binding:"required"`
+	EffectiveFrom wireDate  `json:"effectiveFrom" binding:"required"`
+	EffectiveTo   *wireDate `json:"effectiveTo"`
 }
 
 // SetVehicleDriversRequest 代表整批設定車輛司機的請求。DriverIDs 為空代表清空該車司機。
 type SetVehicleDriversRequest struct {
 	DriverIDs     []uuid.UUID `json:"driverIds"`
-	EffectiveFrom *time.Time  `json:"effectiveFrom"`
+	EffectiveFrom *wireDate   `json:"effectiveFrom"`
 }
 
 // RegionResponse 代表回傳給前端的區域資料。

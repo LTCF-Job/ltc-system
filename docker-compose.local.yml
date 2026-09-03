@@ -44,6 +44,7 @@ services:
     environment:
       - NODE_ENV=development
       - VITE_API_TARGET=http://api:8080
+      - VITE_APP_ENV=local
     depends_on:
       - api
 

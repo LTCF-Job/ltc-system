@@ -31,6 +31,18 @@
           <el-option v-for="s in allSites" :key="s.id" :label="s.name" :value="s.id" />
         </el-select>
 
+        <el-select
+          v-model="filters.status"
+          placeholder="狀態"
+          clearable
+          style="width: 130px"
+          @change="handleSearch"
+        >
+          <el-option label="全部狀態" value="" />
+          <el-option label="啟用" value="active" />
+          <el-option label="停用" value="inactive" />
+        </el-select>
+
         <el-button type="primary" @click="handleSearch">查詢</el-button>
         <el-button @click="handleReset">重設</el-button>
       </template>
@@ -58,46 +70,46 @@
         >
           <el-table-column type="index" label="編號" width="70" align="center" :index="rowIndex" />
 
-          <el-table-column prop="plateNo" label="車號" min-width="120" class-name="vehicle-nowrap-col">
+          <el-table-column prop="plateNo" label="車號" min-width="120" class-name="vehicle-nowrap-col vehicle-plateno-col">
             <template #default="{ row }">
               <span class="font-mono text-id">{{ row.plateNo }}</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="displayName" label="代稱" min-width="180" class-name="vehicle-nowrap-col" />
+          <el-table-column prop="displayName" label="代稱" min-width="180" class-name="vehicle-nowrap-col vehicle-displayname-col" />
 
-          <el-table-column prop="siteName" label="所屬單位" min-width="160" class-name="vehicle-nowrap-col">
+          <el-table-column prop="siteName" label="所屬單位" min-width="160" class-name="vehicle-nowrap-col vehicle-sitename-col">
             <template #default="{ row }">
               <span v-if="row.siteName">{{ row.siteName }}</span>
               <span v-else class="vehicle-empty-text">未指定</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="brand" label="廠牌" min-width="90" class-name="vehicle-nowrap-col" />
+          <el-table-column prop="brand" label="廠牌" min-width="90" class-name="vehicle-nowrap-col vehicle-brand-col" />
 
-          <el-table-column prop="model" label="車型" min-width="120" class-name="vehicle-nowrap-col" />
+          <el-table-column prop="model" label="車型" min-width="120" class-name="vehicle-nowrap-col vehicle-model-col" />
 
-          <el-table-column label="出廠年月" min-width="120" align="center" class-name="vehicle-nowrap-col">
+          <el-table-column label="出廠年月" min-width="120" align="center" class-name="vehicle-nowrap-col vehicle-manufactureym-col">
             <template #default="{ row }">{{ formatYearMonth(row.manufactureYm) }}</template>
           </el-table-column>
 
-          <el-table-column label="強制責任險 (年/月/日)" min-width="150" align="center" class-name="vehicle-nowrap-col">
+          <el-table-column label="強制責任險 (年/月/日)" min-width="150" align="center" class-name="vehicle-nowrap-col vehicle-compulsory-col">
             <template #default="{ row }">{{ formatRocDate(row.compulsoryInsuranceExpiry) }}</template>
           </el-table-column>
 
-          <el-table-column label="乘客責任險 (年/月/日)" min-width="150" align="center" class-name="vehicle-nowrap-col">
+          <el-table-column label="乘客責任險 (年/月/日)" min-width="150" align="center" class-name="vehicle-nowrap-col vehicle-passenger-col">
             <template #default="{ row }">{{ formatRocDate(row.passengerInsuranceExpiry) }}</template>
           </el-table-column>
 
-          <el-table-column label="第三人責任險 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col">
+          <el-table-column label="第三人責任險 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col vehicle-thirdparty-col">
             <template #default="{ row }">{{ formatRocDate(row.thirdPartyInsuranceExpiry) }}</template>
           </el-table-column>
 
-          <el-table-column label="前次檢驗日期 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col">
+          <el-table-column label="前次檢驗日期 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col vehicle-inspection-col">
             <template #default="{ row }">{{ formatRocDate(row.lastInspectionDate) }}</template>
           </el-table-column>
 
-          <el-table-column label="符合輪椅載運規定" min-width="140" align="center" class-name="vehicle-nowrap-col">
+          <el-table-column label="符合輪椅載運規定" min-width="140" align="center" class-name="vehicle-nowrap-col vehicle-wheelchair-col">
             <template #default="{ row }">
               <el-tag
                 v-if="row.wheelchairAccessible !== null"
@@ -111,36 +123,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="active" label="狀態" width="130" align="center">
-            <template #default="{ row }">
-              <el-tooltip
-                v-if="authStore.hasPermission('masters_vehicles', 'edit')"
-                :content="row.active ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
-                placement="top"
-                :show-after="300"
-              >
-                <button
-                  type="button"
-                  class="status-toggle-pill"
-                  :class="row.active ? 'is-active' : 'is-inactive'"
-                  @click="handleQuickToggleActive(row as any, !row.active)"
-                >
-                  <span class="status-indicator-dot"></span>
-                  <span class="status-label-text">{{ row.active ? '啟用' : '停用' }}</span>
-                </button>
-              </el-tooltip>
-              <div
-                v-else
-                class="status-toggle-pill is-readonly"
-                :class="row.active ? 'is-active' : 'is-inactive'"
-              >
-                <span class="status-indicator-dot"></span>
-                <span class="status-label-text">{{ row.active ? '啟用' : '停用' }}</span>
-              </div>
-            </template>
-          </el-table-column>
-
-          <el-table-column label="目前司機" min-width="160">
+          <el-table-column label="目前司機" min-width="160" class-name="vehicle-current-driver-col">
             <template #default="{ row }">
               <div v-if="row.drivers && row.drivers.length" class="vehicle-driver-tags">
                 <el-tag
@@ -157,8 +140,37 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center" class-name="vehicle-nowrap-col">
+          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center" class-name="vehicle-nowrap-col vehicle-createdat-col">
             <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+          </el-table-column>
+
+          <el-table-column prop="status" label="狀態" width="130" align="center">
+            <template #default="{ row }">
+              <el-tooltip
+                v-if="authStore.hasPermission('masters_vehicles', 'edit')"
+                :content="row.status === 'active' ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
+                placement="top"
+                :show-after="300"
+              >
+                <button
+                  type="button"
+                  class="status-toggle-pill"
+                  :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+                  @click="handleQuickToggleActive(row as any, row.status !== 'active')"
+                >
+                  <span class="status-indicator-dot"></span>
+                  <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
+                </button>
+              </el-tooltip>
+              <div
+                v-else
+                class="status-toggle-pill is-readonly"
+                :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+              >
+                <span class="status-indicator-dot"></span>
+                <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
+              </div>
+            </template>
           </el-table-column>
 
           <el-table-column
@@ -308,14 +320,16 @@ const {
 } = useListQuery({
   defaultFilters: {
     q: '',
-    siteId: ''
+    siteId: '',
+    status: ''
   },
   onFetch: async () => {
     const res = await listVehicles({
       page: page.value,
       pageSize: pageSize.value,
       q: filters.q,
-      siteId: filters.siteId
+      siteId: filters.siteId,
+      status: filters.status || undefined
     })
     vehicles.value = res.data
     total.value = res.meta.total
@@ -329,7 +343,7 @@ function rowIndex(index: number) {
 
 async function loadDrivers() {
   try {
-    const res = await listDrivers({ active: true, pageSize: 200 })
+    const res = await listDrivers({ status: 'active', pageSize: 200 })
     allDrivers.value = res.data
   } catch {
     allDrivers.value = []
@@ -338,7 +352,7 @@ async function loadDrivers() {
 
 async function loadSites() {
   try {
-    const res = await listSites({ pageSize: 200 })
+    const res = await listSites({ status: 'active', pageSize: 200 })
     allSites.value = res.data
   } catch {
     allSites.value = []
@@ -402,7 +416,7 @@ function openEditDialog(row: VehicleDTO) {
     thirdPartyInsuranceExpiry: row.thirdPartyInsuranceExpiry || '',
     lastInspectionDate: row.lastInspectionDate || '',
     wheelchairAccessible: row.wheelchairAccessible ?? true,
-    active: row.active
+    status: row.status
   })
   formRef.value?.clearValidate()
   dialogVisible.value = true
@@ -424,15 +438,18 @@ async function handleSubmit() {
       dialogVisible.value = false
       executeFetch()
     } catch (err: any) {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存車輛資料失敗'))
+      if (!err.response?.data?.error?.details?.length) {
+        ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存車輛資料失敗'))
+      }
     } finally {
       submitting.value = false
     }
   })
 }
 
-// 快速切換狀態仍送出完整車輛內容：更新 API 是整筆覆寫，只送 active 會清掉其餘欄位
+// 快速切換狀態仍送出完整車輛內容：更新 API 是整筆覆寫，只送 status 會清掉其餘欄位
 async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
+  const newStatus = newActive ? 'active' : 'inactive'
   try {
     await updateVehicle(row.id, {
       plateNo: row.plateNo,
@@ -446,9 +463,9 @@ async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
       thirdPartyInsuranceExpiry: row.thirdPartyInsuranceExpiry || '',
       lastInspectionDate: row.lastInspectionDate || '',
       wheelchairAccessible: row.wheelchairAccessible ?? true,
-      active: newActive
+      status: newStatus
     })
-    row.active = newActive
+    row.status = newStatus
     ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '啟用' : '停用'}`)
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '切換狀態失敗'))
@@ -495,6 +512,58 @@ executeFetch()
 
 :deep(.vehicle-nowrap-col .cell) {
   white-space: nowrap;
+}
+
+:deep(.vehicle-plateno-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.vehicle-displayname-col .cell) {
+  min-width: 180px;
+}
+
+:deep(.vehicle-sitename-col .cell) {
+  min-width: 160px;
+}
+
+:deep(.vehicle-brand-col .cell) {
+  min-width: 90px;
+}
+
+:deep(.vehicle-model-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.vehicle-manufactureym-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.vehicle-compulsory-col .cell) {
+  min-width: 150px;
+}
+
+:deep(.vehicle-passenger-col .cell) {
+  min-width: 150px;
+}
+
+:deep(.vehicle-thirdparty-col .cell) {
+  min-width: 160px;
+}
+
+:deep(.vehicle-inspection-col .cell) {
+  min-width: 160px;
+}
+
+:deep(.vehicle-wheelchair-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.vehicle-createdat-col .cell) {
+  min-width: 170px;
+}
+
+:deep(.vehicle-current-driver-col .cell) {
+  min-width: 160px;
 }
 
 .driver-dialog-hint {

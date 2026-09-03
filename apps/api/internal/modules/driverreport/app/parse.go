@@ -68,7 +68,8 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 	}
 	driverIdx := dateIdx + 1
 
-	caseHeaders := trimTrailingEmpty(rows[headerRowIdx])[driverIdx+1 : remarkIdx]
+	rawHeaderRow := trimTrailingEmpty(rows[headerRowIdx])
+	caseHeaders := rawHeaderRow[driverIdx+1 : remarkIdx]
 	columns, err := s.buildColumnPreviews(ctx, formID, caseHeaders, driverIdx+1)
 	if err != nil {
 		return nil, err
@@ -82,6 +83,32 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 		PreviewRows: []RowPreview{},
 		Errors:      []ImportErrorItem{},
 		Warnings:    []ImportWarningItem{},
+	}
+
+	// 備註／問題回報欄位後的欄位不匯入，在此記錄提醒供前端說明檢視
+	if len(rawHeaderRow) > remarkIdx+1 {
+		var ignoredHeaders []string
+		for _, h := range rawHeaderRow[remarkIdx+1:] {
+			if th := strings.TrimSpace(h); th != "" {
+				ignoredHeaders = append(ignoredHeaders, th)
+			}
+		}
+		if len(ignoredHeaders) > 0 {
+			remarkName := strings.TrimSpace(rawHeaderRow[remarkIdx])
+			if remarkName == "" {
+				remarkName = headerRemark
+			}
+			sampleCount := 3
+			if len(ignoredHeaders) < sampleCount {
+				sampleCount = len(ignoredHeaders)
+			}
+			samples := strings.Join(ignoredHeaders[:sampleCount], "、")
+			result.Warnings = append(result.Warnings, ImportWarningItem{
+				RowIndex: headerRowIdx + 1,
+				Field:    remarkName,
+				Message:  fmt.Sprintf("「%s」欄位之後的 %d 個欄位已略過不匯入（如：%s 等）", remarkName, len(ignoredHeaders), samples),
+			})
+		}
 	}
 
 	for i := headerRowIdx + 1; i < len(rows); i++ {

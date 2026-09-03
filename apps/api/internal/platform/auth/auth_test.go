@@ -78,6 +78,31 @@ func TestAuthMiddleware_LocalMockJWTPrefix(t *testing.T) {
 	assert.Equal(t, "admin", c.GetString(ContextKeyActorRole))
 }
 
+func TestAuthMiddleware_ProductionRejectsMockJWTPrefix(t *testing.T) {
+	srv, _ := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL}
+	w, _ := performAuthRequest(t, Middleware(cfg), "Bearer mock_jwt_admin_token")
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestAuthMiddleware_ProductionIgnoresMockHeader(t *testing.T) {
+	cfg := &config.Config{AppEnv: "production"}
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/cases", nil)
+	req.Header.Set("X-Mock-Role", "admin")
+	c.Request = req
+
+	Middleware(cfg)(c)
+
+	assert.True(t, c.IsAborted())
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Empty(t, c.GetString(ContextKeyActorRole))
+}
+
 // 未設定 SUPABASE_JWKS_URL 時，正式環境必須拒絕請求而不是信任未驗證的 JWT。
 func TestAuthMiddleware_ProductionWithoutJWKS_Rejects(t *testing.T) {
 	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: ""}

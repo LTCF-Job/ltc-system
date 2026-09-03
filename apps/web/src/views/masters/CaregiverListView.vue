@@ -4,7 +4,7 @@
       <el-tab-pane label="照護人員清單" name="list">
         <DataTablePage
           title="照護人員管理"
-          :max-width="990"
+          :max-width="1070"
           v-model:page="page"
           v-model:pageSize="pageSize"
           :total="total"
@@ -20,6 +20,17 @@
               style="width: 240px"
               @keyup.enter="handleSearch"
             />
+            <el-select
+              v-model="filters.status"
+              placeholder="狀態"
+              clearable
+              style="width: 130px"
+              @change="handleSearch"
+            >
+              <el-option label="全部狀態" value="" />
+              <el-option label="啟用" value="active" />
+              <el-option label="停用" value="inactive" />
+            </el-select>
             <el-button type="primary" @click="handleSearch">查詢</el-button>
             <el-button @click="handleReset">重設</el-button>
           </template>
@@ -47,7 +58,7 @@
                   <span>{{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="單位" min-width="220">
+              <el-table-column label="單位" min-width="220" class-name="site-col">
                 <template #default="{ row }">
                   <span v-if="row.siteName">{{ row.siteName }}</span>
                   <div v-else-if="row.siteNameRaw" class="unresolved-slot">
@@ -66,14 +77,43 @@
                 </template>
               </el-table-column>
               <el-table-column prop="name" label="姓名" min-width="120" class-name="name-col" />
-              <el-table-column label="聯絡方式" min-width="140">
+              <el-table-column label="聯絡方式" min-width="140" class-name="contact-col">
                 <template #default="{ row }">
-                  <span>{{ row.contact || '-' }}</span>
+                  <span class="contact-value">{{ row.contact || '-' }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="備註" min-width="180" show-overflow-tooltip>
+              <el-table-column label="備註" min-width="180" show-overflow-tooltip class-name="notes-col">
                 <template #default="{ row }">
                   <span>{{ row.notes || '-' }}</span>
+                </template>
+              </el-table-column>
+
+              <el-table-column prop="status" label="狀態" width="130" align="center">
+                <template #default="{ row }">
+                  <el-tooltip
+                    v-if="authStore.hasPermission('masters_caregivers', 'edit')"
+                    :content="row.status === 'active' ? '目前為啟用，點選切換為停用' : '目前為停用，點選切換為啟用'"
+                    placement="top"
+                    :show-after="300"
+                  >
+                    <button
+                      type="button"
+                      class="status-toggle-pill"
+                      :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+                      @click="handleToggleStatus(row as CaregiverDTO, row.status !== 'active')"
+                    >
+                      <span class="status-indicator-dot"></span>
+                      <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
+                    </button>
+                  </el-tooltip>
+                  <div
+                    v-else
+                    class="status-toggle-pill is-readonly"
+                    :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+                  >
+                    <span class="status-indicator-dot"></span>
+                    <span class="status-label-text">{{ row.status === 'active' ? '啟用' : '停用' }}</span>
+                  </div>
                 </template>
               </el-table-column>
 
@@ -235,6 +275,22 @@
         <el-form-item label="備註" prop="notes">
           <el-input v-model="form.notes" type="textarea" :rows="2" placeholder="選填" />
         </el-form-item>
+        <el-form-item label="狀態" prop="status">
+          <el-radio-group v-model="form.status" class="status-radio-group">
+            <el-radio-button value="active">
+              <div class="radio-pill active-pill">
+                <span class="radio-dot"></span>
+                <span>啟用</span>
+              </div>
+            </el-radio-button>
+            <el-radio-button value="inactive">
+              <div class="radio-pill inactive-pill">
+                <span class="radio-dot"></span>
+                <span>停用</span>
+              </div>
+            </el-radio-button>
+          </el-radio-group>
+        </el-form-item>
       </el-form>
       <template #footer>
         <DialogFooter
@@ -292,16 +348,22 @@ const {
   handleReset,
   executeFetch
 } = useListQuery({
-  defaultFilters: { q: '' },
+  defaultFilters: { q: '', status: '' },
   onFetch: async () => {
-    const res = await listCaregivers({ page: page.value, pageSize: pageSize.value, q: filters.q, excludePending: true })
+    const res = await listCaregivers({
+      page: page.value,
+      pageSize: pageSize.value,
+      q: filters.q,
+      status: filters.status || undefined,
+      excludePending: true
+    })
     caregivers.value = res.data
     total.value = res.meta.total
   }
 })
 
 async function loadSites() {
-  const res = await listSites({ pageSize: 100 })
+  const res = await listSites({ status: 'active', pageSize: 100 })
   availableSites.value = res.data
 }
 
@@ -378,7 +440,14 @@ const dialogVisible = ref(false)
 const saving = ref(false)
 const editingId = ref<string | null>(null)
 const formRef = ref<FormInstance>()
-const form = reactive({ siteId: '' as string | undefined, name: '', type: '' as CaregiverType | '', contact: '', notes: '' })
+const form = reactive({
+  siteId: '' as string | undefined,
+  name: '',
+  type: '' as CaregiverType | '',
+  contact: '',
+  notes: '',
+  status: 'active' as 'active' | 'inactive'
+})
 const rules = {
   name: [{ required: true, message: '請輸入姓名', trigger: 'blur' }],
   type: [{ required: true, message: '請選擇類型', trigger: 'change' }]
@@ -391,6 +460,7 @@ function openCreateDialog() {
   form.type = ''
   form.contact = ''
   form.notes = ''
+  form.status = 'active'
   dialogVisible.value = true
 }
 
@@ -401,7 +471,19 @@ function openEditDialog(row: any) {
   form.type = row.type
   form.contact = row.contact || ''
   form.notes = row.notes || ''
+  form.status = row.status || 'active'
   dialogVisible.value = true
+}
+
+async function handleToggleStatus(row: CaregiverDTO, newActive: boolean) {
+  const newStatus = newActive ? 'active' : 'inactive'
+  try {
+    await updateCaregiver(row.id, { status: newStatus })
+    row.status = newStatus
+    ElMessage.success(`已將照護人員「${row.name}」切換為 ${newActive ? '啟用' : '停用'}`)
+  } catch (err: any) {
+    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
+  }
 }
 
 async function handleSave() {
@@ -416,7 +498,8 @@ async function handleSave() {
           name: form.name,
           type: form.type as CaregiverType,
           contact: form.contact,
-          notes: form.notes
+          notes: form.notes,
+          status: form.status
         })
         ElMessage.success('照護人員資料已更新')
       } else {
@@ -425,7 +508,8 @@ async function handleSave() {
           name: form.name,
           type: form.type as CaregiverType,
           contact: form.contact,
-          notes: form.notes
+          notes: form.notes,
+          status: form.status
         })
         ElMessage.success('照護人員建立成功')
       }
@@ -472,7 +556,7 @@ async function fetchPending() {
       listCaregivers({ incomplete: true, pageSize: 100 })
     ])
     const merged = new Map<string, CaregiverDTO>()
-    for (const row of [...unresolvedRes.data, ...incompleteRes.data]) {
+    for (const row of [...(unresolvedRes.data ?? []), ...(incompleteRes.data ?? [])]) {
       merged.set(row.id, row)
     }
     pendingCaregivers.value = Array.from(merged.values())
@@ -615,6 +699,22 @@ executeFetch()
    min-width 欄位沒鎖 nowrap 一樣會被壓成逐字換行（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
 :deep(.name-col .cell) {
   white-space: nowrap;
+  min-width: 120px;
+}
+
+/* 主表格「單位／聯絡方式／備註」欄同樣沒有 class-name 鎖 min-width 下限，
+   會被 table-layout="auto" 壓窄或被其他欄擠壓（見待維護子表格同一段說明）。 */
+:deep(.site-col .cell) {
+  white-space: nowrap;
+  min-width: 220px;
+}
+
+:deep(.contact-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.notes-col .cell) {
+  min-width: 180px;
 }
 
 .empty-value {

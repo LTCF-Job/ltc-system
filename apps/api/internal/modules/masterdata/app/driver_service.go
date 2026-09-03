@@ -25,8 +25,8 @@ func NewDriverService(store DriverStore, cfg *config.Config, auditRepo AuditWrit
 }
 
 // List 查詢司機清單。
-func (s *DriverService) List(ctx context.Context, region, q string, page, pageSize int) ([]Driver, int64, error) {
-	return s.store.List(ctx, region, q, page, pageSize)
+func (s *DriverService) List(ctx context.Context, region, q, status string, page, pageSize int) ([]Driver, int64, error) {
+	return s.store.List(ctx, region, q, status, page, pageSize)
 }
 
 // driverLicenseClasses 是允許的駕照類別代碼，與 drivers.license_class 的 CHECK 約束一致。
@@ -132,7 +132,8 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 	if in.Region != nil {
 		existing.Region = *in.Region
 	}
-	if in.Status != nil {
+	// 只接受兩種狀態，非法值一律保留原本的值不變更
+	if in.Status != nil && (*in.Status == "active" || *in.Status == "inactive") {
 		existing.Status = *in.Status
 	}
 	if in.LicenseClass != nil {

@@ -8,7 +8,7 @@ covers:
   - apps/api/internal/modules/identity/app/module_keys.go
   - apps/api/internal/modules/identity/transport/me_handler.go
   - apps/api/migrations/000018_role_permission_delete_axis.up.sql
-  - apps/api/migrations/000020_role_permission_module_coverage.up.sql
+  - apps/api/migrations/000021_role_permission_module_coverage.up.sql
   - apps/web/src/types/domain.ts
   - apps/web/src/views/settings/RoleManagementView.vue
 ---
@@ -35,7 +35,7 @@ covers:
 1. 路由層不再有任何 `RequireRoles`，全部改走 `RequirePermission`；`cmd/server/routes_module_keys_test.go` 以 AST 掃描鎖住這個結論。`/holidays*` 對映新模組 `settings_holidays`，`/tasks/*` 對映新模組 `ops_tasks`（手動觸發維運任務屬異動，用 `edit` 軸）。
 2. `POST /auth/change-password`（自助改自己密碼）與 `POST /demo/reset` 移除權限檢查，只要求通過 `auth.Middleware`；後者的資料平面隔離由 middleware 的 `enforceDataPlane` 負責。
 3. 模組 key 的權威清單集中在 `identityapp.ModuleKeys`，`RoleService.Create/Update` 與 `UserService.UpdatePermissions` 在寫入前驗證，未登記的 key 回 400 並列出全部不合法項目——未登記的 key 寫進 JSONB 後不會被任何路由讀到，等同無聲失效。
-4. `000020_role_permission_module_coverage` 對**所有**既有角色回填兩個新模組，門檻沿用遷移前路由的實際要求；並補回 `settings_users`／`settings_roles` 的 `delete`（`000018` 的兩份模組清單都漏列這兩個，使其落入 `ELSE false`，`base_role = 'admin'` 者補為 `true`）。
+4. `000021_role_permission_module_coverage` 對**所有**既有角色回填兩個新模組，門檻沿用遷移前路由的實際要求；並補回 `settings_users`／`settings_roles` 的 `delete`（`000018` 的兩份模組清單都漏列這兩個，使其落入 `ELSE false`，`base_role = 'admin'` 者補為 `true`）。
 5. 新增 `GET /api/v1/auth/me`，回傳目前登入者身分與 effective permissions；與 `RequirePermission` 共用 `auth.ResolveEffectivePermissions`，前端據以隱藏的操作與 API 實際放行的範圍因此不會分歧。
 
 殘留風險：取得 `settings_roles.edit`／`settings_users.edit` 的角色可以修改權限矩陣，等同具備自我提權能力。這是「所有角色使用同一套權限設計」的必然代價，緩解方式是把這兩個模組的 `edit` 只授予信任層級最高的角色，並倚賴既有的 `roles`／`users` 稽核留痕。

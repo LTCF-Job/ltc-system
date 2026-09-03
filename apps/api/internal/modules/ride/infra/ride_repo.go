@@ -82,7 +82,7 @@ func (r *RideRepository) SaveFormSubmission(
 	`
 	db := pgxdb.FromContext(ctx, r.db)
 	err = db.QueryRow(ctx, query,
-		submissionID, formID, serviceDate, submittedAt, driverNameRaw, driverID, source, payloadBytes, issueText, anomalyFlags,
+		submissionID, formID, serviceDate, submittedAt, driverNameRaw, driverID, source, string(payloadBytes), issueText, anomalyFlags,
 	).Scan(&submissionID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to save form submission: %w", err)
