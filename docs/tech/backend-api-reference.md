@@ -54,7 +54,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
 | GET | `/vehicles` | viewer, staff, admin | 支援 `siteId`、`region`、`q`、`status`（`active`／`inactive`）篩選；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位），以及所屬單位帶出的 `siteName` 與唯讀 `region` |
-| POST | `/vehicles` | staff, admin | 僅 `siteId` 與 `plateNo` 為必填，其餘車籍欄位皆為選填（支援 `null` 與空值）；`status` 非 `active`／`inactive` 一律預設 `active`；車號或代稱重複時回 409 並帶 `details` |
+| POST | `/vehicles` | staff, admin | `siteId`、`plateNo` 與 `displayName`（代稱）為必填，其餘車籍欄位皆為選填（支援 `null` 與空值）；`status` 非 `active`／`inactive` 一律預設 `active`；車號或代稱重複時回 409 並帶 `details` |
 | PATCH | `/vehicles/:id` | staff, admin | 整筆覆寫，必填欄位同 POST；車號或代稱重複時回 409 並帶 `details` |
 | DELETE | `/vehicles/:id` | admin | 軟刪除（僅標記 `deleted_at`，不影響 `status` 啟用/停用狀態）；仍有生效中司機指派或排班趟次綁定時回 409（`CodeResourceInUse`） |
 | PUT | `/vehicles/:id/drivers` | staff, admin | 整批設定本車司機：`{ driverIds: string[], effectiveFrom?: date }`；`driverIds` 為空代表清空 |

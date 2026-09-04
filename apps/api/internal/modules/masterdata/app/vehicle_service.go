@@ -71,12 +71,7 @@ type VehicleInput struct {
 
 func (in VehicleInput) apply(v *Vehicle) {
 	v.PlateNo = strings.TrimSpace(in.PlateNo)
-	// 代稱非必填；未填時以車號代替，滿足 display_name 的 NOT NULL UNIQUE 約束。
-	displayName := strings.TrimSpace(in.DisplayName)
-	if displayName == "" {
-		displayName = v.PlateNo
-	}
-	v.DisplayName = displayName
+	v.DisplayName = strings.TrimSpace(in.DisplayName)
 	v.SiteID = in.SiteID
 	v.Brand = in.Brand
 	v.Model = in.Model

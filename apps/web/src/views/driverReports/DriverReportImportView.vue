@@ -5,7 +5,7 @@
         <div class="upload-stack">
           <PageHeader
             title="批次上傳接送匯報"
-            description="選擇多個 .xlsx 檔案，系統會依檔名自動比對車輛、依內容自動判斷涵蓋月份，解析完成後自動匯入。有系統推薦個案的欄位會自動套用，完全找不到對應個案的欄位會留在「待維護資料」頁籤，稍後逐一連結既有個案或建立新個案。"
+            description="選擇多個 .xlsx 檔案，系統會依檔名自動比對車輛代稱、依內容自動判斷涵蓋月份，解析完成後自動匯入。有系統推薦個案的欄位會自動套用，完全找不到對應個案的欄位會留在「待維護資料」頁籤，稍後逐一連結既有個案或建立新個案。"
           />
 
           <el-upload
@@ -23,7 +23,7 @@
                  不另外包 el-button，避免同一個動作出現兩個 Tab 停留點 -->
             <span class="drop-cta">{{ ctaLabel }}</span>
             <p class="drop-hint">或把 .xlsx 匯報檔拖曳到這一塊</p>
-            <p class="drop-hint-sub">檔名建議包含車輛名稱（例如「竹南2車 (回覆).xlsx」）</p>
+            <p class="drop-hint-sub">檔名建議包含車輛代稱（例如「竹南2車 (回覆).xlsx」）</p>
           </el-upload>
 
           <el-alert
@@ -80,16 +80,16 @@
                 </template>
               </el-table-column>
 
-              <el-table-column label="車輛" min-width="200" class-name="vehicle-col">
+              <el-table-column label="代稱" min-width="200" class-name="vehicle-col">
                 <template #default="{ row }">
                   <el-select
                     v-if="row.status === 'needsVehicle'"
                     :model-value="row.vehicleId || undefined"
-                    placeholder="選擇車輛"
+                    placeholder="選擇代稱"
                     filterable
                     size="small"
                     class="vehicle-select"
-                    :aria-label="`${row.file.name} 選擇車輛`"
+                    :aria-label="`${row.file.name} 選擇代稱`"
                     @change="(vehicleId: string) => onVehiclePicked(row as BatchFileRow, vehicleId)"
                   >
                     <el-option v-for="v in vehicles" :key="v.id" :label="v.displayName" :value="v.id" />
@@ -135,7 +135,7 @@
                         將整月覆蓋 {{ row.overlapMonths.join('、') }} 既有資料
                       </span>
                       <span v-else-if="row.status === 'analyzing'" class="text-muted">解析中…</span>
-                      <span v-else-if="row.status === 'needsVehicle'" class="text-warning">請先選擇對應車輛</span>
+                      <span v-else-if="row.status === 'needsVehicle'" class="text-warning">請先選擇對應代稱</span>
                       <span v-else class="text-muted">-</span>
                     </div>
 
@@ -332,7 +332,7 @@
           </div>
           <div class="info-row">
             <div class="info-item">
-              <span class="info-label">對應車輛：</span>
+              <span class="info-label">對應代稱：</span>
               <span class="info-val">{{ selectedRowForDetail.vehicleName || '未指定' }}</span>
             </div>
             <div class="info-item" v-if="selectedRowForDetail.months.length">
