@@ -337,7 +337,7 @@ export interface VehicleDriverDTO {
 
 export interface CreateVehicleRequest {
   plateNo: string
-  displayName?: string | null
+  displayName: string
   siteId: string
   brand?: string | null
   model?: string | null

@@ -144,10 +144,10 @@ type UpdateVehicleRequest struct {
 }
 
 // VehicleWriteFields 是新增與更新車輛共用的可寫欄位。區域不在其中：車輛的區域由所屬單位決定。
-// 除車號與所屬單位外皆非必填。
+// 車號、代稱與所屬單位為必填。
 type VehicleWriteFields struct {
 	PlateNo                   string     `json:"plateNo" binding:"required"`
-	DisplayName               string     `json:"displayName"`
+	DisplayName               string     `json:"displayName" binding:"required"`
 	SiteID                    *uuid.UUID `json:"siteId" binding:"required"`
 	Brand                     string     `json:"brand"`
 	Model                     string     `json:"model"`

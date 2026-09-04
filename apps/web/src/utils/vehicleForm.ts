@@ -28,12 +28,13 @@ export function emptyVehicleForm(): CreateVehicleRequest {
   }
 }
 
-/** 車輛表單的必填規則：除車號與所屬單位外皆非必填，與後端 VehicleWriteFields 的 binding:"required" 一致。 */
+/** 車輛表單的必填規則：車號、代稱與所屬單位為必填，與後端 VehicleWriteFields 的 binding:"required" 一致。 */
 export const vehicleFormRules = {
   plateNo: [
     { required: true, message: '請輸入車號', trigger: 'blur' },
     { pattern: /^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/, message: '車號格式錯誤 (例如 BZG-7915)', trigger: 'blur' }
   ],
+  displayName: [{ required: true, message: '請輸入代稱', trigger: 'blur' }],
   siteId: [{ required: true, message: '請選擇所屬單位', trigger: 'change' }]
 }
 
@@ -42,7 +43,7 @@ export function sanitizeVehiclePayload<T extends CreateVehicleRequest>(form: T):
   return {
     ...form,
     plateNo: form.plateNo?.trim() || '',
-    displayName: form.displayName?.trim() || null,
+    displayName: form.displayName?.trim() || '',
     siteId: form.siteId || '',
     brand: form.brand?.trim() || null,
     model: form.model?.trim() || null,
