@@ -285,12 +285,19 @@ function changeMonth(delta: number) {
 async function fetchMatrix() {
   loading.value = true
   try {
-    const [res, holidayResponse] = await Promise.all([getRideCalendarMatrix({
-      month: currentRocMonth.value,
-      q: searchQuery.value || undefined
-    }), listHolidays({ startDate: `${selectedDate.value}-01`, endDate: `${selectedDate.value}-${String(daysInMonth.value).padStart(2, '0')}` })])
+    const [res, holidayResponse] = await Promise.all([
+      getRideCalendarMatrix({
+        month: currentRocMonth.value,
+        q: searchQuery.value || undefined
+      }),
+      // 行事曆假日屬月曆輔助標記，若查詢受阻時降級為空清單，避免阻斷搭乘月曆主資料查詢
+      listHolidays({
+        startDate: `${selectedDate.value}-01`,
+        endDate: `${selectedDate.value}-${String(daysInMonth.value).padStart(2, '0')}`
+      }).catch(() => ({ data: [] } as any))
+    ])
     matrixData.value = (res as any)?.cases ? res : ((res as any)?.data || res)
-    holidayMap.value = Object.fromEntries((holidayResponse.data || []).map((item) => [item.holidayDate, item]))
+    holidayMap.value = Object.fromEntries(((holidayResponse as any)?.data || []).map((item: any) => [item.holidayDate, item]))
   } finally {
     loading.value = false
   }

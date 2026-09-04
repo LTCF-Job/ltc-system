@@ -620,10 +620,11 @@ async function fetchAttendance() {
         selectedDriverId.value,
         attendanceQuery.value || undefined
       ),
-      listHolidays({ startDate, endDate })
+      // 行事曆假日屬月曆輔助標記，若查詢受阻時降級為空清單，避免阻斷主出勤紀錄查詢
+      listHolidays({ startDate, endDate }).catch(() => ({ data: [] } as any))
     ])
     attendanceReport.value = attRes
-    holidayMap.value = Object.fromEntries((holidayRes.data || []).map((item) => [item.holidayDate, item]))
+    holidayMap.value = Object.fromEntries(((holidayRes as any)?.data || []).map((item: any) => [item.holidayDate, item]))
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢出勤紀錄失敗'))
   } finally {
