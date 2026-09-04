@@ -21,7 +21,7 @@ func NewCaregiverService(store CaregiverStore, sites SiteLookup, reader Spreadsh
 }
 
 // List 查詢照護人員清單。unresolvedLink 篩選單位名稱待關聯單位主檔的資料列，
-// incomplete 篩選聯絡方式或備註缺漏待補齊的資料列，excludePending 排除以上兩種待維護資料列。
+// incomplete 篩選聯絡方式或備註缺漏待補齊的資料列，excludePending 排除單位待關聯資料列。
 func (s *CaregiverService) List(ctx context.Context, q, status string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
 	return s.store.List(ctx, q, status, unresolvedLink, incomplete, excludePending, page, pageSize)
 }

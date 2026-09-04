@@ -22,7 +22,7 @@ func NewCaregiverRepository(db *pgxpool.Pool) *CaregiverRepository {
 }
 
 // List 取得照護人員清單，支援關鍵字、狀態、單位待關聯與資料待補齊篩選。excludePending 為 true
-// 時排除單位待關聯或聯絡方式／備註缺漏的資料列，供主列表與「待維護」分頁互斥呈現。
+// 時排除單位待關聯（site_name_raw 未關聯既有據點）的資料列，供主列表與「待維護」分頁互斥呈現。
 func (r *CaregiverRepository) List(ctx context.Context, q, status string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]app.Caregiver, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
@@ -32,10 +32,7 @@ func (r *CaregiverRepository) List(ctx context.Context, q, status string, unreso
 		WHERE ($1 = '' OR c.name ILIKE '%' || $1 || '%')
 		  AND ($2 = false OR (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> ''))
 		  AND ($3 = false OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = '')
-		  AND ($6 = false OR NOT (
-		        (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> '')
-		        OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = ''
-		      ))
+		  AND ($6 = false OR NOT (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> ''))
 		  AND ($7 = '' OR c.status = $7)
 		ORDER BY c.name ASC
 		LIMIT $4 OFFSET $5
@@ -61,10 +58,7 @@ func (r *CaregiverRepository) List(ctx context.Context, q, status string, unreso
 		WHERE ($1 = '' OR c.name ILIKE '%' || $1 || '%')
 		  AND ($2 = false OR (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> ''))
 		  AND ($3 = false OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = '')
-		  AND ($4 = false OR NOT (
-		        (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> '')
-		        OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = ''
-		      ))
+		  AND ($4 = false OR NOT (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> ''))
 		  AND ($5 = '' OR c.status = $5)
 	`
 	_ = r.db.QueryRow(ctx, countQuery, q, unresolvedLink, incomplete, excludePending, status).Scan(&total)
