@@ -10,16 +10,23 @@
 | `apps/web` | Vercel（project `ltc-system`） | Vue 3 前端靜態站台 |
 | Supabase 專案 `oywacuduaiulnfxzmpxs` | Supabase | PostgreSQL 資料庫、Auth（GoTrue）、Storage |
 
-系統只有一套環境（正式，由 `main` 分支觸發部署），只用一個 Supabase 專案與一個 `postgres` 資料庫，沒有其他分支或資料平面。
+正式部署目前以 `main` 分支、單一 Cloud Run service／migration job 與單一 Supabase project 為目標；本機 Docker Compose 仍是獨立的 local data plane，不應與正式資料庫混用。文件中不把 branch 名稱當成資料隔離或 runtime 驗證證據。
 
 ## Supabase（資料庫與 Auth）
 
 ### 跑 migration
 
 ```bash
-cd apps/api
-make migrate-up      # 或 go run ./cmd/migrate up
+# 從 repository root 執行
+make migrate-up      # 內部切到 apps/api 執行 go run ./cmd/migrate up
 make migrate-down    # 回滾最新一支
+```
+
+或直接從 `apps/api` 執行：
+
+```bash
+cd apps/api
+go run ./cmd/migrate up
 ```
 
 `DATABASE_URL` 要指向 Supabase 的連線池網址（port 6543，pgbouncer transaction pooling）。
@@ -53,16 +60,17 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 | 變數 | 本機 `.env` | Cloud Run | 說明 |
 |---|---|---|---|
 | `PORT` | `8080` | Cloud Run 自動注入，不用設 | HTTP 監聽埠 |
-| `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL` 與 `ALLOWED_ORIGINS`，否則直接拒絕啟動 |
+| `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL`、`SUPABASE_JWT_ISSUER`（或 `SUPABASE_PROJECT_REF`）、`ALLOWED_ORIGINS` 與 `SUPABASE_SERVICE_ROLE_KEY`，否則直接拒絕啟動 |
 | `DATABASE_URL` | Supabase 連線池網址 | 同左，存在 Secret Manager | 見上方 pgbouncer 說明 |
 | `DB_MAX_OPEN_CONNS` / `DB_MAX_IDLE_CONNS` | `5` / `2` | 同左 | 對應 `pgxpool` 的 `MaxConns`／`MinConns` |
 | `ENCRYPTION_KEY` / `HMAC_KEY` | 32 bytes base64 | 同左，存在 Secret Manager | 個案身分證等敏感欄位加密用 |
 | `SUPABASE_JWKS_URL` | 可留空（本機不驗簽） | `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json` | `production` 必填 |
 | `SUPABASE_PROJECT_REF` | Supabase 專案 ref | 同左 | |
+| `SUPABASE_SERVICE_ROLE_KEY` | 可留空（不使用 Admin API 時） | Secret Manager | production identity／custom permission／default admin bootstrap 需要；不得放入 frontend `VITE_*` |
 | `ALLOWED_ORIGINS` | 不需要（`local` 時 CORS 全開） | 逗號分隔的網域清單 | `production` 必填，見下方常見錯誤 |
 | `STORAGE_BUCKET` | `ltc-exports` | 同左 | |
 | `STORAGE_SIGNED_URL_TTL` | `24h` | 同左 | |
-| `RESEND_API_KEY` / `NOTIFY_FROM` | 可留空 | 通知信件用 | |
+| `RESEND_API_KEY` / `NOTIFY_FROM` | 可留空 | notification 設定 | 目前 notification service 預設使用 simulated `LogEmailSender`，設定存在不代表 email delivery 已接通 |
 | `SENTRY_DSN` | 可留空 | 錯誤追蹤 | |
 | `LOG_LEVEL` | `info` | 同左 | |
 
@@ -73,9 +81,9 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 | `VITE_API_BASE_URL` | 後端 API base URL。本機用 `/api/v1`（走 dev server proxy），部署環境要填完整網址，例如 `https://ltc-api-<hash>.<region>.run.app/api/v1` |
 | `VITE_SUPABASE_URL` | Supabase 專案網址，例如 `https://oywacuduaiulnfxzmpxs.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key（公開金鑰，非機密） |
-| `VITE_GOOGLE_CLIENT_ID` / `VITE_GOOGLE_API_KEY` / `VITE_GOOGLE_APP_ID` | Google Picker／Identity Services，選填 |
+| `VITE_APP_ENV` | local fallback 判斷；正式環境不應設為 local |
 
-`VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 沒設定時，[`apps/web/src/lib/supabase.ts`](../../apps/web/src/lib/supabase.ts) 會讓 `supabase` client 維持 `null`；登入頁看到 `!supabase` 就會直接顯示「帳號密碼錯誤或無此使用者」，不會真的呼叫 Supabase Auth，容易誤判成帳密問題。
+`VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 沒設定時，[`apps/web/src/lib/supabase.ts`](../../apps/web/src/lib/supabase.ts) 會讓 `supabase` client 維持 `null`。在 local／Vite dev 會走 `mock_jwt_<role>` fallback 且不驗證 password；在非 local 環境則拒絕登入。兩者都不代表真實 Supabase Auth 已驗證。
 
 ### 已知坑：Vercel Preview 環境變數要另外設
 
@@ -182,7 +190,7 @@ gcloud run jobs execute ltc-api-migrate --region=asia-east1 --wait
 
 ### 已知坑：migration job 跟 API service 要各自設定同一套 production 必填變數
 
-`cmd/migrate` 跟 `cmd/server`（`ltc-api` 服務本體）共用同一套設定驗證（`internal/platform/config`）：`APP_ENV=production` 時少了 `SUPABASE_JWKS_URL` 或 `ALLOWED_ORIGINS` 任何一個都會直接拒絕啟動。這兩個環境變數（以及 `APP_ENV`、`SUPABASE_PROJECT_REF`）**migration job 跟 API service 是各自獨立的環境變數集合**，只在 `ltc-api` 服務上設定過不代表 `ltc-api-migrate` job 也有——曾經發生過 job 只設了 `DATABASE_URL` 這個 secret，`APP_ENV` 從未設定，實際跑起來因為 `config.LoadFromEnv()` 沒驗證過就直接把整包環境變數丟給 job，結果是不知道哪來的舊設定殘留了 `APP_ENV=develope`（打錯字，不是 `develop` 也不是 `production`），導致 `gcloud run jobs execute` 每次都以 `Failed to load config` 失敗，連帶讓 `deploy-api.yml` 卡在「Run database migrations」那步。
+`cmd/migrate` 跟 `cmd/server`（`ltc-api` 服務本體）共用同一套設定驗證（`internal/platform/config`）：`APP_ENV=production` 時少了 `SUPABASE_JWKS_URL`、`SUPABASE_JWT_ISSUER`（或 `SUPABASE_PROJECT_REF`）、`ALLOWED_ORIGINS`、`SUPABASE_SERVICE_ROLE_KEY` 任一必要設定都會直接拒絕啟動。這些環境變數（以及 `APP_ENV`、`SUPABASE_PROJECT_REF`）**migration job 跟 API service 是各自獨立的環境變數集合**，只在 `ltc-api` 服務上設定過不代表 `ltc-api-migrate` job 也有——曾經發生過 job 只設了 `DATABASE_URL` 這個 secret，`APP_ENV` 從未設定，實際跑起來因為 `config.LoadFromEnv()` 沒驗證過就直接把整包環境變數丟給 job，結果是不知道哪來的舊設定殘留了 `APP_ENV=develope`（打錯字，不是 `develop` 也不是 `production`），導致 `gcloud run jobs execute` 每次都以 `Failed to load config` 失敗，連帶讓 `deploy-api.yml` 卡在「Run database migrations」那步。
 
 `ALLOWED_ORIGINS` 在 migration job 上只是為了通過設定檢查，job 不會真的處理 HTTP 請求，填什麼網域都不影響功能。用下面指令核對兩邊變數是否一致：
 
@@ -232,7 +240,11 @@ gcloud run jobs describe ltc-api-migrate --region=asia-east1 --format="value(spe
 
 ## 部署後檢查清單
 
-1. `curl -i https://<cloud-run-url>/api/v1/healthz`（若有健康檢查端點）或直接打一個需要認證的端點確認回 401 而不是 500／連不上。
+1. `curl -i https://<cloud-run-url>/api/health`，並檢查 body 的 `database` 欄位；目前 DB ping 失敗時 HTTP 200 仍可能出現，不能只看 status。再直接打一個需要認證的端點確認回 401 而不是 500／連不上。
 2. 用實際帳密在目標網域登入一次，不要只信任「畫面沒有紅字」——CORS 失敗、`supabase` client 為 `null` 都不會讓瀏覽器整頁報錯，要看 DevTools console 有沒有 CORS 或網路錯誤。
 3. 前端瀏覽器對同一批 API 快速觸發多個並發請求（例如快速切換好幾個選單頁面），確認沒有隨機出現的 500——這類 prepared statement 撞名的 bug 在低併發下不容易重現。
 4. 若剛執行過 `vercel env add` 或改過 Cloud Run 環境變數，記得變數是**建置期**／**啟動時**生效，一定要有一次新的 build／新的 revision 才會套用，不能只改設定就期待既有部署自動吃到。
+
+5. 確認 notification log 的成功只代表 application sender 被呼叫；目前 default sender 是 simulated，未完成 email adapter／provider delivery 前不可當成寄信成功。
+
+正式部署的 server timeout、graceful shutdown、Docker base image／root 權限、health readiness、CORS whitespace 與 migration lock 仍是 review backlog；本文件的命令與 workflow 靜態存在，不等同這些環境行為已驗證。

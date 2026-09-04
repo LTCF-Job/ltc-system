@@ -8,7 +8,9 @@ covers:
   - docker-compose.local.yml
 ---
 
-# 本機 E2E 從 MSW 假資料改打真實 API — 待開發
+# [Historical] 本機 E2E 從 MSW 假資料改打真實 API — 待開發
+
+> **Historical — 非現行流程、不是 source of truth。** 本文件保留過去移除 MSW／demo path 時的調查紀錄與未完成方向；其中的 `/demo/reset`、demo data plane、CI job 與 MSW 假資料都不可當成目前功能或操作指令。現行本機啟動與驗證邊界請改讀 [`docs/tech/maintainer-runbook.md`](../tech/maintainer-runbook.md)。
 
 MSW 已在本輪移除（`apps/web/src/mocks/` 整目錄、`demoMode.ts` 相關死碼皆已刪除），local／production 兩環境現在功能路徑一致，只差資料庫。但 `apps/web/tests/e2e/`（`01~12-*.spec.ts`，約 1,276 行）依賴 MSW 攔截與假資料斷言，**目前全部會壞**。本文件記錄調查到的現況與設計方向，供下一輪接續；不是實作紀錄，是待辦。
 

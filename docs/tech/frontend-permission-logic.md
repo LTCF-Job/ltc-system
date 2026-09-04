@@ -1,12 +1,12 @@
 # 前端權限判斷邏輯
 
-前端不再自行維護任何角色到權限的對照表。所有畫面顯示與操作限制都依據登入時向後端 `GET /api/v1/auth/me` 取得的 effective permissions，這份資料就是後端 `RequirePermission` 實際查詢並合併（角色矩陣＋個人 `customPermissions` 覆蓋）後的同一份結果——前端看到的能不能做，跟 API 實際放不放行必然一致，不會有兩套規則分歧的問題。
+前端不再自行維護角色到權限的對照表。所有畫面顯示與操作限制主要依據登入時向後端 `GET /api/v1/auth/me` 取得的 effective permissions，這份資料是後端解析並合併（角色矩陣＋個人 `customPermissions` 覆蓋）後的結果。對使用 `RequirePermission` 的 API，前端與 backend 消費同一份 permission resolution；但 auth-only endpoint、route/menu wiring、provider session 與 permission cache 仍可能造成體驗或時序落差，不能宣稱前後端所有行為必然一致。
 
 ## 權限的取得與生效時機（`stores/auth.ts`）
 
 `loadPermissions()` 呼叫 `GET /api/v1/auth/me`，把回傳的 `permissions` 存入 store，並標記 `permissionsLoaded = true`。觸發時機：
 
-1. 登入成功後（`setSession()` 內部呼叫），涵蓋三條登入路徑：正常 Supabase 登入、demo／`ltcf-admin` email 代稱登入（實際仍走 Supabase）、local 環境的 mock JWT 登入（Supabase 未設定時，表單送出後端直接發一張 `mock_jwt_<role>` token）。
+1. 登入成功後（`setSession()` 內部呼叫），涵蓋正常 Supabase 登入、Supabase client 存在時的 `ltcf-admin` email 代稱登入，以及 local 環境的 mock JWT 登入（Supabase 未設定時，表單送出後端直接發一張 `mock_jwt_<role>` token）。
 2. 分頁重新整理時：store 建構階段若偵測到 localStorage 已有 `token`／`user`（沿用既有 session），立即補打一次 `loadPermissions()`。**Permissions 本身不寫入 localStorage**，每次還原 session 都是向後端要最新的一份，避免權限異動後舊分頁還讀到過期快取。
 
 `loadPermissions()` 內部用一個閉包變數快取進行中的 promise，避免 router guard 與 store 初始化同時觸發造成重複請求。
@@ -22,7 +22,7 @@
 1. 路由不是 `meta.public` 且使用者未登入 → 導去 `/login`。
 2. 已登入卻要進 `/login` → 導去首頁。
 3. 已登入但權限尚未載入完成（`!permissionsLoaded`，例如剛按 F5）→ `await authStore.loadPermissions()` 待其完成後才繼續判斷，不會因為請求還沒回來就誤判為無權限而把使用者踢出當前頁。
-4. `meta.module` 有設定值 → 呼叫 `authStore.hasPermission(module, 'view')`，沒權限就導回首頁並跳警告訊息。
+4. `meta.module` 有設定值 → 呼叫 `authStore.hasPermission(module, 'view')`，沒權限就導回首頁並跳警告訊息；目前沒有 dashboard permission 的使用者可能被導到另一個同樣受保護的 `/`，需補專用 403／landing fallback。
 
 **沒有 `meta.roles` 這回事了**——`router/index.ts` 的每個路由只保留 `meta.module`，不再有平行存在、且早已跟真實判斷脫鉤的角色字串陣列。過去 `meta.roles` 只是文件性質的標註、不影響實際放行，這個誤導來源已經整個拿掉。
 
@@ -38,8 +38,8 @@
 
 ## 跟後端授權的對應關係
 
-前端 `hasPermission(module, action)` 與後端 `auth.RequirePermission(module, action)` 現在是同一套資料的兩個消費端，兩者共用 `auth.ResolveEffectivePermissions`：`RequirePermission` 直接拿它的結果判斷放不放行，`/auth/me` 拿同一個結果回給前端顯示。所有路由（含過去維持 `RequireRoles` 白名單的 `/users`、`/roles`、`/auth/change-password`、`/demo/reset`、`/tasks/*`、`/holidays*`）現在都走這一套，`auth.RequireRoles` 已刪除，詳見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md) 的 2026-09 修訂。
+前端 `hasPermission(module, action)` 與後端 `auth.RequirePermission(module, action)` 是同一份 effective permission 的兩個消費端：`RequirePermission` 拿它判斷業務 route，`/auth/me` 拿同一結果回給前端顯示。現行業務 route 已使用 permission matrix；`/auth/me` 與 `/auth/change-password` 是 authenticated-only，不應硬套 module view；不存在 `/demo/reset`，也沒有現行 `auth.RequireRoles` route。詳見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。
 
 ## 已知限制
 
-`SUPABASE_SERVICE_ROLE_KEY` 在 production 環境未設定時，服務會直接拒絕啟動（見 `internal/platform/config/config.go`），不會再有「個人覆蓋悄悄失效」的情況；這條限制只在 local／demo 環境仍成立（fail-open 為「沒有個人覆蓋」），詳見 [custom-permission-admin-api-enforcement.md](../decisions/custom-permission-admin-api-enforcement.md) 的追記。
+`SUPABASE_SERVICE_ROLE_KEY` 在 production 環境未設定時，config 會拒絕啟動；local 的 fallback 行為不能代表正式 permission contract。後端 permission resolution 另有約 30 秒 process-local cache，多 instance 撤權可能延遲；前端 session／permissions 也沒有寫入 localStorage，F5 會重新呼叫 `/auth/me`。user／role self-service、route/menu mismatch 與無 dashboard landing fallback 仍是已知限制，詳見 full-stack review。

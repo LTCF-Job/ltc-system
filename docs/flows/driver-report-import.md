@@ -20,7 +20,7 @@ covers:
 
 ## Trigger
 
-- `POST /api/v1/driver-reports/:id/import`，角色限 `staff`、`admin`。
+- `POST /api/v1/driver-reports/:id/import`，需具 `driver_reports.edit` permission（內建 role 的預設基準為 `staff`、`admin`）。
 - `dryRun=true`（預設）回傳預覽不寫入；`dryRun=false` 正式寫入。
 - `yearMonth`（`YYYY-MM`）選填，宣告這次要覆蓋哪一個月。
 - 前端上傳入口為 `DriverReportImportView.vue`（`/driver-reports/import`，`/driver-reports/batch-import`

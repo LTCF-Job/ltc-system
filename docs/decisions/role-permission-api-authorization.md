@@ -33,7 +33,7 @@ covers:
 保留白名單造成的實際後果是：管理員自建的角色（`RoleService.Create` 以 slugify 產生任意 `key`）在 `/users`、`/roles`、`/holidays*`、`/tasks/*` 上永遠對不上 `"admin"`／`"staff"` 字面值，權限矩陣對這四類模組形同虛設。修訂內容：
 
 1. 路由層不再有任何 `RequireRoles`，全部改走 `RequirePermission`；`cmd/server/routes_module_keys_test.go` 以 AST 掃描鎖住這個結論。`/holidays*` 對映新模組 `settings_holidays`，`/tasks/*` 對映新模組 `ops_tasks`（手動觸發維運任務屬異動，用 `edit` 軸）。
-2. `POST /auth/change-password`（自助改自己密碼）與 `POST /demo/reset` 移除權限檢查，只要求通過 `auth.Middleware`；後者的資料平面隔離由 middleware 的 `enforceDataPlane` 負責。
+2. `POST /auth/change-password`（自助改自己密碼）只要求通過 `auth.Middleware`。同一時期曾規劃的 `POST /demo/reset` 屬於已移除的 demo data plane，目前 route wiring 不存在，不可依此段建立現行操作流程。
 3. 模組 key 的權威清單集中在 `identityapp.ModuleKeys`，`RoleService.Create/Update` 與 `UserService.UpdatePermissions` 在寫入前驗證，未登記的 key 回 400 並列出全部不合法項目——未登記的 key 寫進 JSONB 後不會被任何路由讀到，等同無聲失效。
 4. `000021_role_permission_module_coverage` 對**所有**既有角色回填兩個新模組，門檻沿用遷移前路由的實際要求；並補回 `settings_users`／`settings_roles` 的 `delete`（`000018` 的兩份模組清單都漏列這兩個，使其落入 `ELSE false`，`base_role = 'admin'` 者補為 `true`）。
 5. 新增 `GET /api/v1/auth/me`，回傳目前登入者身分與 effective permissions；與 `RequirePermission` 共用 `auth.ResolveEffectivePermissions`，前端據以隱藏的操作與 API 實際放行的範圍因此不會分歧。

@@ -13,11 +13,11 @@
 - 純更正（單一來源但狀態錯誤）→ `PATCH /rides/:id`。
 - 多來源衝突（同一趟不同司機回報不一致）→ `POST /rides/:id/resolve-conflict`，選擇要採信哪一筆來源。
 
-兩種操作後端都會寫 audit log，前端目前不直接顯示 audit 內容——要查歷史要另外去 `/audit` 頁，且僅 admin 可見。
+兩種操作設計上都應寫 audit log，但目前 backend audit coverage 與 error handling 仍有缺口；前端不直接顯示 audit 內容——要查歷史要另外去 `/audit` 頁，且僅具 `audit_logs.view` permission 的使用者可見。是否實際留下紀錄需以 DB／runtime 驗證。
 
 ## 未回報清單
 
-`MissingRidesView` 打 `GET /rides/missing`，資料來源是後端「未回報偵測」批次（拿應搭日曆跟實際回報比對），純唯讀清單，處理方式是回到搭乘月曆手動補登，或去確認司機是否漏填當日匯報。
+`MissingRidesView` 打 `GET /rides/missing`，畫面把它當成可依日期、個案／車輛、關鍵字與頁碼篩選的清單；資料來源是後端「未回報偵測」邏輯（拿應搭日曆跟實際回報比對）。目前 backend handler 只解析少數 query，且呼叫 task path 可能觸發通知，因此在修正前不能把它視為純唯讀 query。處理方式仍是回到搭乘月曆手動補登，或去確認司機是否漏填當日匯報；通知應由明確的 task command 觸發。
 
 ## 司機接送匯報與欄位對應
 
@@ -74,7 +74,7 @@ API client 會把後端 `details` 裡的具體原因（例如表頭不符）以�
 
 歷史匯出紀錄不提供下載，只有「檢視個案」按鈕，用 `GET /exports/:id` 顯示該次匯出包含哪些個案。儀表板的「最近申報匯出紀錄」同樣只呈現摘要，不再有下載入口，避免出現第二條下載路徑。
 
-前端不會自己組 Excel，實際產檔在後端（見 [backend-flows.md](backend-flows.md) 的政府申報匯出流程）。
+前端不會自己組 Excel，實際產檔在後端（見 [backend-flows.md](backend-flows.md) 的政府申報匯出流程）。API client 會依 response envelope 取得 `data`／`meta`；錯誤顯示依 error code mapping，尚未同步的 backend code 可能只顯示 generic 文案。
 
 搭乘月曆與申報匯出**讀同一份**資料：匯出只取實際成行（`boarded`）的趟次，因此請假、缺席、未回報都不會進申報檔，加開趟次、人工更正過的出發時間與「不申報 AA09」標記則會反映。
 

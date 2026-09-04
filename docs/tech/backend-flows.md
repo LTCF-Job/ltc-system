@@ -1,6 +1,6 @@
 # 後端核心業務流程
 
-這份文件拆解幾條橫跨多個 handler／service／domain 套件的完整流程，比單看某一個檔案更容易看懂系統在幹嘛。分層架構背景見 [backend-framework.md](backend-framework.md)，逐支端點清單見 [backend-api-reference.md](backend-api-reference.md)。
+這份文件拆解幾條橫跨多個 handler／service／domain 套件的目前流程，比單看某一個檔案更容易看懂系統在幹嘛。分層架構背景見 [backend-framework.md](backend-framework.md)，逐支端點清單見 [backend-api-reference.md](backend-api-reference.md)。流程中的「靜態已確認」不代表已用真實 DB／Supabase／外部 provider 執行驗證；目前已知落差集中在 [2026-09-04 Full-stack Review](../reviews/2026-09-04-full-stack-review.md)。
 
 ## 1. 司機接送匯報匯入 → 搭乘紀錄（`DriverReportService.CommitDriverReport` → `RideService.IngestSubmission`）
 
@@ -106,9 +106,11 @@ merge.MergeRideSources（同車取最新、跨車 OR）
 
 ## 3. 未回報偵測與月底提醒（`TaskService`）
 
-- `CheckMissingReports(ctx, targetDate, region)`：拿 `domain/calendar.CalculateExpectedRides` 算出「這天應該有的搭乘」，跟實際 `ride_records` 比對，抓出應搭但沒回報的趟次，回傳給前端「未回報清單」頁，並觸發告警通知。
+- `CheckMissingReports(ctx, targetDate, region)`：拿 `domain/calendar.CalculateExpectedRides` 算出「這天應該有的搭乘」，跟實際 `ride_records` 比對，抓出應搭但沒回報的趟次，並可能觸發告警通知。
 - `MonthEndReminder(ctx, year, month)`：每月 26 日跑，彙整檢核結果並發信提醒。
 - 這兩支都各自有 `POST /tasks/*` 端點，正式環境由 Cloud Scheduler 定期打；本機要測試就直接手動 curl 這兩支。
+
+目前另有 `GET /api/v1/rides/missing` 接到 `taskH.GetMissingReports`，前端把它當成可分頁、可篩選的查詢頁使用，但 handler 只解析少數 query，且呼叫的 task path 具有 notification-capable 行為。這是目前的 query／command 邊界缺陷：在修正前不要把該 GET 當成純讀取 API，也不要以頁面顯示結果推論通知已成功送達。
 
 ## 4. 政府申報匯出（`PrecheckService` + `GovClaimService`）
 
@@ -147,7 +149,7 @@ POST /exports（同步產檔）
 
 ## 6. 通知（`NotificationService`）
 
-`SendNotification` 依 topic（例如未回報告警、月底提醒）撈出啟用中的收件人清單逐一寄信，寄送介面是 `EmailSender`，正式環境用 Resend（`RESEND_API_KEY`），本機沒設定時退化成 `LogEmailSender`（只印 log，不真的寄信）。收件人管理走 `settings/notification-recipients` 系列端點。
+`SendNotification` 依 topic（例如未回報告警、月底提醒）撈出啟用中的收件人清單逐一呼叫 `EmailSender`，收件人管理走 `settings/notification-recipients` 系列端點。目前 `cmd/server/main.go` 傳入 nil sender，service 會使用 `LogEmailSender`，只印 simulated email log；`RESEND_API_KEY` 與 `NOTIFY_FROM` 雖存在設定中，尚未接上可證明 delivery 的 Resend adapter。完成 adapter、provider credentials、retry／delivery status 與 runtime check 前，不可把通知成功說成 email 已送達。
 
 ## 7. 匯報表範本下載
 
@@ -158,4 +160,19 @@ POST /exports（同步產檔）
 
 ## 8. 稽核留痕（`middleware.RecordAuditLog`）
 
-凡是會動到個資或關鍵狀態的操作（新增、修改、reveal PII、更正搭乘紀錄、裁決衝突、匯出、設定變更、匯入）都會呼叫 `RecordAuditLog` 寫一筆 `audit_log`，記錄操作者、角色、動作類型、異動前後的資料快照。`GET /audit` 只有 `admin` 能查，是唯一的稽核紀錄查詢入口。
+設計上，會動到個資或關鍵狀態的操作（新增、修改、reveal PII、更正搭乘紀錄、裁決衝突、匯出、設定變更、匯入）應呼叫 audit writer，記錄操作者、角色、動作類型與異動前後快照。靜態 review 發現部分 service 沒有注入 audit、部分 write error 被忽略，且 change-password 的 actor role 可能為空，因此不能把這段設計描述當成所有 mutation 都已留下可靠 audit。`GET /audit` 是現行稽核查詢 route，但完整 coverage 仍待逐 route runtime／DB 驗證。
+
+## Failure modes
+
+- 匯入解析錯誤可逐列略過；但 migration、transaction、DB write error 應使整份 operation 回滾，不能混成成功結果。
+- 缺漏檢查若被 GET 呼叫，會把查詢失敗與通知副作用混在同一個 user action；在 command/query 拆分前應視為高風險流程。
+- export query 若部分 vehicle／case 查詢失敗，不能只回傳剩餘資料並標示成功；應明確回報 partial／failed state。
+- notification sender 使用 LogEmailSender 時，log 只代表 application 呼叫 sender，不代表外部信件 delivery。
+- local 沒有 DB 時，部分 module 可能回空資料或假成功，部分 repository 可能失敗；offline 啟動不代表本文件的 DB 流程已驗證。
+
+## Unverified
+
+- 真實 PostgreSQL 上 migration、seed、transaction rollback、soft-delete scope、lock 與 row-level error 行為。
+- 真實 Supabase Auth／Admin API 的 JWT role metadata、user list pagination、password change、permission cache 與 logout 行為。
+- Cloud Scheduler 的 retry／duplicate trigger、notification delivery、政府 holiday provider 與正式 export download。
+- 大資料量下的 report／missing query latency、N+1、前端 stale response 與 timezone 邊界。

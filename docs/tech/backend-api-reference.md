@@ -5,9 +5,9 @@ covers: ["apps/api/cmd/server/routes.go"]
 
 # 後端 API 路由總覽
 
-Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/health`（不驗證）跟 `/api/v1/ingest/google-form`（走 `X-Ingest-Token`）。實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
+Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`）；公開 health endpoint 是 `GET /api/health`。目前沒有 `/api/v1/ingest/google-form` 或 `X-Ingest-Token` route。實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
 
-下表「角色」欄列的是**目前系統五個內建角色（viewer/dispatcher/staff/driver/admin）實際能通過的結果**，不是授權機制本身：大多數模組 CRUD 路由已改用 `auth.RequirePermission(module, action)` 查角色的模組權限矩陣（`roles.permissions`，可在「角色身分管理」頁調整，自訂角色的實際存取範圍以矩陣為準，不受下表侷限），只有 `/users`、`/roles`、`/auth/change-password`、`/demo/reset`、`/tasks/*`、`/holidays*` 仍是 `auth.RequireRoles(...)` 寫死的角色字串白名單。機制細節與兩者的邊界見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。
+下表「角色」欄只作為**內建 role 的預設權限基準**，不是授權機制本身：現行 `/api/v1` 業務 route 一律以 `auth.RequirePermission(module, action)` 查角色的模組權限矩陣（`roles.permissions` 與 user custom permission）。`/auth/me` 與 `/auth/change-password` 只要求已通過 JWT authentication；不存在 `/demo/reset`，也沒有現行 `auth.RequireRoles` route。自訂角色的實際存取範圍以 permission matrix 為準，不受下表文字侷限。機制細節與撤權／cache 邊界見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。
 
 架構背景見 [backend-framework.md](backend-framework.md)，每支端點背後的業務流程見 [backend-flows.md](backend-flows.md)。
 
@@ -82,6 +82,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/driver-reports/:id/template` | staff, admin | 下載該車空白匯報範本（`.xlsx`，只有表頭） |
 | POST | `/driver-reports/:id/import?dryRun=&yearMonth=` | staff, admin | 上傳匯報檔；`dryRun=true`（預設）回傳預覽，`dryRun=false` 正式寫入。`yearMonth`（`YYYY-MM`）選填，宣告後整月覆蓋並拒收該月以外的日期 |
 | GET | `/driver-reports/imported-months` | viewer, staff, admin | 每份匯報表各月份已匯入的筆數與最後匯入時間 |
+| GET | `/driver-reports/:id/months/:yearMonth` | viewer, staff, admin | 取得指定匯報表月份明細 |
 | GET | `/driver-reports/columns` | viewer, staff, admin | 欄位清單與對應狀態（可帶 `formId`、`mappingStatus`） |
 | GET | `/driver-reports/columns/name-matches?name=` | viewer, staff, admin | 找出目前待維護欄位中姓名與傳入姓名相符（含近似）的欄位 |
 | PATCH | `/driver-reports/columns/:id/mapping` | staff, admin | 設定單一欄位對應到哪個個案的哪一趟；剛從待維護變成已對應時同一交易內立即回填搭乘紀錄 |
@@ -100,7 +101,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 |---|---|---|---|
 | GET | `/rides/calendar` | viewer, staff, admin | 月曆矩陣視圖（個案 × 日期 × 趟次的搭乘狀態） |
 | GET | `/rides/issues` | viewer, staff, admin | 異常搭乘集中清單（衝突、待確認等） |
-| GET | `/rides/missing` | viewer, staff, admin | 未回報清單（`taskH.GetMissingReports`） |
+| GET | `/rides/missing` | viewer, staff, admin | 未回報清單（目前接到 `taskH.GetMissingReports`；query／pagination 與前端 contract 仍有落差，且需注意可能進入 notification-capable path） |
 | GET | `/rides/:id` | viewer, staff, admin | 單筆搭乘紀錄詳情 |
 | PATCH | `/rides/:id` | staff, admin | 人工更正搭乘紀錄（寫 audit log） |
 | POST | `/rides/manual-report` | staff, admin | 人工補登整筆回報（月曆空白格填寫） |
@@ -141,7 +142,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | DELETE | `/settings/notification-recipients/:id` | admin | |
 | GET | `/notifications/logs` | viewer, staff, admin | 通知發送歷史 |
 
-`notification_recipients` 除 `email` 型別外，資料庫已加 `recipient_type`/`target_role`/`user_id` 欄位（`role`／`user` 型別），但目前沒有任何前端頁面會建立這兩種型別；寄送時若收件人未能解析出 email 會略過並記 log，不讓整批通知失敗。
+`notification_recipients` 除 `email` 型別外，資料庫已加 `recipient_type`/`target_role`/`user_id` 欄位（`role`／`user` 型別），但目前沒有完整的前端建立／更新流程會使用這兩種型別。寄送時若收件人未能解析出 email 會略過並記 log，不讓整批通知失敗；目前 server 預設 sender 是 simulated `LogEmailSender`，不代表 Resend delivery 已完成。
 
 ## 報表 `reportH`
 
@@ -180,7 +181,9 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | Method | Path | 角色 |
 |---|---|---|
 | GET | `/dashboard/metrics` | viewer, staff, admin |
-| GET | `/dashboard/stats` | viewer, staff, admin | 回 `recentExports`：最近 5 筆申報匯出工作（重用 `exportH` 的 `ExportJobDTO` 形狀），其餘欄位見 [integration-contract.md](integration-contract.md) |
+| GET | `/dashboard/stats` | viewer, staff, admin |
+
+`/dashboard/stats` 的 `recentExports` 目前是最近 5 筆申報匯出工作（重用 `exportH` 的 `ExportJobDTO` 形狀）；其餘欄位與 dashboard metrics 的資料來源見 [integration-contract.md](integration-contract.md) 及 review report，部分 KPI 仍需 runtime／業務資料驗證。
 
 ## 稽核紀錄 `auditH`
 
@@ -207,6 +210,13 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | DELETE | `/caregivers/:id` | admin | |
 | PUT | `/caregivers/:id/site` | staff, admin | 將單位待關聯的照護人員連結至既有單位，並清空原始單位名稱 |
 
+## 自助身分資訊與密碼
+
+| Method | Path | 角色 | 說明 |
+|---|---|---|---|
+| GET | `/auth/me` | authenticated | 取得目前 JWT actor、built-in role 與 resolved permission |
+| POST | `/auth/change-password` | authenticated | 目前登入者變更自己的密碼；需依 Supabase Auth provider 流程驗證舊密碼 |
+
 ## 角色身分管理 `roleH`
 
 角色資料落在 `roles` 表（`identity` 模組），非 Supabase 端資料，`is_system` 系統角色（`admin`/`dispatcher`/`staff`/`driver`/`viewer`）不可刪除且權限矩陣不可覆寫成別的 `base_role`。
@@ -219,7 +229,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | PATCH | `/roles/:id` | admin | 系統角色不可修改（`ErrSystemRoleImmutable`） |
 | DELETE | `/roles/:id` | admin | 系統角色或仍有使用者的角色不可刪除（`ErrSystemRoleImmutable`／`ErrRoleInUse`） |
 
-⚠️ `auth.RequireRoles` 只認得 `viewer`/`staff`/`admin` 三個字串，自訂角色的 `base_role` 只是把 API 存取層級對映到其中之一——建出權限矩陣全開但 `base_role=viewer` 的角色，實際仍會被大多數寫入端點擋在 403。
+目前 role route 也走 `RequirePermission("settings_roles", action)`；`is_system` 角色不可刪除，細節由 identity app service 與 DB contract 決定。仍需補 self-role、last-admin 與跨 instance permission cache 的安全規則，詳見 review report。
 
 ## 使用者帳號管理 `identityH`
 
@@ -227,10 +237,11 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/users` | admin | 使用者清單（裸陣列），支援 `keyword`／`role` 篩選（app 層過濾） |
+| GET | `/users` | admin | 使用者清單（裸陣列），支援 `keyword`／`role` 篩選（app 層過濾；目前沒有完整 server-side pagination） |
 | GET | `/users/:id` | admin | |
 | POST | `/users` | admin | 建立使用者，`role` 須存在於 `roles` 表 |
 | PATCH | `/users/:id` | admin | |
 | PUT | `/users/:id/permissions` | admin | 覆寫個人自訂權限（存於 `app_metadata.custom_permissions`） |
+| POST | `/users/:id/reset-password` | admin | 管理員重設指定使用者密碼 |
 | DELETE | `/users/:id` | admin | 不可刪除自己（`ErrCannotDeleteSelf`，403） |
-| POST | `/auth/change-password` | viewer, staff, admin | 任何已登入者可改自己的密碼；後端先以舊密碼呼叫 Supabase `grant_type=password` 驗證通過才允許改新密碼 |
+| POST | `/auth/change-password` | authenticated | 任何已登入者可改自己的密碼；後端先以舊密碼呼叫 Supabase `grant_type=password` 驗證通過才允許改新密碼 |

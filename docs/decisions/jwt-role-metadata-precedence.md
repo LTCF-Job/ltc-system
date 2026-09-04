@@ -8,7 +8,7 @@ covers:
 
 ## Context
 
-`setActorFromClaims` 需要從 Supabase JWT 取出角色供 `RequirePermission`／`RequireRoles` 授權判斷。Supabase 的慣例是：`app_metadata` 只能經由持 service role key 的 Admin API 寫入，使用者無法自行竄改，適合放授權用的角色；`user_metadata` 使用者可透過 `supabase.auth.updateUser({data:{...}})` 自行編輯，只適合放顯示名稱等非敏感資訊；JWT 頂層的 `role` claim 則是 Supabase 內建的 Postgres role（`authenticated`／`anon`／`service_role`），並非本系統的業務角色。
+`setActorFromClaims` 需要從 Supabase JWT 取出角色供現行 `RequirePermission` 授權判斷；`RequireRoles` 僅是本決策記錄中的歷史名稱，已不在 route wiring 中。Supabase 的慣例是：`app_metadata` 只能經由持 service role key 的 Admin API 寫入，使用者無法自行竄改，適合放授權用的角色；`user_metadata` 使用者可透過 `supabase.auth.updateUser({data:{...}})` 自行編輯，只適合放顯示名稱等非敏感資訊；JWT 頂層的 `role` claim 則是 Supabase 內建的 Postgres role（`authenticated`／`anon`／`service_role`），並非本系統的業務角色。
 
 本文件先前記載的版本採「頂層 role → user_metadata.role 覆蓋 → app_metadata.role 覆蓋」的疊加寫法，理由是修正一支特定帳號因 `user_metadata` 存在但缺 `role` 欄位而誤判為 `viewer` 的 bug。但這個寫法本身是一個權限提升漏洞：只要 `app_metadata` 缺 `role`（例如帳號不是經本系統 Admin API 建立），使用者可自行呼叫 `updateUser` 把 `user_metadata.role` 寫成 `"admin"`，`setActorFromClaims` 會採用它，接著即可通過 `/users`、`/roles` 等以角色字串把關的端點修改任何人的權限。
 

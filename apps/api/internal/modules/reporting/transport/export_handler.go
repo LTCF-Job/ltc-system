@@ -54,7 +54,7 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, report, nil)
+	httpx.RespondSuccess(c, http.StatusOK, toPrecheckResponse(report), nil)
 }
 
 // List 取得申報匯出工作歷史紀錄清單。

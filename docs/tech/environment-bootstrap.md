@@ -59,7 +59,7 @@ DATABASE_URL="剛剛記下的資料庫連線字串" APP_ENV=local go run ./cmd/m
 
 > **不想裝終端機工具的話**：也可以到 Supabase Dashboard 左側「SQL Editor」→「New query」，把 [`../../apps/api/migrations/`](../../apps/api/migrations/) 資料夾裡每一個檔名結尾是 `.up.sql` 的檔案，依檔名開頭數字由小到大（`000001_...`、`000002_...`……）依序貼進去按「Run」，一個成功再貼下一個，完全不用裝任何工具。缺點是之後如果想改回終端機那個指令，要自己確認兩邊資料庫版本有沒有對齊。
 
-**這一步只會建立資料表與參考資料（全臺 22 個縣市），不會建立任何登入帳號。**（早期版本的 migration 會塞一組預設管理員，現已全面移除：`000002_seed_reference_data.up.sql` 只剩縣市資料，`000011_backfill_admin_identity.up.sql` 已改成不做事的 no-op。）所以初始化完之後你必須自己建一組管理員帳號才能登入：到 Supabase Dashboard 的「Authentication → Users」按「Add user」，填一組**只有你知道的 email 與密碼**，建立後點進該使用者，把 `app_metadata`（有些版本顯示為 Raw App Meta Data）改成 `{"role":"admin"}` 並儲存——沒有這個 `role` 欄位的話，登入得進去但每一支 API 都會回 403。密碼請直接存進你自己的密碼管理工具，**不要寫進程式碼、環境變數或任何文件**。如果登入時卡在「帳號密碼錯誤」，先確認專案的認證方式（Authentication → Providers）有啟用「Email」，這是最常見的漏設原因。
+**這一步會建立資料表與參考資料（全臺 22 個縣市）；管理員帳號採條件式 bootstrap。** migration runner 在同時提供 `DEFAULT_ADMIN_EMAIL`、`DEFAULT_ADMIN_PASSWORD`、`SUPABASE_URL` 與 `SUPABASE_SERVICE_ROLE_KEY` 時，會嘗試建立／補上 idempotent default admin；若不提供這些設定，才需要到 Supabase Dashboard 的「Authentication → Users」按「Add user」，填一組**只有你知道的 email 與密碼**，建立後把 `app_metadata`（有些版本顯示為 Raw App Meta Data）設成 `{"role":"admin"}`。沒有這個 `role` 欄位的話，登入得進去但 API permission 可能不足。密碼請直接存進你自己的密碼管理工具，**不要寫進程式碼、環境變數或任何文件**。如果登入時卡在「帳號密碼錯誤」，先確認專案的認證方式（Authentication → Providers）有啟用「Email」，這是最常見的漏設原因。
 
 ## 步驟二：建立 Google Cloud 專案
 
@@ -210,15 +210,14 @@ Console →「Cloud Run」→「服務」→ 點進 `ltc-api` →「編輯並部
 
 ## 步驟七：實際測試一次
 
-打開終端機，在專案資料夾裡執行：
+完成設定並確認 workflow／secret 後，請在專案資料夾推送一個已審核、包含實際變更的 `main` commit 觸發部署；不要為了觸發流程建立無內容的空 commit。推送前先確認工作樹與目標 branch：
 
 ```bash
-git checkout main
-git commit --allow-empty -m "chore: 觸發第一次自動部署"
+git status
 git push origin main
 ```
 
-這行指令只是「上傳一次沒有任何程式改動的紀錄」，用來觸發自動部署，確認整套設定是通的。
+部署流程由 `main` push 觸發；本文件不替代 code review、migration 授權或 rollback 準備。
 
 推上去之後：
 
@@ -230,9 +229,9 @@ git push origin main
 
 ## 檢查清單
 
-- [ ] 已在 Supabase「Authentication → Users」自行建立至少一組管理員帳號，且 `app_metadata` 有 `"role":"admin"`（migration 不會幫你建帳號）
+- [ ] 已確認 default admin bootstrap 是否使用；若未提供 bootstrap 設定，至少在 Supabase「Authentication → Users」建立一組管理員帳號，且 `app_metadata` 有 `"role":"admin"`
 - [ ] 資料庫初始化跑到最新版本（`schema_migrations` 表對得上 `apps/api/migrations/` 底下最大的檔案編號；若走 SQL Editor 手動貼的方式，自行核對每一支 `.up.sql` 都依序執行成功）
-- [ ] `ltc-api-migrate` 這個工作跟 `ltc-api` 這個服務兩邊都各自設了 `APP_ENV=production`／`SUPABASE_JWKS_URL`／`ALLOWED_ORIGINS`（拼字也要對，打錯字不會有明確的錯誤提示）
+- [ ] `ltc-api-migrate` 這個工作跟 `ltc-api` 這個服務兩邊都各自設了 `APP_ENV=production`／`SUPABASE_JWKS_URL`／`SUPABASE_JWT_ISSUER` 或 `SUPABASE_PROJECT_REF`／`ALLOWED_ORIGINS`／`SUPABASE_SERVICE_ROLE_KEY`（拼字也要對）
 - [ ] `ltc-api-migrate` 工作的「指令」欄位確認是 `/app/migrate`（或 `//app/migrate`），不是一串看起來像 Windows 路徑（`D:/...`）的亂碼
 - [ ] `ltc-api` 服務的 `ALLOWED_ORIGINS` 已經從佔位值換成 Vercel 實際分配的網址
 - [ ] Vercel 的 Production 環境變數已設過一次 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY`／`VITE_API_BASE_URL`

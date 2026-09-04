@@ -38,7 +38,7 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 |---|---|
 | `masterdata` | 單位、車輛、司機、區域主檔 |
 | `casemgmt` | 個案主檔、排班設定、交通偏好、個案彙整表匯出 |
-| `caseimport` | 個案批次 Excel／CSV 解析、預覽與匯入 |
+| `caseimport` | 個案批次 `.xlsx` 解析、預覽與匯入；目前不應視為支援 CSV |
 | `ride` | 司機接送匯報展開、搭乘紀錄合併與人工更正 |
 | `driverreport` | 車輛匯報表登錄、`.xlsx` 匯入與欄位對應 |
 | `reporting` | 趟數表、新竹時刻表、儀表板、前置檢核、政府申報匯出 |
@@ -72,7 +72,7 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 
 ## Auth
 
-正式流程：前端帶 `Authorization: Bearer <supabase JWT>` → `middleware.AuthMiddleware` 用 Supabase JWKS 驗簽 → 從 claim 的 `user_metadata.role`（或 `app_metadata.role`）拿角色，寫進 Gin context（`actor_id`、`actor_role`）→ 路由層用 `middleware.RequireRoles("staff", "admin")` 這種白名單擋。角色目前大致有 `admin` / `staff` / `dispatcher` / `driver` / `viewer`，實際哪個角色能打哪個 API 以 [backend-api-reference.md](backend-api-reference.md) 為準。
+正式流程：前端帶 `Authorization: Bearer <supabase JWT>` → `middleware.AuthMiddleware` 用 Supabase JWKS 驗簽 → 只從 claim 的 `app_metadata.role` 取得 built-in role，寫進 Gin context（`actor_id`、`actor_role`）→ 路由層以 `middleware.RequirePermission` 檢查 module/action。`user_metadata.role` 與 top-level `role` 不是 backend 授權來源；`RequireRoles` 也不是現行 route API。角色目前大致有 `admin` / `staff` / `dispatcher` / `driver` / `viewer`，實際哪個角色能打哪個 API 以 [backend-api-reference.md](backend-api-reference.md) 與資料庫 permission matrix 為準。
 
 `APP_ENV=local` 時額外接受 `Authorization: Bearer mock_jwt_admin` 這種 token 字串（token 裡包含角色名稱關鍵字就吃該角色，預設 `staff`），讓本機沒接 Supabase 也能用正常的登入表單進系統；它仍要通過 data plane 檢查。`X-Mock-Role` header 後門已移除。
 
@@ -92,12 +92,12 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 { "error": { "code": "VALIDATION_FAILED", "message": "...", "details": [{"field":"...", "reason":"..."}] } }
 ```
 
-錯誤碼是 `httpx` 的常數：`VALIDATION_FAILED`、`UNAUTHENTICATED`、`FORBIDDEN`、`NOT_FOUND`、`DUPLICATE_NATIONAL_ID`、`ASSIGNMENT_OVERLAP`、`EXPORT_IN_PROGRESS`、`PRECHECK_FAILED`、`MAPPING_REQUIRED`、`INGEST_TOKEN_INVALID`、`FORM_SOURCE_FAILED`、`FORM_SYNC_FAILED`、`FORM_MAPPING_FAILED`、`INTERNAL_ERROR`。新增錯誤情境優先看有沒有現成碼可以用，真的沒有再加新常數，不要在 handler 裡面手打字串。
+錯誤碼是 `httpx` 的常數，現行主要包含 `VALIDATION_FAILED`、`UNAUTHENTICATED`、`FORBIDDEN`、`NOT_FOUND`、`ASSIGNMENT_OVERLAP`、`EXPORT_IN_PROGRESS`、`PRECHECK_FAILED`、`MAPPING_REQUIRED`、`FORM_MAPPING_FAILED`、`SERVICE_UNAVAILABLE`、`RESOURCE_IN_USE` 與 `INTERNAL_ERROR`。部分歷史文件中的 `INGEST_TOKEN_INVALID`、`FORM_SOURCE_FAILED`、`FORM_SYNC_FAILED`、`DUPLICATE_NATIONAL_ID` 不應當成現行 route／error contract，使用前以 `internal/platform/httpx/response.go` 為準。新增錯誤情境優先看有沒有現成碼可以用，真的沒有再加新常數，不要在 handler 裡面手打字串。
 
 ## 設定（環境變數）
 
 集中在 `internal/platform/config/config.go`，啟動時直接驗證並在缺漏必填值時拒絕啟動：
 
-- 必填：`APP_ENV`（僅接受 `local` 或 `production`）、`DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`（兩把 32 bytes base64 金鑰，且不可相同）。
-- `APP_ENV=production` 時額外必填：`SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`。
-- 選填：`PORT`、`DB_MAX_OPEN_CONNS`、`DB_MAX_IDLE_CONNS`、`SUPABASE_PROJECT_REF`、`STORAGE_BUCKET`、`STORAGE_SIGNED_URL_TTL`、`GOOGLE_SA_JSON`、`RESEND_API_KEY`、`NOTIFY_FROM`、`SENTRY_DSN`、`LOG_LEVEL`。
+- 必填／具預設：`APP_ENV`（僅接受 `local` 或 `production`）、`DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`（兩把 32 bytes base64 金鑰，且不可相同）；production 不可使用 source 內公開的 development default key。
+- `APP_ENV=production` 時額外必填：`SUPABASE_JWKS_URL`、`SUPABASE_JWT_ISSUER`（或 `SUPABASE_PROJECT_REF` 推導）、`ALLOWED_ORIGINS`、`SUPABASE_SERVICE_ROLE_KEY`。
+- 其他設定：`PORT`、`DB_MAX_OPEN_CONNS`、`DB_MAX_IDLE_CONNS`、`SUPABASE_PROJECT_REF`、`SUPABASE_URL`、`STORAGE_BUCKET`、`STORAGE_SIGNED_URL_TTL`、`SUPABASE_ADMIN_API_TIMEOUT`、`GOVERNMENT_HOLIDAY_API_TIMEOUT`、`RESEND_API_KEY`、`NOTIFY_FROM`、`DEFAULT_ADMIN_EMAIL`、`DEFAULT_ADMIN_PASSWORD`、`SENTRY_DSN`、`LOG_LEVEL`。Resend 設定目前尚未接到真實 sender；default admin 只在設定齊全時 conditional bootstrap，文件不得記錄 secret。

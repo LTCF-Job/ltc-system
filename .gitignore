@@ -12,3 +12,4 @@ bin/
 .vercel
 .env*
 local/
+docs/operations/

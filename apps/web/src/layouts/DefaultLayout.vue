@@ -31,7 +31,8 @@
         <el-menu
           id="primary-navigation"
           :default-active="activeRoute"
-            :collapse="!isMobile && isCollapse"
+          :collapse="!isMobile && isCollapse"
+          :collapse-transition="false"
           router
           class="el-menu-vertical"
         >
@@ -400,7 +401,6 @@ async function handleCommand(cmd: string) {
   border-right: 1px solid var(--app-nav-border);
   height: 100%;
   min-height: 0;
-  transition: width 0.25s ease;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -529,6 +529,17 @@ async function handleCommand(cmd: string) {
       background-color: var(--app-nav-bg) !important;
       padding: 4px 0 4px 8px;
       border-radius: 8px;
+    }
+
+    /* 移除子選單開啟/摺疊時顯示在文字正中間的箭頭旋轉動畫特效 */
+    :deep(.el-sub-menu__icon-arrow) {
+      display: none !important;
+    }
+
+    :deep(.el-collapse-transition-enter-active),
+    :deep(.el-collapse-transition-leave-active),
+    :deep(.horizontal-collapse-transition) {
+      transition: none !important;
     }
   }
 

@@ -136,3 +136,140 @@ func optionalTime(t *time.Time) string {
 	}
 	return t.Format(time.RFC3339)
 }
+
+// precheckSummaryResponse 代表前置檢核的統計數字摘要。
+type precheckSummaryResponse struct {
+	TotalErrors   int `json:"totalErrors"`
+	TotalWarnings int `json:"totalWarnings"`
+	TotalInfos    int `json:"totalInfos"`
+}
+
+// precheckItemDetailResponse 代表單筆檢核項目的問題明細。
+type precheckItemDetailResponse struct {
+	CaseID      string `json:"caseId,omitempty"`
+	CaseName    string `json:"caseName,omitempty"`
+	Field       string `json:"field,omitempty"`
+	ServiceDate string `json:"serviceDate,omitempty"`
+	RideID      string `json:"rideId,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// precheckItemResponse 代表依規則聚合後的檢核條目。
+type precheckItemResponse struct {
+	Level   string                       `json:"level"`
+	Code    string                       `json:"code"`
+	Message string                       `json:"message"`
+	Details []precheckItemDetailResponse `json:"details,omitempty"`
+}
+
+// precheckResponse 代表前置檢核對外回應形狀，同時滿足前端卡片呈現與向下相容。
+type precheckResponse struct {
+	Passed        bool                    `json:"passed"`
+	HasErrors     bool                    `json:"hasErrors"`
+	HasWarnings   bool                    `json:"hasWarnings"`
+	TotalErrors   int                     `json:"totalErrors"`
+	TotalWarnings int                     `json:"totalWarnings"`
+	TotalInfos    int                     `json:"totalInfos"`
+	Summary       precheckSummaryResponse `json:"summary"`
+	Items         []precheckItemResponse  `json:"items"`
+	Issues        []app.PrecheckIssue     `json:"issues,omitempty"`
+}
+
+// toPrecheckResponse 將領域層檢核報告轉換為前端所需之結構化 DTO。
+func toPrecheckResponse(report *app.PrecheckReport) precheckResponse {
+	if report == nil {
+		return precheckResponse{
+			Passed:  true,
+			Summary: precheckSummaryResponse{},
+			Items:   []precheckItemResponse{},
+		}
+	}
+
+	summary := precheckSummaryResponse{
+		TotalErrors:   report.TotalErrors,
+		TotalWarnings: report.TotalWarnings,
+		TotalInfos:    report.TotalInfos,
+	}
+
+	type group struct {
+		level   string
+		code    string
+		message string
+		details []precheckItemDetailResponse
+	}
+
+	var groupOrder []string
+	groups := make(map[string]*group)
+
+	for _, issue := range report.Issues {
+		code := issue.Code
+		g, exists := groups[code]
+		if !exists {
+			groupOrder = append(groupOrder, code)
+			msg := issue.Message
+			switch code {
+			case "MISSING_CASE_PROFILE":
+				msg = "個案基本資料不完整（缺少身分證、住家地址、服務類別或服務使用類型）"
+			case "UNRESOLVED_CONFLICT":
+				msg = "存在未裁決之混車衝突"
+			}
+			g = &group{
+				level:   string(issue.Severity),
+				code:    code,
+				message: msg,
+			}
+			groups[code] = g
+		}
+
+		detail := precheckItemDetailResponse{
+			Description: issue.Message,
+		}
+		if issue.Details != nil {
+			if cid, ok := issue.Details["caseId"]; ok && cid != nil {
+				detail.CaseID = fmt.Sprint(cid)
+			}
+			if cname, ok := issue.Details["caseName"]; ok && cname != nil {
+				detail.CaseName = fmt.Sprint(cname)
+			}
+			if sdate, ok := issue.Details["serviceDate"]; ok && sdate != nil {
+				detail.ServiceDate = fmt.Sprint(sdate)
+			}
+			if rid, ok := issue.Details["rideId"]; ok && rid != nil {
+				detail.RideID = fmt.Sprint(rid)
+			}
+			if f, ok := issue.Details["field"]; ok && f != nil {
+				detail.Field = fmt.Sprint(f)
+			} else if code == "MISSING_CASE_PROFILE" {
+				detail.Field = "身分證/地址/類別"
+			}
+		}
+
+		if detail.CaseID != "" || detail.CaseName != "" || detail.RideID != "" || detail.ServiceDate != "" {
+			g.details = append(g.details, detail)
+		}
+	}
+
+	items := make([]precheckItemResponse, 0, len(groupOrder))
+	for _, code := range groupOrder {
+		g := groups[code]
+		items = append(items, precheckItemResponse{
+			Level:   g.level,
+			Code:    g.code,
+			Message: g.message,
+			Details: g.details,
+		})
+	}
+
+	return precheckResponse{
+		Passed:        report.Passed,
+		HasErrors:     report.TotalErrors > 0,
+		HasWarnings:   report.TotalWarnings > 0,
+		TotalErrors:   report.TotalErrors,
+		TotalWarnings: report.TotalWarnings,
+		TotalInfos:    report.TotalInfos,
+		Summary:       summary,
+		Items:         items,
+		Issues:        report.Issues,
+	}
+}
+

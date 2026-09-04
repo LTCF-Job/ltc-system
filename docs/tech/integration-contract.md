@@ -29,21 +29,26 @@ view 元件呼叫 src/api/*.ts
       - 成功：解出 response.data，view 拿到的就是 { data, meta }，不用再 .data.data
       - 401：自動登出並導回登入頁
       - 403：跳 ElNotification 警告
-      - 其他錯誤：ElMessage 顯示 error.message；若有 error.details（欄位級錯誤陣列）逐欄列出
+      - 其他錯誤：依 `src/api/errorCodes.ts` 以 error code 查表顯示固定文案；若有 error.details（欄位級錯誤陣列）逐欄列出，未知 code 目前可能只顯示 generic 文案，不直接信任 backend 原始 message
 ```
 
 司機接送匯報是檔案上傳（`multipart/form-data`）而非 JSON，見 [backend-flows.md](backend-flows.md) 的匯報匯入流程；回應仍走同一套成功／錯誤封裝。
 
 ## Failure modes
 
-- **前後端模組權限不同步**：前端 `hasPermission(module, action)` 與後端 `RequirePermission(module, action)` 現在共用同一份權限矩陣（透過 `GET /api/v1/auth/me` 取得，見 [frontend-permission-logic.md](frontend-permission-logic.md)），但新增頁面時若忘了在路由掛正確的 `meta.module`，或後端忘了在對應路由掛 `RequirePermission`，兩邊還是可能對不上，出現「畫面看得到但 API 403」或反過來。新增頁面或模組時，兩邊要對照 [frontend-pages.md](frontend-pages.md) 與 [backend-api-reference.md](backend-api-reference.md) 一起改。
+- **前後端模組權限不同步**：前端 `hasPermission(module, action)` 與 backend `RequirePermission(module, action)` 對 permission route 共用同一份權限矩陣（透過 `GET /api/v1/auth/me` 取得，見 [frontend-permission-logic.md](frontend-permission-logic.md)），但新增頁面時若忘了在路由掛正確的 `meta.module`、sidebar/menu 顯示條件或 backend route guard，兩邊還是可能對不上，出現「畫面看得到但 API 403」或反過來。`/auth/me` 與 `/auth/change-password` 是 authenticated-only，不能誤記成 module permission route；新增頁面或模組時，兩邊要對照 [frontend-pages.md](frontend-pages.md) 與 [backend-api-reference.md](backend-api-reference.md) 一起改。
 - **契約型別脫鉤**：後端 DTO 改了欄位，前端 `src/types/api.d.ts` 沒重新產生（`npm run gen:types`）時不會在編譯期報錯，只會在 runtime 欄位對不上；`error.details` 的欄位陣列格式也只有前端攔截器單方面假設，沒有型別檢查保證後端一定回這個形狀。
 - **本機免驗證憑證外洩到正式環境**：`mock_jwt_` 前綴憑證只在 `APP_ENV=local` 生效，寫死在 `internal/platform/auth/auth.go`；改動這段驗證邏輯時，判斷分支寫錯會讓正式環境也吃這種 token，等同繞過登入。
+- **Query／command 混用**：`GET /rides/missing` 目前接到 notification-capable task path，且前端傳送的 filter／pagination 沒有完整 backend 對應；在拆分前不可把它當成純讀取契約。
+- **Data plane 不可用**：local server 沒有 DB 時仍可能啟動，部分 endpoint 回空資料或假成功、部分 path 失敗；HTTP process alive 不是 CRUD／transaction 已驗證的證據。
+- **Permission freshness**：effective permission 會有約 30 秒 process-local cache，多 instance 的 revoke 可能延遲；frontend route/menu 也可能與 backend permission 產生體驗落差。
+- **錯誤碼漂移**：backend 已有 `SERVICE_UNAVAILABLE`、`RESOURCE_IN_USE` 等 code，但 frontend mapping 與文件未必同步；未知 code 不應被靜默轉成業務成功。
 
 ## 刻意保留的契約落差
 
-- **`DashboardStatsDTO` 的未回欄位**：前端型別宣告 7 個欄位，後端 `GET /dashboard/stats` 只真的回 `recentExports`，其餘欄位（來自不同資料源）目前由 `GET /dashboard/metrics` 分開提供，未合併進 `stats`。既有漂移，本輪只補上 `recentExports` 這一項，不擴大範圍統一兩支端點。
+- **`DashboardStatsDTO` 的未回欄位**：前端型別宣告 7 個欄位，後端 `GET /dashboard/stats` 只真的回 `recentExports`，其餘欄位（來自不同資料源）目前由 `GET /dashboard/metrics` 分開提供，未合併進 `stats`。既有漂移，本輪只補上 `recentExports` 這一項，不擴大範圍統一兩支端點；metrics 的固定／簡化 KPI 與 error semantics 仍需業務及 runtime 驗證。
 - **`import_error` 分頁的 `caseName` 語意**：`GET /rides/issues?issueType=import_error` 回傳的 `caseName` 欄位實際內容是 `driver_name_raw`（原始回報文字/欄位），不是個案姓名——該分頁前端標題本來就是「回報文字/欄位」，欄位名稱沿用共用 DTO 只是為了三種 `issueType` 共用同一個回應形狀。同理 `caseId` 回空字串、`legSeq` 回 `0`，前端這兩欄在該分頁本來就不顯示。
+- **Notification delivery state**：收件人設定／通知 log 與實際 email delivery 是不同層；目前 default sender 是 simulated，不能把 API success 當成信件送達。
 
 ## Unverified
 
