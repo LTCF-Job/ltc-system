@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	identityapp "ltc-system/apps/api/internal/modules/identity/app"
+	identityinfra "ltc-system/apps/api/internal/modules/identity/infra"
 	"ltc-system/apps/api/internal/platform/config"
 )
 
@@ -89,6 +92,19 @@ func main() {
 	}
 
 	slog.Info("Migration completed successfully", slog.String("action", action))
+
+	if action == "up" {
+		if err := seedDefaultAdmin(ctx, pool, cfg); err != nil {
+			slog.Error("Failed to seed default admin", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+	}
+}
+
+func seedDefaultAdmin(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config) error {
+	admin := identityinfra.NewSupabaseAdminClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, &http.Client{Timeout: cfg.SupabaseAdminTimeout})
+	roles := identityinfra.NewRoleRepository(pool)
+	return identityapp.SeedDefaultAdmin(ctx, admin, roles, cfg.DefaultAdminEmail, cfg.DefaultAdminPassword)
 }
 
 func ensureMigrationsTable(ctx context.Context, pool *pgxpool.Pool) error {

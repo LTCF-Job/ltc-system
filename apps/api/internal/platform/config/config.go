@@ -39,6 +39,8 @@ type Config struct {
 	SupabaseURL                 string        `envconfig:"SUPABASE_URL"`
 	SupabaseServiceRoleKey      string        `envconfig:"SUPABASE_SERVICE_ROLE_KEY"`
 	SupabaseAdminTimeout        time.Duration `envconfig:"SUPABASE_ADMIN_API_TIMEOUT" default:"10s"`
+	DefaultAdminEmail           string        `envconfig:"DEFAULT_ADMIN_EMAIL"`
+	DefaultAdminPassword        string        `envconfig:"DEFAULT_ADMIN_PASSWORD"`
 
 	// 解析後的金鑰 bytes
 	EncryptionKey []byte `ignored:"true"`
