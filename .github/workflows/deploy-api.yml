@@ -28,6 +28,17 @@ env:
   API_SERVICE: ${{ vars.API_SERVICE || 'ltc-api' }}
   MIGRATION_JOB: ${{ vars.MIGRATION_JOB || 'ltc-api-migrate' }}
   IMAGE_TAG: ${{ github.sha }}
+  # 以下皆為 Cloud Run service／job 的非機密設定值，跟 GCP_PROJECT_ID 等一樣走
+  # GitHub Environment variables；機密值一律用 Secret Manager 的 secret 名稱參照
+  # （見 deploy-prod job 的 --set-secrets），密碼與金鑰本身不會進到這個 workflow。
+  SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+  ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+  STORAGE_BUCKET: ${{ vars.STORAGE_BUCKET || 'ltc-exports' }}
+  STORAGE_SIGNED_URL_TTL: ${{ vars.STORAGE_SIGNED_URL_TTL || '24h' }}
+  NOTIFY_FROM: ${{ vars.NOTIFY_FROM || 'noreply@ltc.example.com' }}
+  LOG_LEVEL: ${{ vars.LOG_LEVEL || 'info' }}
+  DB_MAX_OPEN_CONNS: ${{ vars.DB_MAX_OPEN_CONNS || '5' }}
+  DB_MAX_IDLE_CONNS: ${{ vars.DB_MAX_IDLE_CONNS || '2' }}
 
 jobs:
   test:
@@ -113,12 +124,19 @@ jobs:
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
-      - name: Update migration job image
+      - name: Sync migration job configuration
+        # gcloud run jobs update 若只帶 --image，其餘 env／secret 一律沿用 Console 手動
+        # 設定的舊值；改用 --set-env-vars／--set-secrets 讓這個 workflow 成為 job 設定的
+        # 唯一真相來源，之後改設定只要改這個檔案，不用再去 Console 手動點。
+        # ALLOWED_ORIGINS 內容可能含多個以逗號分隔的網址，用 "^;^" 把 gcloud 預設的
+        # 逗號分隔符換成分號，逗號才不會被誤判成下一組 KEY=VALUE 的分界。
         run: |
           gcloud run jobs update "$MIGRATION_JOB" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
-            --image "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/api:${IMAGE_TAG}"
+            --image "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/api:${IMAGE_TAG}" \
+            --set-env-vars="^;^APP_ENV=production;SUPABASE_PROJECT_REF=${SUPABASE_PROJECT_REF};SUPABASE_JWKS_URL=https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1/.well-known/jwks.json;ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
+            --set-secrets="^;^DATABASE_URL=DATABASE_URL:latest;ENCRYPTION_KEY=ENCRYPTION_KEY:latest;HMAC_KEY=HMAC_KEY:latest;SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest;DEFAULT_ADMIN_EMAIL=DEFAULT_ADMIN_EMAIL:latest;DEFAULT_ADMIN_PASSWORD=DEFAULT_ADMIN_PASSWORD:latest"
 
       - name: Run database migrations
         run: |
@@ -128,9 +146,12 @@ jobs:
             --wait
 
       - name: Deploy API service
+        # 同上，service 跟 job 是各自獨立的資源，設定不互通，這裡也要完整宣告一次。
         run: |
           gcloud run deploy "$API_SERVICE" \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
             --image "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/api:${IMAGE_TAG}" \
-            --platform managed
+            --platform managed \
+            --set-env-vars="^;^APP_ENV=production;STORAGE_BUCKET=${STORAGE_BUCKET};STORAGE_SIGNED_URL_TTL=${STORAGE_SIGNED_URL_TTL};NOTIFY_FROM=${NOTIFY_FROM};LOG_LEVEL=${LOG_LEVEL};SUPABASE_PROJECT_REF=${SUPABASE_PROJECT_REF};SUPABASE_JWKS_URL=https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1/.well-known/jwks.json;DB_MAX_OPEN_CONNS=${DB_MAX_OPEN_CONNS};DB_MAX_IDLE_CONNS=${DB_MAX_IDLE_CONNS};ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
+            --set-secrets="^;^DATABASE_URL=DATABASE_URL:latest;ENCRYPTION_KEY=ENCRYPTION_KEY:latest;HMAC_KEY=HMAC_KEY:latest;SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest"
