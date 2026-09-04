@@ -66,16 +66,16 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_ENV: production
-      # actions/checkout 預設是 detached HEAD，vercel build／deploy 讀不到分支名稱，
-      # 部署會被 Vercel 歸類成 "HEAD" 而非 main，Dashboard 的分支篩選找不到這個環境。
-      # 這幾個變數是 Vercel CLI 認得的既有慣例名稱，顯式帶上就能讓它正確標記來源分支與 commit。
-      VERCEL_GIT_COMMIT_SHA: ${{ github.sha }}
-      VERCEL_GIT_COMMIT_REF: ${{ github.ref_name }}
-      VERCEL_GIT_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-      VERCEL_GIT_COMMIT_AUTHOR_LOGIN: ${{ github.actor }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # vercel deploy 不吃 VERCEL_GIT_COMMIT_* 這類環境變數，它是讀本機 .git 狀態
+      # （靠 git-last-commit 抓目前分支）來產生部署的 git metadata。actions/checkout
+      # 預設停在 detached HEAD，抓不到分支名稱，部署會被 Vercel 歸類成 "HEAD" 而非
+      # main，Dashboard 的分支篩選也就看不到這個環境；接回分支名稱即可讓它正確讀到。
+      - name: Attach checkout to branch
+        run: git checkout -B "${{ github.ref_name }}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
