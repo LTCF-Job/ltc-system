@@ -55,7 +55,7 @@
           </el-table-column>
           <el-table-column prop="nationalId" label="身分證字號" width="140" align="center">
             <template #default="{ row }">
-              <span class="driver-data font-mono">{{ row.nationalId || '-' }}</span>
+              <span class="driver-data font-mono">{{ row.nationalIdMasked || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="licenseClass" label="駕照類別" min-width="120" align="center" class-name="license-class-col">
@@ -161,9 +161,6 @@
         <el-form-item label="司機姓名" prop="name">
           <el-input v-model="form.name" placeholder="請輸入姓名" />
         </el-form-item>
-        <el-form-item label="身分證字號" prop="nationalId">
-          <el-input v-model="form.nationalId" placeholder="1 碼英文 + 9 碼數字" />
-        </el-form-item>
         <el-form-item label="所屬區域" prop="region">
           <el-select v-model="form.region" placeholder="請選擇區域" filterable style="width: 100%">
             <el-option
@@ -173,9 +170,6 @@
               :value="key"
             />
           </el-select>
-        </el-form-item>
-        <el-form-item label="聯絡電話" prop="phone">
-          <el-input v-model="form.phone" placeholder="如：0912345678" />
         </el-form-item>
         <el-form-item label="電子信箱" prop="email">
           <el-input v-model="form.email" placeholder="通知寄送用信箱" />
@@ -289,7 +283,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { formatDate } from '@/utils/formatters'
 import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass, REGION_LABELS } from '@/types/domain'
-import type { DriverDTO, CreateDriverRequest, VehicleDTO } from '@/types/api'
+import type { DriverDTO, CreateDriverRequest, UpdateDriverRequest, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
 const drivers = ref<DriverDTO[]>([])
@@ -315,11 +309,10 @@ const assignRules = {
   startDate: [{ required: true, message: '請選擇起始日期', trigger: 'change' }]
 }
 
-const form = reactive<CreateDriverRequest>({
+const form = reactive<CreateDriverRequest & UpdateDriverRequest>({
   name: '',
   nationalId: '',
   region: 'miaoli',
-  phone: '',
   email: '',
   status: 'active',
   licenseClass: null,
@@ -328,7 +321,6 @@ const form = reactive<CreateDriverRequest>({
 
 const rules = {
   name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }],
-  nationalId: [{ required: true, message: '請輸入身分證字號', trigger: 'blur' }],
   region: [{ required: true, message: '請選擇所屬區域', trigger: 'change' }]
 }
 
@@ -386,9 +378,7 @@ function handleDriverCreated() {
 function openEditDialog(row: any) {
   editingId.value = row.id
   form.name = row.name
-  form.nationalId = row.nationalId
   form.region = row.region
-  form.phone = row.phone || ''
   form.email = row.email || ''
   form.status = row.status
   form.licenseClass = row.licenseClass ?? null
@@ -432,7 +422,14 @@ async function handleSubmit() {
     if (!valid) return
     submitting.value = true
     try {
-      await updateDriver(editingId.value!, form)
+      await updateDriver(editingId.value!, {
+        name: form.name,
+        region: form.region,
+        email: form.email,
+        status: form.status,
+        licenseClass: form.licenseClass,
+        licenseExpiryDate: form.licenseExpiryDate
+      })
       ElMessage.success('司機資料已更新')
       editDialogVisible.value = false
       executeFetch()

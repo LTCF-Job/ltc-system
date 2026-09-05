@@ -17,9 +17,6 @@
           <el-option v-for="(label, key) in REGION_LABELS" :key="key" :label="label" :value="key" />
         </el-select>
       </el-form-item>
-      <el-form-item label="聯絡電話" prop="phone">
-        <el-input v-model="form.phone" placeholder="如：0912345678" />
-      </el-form-item>
       <el-form-item label="電子信箱" prop="email">
         <el-input v-model="form.email" placeholder="通知寄送用信箱" />
       </el-form-item>
@@ -76,9 +73,7 @@ const form = reactive<CreateDriverRequest>({
   name: '',
   nationalId: '',
   region: 'miaoli',
-  phone: '',
-  email: '',
-  status: 'active',
+    email: '',
   licenseClass: null,
   licenseExpiryDate: null
 })
@@ -108,9 +103,7 @@ watch(
     form.name = props.prefillName || ''
     form.nationalId = ''
     form.region = 'miaoli'
-    form.phone = ''
     form.email = ''
-    form.status = 'active'
     form.licenseClass = null
     form.licenseExpiryDate = null
     formRef.value?.clearValidate()

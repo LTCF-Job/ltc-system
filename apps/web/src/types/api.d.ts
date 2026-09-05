@@ -366,9 +366,8 @@ export interface DriverDTO {
   id: string;
   name: string;
   nameNormalized?: string;
-  nationalId: string;
+  nationalIdMasked: string;
   region: string;
-  phone?: string;
   email?: string;
   status: "active" | "inactive";
   // 駕照類別與有效日期為選填，未補登時為 null
@@ -382,14 +381,19 @@ export interface CreateDriverRequest {
   name: string;
   nationalId: string;
   region: string;
-  phone?: string;
+  email?: string;
+  licenseClass?: DriverLicenseClass | null;
+  licenseExpiryDate?: string | null;
+}
+
+export interface UpdateDriverRequest {
+  name?: string;
+  region?: string;
   email?: string;
   status?: "active" | "inactive";
   licenseClass?: DriverLicenseClass | null;
   licenseExpiryDate?: string | null;
 }
-
-export interface UpdateDriverRequest extends Partial<CreateDriverRequest> {}
 
 // 照護人員：siteId 為空但 siteNameRaw 有值時，代表匯入時的單位名稱尚未關聯既有單位
 export interface CaregiverDTO {
