@@ -737,6 +737,7 @@ type IssueRide struct {
 	LegSeq      int16
 	Description string
 	Vehicles    []string
+	RawPayload  string
 }
 
 // ListIssues 依 issueType 分派查詢「異常集中處理」清單，month 格式為 YYYY-MM。
@@ -821,6 +822,7 @@ func (s *RideService) listImportErrorIssues(ctx context.Context, start, end time
 			CaseName:    r.DriverNameRaw,
 			ServiceDate: r.ServiceDate,
 			Description: describeAnomalyFlags(r.AnomalyFlags),
+			RawPayload:  r.RawPayload,
 		})
 	}
 	return items, total, nil

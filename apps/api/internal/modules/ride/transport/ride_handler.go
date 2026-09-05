@@ -294,6 +294,7 @@ type issueRideResponse struct {
 	LegSeq      int16    `json:"legSeq"`
 	Description string   `json:"description"`
 	Vehicles    []string `json:"vehicles,omitempty"`
+	RawPayload  string   `json:"rawPayload,omitempty"`
 }
 
 func toIssueRideResponse(item app.IssueRide) issueRideResponse {
@@ -305,6 +306,7 @@ func toIssueRideResponse(item app.IssueRide) issueRideResponse {
 		LegSeq:      item.LegSeq,
 		Description: item.Description,
 		Vehicles:    item.Vehicles,
+		RawPayload:  item.RawPayload,
 	}
 }
 
