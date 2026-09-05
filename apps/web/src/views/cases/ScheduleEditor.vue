@@ -628,7 +628,7 @@ function buildMonthDaysList() {
   const daysCount = new Date(year, month, 0).getDate()
 
   const list: MonthDayRow[] = []
-  const defaultVehicle = formData.legs[0]?.vehicleId || availableVehicles.value[0]?.id || ''
+  const defaultVehicle = formData.legs[0]?.vehicleId || ''
   const defaultDepart = formData.legs[0]?.departTime || '09:00'
   const defaultReturn = formData.legs[1]?.departTime || '16:00'
 
@@ -750,7 +750,7 @@ function applyWeeklyToMonth() {
       row.tripCount = wConfig.tripCount
       row.departTime = wConfig.departTime || '09:00'
       row.returnTime = wConfig.returnTime || '16:00'
-      row.vehicleId = wConfig.vehicleId || availableVehicles.value[0]?.id || ''
+      row.vehicleId = wConfig.vehicleId || ''
       markDayOverridden(row)
     }
   })
@@ -759,7 +759,7 @@ function applyWeeklyToMonth() {
 
 function applyFixedToMonth() {
   const activeSet = new Set(formData.weekdays)
-  const defaultVehicle = formData.legs[0]?.vehicleId || availableVehicles.value[0]?.id || ''
+  const defaultVehicle = formData.legs[0]?.vehicleId || ''
   monthDaysList.value.forEach((row) => {
     row.tripCount = activeSet.has(row.weekday) ? (formData.tripPattern || 2) : 0
     row.departTime = formData.legs[0]?.departTime || '09:00'
@@ -790,7 +790,7 @@ function setAllMonthAbsent() {
 
 // 趟數切換時調整 legs 陣列
 function handlePatternChange(pattern: any) {
-  const currentVehicle = formData.legs[0]?.vehicleId || availableVehicles.value[0]?.id || ''
+  const currentVehicle = formData.legs[0]?.vehicleId || ''
 
   if (pattern === 1) {
     formData.legs = [
@@ -880,21 +880,6 @@ async function loadSitesAndVehicles() {
   availableSites.value = sitesRes
   availableVehicles.value = vehiclesRes
 
-  if (!formData.siteId && availableSites.value.length > 0) {
-    formData.siteId = availableSites.value[0].id
-  }
-  if (availableVehicles.value.length > 0) {
-    formData.legs.forEach((leg) => {
-      if (!leg.vehicleId) {
-        leg.vehicleId = availableVehicles.value[0].id
-      }
-    })
-    weekdayConfigs.forEach((cfg) => {
-      if (!cfg.vehicleId) {
-        cfg.vehicleId = availableVehicles.value[0].id
-      }
-    })
-  }
   buildMonthDaysList()
 }
 
@@ -913,6 +898,11 @@ onMounted(async () => {
 
 async function handleSave() {
   if (!formRef.value) return
+
+  if (!formData.siteId || formData.legs.some((leg) => !leg.vehicleId)) {
+    ElMessage.warning('請明確選擇所屬單位與每一趟車輛')
+    return
+  }
 
   // 1. 組裝各模式的相容性 weekdays 與 legs
   if (scheduleMode.value === 'by_weekday') {
