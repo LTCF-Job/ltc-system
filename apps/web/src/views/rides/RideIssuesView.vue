@@ -241,8 +241,8 @@ function handleReset() {
 
 function openResolveDialog(row: any) {
   selectedIssue.value = row
-  resolveForm.vehicleId = allVehicles.value[0]?.id || ''
-  resolveForm.driverId = allDrivers.value[0]?.id || ''
+  resolveForm.vehicleId = ''
+  resolveForm.driverId = ''
   resolveForm.reason = '混車確認'
   resolveDialogVisible.value = true
 }
@@ -254,6 +254,10 @@ function openErrorDetail(row: IssueRideDTO) {
 
 async function handleResolveSubmit() {
   if (!selectedIssue.value) return
+  if (!resolveForm.vehicleId) {
+    ElMessage.warning('請先指定正確認定的車輛')
+    return
+  }
   await ElMessageBox.confirm(
     `確定將該搭乘紀錄裁決為指定車輛與司機？`,
     '確認裁決',
