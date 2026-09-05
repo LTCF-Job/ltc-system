@@ -2,14 +2,13 @@ package app
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 // GovClaimSourceReader 查詢指定期間、地區與個案範圍內可申報的趟次原始資料。
 type GovClaimSourceReader interface {
-	QueryGovClaimSources(ctx context.Context, start, end time.Time, region string, caseIDs []uuid.UUID) ([]GovClaimSource, error)
+	QueryGovClaimSources(ctx context.Context, scope ClaimScope) ([]GovClaimSource, error)
 }
 
 // ExportJobStore 保存匯出工作、逐案檔案中繼資料與申報列快照。

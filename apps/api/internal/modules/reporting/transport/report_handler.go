@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/reporting/app"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
@@ -23,17 +24,18 @@ func NewReportHandler(reportSvc *app.ReportService) *ReportHandler {
 // GetTripSummary 查詢車輛趟數表。
 func (h *ReportHandler) GetTripSummary(c *gin.Context) {
 	periodYm := c.DefaultQuery("periodYm", "115-07")
+	if !validatePeriod(c, periodYm) {
+		return
+	}
 	region := c.Query("region")
 	var regionPtr *string
 	if region != "" {
 		regionPtr = &region
 	}
 
-	var vehID *uuid.UUID
-	if vStr := c.Query("vehicleId"); vStr != "" {
-		if uid, err := uuid.Parse(vStr); err == nil {
-			vehID = &uid
-		}
+	vehID, ok := parseOptionalUUID(c, "vehicleId")
+	if !ok {
+		return
 	}
 
 	report, err := h.reportSvc.GetTripSummary(c.Request.Context(), periodYm, regionPtr, vehID)
@@ -48,17 +50,18 @@ func (h *ReportHandler) GetTripSummary(c *gin.Context) {
 // ExportTripSummaryExcel 匯出車輛趟數表 Excel 檔案。
 func (h *ReportHandler) ExportTripSummaryExcel(c *gin.Context) {
 	periodYm := c.DefaultQuery("periodYm", "115-07")
+	if !validatePeriod(c, periodYm) {
+		return
+	}
 	region := c.Query("region")
 	var regionPtr *string
 	if region != "" {
 		regionPtr = &region
 	}
 
-	var vehID *uuid.UUID
-	if vStr := c.Query("vehicleId"); vStr != "" {
-		if uid, err := uuid.Parse(vStr); err == nil {
-			vehID = &uid
-		}
+	vehID, ok := parseOptionalUUID(c, "vehicleId")
+	if !ok {
+		return
 	}
 
 	excelBytes, err := h.reportSvc.GenerateTripSummaryExcel(c.Request.Context(), periodYm, regionPtr, vehID)
@@ -74,16 +77,13 @@ func (h *ReportHandler) ExportTripSummaryExcel(c *gin.Context) {
 
 // GetHsinchuSchedule 查詢新竹接送時刻表。
 func (h *ReportHandler) GetHsinchuSchedule(c *gin.Context) {
-	var siteID, vehID *uuid.UUID
-	if sStr := c.Query("siteId"); sStr != "" {
-		if uid, err := uuid.Parse(sStr); err == nil {
-			siteID = &uid
-		}
+	siteID, ok := parseOptionalUUID(c, "siteId")
+	if !ok {
+		return
 	}
-	if vStr := c.Query("vehicleId"); vStr != "" {
-		if uid, err := uuid.Parse(vStr); err == nil {
-			vehID = &uid
-		}
+	vehID, ok := parseOptionalUUID(c, "vehicleId")
+	if !ok {
+		return
 	}
 
 	report, err := h.reportSvc.GetHsinchuSchedule(c.Request.Context(), siteID, vehID)
@@ -97,16 +97,13 @@ func (h *ReportHandler) GetHsinchuSchedule(c *gin.Context) {
 
 // ExportHsinchuScheduleExcel 匯出新竹接送時刻表 Excel 檔案。
 func (h *ReportHandler) ExportHsinchuScheduleExcel(c *gin.Context) {
-	var siteID, vehID *uuid.UUID
-	if sStr := c.Query("siteId"); sStr != "" {
-		if uid, err := uuid.Parse(sStr); err == nil {
-			siteID = &uid
-		}
+	siteID, ok := parseOptionalUUID(c, "siteId")
+	if !ok {
+		return
 	}
-	if vStr := c.Query("vehicleId"); vStr != "" {
-		if uid, err := uuid.Parse(vStr); err == nil {
-			vehID = &uid
-		}
+	vehID, ok := parseOptionalUUID(c, "vehicleId")
+	if !ok {
+		return
 	}
 
 	excelBytes, err := h.reportSvc.GenerateHsinchuScheduleExcel(c.Request.Context(), siteID, vehID)
@@ -118,4 +115,25 @@ func (h *ReportHandler) ExportHsinchuScheduleExcel(c *gin.Context) {
 	filename := "hsinchu-schedule.xlsx"
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
+}
+
+func validatePeriod(c *gin.Context, period string) bool {
+	if _, _, err := rocdate.ParseYearMonth(period); err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "月份格式錯誤，請使用 RRR-MM 或 YYYY-MM", nil)
+		return false
+	}
+	return true
+}
+
+func parseOptionalUUID(c *gin.Context, key string) (*uuid.UUID, bool) {
+	raw := c.Query(key)
+	if raw == "" {
+		return nil, true
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, key+" 必須為有效 UUID", nil)
+		return nil, false
+	}
+	return &id, true
 }

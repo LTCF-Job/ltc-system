@@ -2,12 +2,11 @@ package app
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/govform"
+	"ltc-system/apps/api/internal/domain/rocdate"
 )
 
 // ReportRepositoryPort 定義報表資料存取介面。
@@ -95,7 +94,10 @@ func (s *ReportService) GetTripSummary(ctx context.Context, periodYm string, reg
 		return report, nil
 	}
 
-	startDate, endDate := parsePeriodDates(periodYm)
+	startDate, endDate, _, err := rocdate.MonthRangeStrict(periodYm)
+	if err != nil {
+		return nil, err
+	}
 	vehSummaries, err := s.repo.QueryTripSummaryData(ctx, startDate, endDate, region, vehicleID)
 	if err != nil {
 		return nil, err
@@ -201,35 +203,6 @@ func (s *ReportService) GenerateHsinchuScheduleExcel(ctx context.Context, siteID
 	}
 
 	return s.renderer.RenderHsinchuSchedule(report.Outbound, report.Inbound)
-}
-
-func parsePeriodDates(periodYm string) (time.Time, time.Time) {
-	var startDate, endDate time.Time
-	if strings.Contains(periodYm, "-") {
-		parts := strings.Split(periodYm, "-")
-		if len(parts) == 2 {
-			var year, month int
-			fmt.Sscanf(parts[0], "%d", &year)
-			fmt.Sscanf(parts[1], "%d", &month)
-			if year < 1000 {
-				year += 1911 // 民國轉西元
-			}
-			startDate = time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-			endDate = startDate.AddDate(0, 1, 0)
-		}
-	} else if len(periodYm) == 5 {
-		var rocYear, month int
-		fmt.Sscanf(periodYm[:3], "%d", &rocYear)
-		fmt.Sscanf(periodYm[3:], "%d", &month)
-		startDate = time.Date(rocYear+1911, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-		endDate = startDate.AddDate(0, 1, 0)
-	}
-
-	if startDate.IsZero() {
-		startDate = time.Date(time.Now().Year(), time.Now().Month(), 1, 0, 0, 0, 0, time.UTC)
-		endDate = startDate.AddDate(0, 1, 0)
-	}
-	return startDate, endDate
 }
 
 // GenerateGovClaimExcel 產生政府申報 Excel 檔案。

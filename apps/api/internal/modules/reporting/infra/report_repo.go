@@ -55,9 +55,13 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 	var vehicles []app.ReportVehicleItem
 	for vehRows.Next() {
 		var v app.ReportVehicleItem
-		if err := vehRows.Scan(&v.ID, &v.PlateNo, &v.DisplayName, &v.Region); err == nil {
-			vehicles = append(vehicles, v)
+		if err := vehRows.Scan(&v.ID, &v.PlateNo, &v.DisplayName, &v.Region); err != nil {
+			return nil, fmt.Errorf("failed to scan report vehicle: %w", err)
 		}
+		vehicles = append(vehicles, v)
+	}
+	if err := vehRows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate report vehicles: %w", err)
 	}
 
 	var results []app.ReportVehicleTripSummary
@@ -79,15 +83,21 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 	for _, v := range vehicles {
 		rRows, err := r.db.Query(ctx, statQuery, v.ID, startDate, endDate)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("failed to query report vehicle rows: %w", err)
 		}
 
 		var rows []app.ReportTripSummaryCaseRow
 		for rRows.Next() {
 			var row app.ReportTripSummaryCaseRow
-			if err := rRows.Scan(&row.CaseID, &row.CaseName, &row.OutboundCount, &row.InboundCount, &row.TotalCount); err == nil {
-				rows = append(rows, row)
+			if err := rRows.Scan(&row.CaseID, &row.CaseName, &row.OutboundCount, &row.InboundCount, &row.TotalCount); err != nil {
+				rRows.Close()
+				return nil, fmt.Errorf("failed to scan report vehicle row: %w", err)
 			}
+			rows = append(rows, row)
+		}
+		if err := rRows.Err(); err != nil {
+			rRows.Close()
+			return nil, fmt.Errorf("failed to iterate report vehicle rows: %w", err)
 		}
 		rRows.Close()
 
@@ -157,6 +167,9 @@ func (r *ReportRepository) QueryHsinchuScheduleData(ctx context.Context, siteID 
 			return nil, fmt.Errorf("failed to scan schedule item: %w", err)
 		}
 		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate hsinchu schedule: %w", err)
 	}
 
 	return result, nil

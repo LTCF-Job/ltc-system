@@ -73,7 +73,8 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 		return GovClaimJob{}, err
 	}
 
-	report, err := s.precheck.RunPrecheck(ctx, periodYM, input.Region)
+	scope := NewClaimScope(start, end, input.Region, input.CaseIDs)
+	report, err := s.precheck.RunPrecheck(ctx, scope)
 	if err != nil {
 		return GovClaimJob{}, fmt.Errorf("run precheck: %w", err)
 	}
@@ -100,7 +101,7 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 		return GovClaimJob{}, fmt.Errorf("create export job: %w", err)
 	}
 
-	files, lines, skipped, err := s.buildJobContent(ctx, periodYM, input, start, end)
+	files, lines, skipped, err := s.buildJobContent(ctx, periodYM, input, scope)
 	if err != nil {
 		// 產檔失敗仍要留下失敗紀錄，讓使用者在歷史清單看得到這次嘗試
 		if failErr := s.store.FailJob(ctx, jobID, exportFailureMessage(err)); failErr != nil {
@@ -231,9 +232,9 @@ func (s *GovClaimService) buildJobContent(
 	ctx context.Context,
 	periodYM string,
 	input CreateGovClaimInput,
-	start, end time.Time,
+	scope ClaimScope,
 ) ([]GovClaimCaseFile, []ExportLine, []ClaimSkip, error) {
-	sources, err := s.reader.QueryGovClaimSources(ctx, start, end, input.Region, input.CaseIDs)
+	sources, err := s.reader.QueryGovClaimSources(ctx, scope)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("query gov claim sources: %w", err)
 	}
@@ -449,6 +450,11 @@ func parsePeriodYM(raw string) (string, time.Time, time.Time, error) {
 
 	start := time.Date(rocYear+1911, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	return normalized, start, start.AddDate(0, 1, 0), nil
+}
+
+// ParseClaimPeriod 將申報月份轉成標準化月份與日期範圍，供 transport 建立相同 ClaimScope。
+func ParseClaimPeriod(raw string) (string, time.Time, time.Time, error) {
+	return parsePeriodYM(raw)
 }
 
 func combineDepartTime(serviceDate time.Time, hhmm string) (time.Time, error) {

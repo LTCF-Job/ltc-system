@@ -7,8 +7,8 @@ import (
 
 // PrecheckRepositoryPort 定義前置檢核資料查詢介面。
 type PrecheckRepositoryPort interface {
-	FindIncompleteActiveCases(ctx context.Context, region string) ([]IncompleteCase, error)
-	FindUnresolvedConflicts(ctx context.Context, region string) ([]UnresolvedConflict, error)
+	FindIncompleteActiveCases(ctx context.Context, scope ClaimScope) ([]IncompleteCase, error)
+	FindUnresolvedConflicts(ctx context.Context, scope ClaimScope) ([]UnresolvedConflict, error)
 }
 
 // PrecheckSeverity 代表檢核結果等級。
@@ -48,7 +48,7 @@ func NewPrecheckService(repo PrecheckRepositoryPort) *PrecheckService {
 }
 
 // RunPrecheck 執行指定月份與區域之申報前置檢核（規格書 7.6）。
-func (s *PrecheckService) RunPrecheck(ctx context.Context, periodYM string, region string) (*PrecheckReport, error) {
+func (s *PrecheckService) RunPrecheck(ctx context.Context, scope ClaimScope) (*PrecheckReport, error) {
 	var issues []PrecheckIssue
 	errorCount := 0
 	warningCount := 0
@@ -62,39 +62,45 @@ func (s *PrecheckService) RunPrecheck(ctx context.Context, periodYM string, regi
 	})
 	infoCount++
 
-	if s.repo != nil {
-		// 2. 檢查是否有個案缺必要欄位 (身分證、住址、使用類型)
-		if incompleteCases, err := s.repo.FindIncompleteActiveCases(ctx, region); err == nil {
-			for _, c := range incompleteCases {
-				issues = append(issues, PrecheckIssue{
-					Severity: SeverityError,
-					Code:     "MISSING_CASE_PROFILE",
-					Message:  fmt.Sprintf("個案「%s」缺少身分證、住家地址、服務類別或服務使用類型", c.Name),
-					Details: map[string]interface{}{
-						"caseId":   c.ID,
-						"caseName": c.Name,
-					},
-				})
-				errorCount++
-			}
-		}
+	if s.repo == nil {
+		return nil, fmt.Errorf("precheck repository is not configured")
+	}
 
-		// 3. 檢查是否有未處理的混車衝突
-		if conflicts, err := s.repo.FindUnresolvedConflicts(ctx, region); err == nil {
-			for _, conf := range conflicts {
-				issues = append(issues, PrecheckIssue{
-					Severity: SeverityWarning,
-					Code:     "UNRESOLVED_CONFLICT",
-					Message:  fmt.Sprintf("個案「%s」於 %s 存在未裁決之混車衝突", conf.CaseName, conf.ServiceDate.Format("2006-01-02")),
-					Details: map[string]interface{}{
-						"rideId":      conf.RideID,
-						"caseName":    conf.CaseName,
-						"serviceDate": conf.ServiceDate.Format("2006-01-02"),
-					},
-				})
-				warningCount++
-			}
-		}
+	// 2. 檢查是否有個案缺必要欄位 (身分證、住址、使用類型)
+	incompleteCases, err := s.repo.FindIncompleteActiveCases(ctx, scope)
+	if err != nil {
+		return nil, fmt.Errorf("find incomplete active cases: %w", err)
+	}
+	for _, c := range incompleteCases {
+		issues = append(issues, PrecheckIssue{
+			Severity: SeverityError,
+			Code:     "MISSING_CASE_PROFILE",
+			Message:  fmt.Sprintf("個案「%s」缺少身分證、住家地址、服務類別或服務使用類型", c.Name),
+			Details: map[string]interface{}{
+				"caseId":   c.ID,
+				"caseName": c.Name,
+			},
+		})
+		errorCount++
+	}
+
+	// 3. 未裁決衝突會使申報來源不確定，必須阻擋匯出。
+	conflicts, err := s.repo.FindUnresolvedConflicts(ctx, scope)
+	if err != nil {
+		return nil, fmt.Errorf("find unresolved conflicts: %w", err)
+	}
+	for _, conf := range conflicts {
+		issues = append(issues, PrecheckIssue{
+			Severity: SeverityError,
+			Code:     "UNRESOLVED_CONFLICT",
+			Message:  fmt.Sprintf("個案「%s」於 %s 存在未裁決之混車衝突", conf.CaseName, conf.ServiceDate.Format("2006-01-02")),
+			Details: map[string]interface{}{
+				"rideId":      conf.RideID,
+				"caseName":    conf.CaseName,
+				"serviceDate": conf.ServiceDate.Format("2006-01-02"),
+			},
+		})
+		errorCount++
 	}
 
 	return &PrecheckReport{

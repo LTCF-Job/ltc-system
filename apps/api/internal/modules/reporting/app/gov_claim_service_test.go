@@ -27,8 +27,8 @@ type fakeSourceReader struct {
 	gotCaseIDs []uuid.UUID
 }
 
-func (f *fakeSourceReader) QueryGovClaimSources(_ context.Context, start, end time.Time, region string, caseIDs []uuid.UUID) ([]app.GovClaimSource, error) {
-	f.gotStart, f.gotEnd, f.gotRegion, f.gotCaseIDs = start, end, region, caseIDs
+func (f *fakeSourceReader) QueryGovClaimSources(_ context.Context, scope app.ClaimScope) ([]app.GovClaimSource, error) {
+	f.gotStart, f.gotEnd, f.gotRegion, f.gotCaseIDs = scope.StartDate, scope.EndDate, scope.RegionValue(), scope.CaseIDs
 	return f.sources, f.err
 }
 
@@ -126,11 +126,25 @@ type stubPrecheckRepo struct {
 	incomplete []app.IncompleteCase
 }
 
-func (s stubPrecheckRepo) FindIncompleteActiveCases(context.Context, string) ([]app.IncompleteCase, error) {
+func (s stubPrecheckRepo) FindIncompleteActiveCases(context.Context, app.ClaimScope) ([]app.IncompleteCase, error) {
 	return s.incomplete, nil
 }
 
-func (s stubPrecheckRepo) FindUnresolvedConflicts(context.Context, string) ([]app.UnresolvedConflict, error) {
+func (s stubPrecheckRepo) FindUnresolvedConflicts(context.Context, app.ClaimScope) ([]app.UnresolvedConflict, error) {
+	return nil, nil
+}
+
+type recordingPrecheckRepo struct {
+	scope app.ClaimScope
+}
+
+func (r *recordingPrecheckRepo) FindIncompleteActiveCases(_ context.Context, scope app.ClaimScope) ([]app.IncompleteCase, error) {
+	r.scope = scope
+	return nil, nil
+}
+
+func (r *recordingPrecheckRepo) FindUnresolvedConflicts(_ context.Context, scope app.ClaimScope) ([]app.UnresolvedConflict, error) {
+	r.scope = scope
 	return nil, nil
 }
 
@@ -234,6 +248,25 @@ func TestCreateGovClaimJob_OneFilePerCase(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), reader.gotStart)
 	assert.Equal(t, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), reader.gotEnd)
 	assert.Equal(t, "xlsx", store.created[0].Format)
+}
+
+func TestCreateGovClaimJob_UsesSameClaimScopeForPrecheckAndExport(t *testing.T) {
+	caseID := uuid.New()
+	driverID := uuid.New()
+	reader := &fakeSourceReader{sources: []app.GovClaimSource{
+		newSource(t, caseID, "C001", "蔡曾切", driverID, 1, 1, "outbound", "09:40"),
+	}}
+	precheck := &recordingPrecheckRepo{}
+	store := &fakeExportStore{jobID: uuid.New()}
+
+	_, err := newService(reader, store, &recordingRenderer{}, &recordingArchiver{}, precheck).
+		CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseID))
+
+	require.NoError(t, err)
+	assert.Equal(t, reader.gotStart, precheck.scope.StartDate)
+	assert.Equal(t, reader.gotEnd, precheck.scope.EndDate)
+	assert.Equal(t, reader.gotRegion, precheck.scope.RegionValue())
+	assert.Equal(t, reader.gotCaseIDs, precheck.scope.CaseIDs)
 }
 
 func TestCreateGovClaimJob_RowOrderMatchesGovernmentSample(t *testing.T) {

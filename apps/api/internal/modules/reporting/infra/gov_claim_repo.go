@@ -3,7 +3,6 @@ package infra
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,6 +43,7 @@ const govClaimSourceQuery = `
 	LEFT JOIN drivers d ON d.id = r.driver_id
 	WHERE r.service_date >= $1 AND r.service_date < $2
 	  AND r.effective_status = 'boarded'
+	  AND (r.has_conflict = false OR r.conflict_resolved_at IS NOT NULL)
 	  AND ($3 = '' OR c.region = $3)
 	  AND (COALESCE(cardinality($4::uuid[]), 0) = 0 OR c.id = ANY($4::uuid[]))
 	ORDER BY c.name, r.leg_seq, r.service_date
@@ -54,18 +54,16 @@ const govClaimSourceQuery = `
 // 它只決定申報列的第 17 欄，該列仍須出現。
 func (r *GovClaimRepository) QueryGovClaimSources(
 	ctx context.Context,
-	start, end time.Time,
-	region string,
-	caseIDs []uuid.UUID,
+	scope app.ClaimScope,
 ) ([]app.GovClaimSource, error) {
 	if r.db == nil {
 		return []app.GovClaimSource{}, nil
 	}
-	if caseIDs == nil {
-		caseIDs = []uuid.UUID{}
+	if scope.CaseIDs == nil {
+		scope.CaseIDs = []uuid.UUID{}
 	}
 
-	rows, err := r.db.Query(ctx, govClaimSourceQuery, start, end, region, caseIDs)
+	rows, err := r.db.Query(ctx, govClaimSourceQuery, scope.StartDate, scope.EndDate, scope.RegionValue(), scope.CaseIDs)
 	if err != nil {
 		return nil, fmt.Errorf("query gov claim sources: %w", err)
 	}

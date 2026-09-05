@@ -69,13 +69,29 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	r.Use(cors.New(corsConfig))
 
-	// 健康檢查端點 (健康檢查不走 JWT)。避免使用 /healthz：Cloud Run 預設網域的 Google 前端會保留攔截此精確路徑，導致外部請求收不到回應。
+	// liveness 只確認 process 仍能回應，不依賴資料庫。
+	r.GET("/api/livez", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// readiness 檢查必要的資料庫依賴；依賴異常時必須回 503，不能用 200 偽裝健康。
+	r.GET("/api/readyz", func(c *gin.Context) {
+		if pool == nil || pool.Ping(c.Request.Context()) != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "database": "disconnected"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready", "database": "connected"})
+	})
+
+	// 保留既有 /api/health，相容舊監控；其 HTTP 狀態同步反映 readiness。
 	r.GET("/api/health", func(c *gin.Context) {
 		dbStatus := "connected"
+		httpStatus := http.StatusOK
 		if pool == nil || pool.Ping(c.Request.Context()) != nil {
 			dbStatus = "disconnected"
+			httpStatus = http.StatusServiceUnavailable
 		}
-		c.JSON(http.StatusOK, gin.H{
+		c.JSON(httpStatus, gin.H{
 			"status":   "ok",
 			"env":      cfg.AppEnv,
 			"database": dbStatus,

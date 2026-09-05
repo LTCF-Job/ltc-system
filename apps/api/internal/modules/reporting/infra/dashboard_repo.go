@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -96,9 +97,13 @@ func (r *DashboardRepository) GetVehicleTripTrends(ctx context.Context, start, e
 	var trends []app.VehicleTripTrend
 	for rows.Next() {
 		var item app.VehicleTripTrend
-		if err := rows.Scan(&item.VehicleName, &item.PlateNo, &item.TripCount); err == nil {
-			trends = append(trends, item)
+		if err := rows.Scan(&item.VehicleName, &item.PlateNo, &item.TripCount); err != nil {
+			return nil, fmt.Errorf("failed to scan vehicle trip trend: %w", err)
 		}
+		trends = append(trends, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate vehicle trip trends: %w", err)
 	}
 	return trends, nil
 }
@@ -124,9 +129,13 @@ func (r *DashboardRepository) GetAttendanceDistribution(ctx context.Context, sta
 	for rows.Next() {
 		var status string
 		var count int
-		if err := rows.Scan(&status, &count); err == nil {
-			dist[status] = count
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan attendance distribution: %w", err)
 		}
+		dist[status] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate attendance distribution: %w", err)
 	}
 	return dist, nil
 }

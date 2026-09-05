@@ -41,6 +41,7 @@ var codeMessages = map[string]string{
 	CodeFormMappingFailed:  "更新欄位對應設定失敗，請稍後再試",
 	CodeDemoResetFailed:    "重置 Demo 資料集失敗，請稍後再試",
 	CodeInternalError:      "系統發生錯誤，請稍後再試",
+	CodeServiceUnavailable: "服務暫時無法使用，請稍後再試",
 }
 
 // APIResponse 定義 API 成功回應結構。

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"unicode"
 
 	"github.com/gin-gonic/gin"
@@ -34,21 +35,46 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 		periodYM = c.DefaultQuery("month", "11507")
 	}
 	region := c.Query("region")
+	caseIDValues := c.QueryArray("caseIds")
+	if len(caseIDValues) == 0 && c.Query("caseIds") != "" {
+		caseIDValues = strings.Split(c.Query("caseIds"), ",")
+	}
 
 	if c.Request.Method == http.MethodPost {
 		var req struct {
-			PeriodYM string `json:"periodYm"`
-			Region   string `json:"region"`
+			PeriodYM string   `json:"periodYm"`
+			Region   string   `json:"region"`
+			CaseIDs  []string `json:"caseIds"`
 		}
 		if err := c.ShouldBindJSON(&req); err == nil {
 			if req.PeriodYM != "" {
 				periodYM = req.PeriodYM
 			}
 			region = req.Region
+			caseIDValues = req.CaseIDs
 		}
 	}
 
-	report, err := h.precheckService.RunPrecheck(c.Request.Context(), periodYM, region)
+	caseIDs := make([]uuid.UUID, 0, len(caseIDValues))
+	for _, rawID := range caseIDValues {
+		rawID = strings.TrimSpace(rawID)
+		if rawID == "" {
+			continue
+		}
+		caseID, err := uuid.Parse(rawID)
+		if err != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+			return
+		}
+		caseIDs = append(caseIDs, caseID)
+	}
+
+	_, start, end, err := app.ParseClaimPeriod(periodYM)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	report, err := h.precheckService.RunPrecheck(c.Request.Context(), app.NewClaimScope(start, end, region, caseIDs))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return

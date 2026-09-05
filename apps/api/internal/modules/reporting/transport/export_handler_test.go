@@ -298,7 +298,7 @@ type stubSourceReader struct {
 	sources []app.GovClaimSource
 }
 
-func (s *stubSourceReader) QueryGovClaimSources(context.Context, time.Time, time.Time, string, []uuid.UUID) ([]app.GovClaimSource, error) {
+func (s *stubSourceReader) QueryGovClaimSources(context.Context, app.ClaimScope) ([]app.GovClaimSource, error) {
 	return s.sources, nil
 }
 
@@ -306,11 +306,11 @@ type stubPrecheckRepo struct {
 	incomplete []app.IncompleteCase
 }
 
-func (s stubPrecheckRepo) FindIncompleteActiveCases(context.Context, string) ([]app.IncompleteCase, error) {
+func (s stubPrecheckRepo) FindIncompleteActiveCases(context.Context, app.ClaimScope) ([]app.IncompleteCase, error) {
 	return s.incomplete, nil
 }
 
-func (s stubPrecheckRepo) FindUnresolvedConflicts(context.Context, string) ([]app.UnresolvedConflict, error) {
+func (s stubPrecheckRepo) FindUnresolvedConflicts(context.Context, app.ClaimScope) ([]app.UnresolvedConflict, error) {
 	return nil, nil
 }
 
