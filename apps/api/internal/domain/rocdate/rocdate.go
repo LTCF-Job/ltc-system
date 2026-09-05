@@ -3,14 +3,19 @@ package rocdate
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
 var (
-	ErrBeforeROCYear = errors.New("date is before ROC year 1 (1912-01-01)")
-	ErrInvalidROCVal = errors.New("invalid ROC date integer")
+	ErrBeforeROCYear    = errors.New("date is before ROC year 1 (1912-01-01)")
+	ErrInvalidROCVal    = errors.New("invalid ROC date integer")
+	ErrInvalidYearMonth = errors.New("invalid year-month format")
 )
+
+var yearMonthPattern = regexp.MustCompile(`^(?:(\d{3})-?(\d{2})|(\d{4})-(\d{2}))$`)
 
 // ToROC 將西元日期轉換為民國 7 碼整數（例如 2026-07-01 -> 1150701）。
 func ToROC(d time.Time) (int, error) {
@@ -62,18 +67,71 @@ func FormatROCYearMonth(year, month int) string {
 
 // ParseROCYearMonth 解析民國年月字串（例如 "115-07" -> 2026, 7）。
 func ParseROCYearMonth(str string) (int, int, error) {
-	var rocYear, month int
-	if n, _ := fmt.Sscanf(str, "%d-%d", &rocYear, &month); n == 2 {
-		if rocYear >= 1 && month >= 1 && month <= 12 {
-			return rocYear + 1911, month, nil
+	str = strings.TrimSpace(str)
+	if len(str) == 6 && str[3] == '-' {
+		str = str[:3] + str[4:]
+	}
+	if len(str) != 5 {
+		return 0, 0, errors.New("invalid ROC year-month format, expected RRR-MM or RRRMM")
+	}
+	rocYear, err := strconv.Atoi(str[:3])
+	if err != nil {
+		return 0, 0, errors.New("invalid ROC year-month format, expected RRR-MM or RRRMM")
+	}
+	month, err := strconv.Atoi(str[3:])
+	if err != nil || rocYear < 1 || month < 1 || month > 12 {
+		return 0, 0, errors.New("invalid ROC year-month format, expected RRR-MM or RRRMM")
+	}
+	return rocYear + 1911, month, nil
+}
+
+// ParseYearMonth 嚴格解析民國 RRR-MM／RRRMM 或西元 YYYY-MM，拒絕不完整與
+// 不存在的月份，不替非法輸入猜測目前月份。
+func ParseYearMonth(raw string) (int, int, error) {
+	matches := yearMonthPattern.FindStringSubmatch(strings.TrimSpace(raw))
+	if matches == nil {
+		return 0, 0, ErrInvalidYearMonth
+	}
+
+	var year, month int
+	if matches[1] != "" {
+		rocYear, err := strconv.Atoi(matches[1])
+		if err != nil {
+			return 0, 0, ErrInvalidYearMonth
+		}
+		year = rocYear + 1911
+		month, err = strconv.Atoi(matches[2])
+		if err != nil {
+			return 0, 0, ErrInvalidYearMonth
+		}
+	} else {
+		var err error
+		year, err = strconv.Atoi(matches[3])
+		if err != nil {
+			return 0, 0, ErrInvalidYearMonth
+		}
+		month, err = strconv.Atoi(matches[4])
+		if err != nil {
+			return 0, 0, ErrInvalidYearMonth
 		}
 	}
-	if n, _ := fmt.Sscanf(str, "%03d%02d", &rocYear, &month); n == 2 {
-		if rocYear >= 1 && month >= 1 && month <= 12 {
-			return rocYear + 1911, month, nil
-		}
+
+	currentYear := time.Now().Year()
+	if year < 1912 || year > currentYear+5 || month < 1 || month > 12 {
+		return 0, 0, ErrInvalidYearMonth
 	}
-	return 0, 0, errors.New("invalid ROC year-month format, expected RRR-MM or RRRMM")
+	return year, month, nil
+}
+
+// MonthRangeStrict 回傳指定月份的左閉右開 UTC 日期範圍。
+func MonthRangeStrict(periodYM string) (start, end time.Time, daysInMonth int, err error) {
+	year, month, err := ParseYearMonth(periodYM)
+	if err != nil {
+		return time.Time{}, time.Time{}, 0, err
+	}
+	start = time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	end = start.AddDate(0, 1, 0)
+	return start, end, end.AddDate(0, 0, -1).Day(), nil
 }
 
 // MonthRange 將期別字串解析為當月第一天、下月第一天與當月天數。

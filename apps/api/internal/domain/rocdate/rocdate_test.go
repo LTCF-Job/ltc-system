@@ -72,6 +72,28 @@ func TestToROC(t *testing.T) {
 	}
 }
 
+func TestMonthRangeStrictRejectsInvalidPeriod(t *testing.T) {
+	tests := []string{"abc", "115-99", "115-7", "2026/07", "1911-12"}
+	for _, input := range tests {
+		t.Run(input, func(t *testing.T) {
+			_, _, _, err := MonthRangeStrict(input)
+			assert.ErrorIs(t, err, ErrInvalidYearMonth)
+		})
+	}
+}
+
+func TestMonthRangeStrictSupportsROCAndGregorian(t *testing.T) {
+	start, end, days, err := MonthRangeStrict("2026-07")
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), start)
+	assert.Equal(t, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), end)
+	assert.Equal(t, 31, days)
+
+	start, _, _, err = MonthRangeStrict("11507")
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), start)
+}
+
 func TestFromROC(t *testing.T) {
 	tests := []struct {
 		name    string

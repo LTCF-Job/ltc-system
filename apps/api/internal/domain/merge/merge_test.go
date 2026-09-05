@@ -82,6 +82,20 @@ func TestMergeRideSources(t *testing.T) {
 		assert.False(t, res.HasConflict)
 	})
 
+	t.Run("同一提交時間依來源優先級與 ID 穩定選擇", func(t *testing.T) {
+		lowID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		highID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+		sources := []RideSourceInput{
+			{SourceID: lowID, SourcePriority: 1, VehicleID: vA, Reported: "boarded", SubmittedAt: baseTime},
+			{SourceID: highID, SourcePriority: 2, VehicleID: vB, Reported: "boarded", SubmittedAt: baseTime},
+		}
+
+		res := MergeRideSources(sources, nil, vDefault, nil)
+
+		assert.Equal(t, vB, res.SelectedVehicle)
+		assert.True(t, res.HasConflict)
+	})
+
 	t.Run("已人工裁決後重跑同步 (車輛司機不被覆蓋)", func(t *testing.T) {
 		sources := []RideSourceInput{
 			{VehicleID: vA, DriverID: &dA, Reported: "boarded", SubmittedAt: baseTime},
@@ -119,4 +133,30 @@ func TestMergeRideSources(t *testing.T) {
 		assert.Equal(t, "boarded", res.EffectiveStatus) // 維持人工更正的 boarded
 		assert.True(t, res.SourceChanged)               // 標記來源資料有變更
 	})
+}
+
+func TestParseReportedValue(t *testing.T) {
+	tests := []struct {
+		name   string
+		raw    string
+		status string
+		ok     bool
+	}{
+		{name: "有坐", raw: "有坐", status: "boarded", ok: true},
+		{name: "有搭乘", raw: "有搭乘", status: "boarded", ok: true},
+		{name: "沒坐", raw: "沒坐", status: "absent", ok: true},
+		{name: "沒有坐", raw: "沒有坐", status: "absent", ok: true},
+		{name: "未搭乘", raw: "未搭乘", status: "absent", ok: true},
+		{name: "沒有搭乘", raw: "沒有搭乘", status: "absent", ok: true},
+		{name: "空白", raw: " ", ok: false},
+		{name: "其他備註", raw: "沒有坐，家屬代請假", ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, ok := ParseReportedValue(tt.raw)
+			assert.Equal(t, tt.status, status)
+			assert.Equal(t, tt.ok, ok)
+		})
+	}
 }
