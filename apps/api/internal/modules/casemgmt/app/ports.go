@@ -42,6 +42,11 @@ type AuditWriter interface {
 	Write(ctx context.Context, e AuditEntry) error
 }
 
+// TransactionRunner 封裝需要跨多筆資料異動的交易邊界。
+type TransactionRunner interface {
+	WithTx(ctx context.Context, fn func(context.Context) error) error
+}
+
 // CaseProfileRow 是個案彙整表的一列，欄位順序即表格欄位順序。
 type CaseProfileRow struct {
 	Name              string

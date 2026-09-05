@@ -14,11 +14,14 @@ import (
 )
 
 var (
-	ErrSiteRegionMismatch = errors.New("site region does not match case region")
-	ErrCaseRegionUnset    = errors.New("個案尚未設定所屬區域，無法建立排班")
-	ErrInvalidTripPattern = errors.New("trip pattern must match schedule legs count")
-	ErrLegTimesNotOrdered = errors.New("schedule leg departure times must be strictly increasing")
-	ErrCaseNotFound       = errors.New("case not found")
+	ErrSiteRegionMismatch      = errors.New("site region does not match case region")
+	ErrCaseRegionUnset         = errors.New("個案尚未設定所屬區域，無法建立排班")
+	ErrInvalidTripPattern      = errors.New("trip pattern must match schedule legs count")
+	ErrLegTimesNotOrdered      = errors.New("schedule leg departure times must be strictly increasing")
+	ErrCaseNotFound            = errors.New("case not found")
+	ErrCaseNameRequired        = errors.New("case name is required")
+	ErrNationalIDNotConfigured = errors.New("national id is not configured")
+	ErrRevealAuditUnavailable  = errors.New("reveal audit is unavailable")
 )
 
 // CaseService 封裝個案、單位、車輛、司機與排班之業務邏輯。
@@ -28,6 +31,7 @@ type CaseService struct {
 	siteRepo  SiteFinder
 	auditRepo AuditWriter
 	renderer  ProfileRenderer
+	txRunner  TransactionRunner
 }
 
 // NewCaseService 建立 CaseService 實例。
@@ -37,13 +41,19 @@ func NewCaseService(
 	siteRepo SiteFinder,
 	auditRepo AuditWriter,
 	renderer ProfileRenderer,
+	txRunners ...TransactionRunner,
 ) *CaseService {
+	var txRunner TransactionRunner
+	if len(txRunners) > 0 {
+		txRunner = txRunners[0]
+	}
 	return &CaseService{
 		cfg:       cfg,
 		caseRepo:  caseRepo,
 		siteRepo:  siteRepo,
 		auditRepo: auditRepo,
 		renderer:  renderer,
+		txRunner:  txRunner,
 	}
 }
 
@@ -175,7 +185,12 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 	}
 
 	if in.Name != nil {
-		entity.Name = *in.Name
+		name := strings.TrimSpace(*in.Name)
+		if name == "" {
+			return nil, ErrCaseNameRequired
+		}
+		entity.Name = name
+		entity.NameNormalized = namenorm.Normalize(name)
 	}
 	if in.HomeAddress != nil {
 		entity.HomeAddress = in.HomeAddress
@@ -233,33 +248,41 @@ func (s *CaseService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRo
 		return ErrCaseNotFound
 	}
 
-	ok, err := s.caseRepo.SoftDelete(ctx, id, actorID)
-	if err != nil {
-		return fmt.Errorf("failed to soft delete case: %w", err)
-	}
-	if !ok {
-		return ErrCaseNotFound
+	deleteFn := func(txCtx context.Context) error {
+		ok, err := s.caseRepo.SoftDelete(txCtx, id, actorID)
+		if err != nil {
+			return fmt.Errorf("failed to soft delete case: %w", err)
+		}
+		if !ok {
+			return ErrCaseNotFound
+		}
+
+		if err := s.caseRepo.CloseOpenSchedules(txCtx, id); err != nil {
+			return fmt.Errorf("failed to close open schedules: %w", err)
+		}
+
+		if s.auditRepo != nil {
+			entityIDStr := id.String()
+			if err := s.auditRepo.Write(txCtx, AuditEntry{
+				ActorID:    &actorID,
+				ActorRole:  &actorRole,
+				Action:     "delete",
+				EntityType: "cases",
+				EntityID:   &entityIDStr,
+				BeforeData: before,
+				IPAddress:  &ip,
+				UserAgent:  &ua,
+			}); err != nil {
+				return fmt.Errorf("failed to write case deletion audit: %w", err)
+			}
+		}
+		return nil
 	}
 
-	if err := s.caseRepo.CloseOpenSchedules(ctx, id); err != nil {
-		return fmt.Errorf("failed to close open schedules: %w", err)
+	if s.txRunner != nil {
+		return s.txRunner.WithTx(ctx, deleteFn)
 	}
-
-	if s.auditRepo != nil {
-		entityIDStr := id.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    &actorID,
-			ActorRole:  &actorRole,
-			Action:     "delete",
-			EntityType: "cases",
-			EntityID:   &entityIDStr,
-			BeforeData: before,
-			IPAddress:  &ip,
-			UserAgent:  &ua,
-		})
-	}
-
-	return nil
+	return deleteFn(ctx)
 }
 
 // UpdateCaseTransportPreference 更新個案的交通偏好（所屬單位與去回程車輛），回傳更新後的個案主檔。
@@ -303,23 +326,33 @@ func (s *CaseService) RevealCaseNationalID(ctx context.Context, caseID uuid.UUID
 	if err != nil {
 		return "", err
 	}
+	if caseEntity == nil {
+		return "", ErrCaseNotFound
+	}
+	if len(caseEntity.NationalIDCipher) == 0 {
+		return "", ErrNationalIDNotConfigured
+	}
+
+	if s.auditRepo == nil {
+		return "", ErrRevealAuditUnavailable
+	}
+
+	entityIDStr := caseID.String()
+	if err := s.auditRepo.Write(ctx, AuditEntry{
+		ActorID:    &actorID,
+		ActorRole:  &actorRole,
+		Action:     "reveal_pii",
+		EntityType: "cases",
+		EntityID:   &entityIDStr,
+		IPAddress:  &ip,
+		UserAgent:  &ua,
+	}); err != nil {
+		return "", fmt.Errorf("%w: %v", ErrRevealAuditUnavailable, err)
+	}
 
 	plainID, err := crypto.Decrypt(caseEntity.NationalIDCipher, s.cfg.EncryptionKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt national id: %w", err)
-	}
-
-	if s.auditRepo != nil {
-		entityIDStr := caseID.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    &actorID,
-			ActorRole:  &actorRole,
-			Action:     "reveal_pii",
-			EntityType: "cases",
-			EntityID:   &entityIDStr,
-			IPAddress:  &ip,
-			UserAgent:  &ua,
-		})
 	}
 
 	return plainID, nil
@@ -328,10 +361,47 @@ func (s *CaseService) RevealCaseNationalID(ctx context.Context, caseID uuid.UUID
 // CaseImportSkippedRow 是寫入稽核日誌的略過列快照。json tag 即為 audit_log 中
 // import_skip 紀錄的資料契約，不得與呼叫端的型別分歧。
 type CaseImportSkippedRow struct {
+	RowID     string            `json:"rowId"`
 	RowIndex  int               `json:"rowIndex"`
 	CaseName  string            `json:"caseName"`
 	Reasons   []string          `json:"reasons"`
 	RawValues map[string]string `json:"rawValues"`
+}
+
+// sanitizeCaseImportAuditRow 移除匯入略過列中的明文個資；完整原始值仍可留在
+// 目前回應給操作人員，但不可再寫入長期保存的 audit_log。
+func sanitizeCaseImportAuditRow(item CaseImportSkippedRow) CaseImportSkippedRow {
+	item.CaseName = maskAuditName(item.CaseName)
+	values := make(map[string]string, len(item.RawValues))
+	for key, value := range item.RawValues {
+		normalizedKey := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(key), " ", ""), "_", ""))
+		switch {
+		case strings.Contains(normalizedKey, "身分證"), strings.Contains(normalizedKey, "nationalid"):
+			values[key] = crypto.Mask(value)
+		case strings.Contains(normalizedKey, "地址"), strings.Contains(normalizedKey, "居住"), strings.Contains(normalizedKey, "戶籍"), strings.Contains(normalizedKey, "聯絡"), strings.Contains(normalizedKey, "電話"), strings.Contains(normalizedKey, "手機"):
+			values[key] = "[REDACTED]"
+		case strings.Contains(normalizedKey, "姓名"), strings.EqualFold(normalizedKey, "name"):
+			values[key] = maskAuditName(value)
+		default:
+			values[key] = value
+		}
+	}
+	item.RawValues = values
+	return item
+}
+
+func maskAuditName(name string) string {
+	runes := []rune(strings.TrimSpace(name))
+	switch len(runes) {
+	case 0:
+		return ""
+	case 1:
+		return "○"
+	case 2:
+		return string(runes[:1]) + "○"
+	default:
+		return string(runes[:1]) + "○" + string(runes[len(runes)-1:])
+	}
 }
 
 // RecordSkippedCaseImport 保留未寫入的來源列，讓操作人員能回查補正原因與原始欄位。
@@ -339,6 +409,7 @@ func (s *CaseService) RecordSkippedCaseImport(ctx context.Context, item CaseImpo
 	if s.auditRepo == nil {
 		return
 	}
+	item = sanitizeCaseImportAuditRow(item)
 	entityID := fmt.Sprintf("row-%d", item.RowIndex)
 	_ = s.auditRepo.Write(ctx, AuditEntry{
 		ActorID: &actorID, ActorRole: &actorRole, Action: "import_skip", EntityType: "case_import", EntityID: &entityID,

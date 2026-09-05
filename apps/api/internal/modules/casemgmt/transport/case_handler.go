@@ -100,6 +100,14 @@ func (h *CaseHandler) Reveal(c *gin.Context) {
 		c.Request.Context(), id, actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
 	)
 	if err != nil {
+		if errors.Is(err, app.ErrNationalIDNotConfigured) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "個案尚未設定身分證資料", nil)
+			return
+		}
+		if errors.Is(err, app.ErrRevealAuditUnavailable) {
+			httpx.RespondErrorCode(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, err, nil)
+			return
+		}
 		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "個案不存在或解密失敗", nil)
 		return
 	}
