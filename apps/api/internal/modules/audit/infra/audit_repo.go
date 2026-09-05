@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,6 +16,8 @@ type AuditRepository struct {
 	db *pgxpool.Pool
 }
 
+var errAuditDatabaseNotConfigured = errors.New("audit database is not configured")
+
 // NewAuditRepository 建立 AuditRepository 實例。
 func NewAuditRepository(db *pgxpool.Pool) *AuditRepository {
 	return &AuditRepository{db: db}
@@ -23,7 +26,7 @@ func NewAuditRepository(db *pgxpool.Pool) *AuditRepository {
 // Insert 寫入一筆不可變之稽核日誌。
 func (r *AuditRepository) Insert(ctx context.Context, e app.Entry) error {
 	if r.db == nil {
-		return nil
+		return errAuditDatabaseNotConfigured
 	}
 
 	query := `
@@ -41,7 +44,7 @@ func (r *AuditRepository) Insert(ctx context.Context, e app.Entry) error {
 // List 依據多條件篩選並分頁查詢稽核紀錄。
 func (r *AuditRepository) List(ctx context.Context, f app.Filter) ([]app.Record, int64, error) {
 	if r.db == nil {
-		return []app.Record{}, 0, nil
+		return nil, 0, errAuditDatabaseNotConfigured
 	}
 
 	if f.Page <= 0 {
@@ -80,6 +83,9 @@ func (r *AuditRepository) List(ctx context.Context, f app.Filter) ([]app.Record,
 		}
 		logs = append(logs, l)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate audit logs: %w", err)
+	}
 
 	var total int64
 	countQuery := `
@@ -92,7 +98,9 @@ func (r *AuditRepository) List(ctx context.Context, f app.Filter) ([]app.Record,
 		  AND ($6::timestamptz IS NULL OR created_at <= $6)
 		  AND ($7 = '' OR action ILIKE '%' || $7 || '%' OR entity_type ILIKE '%' || $7 || '%' OR entity_id ILIKE '%' || $7 || '%')
 	`
-	_ = r.db.QueryRow(ctx, countQuery, f.ActorID, f.Action, f.EntityType, f.EntityID, f.StartDate, f.EndDate, f.Q).Scan(&total)
+	if err := r.db.QueryRow(ctx, countQuery, f.ActorID, f.Action, f.EntityType, f.EntityID, f.StartDate, f.EndDate, f.Q).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count audit logs: %w", err)
+	}
 
 	return logs, total, nil
 }
