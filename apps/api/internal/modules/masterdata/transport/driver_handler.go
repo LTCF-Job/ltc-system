@@ -199,6 +199,10 @@ func (h *DriverHandler) AssignVehicle(c *gin.Context) {
 		EffectiveTo:   req.EffectiveTo.toTimePtr(),
 	})
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidAssignmentRange) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "司機指派日期區間無效", nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}

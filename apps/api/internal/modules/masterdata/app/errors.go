@@ -15,6 +15,7 @@ var (
 	// ErrInvalidDriverLicenseClass 代表駕照類別不在允許的代碼清單內。
 	ErrInvalidDriverLicenseClass = errors.New("invalid driver license class")
 	ErrInvalidStatus             = errors.New("invalid status")
+	ErrInvalidAssignmentRange    = errors.New("invalid driver assignment date range")
 	// ErrRegionNameRequired 代表未提供區域名稱。
 	ErrRegionNameRequired = errors.New("region name is required")
 	// ErrDuplicateRegionName 代表區域名稱重複。

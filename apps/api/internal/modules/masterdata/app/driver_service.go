@@ -214,6 +214,10 @@ type AssignVehicleInput struct {
 
 // AssignVehicle 建立司機與車輛之指派期間。
 func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, in AssignVehicleInput) (*DriverAssignment, error) {
+	if driverID == uuid.Nil || in.VehicleID == uuid.Nil || in.EffectiveFrom.IsZero() ||
+		(in.EffectiveTo != nil && !in.EffectiveTo.After(in.EffectiveFrom)) {
+		return nil, ErrInvalidAssignmentRange
+	}
 	assignment := &DriverAssignment{
 		DriverID:      driverID,
 		VehicleID:     in.VehicleID,
