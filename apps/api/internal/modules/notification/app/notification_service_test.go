@@ -2,12 +2,19 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type failingEmailSender struct{}
+
+func (failingEmailSender) SendEmail(context.Context, string, string, string) error {
+	return errors.New("provider unavailable")
+}
 
 // MockEmailSender 供測試之 mock 寄信元件。
 type MockEmailSender struct {
@@ -158,4 +165,13 @@ func TestNotificationService_SendNotification_SkipsRecipientsWithoutResolvedEmai
 	assert.NoError(t, err)
 	require.Len(t, sender.SentList, 1, "只有已解析出 email 的收件人應該被寄送")
 	assert.Equal(t, "a@example.com", sender.SentList[0].To)
+}
+
+func TestNotificationService_SendNotification_ReturnsErrorWhenProviderFails(t *testing.T) {
+	store := &fakeRecipientStore{listRecipients: []Recipient{{ID: 1, Email: "a@example.com"}}}
+	svc := NewNotificationService(store, nil, failingEmailSender{})
+
+	err := svc.SendNotification(context.Background(), "missing_report", "測試", "內容")
+
+	assert.Error(t, err)
 }

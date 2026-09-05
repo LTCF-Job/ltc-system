@@ -32,7 +32,7 @@ type Config struct {
 	StorageBucket               string        `envconfig:"STORAGE_BUCKET" default:"ltc-exports"`
 	StorageSignedURLTTL         time.Duration `envconfig:"STORAGE_SIGNED_URL_TTL" default:"24h"`
 	ResendAPIKey                string        `envconfig:"RESEND_API_KEY"`
-	NotifyFrom                  string        `envconfig:"NOTIFY_FROM" default:"noreply@ltc.example.com"`
+	NotifyFrom                  string        `envconfig:"NOTIFY_FROM"`
 	SentryDSN                   string        `envconfig:"SENTRY_DSN"`
 	LogLevel                    string        `envconfig:"LOG_LEVEL" default:"info"`
 	GovernmentHolidayAPITimeout time.Duration `envconfig:"GOVERNMENT_HOLIDAY_API_TIMEOUT" default:"10s"`
@@ -67,6 +67,13 @@ func LoadFromEnv() (*Config, error) {
 	// 正式環境未設定白名單時 CORS 會退回全放行，改為啟動時直接拒絕啟動
 	if cfg.AppEnv == "production" && cfg.AllowedOrigins == "" {
 		return nil, errors.New("ALLOWED_ORIGINS is required when APP_ENV=production")
+	}
+
+	if cfg.AppEnv == "production" && cfg.ResendAPIKey == "" {
+		return nil, errors.New("RESEND_API_KEY is required when APP_ENV=production")
+	}
+	if cfg.AppEnv == "production" && cfg.NotifyFrom == "" {
+		return nil, errors.New("NOTIFY_FROM is required when APP_ENV=production")
 	}
 
 	encKey, err := base64.StdEncoding.DecodeString(cfg.EncryptionKeyB64)

@@ -33,6 +33,8 @@ func setProductionEnv(t *testing.T) {
 	t.Setenv("ENCRYPTION_KEY", testEncryptionKeyB64)
 	t.Setenv("HMAC_KEY", testHMACKeyB64)
 	t.Setenv("ALLOWED_ORIGINS", "https://example.vercel.app")
+	t.Setenv("RESEND_API_KEY", "resend-test-key")
+	t.Setenv("NOTIFY_FROM", "noreply@example.com")
 }
 
 func TestLoadFromEnv_RequiresAppEnv(t *testing.T) {
@@ -63,6 +65,22 @@ func TestLoadFromEnv_ProductionRequiresAllowedOrigins(t *testing.T) {
 	t.Setenv("ALLOWED_ORIGINS", "")
 	if _, err := LoadFromEnv(); err == nil {
 		t.Fatal("expected error when APP_ENV=production without ALLOWED_ORIGINS, got nil")
+	}
+}
+
+func TestLoadFromEnv_ProductionRequiresResendAPIKey(t *testing.T) {
+	setProductionEnv(t)
+	t.Setenv("RESEND_API_KEY", "")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("expected error when APP_ENV=production without RESEND_API_KEY, got nil")
+	}
+}
+
+func TestLoadFromEnv_ProductionRequiresNotifyFrom(t *testing.T) {
+	setProductionEnv(t)
+	t.Setenv("NOTIFY_FROM", "")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("expected error when APP_ENV=production without NOTIFY_FROM, got nil")
 	}
 }
 

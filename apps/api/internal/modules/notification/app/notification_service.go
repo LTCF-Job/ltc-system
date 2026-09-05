@@ -14,6 +14,12 @@ type EmailSender interface {
 	SendEmail(ctx context.Context, to, subject, body string) error
 }
 
+// SendResult 記錄一次通知事件實際成功與失敗的寄送數量。
+type SendResult struct {
+	Sent   int
+	Failed int
+}
+
 // LogEmailSender 供本機或測試環境使用之日誌模擬發送器。
 type LogEmailSender struct{}
 
@@ -43,9 +49,22 @@ func NewNotificationService(repo Store, auditRepo AuditWriter, sender EmailSende
 
 // SendNotification 依主題將通知寄送給所有啟用的收件人，並記錄發送留痕。
 func (s *NotificationService) SendNotification(ctx context.Context, topic, subject, body string) error {
+	result, err := s.SendNotificationWithResult(ctx, topic, subject, body)
+	if err != nil {
+		return err
+	}
+	if result.Failed > 0 {
+		return fmt.Errorf("notification delivery failed for %d recipient(s)", result.Failed)
+	}
+	return nil
+}
+
+// SendNotificationWithResult 派送通知並回傳實際結果；部分收件人失敗時不再
+// 靜默回傳成功，呼叫端可依 Failed 觸發 retry 或告警。
+func (s *NotificationService) SendNotificationWithResult(ctx context.Context, topic, subject, body string) (SendResult, error) {
 	recipients, err := s.repo.ListRecipients(ctx, topic, true)
 	if err != nil {
-		return fmt.Errorf("failed to load notification recipients: %w", err)
+		return SendResult{}, fmt.Errorf("failed to load notification recipients: %w", err)
 	}
 
 	// 規格書 §8.4：收件人為空時不寄送，改寫入失敗留痕
@@ -63,9 +82,10 @@ func (s *NotificationService) SendNotification(ctx context.Context, topic, subje
 		}
 		_ = s.repo.InsertLog(ctx, logItem)
 		slog.Warn("Notification not sent because recipient list is empty", slog.String("topic", topic))
-		return nil
+		return SendResult{}, nil
 	}
 
+	result := SendResult{}
 	for _, r := range recipients {
 		if r.Email == "" {
 			slog.Warn("Skipping notification recipient without a resolved email",
@@ -83,6 +103,9 @@ func (s *NotificationService) SendNotification(ctx context.Context, topic, subje
 			status = "failed"
 			msg := sendErr.Error()
 			errStr = &msg
+			result.Failed++
+		} else {
+			result.Sent++
 		}
 		logItem := &Log{
 			Topic:           topic,
@@ -94,10 +117,12 @@ func (s *NotificationService) SendNotification(ctx context.Context, topic, subje
 			ErrorMessage:    errStr,
 			SentAt:          time.Now().UTC(),
 		}
-		_ = s.repo.InsertLog(ctx, logItem)
+		if err := s.repo.InsertLog(ctx, logItem); err != nil {
+			return result, fmt.Errorf("failed to record notification log: %w", err)
+		}
 	}
 
-	return nil
+	return result, nil
 }
 
 // ListRecipients 取得收件人清單。
