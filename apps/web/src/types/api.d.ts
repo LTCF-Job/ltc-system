@@ -229,9 +229,9 @@ export interface CreateCaseRequest {
 
 // 三欄位皆選填：未帶入的欄位維持既有關聯不變，僅更新有帶值的那一項
 export interface UpdateCaseTransportPreferenceRequest {
-  siteId?: string;
-  outboundVehicleId?: string;
-  inboundVehicleId?: string;
+  siteId: string | null;
+  outboundVehicleId: string | null;
+  inboundVehicleId: string | null;
 }
 
 export interface UpdateCaseRequest extends Partial<CreateCaseRequest> {}

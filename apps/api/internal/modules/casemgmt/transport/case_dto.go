@@ -1,11 +1,41 @@
 package transport
 
 import (
+	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/casemgmt/app"
 )
+
+type optionalDate struct {
+	Present bool
+	Value   *time.Time
+}
+
+func (d *optionalDate) UnmarshalJSON(data []byte) error {
+	d.Present = true
+	if string(data) == "null" {
+		d.Value = nil
+		return nil
+	}
+	var raw string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if strings.TrimSpace(raw) == "" {
+		d.Value = nil
+		return nil
+	}
+	value, err := rocdate.ParseDate(raw)
+	if err != nil {
+		return err
+	}
+	d.Value = &value
+	return nil
+}
 
 // CreateCaseRequest 代表新增個案主檔請求。僅姓名為必要欄位；其餘欄位皆選填。
 type CreateCaseRequest struct {

@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/casemgmt/app"
 	"ltc-system/apps/api/internal/platform/auth"
 	"ltc-system/apps/api/internal/platform/clock"
@@ -211,21 +210,21 @@ func (h *CaseHandler) Update(c *gin.Context) {
 	}
 
 	var req struct {
-		Name              *string `json:"name"`
-		HomeAddress       *string `json:"homeAddress"`
-		Region            *string `json:"region"`
-		LTCLevel          *string `json:"ltcLevel"`
-		ServiceCategory   *int    `json:"serviceCategory"`
-		ServiceUsageType  *int    `json:"serviceUsageType"`
-		ClaimEndDate      *string `json:"claimEndDate"`
-		Status            *string `json:"status"`
-		HouseholdType     *string `json:"householdType"`
-		Gender            *string `json:"gender"`
-		BirthDate         *string `json:"birthDate"`
-		CareContactRole   *string `json:"careContactRole"`
-		CareContactName   *string `json:"careContactName"`
-		RegisteredAddress *string `json:"registeredAddress"`
-		Remarks           *string `json:"remarks"`
+		Name              *string      `json:"name"`
+		HomeAddress       *string      `json:"homeAddress"`
+		Region            *string      `json:"region"`
+		LTCLevel          *string      `json:"ltcLevel"`
+		ServiceCategory   *int         `json:"serviceCategory"`
+		ServiceUsageType  *int         `json:"serviceUsageType"`
+		ClaimEndDate      optionalDate `json:"claimEndDate"`
+		Status            *string      `json:"status"`
+		HouseholdType     *string      `json:"householdType"`
+		Gender            *string      `json:"gender"`
+		BirthDate         optionalDate `json:"birthDate"`
+		CareContactRole   *string      `json:"careContactRole"`
+		CareContactName   *string      `json:"careContactName"`
+		RegisteredAddress *string      `json:"registeredAddress"`
+		Remarks           *string      `json:"remarks"`
 	}
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
@@ -233,25 +232,24 @@ func (h *CaseHandler) Update(c *gin.Context) {
 	}
 
 	in := app.UpdateCaseInput{
-		Name:              req.Name,
-		HomeAddress:       req.HomeAddress,
-		Region:            req.Region,
-		LTCLevel:          req.LTCLevel,
-		ServiceCategory:   req.ServiceCategory,
-		ServiceUsageType:  req.ServiceUsageType,
-		Status:            req.Status,
-		HouseholdType:     req.HouseholdType,
-		Gender:            req.Gender,
-		CareContactRole:   req.CareContactRole,
-		CareContactName:   req.CareContactName,
-		RegisteredAddress: req.RegisteredAddress,
-		Remarks:           req.Remarks,
+		Name:                req.Name,
+		HomeAddress:         req.HomeAddress,
+		Region:              req.Region,
+		LTCLevel:            req.LTCLevel,
+		ServiceCategory:     req.ServiceCategory,
+		ServiceUsageType:    req.ServiceUsageType,
+		ClaimEndDate:        req.ClaimEndDate.Value,
+		ClaimEndDatePresent: req.ClaimEndDate.Present,
+		Status:              req.Status,
+		HouseholdType:       req.HouseholdType,
+		Gender:              req.Gender,
+		CareContactRole:     req.CareContactRole,
+		CareContactName:     req.CareContactName,
+		RegisteredAddress:   req.RegisteredAddress,
+		Remarks:             req.Remarks,
 	}
-	if req.BirthDate != nil {
-		if t, err := rocdate.ParseDate(*req.BirthDate); err == nil {
-			in.BirthDate = &t
-		}
-	}
+	in.BirthDate = req.BirthDate.Value
+	in.BirthDatePresent = req.BirthDate.Present
 
 	entity, err := h.masterService.UpdateCase(c.Request.Context(), id, in)
 	if err != nil {

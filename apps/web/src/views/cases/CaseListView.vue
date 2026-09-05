@@ -589,11 +589,17 @@ const SLOT_RAW_FIELD: Record<UnresolvedSlot, 'siteNameRaw' | 'outboundVehicleNam
   inboundVehicle: 'inboundVehicleNameRaw'
 }
 
-// 只送出被關聯的那一個欄位 ID，其餘欄位省略以維持既有關聯不變（後端契約：未帶入=不變更）
+// 完整替換交通偏好，保留同一列中尚未處理的既有關聯。
 async function handleLinkSlot(row: CaseDTO, slot: UnresolvedSlot, entityId: string) {
   if (!entityId) return
   try {
-    await updateCaseTransportPreference(row.id, { [SLOT_ID_FIELD[slot]]: entityId })
+    const payload = {
+      siteId: row.siteId || null,
+      outboundVehicleId: row.outboundVehicleId || null,
+      inboundVehicleId: row.inboundVehicleId || null
+    }
+    payload[SLOT_ID_FIELD[slot]] = entityId
+    await updateCaseTransportPreference(row.id, payload)
     ;(row as any)[SLOT_RAW_FIELD[slot]] = undefined
     if (!row.siteNameRaw && !row.outboundVehicleNameRaw && !row.inboundVehicleNameRaw) {
       unresolvedCases.value = unresolvedCases.value.filter((c) => c.id !== row.id)

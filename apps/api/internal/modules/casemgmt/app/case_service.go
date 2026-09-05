@@ -161,20 +161,23 @@ func (s *CaseService) GetCaseByID(ctx context.Context, id uuid.UUID) (*Case, err
 
 // UpdateCaseInput 代表更新個案主檔所需之輸入，欄位為 nil 表示不變更。
 type UpdateCaseInput struct {
-	Name              *string
-	HomeAddress       *string
-	Region            *string
-	LTCLevel          *string
-	ServiceCategory   *int
-	ServiceUsageType  *int
-	Status            *string
-	HouseholdType     *string
-	Gender            *string
-	BirthDate         *time.Time
-	CareContactRole   *string
-	CareContactName   *string
-	RegisteredAddress *string
-	Remarks           *string
+	Name                *string
+	HomeAddress         *string
+	Region              *string
+	LTCLevel            *string
+	ServiceCategory     *int
+	ServiceUsageType    *int
+	ClaimEndDate        *time.Time
+	ClaimEndDatePresent bool
+	Status              *string
+	HouseholdType       *string
+	Gender              *string
+	BirthDate           *time.Time
+	BirthDatePresent    bool
+	CareContactRole     *string
+	CareContactName     *string
+	RegisteredAddress   *string
+	Remarks             *string
 }
 
 // UpdateCase 更新個案主檔資料，僅套用有提供的欄位。
@@ -207,6 +210,9 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 	if in.ServiceUsageType != nil {
 		entity.ServiceUsageType = in.ServiceUsageType
 	}
+	if in.ClaimEndDatePresent {
+		entity.ClaimEndDate = in.ClaimEndDate
+	}
 	if in.Status != nil {
 		entity.Status = *in.Status
 	}
@@ -216,7 +222,7 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 	if in.Gender != nil {
 		entity.Gender = in.Gender
 	}
-	if in.BirthDate != nil {
+	if in.BirthDatePresent {
 		entity.BirthDate = in.BirthDate
 	}
 	if in.CareContactRole != nil {

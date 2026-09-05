@@ -149,16 +149,15 @@ func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 	return list, nil
 }
 
-// UpsertTransportPreference 寫入個案的單位與去回程車輛偏好。nil 的 ID 以 COALESCE 保留
-// 既有值（避免部分更新把未提供的欄位覆寫為 null）；raw name 隨對應 ID 一併寫入或清空。
+// UpsertTransportPreference 以完整替換語意寫入個案的交通偏好；nil 的 ID 代表清除欄位。
 func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
 	db := pgxdb.FromContext(ctx, r.db)
 	_, err := db.Exec(ctx, `INSERT INTO case_transport_preferences (case_id, site_id, outbound_vehicle_id, inbound_vehicle_id, site_name_raw, outbound_vehicle_name_raw, inbound_vehicle_name_raw)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (case_id) DO UPDATE SET
-			site_id = COALESCE(EXCLUDED.site_id, case_transport_preferences.site_id),
-			outbound_vehicle_id = COALESCE(EXCLUDED.outbound_vehicle_id, case_transport_preferences.outbound_vehicle_id),
-			inbound_vehicle_id = COALESCE(EXCLUDED.inbound_vehicle_id, case_transport_preferences.inbound_vehicle_id),
+			site_id = EXCLUDED.site_id,
+			outbound_vehicle_id = EXCLUDED.outbound_vehicle_id,
+			inbound_vehicle_id = EXCLUDED.inbound_vehicle_id,
 			site_name_raw = CASE WHEN EXCLUDED.site_id IS NOT NULL THEN NULL WHEN EXCLUDED.site_name_raw IS NOT NULL THEN EXCLUDED.site_name_raw ELSE case_transport_preferences.site_name_raw END,
 			outbound_vehicle_name_raw = CASE WHEN EXCLUDED.outbound_vehicle_id IS NOT NULL THEN NULL WHEN EXCLUDED.outbound_vehicle_name_raw IS NOT NULL THEN EXCLUDED.outbound_vehicle_name_raw ELSE case_transport_preferences.outbound_vehicle_name_raw END,
 			inbound_vehicle_name_raw = CASE WHEN EXCLUDED.inbound_vehicle_id IS NOT NULL THEN NULL WHEN EXCLUDED.inbound_vehicle_name_raw IS NOT NULL THEN EXCLUDED.inbound_vehicle_name_raw ELSE case_transport_preferences.inbound_vehicle_name_raw END,

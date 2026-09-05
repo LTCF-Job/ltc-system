@@ -360,10 +360,11 @@ async function handleUpdateTransportPreference() {
   savingTransportPreference.value = true
   try {
     // 三個欄位皆選填：只送出有值的欄位，避免把使用者未異動、原本為空的欄位當成「明確清空」送出
-    const payload: UpdateCaseTransportPreferenceRequest = {}
-    if (transportForm.siteId) payload.siteId = transportForm.siteId
-    if (transportForm.outboundVehicleId) payload.outboundVehicleId = transportForm.outboundVehicleId
-    if (transportForm.inboundVehicleId) payload.inboundVehicleId = transportForm.inboundVehicleId
+    const payload: UpdateCaseTransportPreferenceRequest = {
+      siteId: transportForm.siteId || null,
+      outboundVehicleId: transportForm.outboundVehicleId || null,
+      inboundVehicleId: transportForm.inboundVehicleId || null
+    }
     await updateCaseTransportPreference(caseId.value, payload)
     ElMessage.success('交通偏好已更新')
   } finally {
