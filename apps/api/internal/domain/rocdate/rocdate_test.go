@@ -150,3 +150,33 @@ func TestFromROC(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDate(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{name: "民國緊湊格式", input: "1150701", want: "2026-07-01"},
+		{name: "民國斜線格式", input: "115/7/1", want: "2026-07-01"},
+		{name: "西元 ISO 格式", input: "2026-07-01", want: "2026-07-01"},
+		{name: "西元點號格式", input: "2026.07.01", want: "2026-07-01"},
+		{name: "不存在日期", input: "115/02/29", wantErr: true},
+		{name: "不完整年份", input: "26-07-01", wantErr: true},
+		{name: "超過合理年份", input: "2101-01-01", wantErr: true},
+		{name: "民國年份超過合理年份", input: "190/01/01", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseDate(tt.input)
+			if tt.wantErr {
+				assert.ErrorIs(t, err, ErrInvalidDate)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.Format("2006-01-02"))
+		})
+	}
+}

@@ -3,12 +3,12 @@ package transport
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/ride/app"
 	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/httpx"
 
 	"github.com/gin-gonic/gin"
@@ -57,7 +57,7 @@ func (h *RideHandler) Correct(c *gin.Context) {
 	rideID, rideErr := uuid.Parse(rideIDStr)
 
 	var dto CorrectDTO
-	if err := c.ShouldBindJSON(&dto); err != nil {
+	if err := httpx.BindJSONStrict(c, &dto); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -106,7 +106,7 @@ func (h *RideHandler) Correct(c *gin.Context) {
 // ManualReport 人工輸入回報內容並儲存搭乘紀錄。
 func (h *RideHandler) ManualReport(c *gin.Context) {
 	var dto ManualReportDTO
-	if err := c.ShouldBindJSON(&dto); err != nil {
+	if err := httpx.BindJSONStrict(c, &dto); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -232,7 +232,7 @@ func (h *RideHandler) GetRecord(c *gin.Context) {
 
 // GetCalendar 取得搭乘月曆矩陣資料。月份接受民國（115-07）與西元（2026-07）兩種寫法。
 func (h *RideHandler) GetCalendar(c *gin.Context) {
-	now := time.Now()
+	now := clock.Now()
 	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(now.Year(), int(now.Month())))
 
 	start, _, _, err := rocdate.MonthRangeStrict(monthStr)
@@ -283,7 +283,7 @@ func (h *RideHandler) ListIssues(c *gin.Context) {
 		return
 	}
 
-	now := time.Now()
+	now := clock.Now()
 	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(now.Year(), int(now.Month())))
 	start, _, _, err := rocdate.MonthRangeStrict(monthStr)
 	if err != nil {
@@ -291,13 +291,10 @@ func (h *RideHandler) ListIssues(c *gin.Context) {
 		return
 	}
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if page < 1 {
-		page = 1
-	}
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
 	}
 
 	items, total, err := h.rideService.ListIssues(c.Request.Context(), issueType, start.Year(), int(start.Month()), c.Query("region"), c.Query("keyword"), page, pageSize)
@@ -339,7 +336,7 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 	}
 
 	var dto ResolveConflictDTO
-	if err := c.ShouldBindJSON(&dto); err != nil {
+	if err := httpx.BindJSONStrict(c, &dto); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}

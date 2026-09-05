@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -106,7 +107,7 @@ func (s *RideService) GetCalendar(ctx context.Context, year, month int, region, 
 			legTimes[l.LegSeq] = l.DepartTime
 		}
 
-		days := calendar.CalculateScheduleDays(year, month, calendar.CaseScheduleCalendarInput{
+		days, err := calendar.CalculateScheduleDays(year, month, calendar.CaseScheduleCalendarInput{
 			CaseID:        c.ID,
 			ClaimEndDate:  c.ClaimEndDate,
 			EffectiveFrom: c.EffectiveFrom,
@@ -115,6 +116,9 @@ func (s *RideService) GetCalendar(ctx context.Context, year, month int, region, 
 			SiteOpenDays:  c.SiteOpenDays,
 			Legs:          legs,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("calculate schedule calendar for case %s: %w", c.ID, err)
+		}
 
 		for _, day := range days {
 			dateStr := day.Date.Format("2006-01-02")

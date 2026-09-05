@@ -50,6 +50,9 @@ func (r *RideRepository) GetFormColumns(ctx context.Context, formID uuid.UUID) (
 		}
 		cols = append(cols, col)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return cols, nil
 }
 
@@ -253,7 +256,7 @@ func (r *RideRepository) GetRideRecordForSlot(ctx context.Context, caseID uuid.U
 		SELECT id, case_id, service_date, leg_seq, merged_status, effective_status,
 		       vehicle_id, driver_id, has_conflict, conflict_resolved_at, conflict_resolved_by,
 		       to_char(depart_time_override, 'HH24:MI'), duration_min_override, not_claimed_aa09,
-		       corrected_by, corrected_at, correction_reason, created_at, updated_at
+		       corrected_by, corrected_at, correction_reason, based_on_fingerprint, created_at, updated_at
 		FROM ride_records
 		WHERE case_id = $1 AND service_date = $2 AND leg_seq = $3
 		LIMIT 1
@@ -264,7 +267,7 @@ func (r *RideRepository) GetRideRecordForSlot(ctx context.Context, caseID uuid.U
 		&rec.ID, &rec.CaseID, &rec.ServiceDate, &rec.LegSeq, &rec.MergedStatus, &rec.EffectiveStatus,
 		&rec.VehicleID, &rec.DriverID, &rec.HasConflict, &rec.ConflictResolvedAt, &rec.ConflictResolvedBy,
 		&rec.DepartTimeOverride, &rec.DurationMinOverride, &rec.NotClaimedAA09,
-		&rec.CorrectedBy, &rec.CorrectedAt, &rec.CorrectionReason, &rec.CreatedAt, &rec.UpdatedAt,
+		&rec.CorrectedBy, &rec.CorrectedAt, &rec.CorrectionReason, &rec.BasedOnFingerprint, &rec.CreatedAt, &rec.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -282,9 +285,9 @@ func (r *RideRepository) UpsertRideRecord(ctx context.Context, rec *app.RideReco
 			id, case_id, service_date, leg_seq, merged_status, effective_status,
 			vehicle_id, driver_id, has_conflict, conflict_resolved_at, conflict_resolved_by,
 			depart_time_override, duration_min_override,
-			not_claimed_aa09, corrected_by, corrected_at, correction_reason
+			not_claimed_aa09, corrected_by, corrected_at, correction_reason, based_on_fingerprint
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
 		)
 		ON CONFLICT (case_id, service_date, leg_seq) DO UPDATE
 		SET merged_status = EXCLUDED.merged_status,
@@ -300,6 +303,7 @@ func (r *RideRepository) UpsertRideRecord(ctx context.Context, rec *app.RideReco
 		    corrected_by = EXCLUDED.corrected_by,
 		    corrected_at = EXCLUDED.corrected_at,
 		    correction_reason = EXCLUDED.correction_reason,
+		    based_on_fingerprint = EXCLUDED.based_on_fingerprint,
 		    updated_at = now()
 		RETURNING created_at, updated_at
 	`
@@ -311,7 +315,7 @@ func (r *RideRepository) UpsertRideRecord(ctx context.Context, rec *app.RideReco
 		rec.ID, rec.CaseID, rec.ServiceDate, rec.LegSeq, rec.MergedStatus, rec.EffectiveStatus,
 		rec.VehicleID, rec.DriverID, rec.HasConflict, rec.ConflictResolvedAt, rec.ConflictResolvedBy,
 		rec.DepartTimeOverride, rec.DurationMinOverride,
-		rec.NotClaimedAA09, rec.CorrectedBy, rec.CorrectedAt, rec.CorrectionReason,
+		rec.NotClaimedAA09, rec.CorrectedBy, rec.CorrectedAt, rec.CorrectionReason, rec.BasedOnFingerprint,
 	).Scan(&rec.CreatedAt, &rec.UpdatedAt)
 }
 
@@ -347,6 +351,52 @@ func (r *RideRepository) CorrectRideRecord(
 		rideID, effectiveStatus, vehicleID, driverID, departTimeOverride,
 		durationMinOverride, notClaimedAA09, reason, operatorID,
 	)
+	return err
+}
+
+// CorrectRideRecordWithFingerprint 以單一 UPDATE 原子保存人工更正與其來源快照。
+func (r *RideRepository) CorrectRideRecordWithFingerprint(
+	ctx context.Context,
+	rideID uuid.UUID,
+	effectiveStatus *string,
+	vehicleID *uuid.UUID,
+	driverID *uuid.UUID,
+	departTimeOverride *string,
+	durationMinOverride *int16,
+	notClaimedAA09 *bool,
+	reason *string,
+	operatorID uuid.UUID,
+	fingerprint string,
+) error {
+	query := `
+		UPDATE ride_records
+		SET effective_status = COALESCE($2, effective_status),
+		    vehicle_id = COALESCE($3, vehicle_id),
+		    driver_id = COALESCE($4, driver_id),
+		    depart_time_override = $5::time,
+		    duration_min_override = $6,
+		    not_claimed_aa09 = COALESCE($7, not_claimed_aa09),
+		    correction_reason = $8,
+		    corrected_by = $9,
+		    corrected_at = now(),
+		    based_on_fingerprint = $10,
+		    updated_at = now()
+		WHERE id = $1
+	`
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, query,
+		rideID, effectiveStatus, vehicleID, driverID, departTimeOverride,
+		durationMinOverride, notClaimedAA09, reason, operatorID, fingerprint,
+	)
+	return err
+}
+
+// SetCorrectionFingerprint 保存人工更正當下所依據的來源快照。
+func (r *RideRepository) SetCorrectionFingerprint(ctx context.Context, rideID uuid.UUID, fingerprint string) error {
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `
+		UPDATE ride_records
+		SET based_on_fingerprint = $2, updated_at = now()
+		WHERE id = $1
+	`, rideID, fingerprint)
 	return err
 }
 
@@ -405,7 +455,7 @@ func (r *RideRepository) DeleteFormSubmissions(ctx context.Context, formID uuid.
 // 被重匯覆蓋，也就不該讓使用者以為那個月是匯入來的。
 func (r *RideRepository) ListImportedMonths(ctx context.Context) ([]app.ImportedMonth, error) {
 	if r.db == nil {
-		return nil, nil
+		return nil, fmt.Errorf("ride database is not configured")
 	}
 	query := `
 		SELECT form_id, to_char(service_date, 'YYYY-MM'), count(*), max(submitted_at)
@@ -519,7 +569,7 @@ func (r *RideRepository) GetRideRecordByID(ctx context.Context, id uuid.UUID) (*
 		SELECT id, case_id, service_date, leg_seq, merged_status, effective_status,
 		       vehicle_id, driver_id, has_conflict, conflict_resolved_at, conflict_resolved_by, conflict_resolution_note,
 		       to_char(depart_time_override, 'HH24:MI'), duration_min_override, not_claimed_aa09,
-		       corrected_by, corrected_at, correction_reason, created_at, updated_at
+		       corrected_by, corrected_at, correction_reason, based_on_fingerprint, created_at, updated_at
 		FROM ride_records
 		WHERE id = $1
 	`
@@ -529,7 +579,7 @@ func (r *RideRepository) GetRideRecordByID(ctx context.Context, id uuid.UUID) (*
 		&rec.ID, &rec.CaseID, &rec.ServiceDate, &rec.LegSeq, &rec.MergedStatus, &rec.EffectiveStatus,
 		&rec.VehicleID, &rec.DriverID, &rec.HasConflict, &rec.ConflictResolvedAt, &rec.ConflictResolvedBy, &rec.ConflictResolutionNote,
 		&rec.DepartTimeOverride, &rec.DurationMinOverride, &rec.NotClaimedAA09,
-		&rec.CorrectedBy, &rec.CorrectedAt, &rec.CorrectionReason, &rec.CreatedAt, &rec.UpdatedAt,
+		&rec.CorrectedBy, &rec.CorrectedAt, &rec.CorrectionReason, &rec.BasedOnFingerprint, &rec.CreatedAt, &rec.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {

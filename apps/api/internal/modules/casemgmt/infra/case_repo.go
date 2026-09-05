@@ -8,7 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/casemgmt/app"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
@@ -75,6 +77,9 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		}
 		list = append(list, c)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate cases: %w", err)
+	}
 
 	var total int64
 	countQuery := `
@@ -95,9 +100,53 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
 		      ))
 	`
-	_ = r.db.QueryRow(ctx, countQuery, region, status, q, unresolvedLink, excludePending).Scan(&total)
+	if err := r.db.QueryRow(ctx, countQuery, region, status, q, unresolvedLink, excludePending).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count cases: %w", err)
+	}
 
 	return list, total, nil
+}
+
+// ListAll 取得完整的未刪除個案資料集，供個案主檔匯出使用，不受 UI 分頁上限影響。
+func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
+	query := `
+		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
+		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
+		       p.site_id, COALESCE(st.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.inbound_vehicle_id, COALESCE(vi.display_name, ''),
+		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
+		       c.status, c.remarks, c.created_at, c.updated_at
+		FROM cases c
+		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
+		LEFT JOIN sites st ON st.id = p.site_id
+		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
+		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
+		WHERE c.deleted_at IS NULL
+		ORDER BY c.created_at DESC, c.name ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all cases: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]app.Case, 0)
+	for rows.Next() {
+		var c app.Case
+		if err := rows.Scan(
+			&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
+			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
+			&c.SiteID, &c.SiteName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.InboundVehicleID, &c.InboundVehicle,
+			&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
+			&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan all cases: %w", err)
+		}
+		list = append(list, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate all cases: %w", err)
+	}
+	return list, nil
 }
 
 // UpsertTransportPreference 寫入個案的單位與去回程車輛偏好。nil 的 ID 以 COALESCE 保留
@@ -207,6 +256,9 @@ func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm strin
 		}
 		list = append(list, c)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate case name matches: %w", err)
+	}
 	return list, nil
 }
 
@@ -278,12 +330,13 @@ func (r *CaseRepository) insertSchedule(ctx context.Context, tx pgxdb.Querier, s
 		INSERT INTO case_schedules (
 			id, case_id, site_id, effective_range, weekdays, trip_pattern, unit_price, distance_km,
 			service_duration_min, service_code, note
-		) VALUES ($1, $2, $3, daterange($4, $5, '[]'), $6, $7, $8, $9, $10, $11, $12)
+		) VALUES ($1, $2, $3, daterange($4, $5, '[)'), $6, $7, $8, $9, $10, $11, $12)
 		RETURNING created_at, updated_at
 	`
 	var toVal *time.Time
 	if s.EffectiveTo != nil {
-		toVal = s.EffectiveTo
+		exclusiveEnd := s.EffectiveTo.AddDate(0, 0, 1)
+		toVal = &exclusiveEnd
 	}
 	err := tx.QueryRow(ctx, querySchedule,
 		s.ID, s.CaseID, s.SiteID, s.EffectiveFrom, toVal, s.Weekdays, s.TripPattern,
@@ -373,6 +426,9 @@ func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, cas
 		}
 		s.Legs = append(s.Legs, leg)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate schedule legs: %w", err)
+	}
 
 	return &s, nil
 }
@@ -380,24 +436,24 @@ func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, cas
 // GetActiveSchedulesForMonth 查詢特定月份所有在案個案的有效排班與 Legs。
 func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]app.ActiveCaseScheduleInfo, error) {
 	if r.db == nil {
-		return []app.ActiveCaseScheduleInfo{}, nil
+		return nil, fmt.Errorf("case database is not configured")
 	}
 
 	firstDay := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-	lastDay := firstDay.AddDate(0, 1, -1)
+	lastDay := firstDay.AddDate(0, 1, 0)
 
 	query := `
 		SELECT c.id, c.name, COALESCE(c.region, ''), c.claim_end_date,
 		       s.id as schedule_id, s.site_id, st.open_days,
 		       lower(s.effective_range) as eff_from,
-		       CASE WHEN upper_inf(s.effective_range) THEN NULL ELSE to_char(upper(s.effective_range), 'YYYY-MM-DD') END as eff_to_str,
+		       CASE WHEN upper_inf(s.effective_range) THEN NULL ELSE to_char(upper(s.effective_range) - 1, 'YYYY-MM-DD') END as eff_to_str,
 		       s.weekdays, s.trip_pattern
 		FROM cases c
 		JOIN case_schedules s ON c.id = s.case_id
 		JOIN sites st ON s.site_id = st.id
 		WHERE c.status = 'active' AND c.deleted_at IS NULL
 		  AND ($1 = '' OR c.region = $1)
-		  AND s.effective_range && daterange($2, $3, '[]')
+		  AND s.effective_range && daterange($2, $3, '[)')
 		ORDER BY c.created_at DESC, c.name ASC
 	`
 	rows, err := r.db.Query(ctx, query, region, firstDay, lastDay)
@@ -425,11 +481,16 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 			return nil, err
 		}
 		if effToStr != nil && *effToStr != "" {
-			if t, err := time.Parse("2006-01-02", *effToStr); err == nil {
-				sr.info.EffectiveTo = &t
+			t, err := rocdate.ParseDate(*effToStr)
+			if err != nil {
+				return nil, fmt.Errorf("parse schedule effective end date: %w", err)
 			}
+			sr.info.EffectiveTo = &t
 		}
 		list = append(list, sr)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate monthly active schedules: %w", err)
 	}
 
 	var results []app.ActiveCaseScheduleInfo
@@ -458,6 +519,10 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 			}
 			item.info.Legs = append(item.info.Legs, leg)
 		}
+		if err := lRows.Err(); err != nil {
+			lRows.Close()
+			return nil, fmt.Errorf("failed to iterate monthly schedule legs: %w", err)
+		}
 		lRows.Close()
 		results = append(results, item.info)
 	}
@@ -469,7 +534,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 // 匯報欄位對應而把整份含密文的個案主檔載進記憶體。
 func (r *CaseRepository) ListNameIndex(ctx context.Context) ([]app.CaseNameRef, error) {
 	if r.db == nil {
-		return nil, nil
+		return nil, fmt.Errorf("case database is not configured")
 	}
 
 	rows, err := r.db.Query(ctx, `
@@ -509,8 +574,8 @@ func (r *CaseRepository) CloseOpenSchedules(ctx context.Context, caseID uuid.UUI
 	db := pgxdb.FromContext(ctx, r.db)
 	_, err := db.Exec(ctx, `
 		UPDATE case_schedules
-		SET effective_range = daterange(lower(effective_range), CURRENT_DATE, '[)'), updated_at = now()
+		SET effective_range = daterange(lower(effective_range), $2::date, '[)'), updated_at = now()
 		WHERE case_id = $1 AND upper_inf(effective_range)
-	`, caseID)
+	`, caseID, clock.Today())
 	return err
 }

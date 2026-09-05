@@ -78,7 +78,7 @@ func TestRideService_ResolveConflict_Success(t *testing.T) {
 	rideID := uuid.New()
 	vehicleID := uuid.New()
 	store := newFakeRecordStore(nil)
-	store.getByIDResult = &RideRecord{ID: rideID, VehicleID: uuid.New()}
+	store.getByIDResult = &RideRecord{ID: rideID, CaseName: "不應寫入稽核的個案姓名", VehicleID: uuid.New()}
 	store.resolveResult = true
 	audit := &fakeAuditWriter{}
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, audit, nil)
@@ -88,6 +88,10 @@ func TestRideService_ResolveConflict_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, audit.entries, 1)
 	assert.Equal(t, "resolve_conflict", audit.entries[0].Action)
+	snapshot, ok := audit.entries[0].BeforeData.(rideAuditSnapshot)
+	require.True(t, ok)
+	assert.Equal(t, rideID, snapshot.ID)
+	assert.Equal(t, store.getByIDResult.VehicleID, snapshot.VehicleID)
 }
 
 func TestRideService_ResolveConflict_AuditFailureNoRollback(t *testing.T) {

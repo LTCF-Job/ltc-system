@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/casemgmt/app"
 	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
@@ -32,10 +32,10 @@ func NewCaseHandler(
 
 // List 查詢個案清單（回傳遮罩身分證）。
 func (h *CaseHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	if pageSize > 100 {
-		pageSize = 100
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
 	}
 	region := c.Query("region")
 	status := c.Query("status")
@@ -65,7 +65,7 @@ func (h *CaseHandler) List(c *gin.Context) {
 // Create 新增個案主檔。
 func (h *CaseHandler) Create(c *gin.Context) {
 	var req CreateCaseRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -141,7 +141,7 @@ func (h *CaseHandler) Delete(c *gin.Context) {
 // CreateSchedule 建立個案排班設定與時段明細。
 func (h *CaseHandler) CreateSchedule(c *gin.Context) {
 	var req CreateScheduleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -227,7 +227,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		RegisteredAddress *string `json:"registeredAddress"`
 		Remarks           *string `json:"remarks"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -248,7 +248,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		Remarks:           req.Remarks,
 	}
 	if req.BirthDate != nil {
-		if t, err := time.Parse("2006-01-02", *req.BirthDate); err == nil {
+		if t, err := rocdate.ParseDate(*req.BirthDate); err == nil {
 			in.BirthDate = &t
 		}
 	}
@@ -283,7 +283,7 @@ func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 		OutboundVehicleNameRaw string     `json:"outboundVehicleNameRaw"`
 		InboundVehicleNameRaw  string     `json:"inboundVehicleNameRaw"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -312,7 +312,7 @@ func (h *CaseHandler) GetSchedule(c *gin.Context) {
 	// TODO: 尚無「個案排班」在無現行排班時的產品規格確認，先誠實回傳查無資料，
 	// 不再回傳假造的竹北日照中心／竹北一車預設排班（原本無論真實查詢成功與否，
 	// 只要查無排班或查詢出錯都會回傳同一組寫死的假資料，兩種情況也未區分）。
-	sched, err := h.masterService.GetActiveScheduleForCaseOnDate(c.Request.Context(), id, time.Now())
+	sched, err := h.masterService.GetActiveScheduleForCaseOnDate(c.Request.Context(), id, clock.Today())
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢個案排班失敗", nil)
 		return
@@ -328,7 +328,7 @@ func (h *CaseHandler) GetSchedule(c *gin.Context) {
 // SaveSchedule 儲存/更新個案排班。
 func (h *CaseHandler) SaveSchedule(c *gin.Context) {
 	var req CreateScheduleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}

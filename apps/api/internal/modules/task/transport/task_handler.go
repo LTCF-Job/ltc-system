@@ -3,11 +3,11 @@ package transport
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/task/app"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
@@ -23,10 +23,10 @@ func NewTaskHandler(svc *app.TaskService) *TaskHandler {
 
 // CheckMissingReports 觸發未回報檢查並派送通知。
 func (h *TaskHandler) CheckMissingReports(c *gin.Context) {
-	dateStr := c.DefaultQuery("date", time.Now().Format("2006-01-02"))
+	dateStr := c.DefaultQuery("date", clock.Today().Format("2006-01-02"))
 	region := c.Query("region")
 
-	targetDate, err := time.Parse("2006-01-02", dateStr)
+	targetDate, err := rocdate.ParseDate(dateStr)
 	if err != nil {
 		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "日期格式錯誤，請使用 YYYY-MM-DD", nil)
 		return
@@ -49,10 +49,10 @@ func (h *TaskHandler) CheckMissingReports(c *gin.Context) {
 
 // GetMissingReports 供前端頁面查詢特定日期或今日之未回報清單。
 func (h *TaskHandler) GetMissingReports(c *gin.Context) {
-	dateStr := c.DefaultQuery("date", time.Now().Format("2006-01-02"))
+	dateStr := c.DefaultQuery("date", clock.Today().Format("2006-01-02"))
 	region := c.Query("region")
 
-	targetDate, err := time.Parse("2006-01-02", dateStr)
+	targetDate, err := rocdate.ParseDate(dateStr)
 	if err != nil {
 		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "日期格式錯誤，請使用 YYYY-MM-DD", nil)
 		return
@@ -69,7 +69,8 @@ func (h *TaskHandler) GetMissingReports(c *gin.Context) {
 
 // MonthEndReminder 觸發每月 26 日申報提醒檢查與發信通知。
 func (h *TaskHandler) MonthEndReminder(c *gin.Context) {
-	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(time.Now().Year(), int(time.Now().Month())))
+	today := clock.Today()
+	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(today.Year(), int(today.Month())))
 
 	year, month, err := rocdate.ParseROCYearMonth(monthStr)
 	if err != nil {

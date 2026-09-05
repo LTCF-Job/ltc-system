@@ -144,6 +144,8 @@ func TestGovClaim_NotClaimedAA09(t *testing.T) {
 		DurationMin:      10,
 		Direction:        "outbound",
 		LegSeq:           1,
+		HomeAddress:      "新竹縣竹北市光明六路264號",
+		SiteAddress:      "新竹縣竹北市中正西路100號",
 		DistanceKM:       5.0,
 		PlateNo:          "BZG-7915",
 		ServiceUsageType: 2,

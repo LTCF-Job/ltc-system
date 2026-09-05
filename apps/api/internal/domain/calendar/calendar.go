@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,9 +66,13 @@ type ScheduleDay struct {
 }
 
 // CalculateExpectedRides returns only dates and legs that should be reported.
-func CalculateExpectedRides(year, month int, input CaseScheduleCalendarInput) []ExpectedRide {
+func CalculateExpectedRides(year, month int, input CaseScheduleCalendarInput) ([]ExpectedRide, error) {
 	var results []ExpectedRide
-	for _, day := range CalculateScheduleDays(year, month, input) {
+	days, err := CalculateScheduleDays(year, month, input)
+	if err != nil {
+		return nil, err
+	}
+	for _, day := range days {
 		for _, leg := range day.Legs {
 			results = append(results, ExpectedRide{
 				CaseID:      input.CaseID,
@@ -78,13 +83,14 @@ func CalculateExpectedRides(year, month int, input CaseScheduleCalendarInput) []
 			})
 		}
 	}
-	return results
+	return results, nil
 }
 
 // CalculateScheduleDays applies monthly override, holiday, weekly, then fixed priority.
 // An explicit monthly entry, including tripCount 0, is allowed to override a holiday.
-func CalculateScheduleDays(year, month int, input CaseScheduleCalendarInput) []ScheduleDay {
+func CalculateScheduleDays(year, month int, input CaseScheduleCalendarInput) ([]ScheduleDay, error) {
 	var results []ScheduleDay
+	var err error
 	weekdayMap := make(map[int]bool)
 	for _, wd := range input.Weekdays {
 		weekdayMap[int(wd)] = true
@@ -121,7 +127,10 @@ func CalculateScheduleDays(year, month int, input CaseScheduleCalendarInput) []S
 			day.Source = "monthly"
 			if cfg.TripCount > 0 {
 				day.Status = ScheduleDayManualScheduled
-				day.Legs = scheduleLegs(cfg.TripCount, cfg.Legs, input.Legs)
+				day.Legs, err = scheduleLegs(cfg.TripCount, cfg.Legs, input.Legs)
+				if err != nil {
+					return nil, fmt.Errorf("monthly schedule %s: %w", dateStr, err)
+				}
 			} else {
 				day.Status = ScheduleDayManualAbsent
 			}
@@ -140,7 +149,10 @@ func CalculateScheduleDays(year, month int, input CaseScheduleCalendarInput) []S
 			day.Source = "weekly"
 			if cfg.TripCount > 0 && siteOpenMap[weekday] {
 				day.Status = ScheduleDayScheduled
-				day.Legs = scheduleLegs(cfg.TripCount, cfg.Legs, input.Legs)
+				day.Legs, err = scheduleLegs(cfg.TripCount, cfg.Legs, input.Legs)
+				if err != nil {
+					return nil, fmt.Errorf("weekly schedule weekday %d: %w", weekday, err)
+				}
 			}
 			results = append(results, day)
 			continue
@@ -152,24 +164,15 @@ func CalculateScheduleDays(year, month int, input CaseScheduleCalendarInput) []S
 		}
 		results = append(results, day)
 	}
-	return results
+	return results, nil
 }
 
-func scheduleLegs(tripCount int16, legs, fallback []LegInput) []LegInput {
+func scheduleLegs(tripCount int16, legs, fallback []LegInput) ([]LegInput, error) {
 	if tripCount > 0 && int(tripCount) <= len(legs) {
-		return legs[:tripCount]
+		return legs[:tripCount], nil
 	}
 	if tripCount > 0 && int(tripCount) <= len(fallback) {
-		return fallback[:tripCount]
+		return fallback[:tripCount], nil
 	}
-	switch tripCount {
-	case 1:
-		return []LegInput{{LegSeq: 1, Direction: "outbound", DepartTime: "09:00"}}
-	case 2:
-		return []LegInput{{LegSeq: 1, Direction: "outbound", DepartTime: "09:00"}, {LegSeq: 2, Direction: "inbound", DepartTime: "16:00"}}
-	case 4:
-		return []LegInput{{LegSeq: 1, Direction: "outbound", DepartTime: "08:30"}, {LegSeq: 2, Direction: "inbound", DepartTime: "11:30"}, {LegSeq: 3, Direction: "outbound", DepartTime: "13:30"}, {LegSeq: 4, Direction: "inbound", DepartTime: "16:30"}}
-	default:
-		return fallback
-	}
+	return nil, fmt.Errorf("trip count %d has no complete leg definition", tripCount)
 }

@@ -2,14 +2,18 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/merge"
 	"ltc-system/apps/api/internal/domain/namenorm"
+	"ltc-system/apps/api/internal/domain/rocdate"
+	"ltc-system/apps/api/internal/platform/clock"
 )
 
 // RideService 封裝司機接送匯報的展開、正規化、混車合併、衝突裁決與更正。
@@ -19,6 +23,52 @@ type RideService struct {
 	caseRepo        ScheduleReader
 	auditRepo       AuditWriter
 	missingProvider MissingReportProvider
+}
+
+var ErrStaleCorrection = errors.New("correction is based on stale ride sources")
+
+// rideAuditSnapshot 避免把查詢組裝出的個案／司機顯示名稱寫入稽核資料。
+type rideAuditSnapshot struct {
+	ID              uuid.UUID  `json:"id"`
+	CaseID          uuid.UUID  `json:"caseId"`
+	ServiceDate     time.Time  `json:"serviceDate"`
+	LegSeq          int16      `json:"legSeq"`
+	EffectiveStatus string     `json:"effectiveStatus"`
+	VehicleID       uuid.UUID  `json:"vehicleId"`
+	DriverID        *uuid.UUID `json:"driverId,omitempty"`
+	HasConflict     bool       `json:"hasConflict"`
+}
+
+func newRideAuditSnapshot(item *RideRecord) rideAuditSnapshot {
+	if item == nil {
+		return rideAuditSnapshot{}
+	}
+	return rideAuditSnapshot{
+		ID:              item.ID,
+		CaseID:          item.CaseID,
+		ServiceDate:     item.ServiceDate,
+		LegSeq:          item.LegSeq,
+		EffectiveStatus: item.EffectiveStatus,
+		VehicleID:       item.VehicleID,
+		DriverID:        item.DriverID,
+		HasConflict:     item.HasConflict,
+	}
+}
+
+// sourceFingerprint 以穩定排序的來源 ID 與內容建立更正依據快照。
+func sourceFingerprint(rows []RideSourceRow, serviceDate time.Time, legSeq int16) string {
+	parts := make([]string, 0, len(rows))
+	for _, row := range rows {
+		driver := ""
+		if row.DriverID != nil {
+			driver = row.DriverID.String()
+		}
+		parts = append(parts, fmt.Sprintf("%s|%s|%s|%s|%s", row.SourceID, row.VehicleID, driver, row.Reported, row.SubmittedAt.UTC().Format(time.RFC3339Nano)))
+	}
+	sort.Strings(parts)
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "%s|%d|%s|%s", serviceDate.Format("2006-01-02"), legSeq, strings.Join(parts, ";"), fmt.Sprint(len(rows)))
+	return fmt.Sprintf("sha256:%x", h.Sum(nil))
 }
 
 // NewRideService 建立 RideService 實例。
@@ -59,13 +109,17 @@ func (s *RideService) IngestSubmission(ctx context.Context, formID, defaultVehic
 
 	submittedAt := req.SubmittedAt
 	if submittedAt.IsZero() {
-		submittedAt = time.Now().UTC()
+		submittedAt = clock.Now()
 	}
 
 	driverID := req.DriverID
 	req.DriverRaw = strings.TrimSpace(req.DriverRaw)
 	if driverID == nil && req.DriverRaw != "" {
-		if d, _ := s.driverRepo.GetByNameNormalized(ctx, namenorm.Normalize(req.DriverRaw)); d != nil {
+		d, err := s.driverRepo.GetByNameNormalized(ctx, namenorm.Normalize(req.DriverRaw))
+		if err != nil {
+			return 0, fmt.Errorf("failed to resolve driver: %w", err)
+		}
+		if d != nil {
 			driverID = &d.ID
 		}
 	}
@@ -107,7 +161,10 @@ func (s *RideService) IngestSubmission(ctx context.Context, formID, defaultVehic
 		}
 
 		caseID := *col.CaseID
-		sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, req.ServiceDate)
+		sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, req.ServiceDate)
+		if err != nil {
+			return 0, fmt.Errorf("failed to load active schedule: %w", err)
+		}
 
 		for _, legSeq := range expandLegSeqs(*col.LegSeq, sched) {
 			if err := s.formRepo.InsertRideSource(
@@ -149,7 +206,10 @@ func (s *RideService) BackfillColumn(
 			continue
 		}
 
-		sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, a.ServiceDate)
+		sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, a.ServiceDate)
+		if err != nil {
+			return written, fmt.Errorf("failed to load active schedule: %w", err)
+		}
 		for _, seq := range expandLegSeqs(legSeq, sched) {
 			if err := s.formRepo.InsertRideSource(
 				ctx, a.SubmissionID, caseID, a.ServiceDate, seq, defaultVehicleID, a.DriverID, reported, columnIndex,
@@ -344,29 +404,21 @@ func (s *RideService) recalculateRideRecord(
 		return fmt.Errorf("failed to load existing ride record: %w", err)
 	}
 
-	var existingState *merge.ExistingRecordState
-	if existingRec != nil {
-		existingState = &merge.ExistingRecordState{
-			HasConflict:        existingRec.HasConflict,
-			ConflictResolvedAt: existingRec.ConflictResolvedAt,
-			ResolvedVehicleID:  &existingRec.VehicleID,
-			ResolvedDriverID:   existingRec.DriverID,
-			CorrectedAt:        existingRec.CorrectedAt,
-			CorrectedBy:        existingRec.CorrectedBy,
-			EffectiveStatus:    existingRec.EffectiveStatus,
-			CorrectedVehicle:   &existingRec.VehicleID,
-			CorrectedDriver:    existingRec.DriverID,
-		}
-	}
-
 	// 查詢當日排班設定預設車輛與司機
-	sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, serviceDate)
+	sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, serviceDate)
+	if err != nil {
+		return fmt.Errorf("failed to load active schedule: %w", err)
+	}
 	if sched != nil {
 		for _, l := range sched.Legs {
 			if l.LegSeq == legSeq && l.VehicleID != nil {
 				defaultVehicleID = *l.VehicleID
 				// 一台車當日可能有多位司機，無從判斷是誰出車時留空由人工指定
-				if drivers, _ := s.driverRepo.ListDriversForVehicleOnDate(ctx, defaultVehicleID, serviceDate); len(drivers) == 1 {
+				drivers, err := s.driverRepo.ListDriversForVehicleOnDate(ctx, defaultVehicleID, serviceDate)
+				if err != nil {
+					return fmt.Errorf("failed to load scheduled drivers: %w", err)
+				}
+				if len(drivers) == 1 {
 					defaultDriverID = &drivers[0].ID
 				}
 				break
@@ -381,7 +433,28 @@ func (s *RideService) recalculateRideRecord(
 		return fmt.Errorf("failed to load ride sources for slot: %w", err)
 	}
 	if len(rows) == 0 {
-		return nil
+		return s.formRepo.DeleteDerivedRideRecord(ctx, caseID, serviceDate, legSeq)
+	}
+
+	fingerprint := sourceFingerprint(rows, serviceDate, legSeq)
+	correctionIsCurrent := existingRec != nil &&
+		(existingRec.BasedOnFingerprint == "" || existingRec.BasedOnFingerprint == fingerprint)
+
+	var existingState *merge.ExistingRecordState
+	if existingRec != nil {
+		existingState = &merge.ExistingRecordState{
+			HasConflict:        existingRec.HasConflict,
+			ConflictResolvedAt: existingRec.ConflictResolvedAt,
+			ResolvedVehicleID:  &existingRec.VehicleID,
+			ResolvedDriverID:   existingRec.DriverID,
+		}
+		if correctionIsCurrent {
+			existingState.CorrectedAt = existingRec.CorrectedAt
+			existingState.CorrectedBy = existingRec.CorrectedBy
+			existingState.EffectiveStatus = existingRec.EffectiveStatus
+			existingState.CorrectedVehicle = &existingRec.VehicleID
+			existingState.CorrectedDriver = existingRec.DriverID
+		}
 	}
 
 	sources := make([]merge.RideSourceInput, 0, len(rows))
@@ -399,23 +472,26 @@ func (s *RideService) recalculateRideRecord(
 	result := merge.MergeRideSources(sources, existingState, defaultVehicleID, defaultDriverID)
 
 	rec := RideRecord{
-		CaseID:          caseID,
-		ServiceDate:     serviceDate,
-		LegSeq:          legSeq,
-		MergedStatus:    result.MergedStatus,
-		EffectiveStatus: result.EffectiveStatus,
-		VehicleID:       result.SelectedVehicle,
-		DriverID:        result.SelectedDriver,
-		HasConflict:     result.HasConflict,
+		CaseID:             caseID,
+		ServiceDate:        serviceDate,
+		LegSeq:             legSeq,
+		MergedStatus:       result.MergedStatus,
+		EffectiveStatus:    result.EffectiveStatus,
+		VehicleID:          result.SelectedVehicle,
+		DriverID:           result.SelectedDriver,
+		HasConflict:        result.HasConflict,
+		BasedOnFingerprint: fingerprint,
 	}
 	if existingRec != nil {
 		rec.ID = existingRec.ID
 		rec.ConflictResolvedAt = existingRec.ConflictResolvedAt
 		rec.ConflictResolvedBy = existingRec.ConflictResolvedBy
-		rec.CorrectedAt = existingRec.CorrectedAt
-		rec.CorrectedBy = existingRec.CorrectedBy
-		rec.CorrectionReason = existingRec.CorrectionReason
-		rec.NotClaimedAA09 = existingRec.NotClaimedAA09
+		if correctionIsCurrent {
+			rec.CorrectedAt = existingRec.CorrectedAt
+			rec.CorrectedBy = existingRec.CorrectedBy
+			rec.CorrectionReason = existingRec.CorrectionReason
+			rec.NotClaimedAA09 = existingRec.NotClaimedAA09
+		}
 	}
 
 	if err := s.formRepo.UpsertRideRecord(ctx, &rec); err != nil {
@@ -433,6 +509,7 @@ type CorrectRideRecordRequest struct {
 	DurationMinOverride *int16     `json:"durationMinOverride"`
 	NotClaimedAA09      *bool      `json:"notClaimedAa09"`
 	Reason              *string    `json:"reason"`
+	BasedOnFingerprint  *string    `json:"basedOnFingerprint"`
 }
 
 // ManualReportRideRequest 代表人工補登或編輯回報內容之請求結構體。
@@ -458,10 +535,38 @@ func (s *RideService) CorrectRideRecord(
 	actorID uuid.UUID,
 	actorRole, ip, ua string,
 ) error {
-	err := s.formRepo.CorrectRideRecord(
-		ctx, rideID, req.EffectiveStatus, req.VehicleID, req.DriverID,
-		req.DepartTimeOverride, req.DurationMinOverride, req.NotClaimedAA09, req.Reason, actorID,
-	)
+	before, err := s.formRepo.GetRideRecordByID(ctx, rideID)
+	if err != nil {
+		return fmt.Errorf("failed to load ride record: %w", err)
+	}
+	if before == nil {
+		return ErrRideNotFound
+	}
+	sources, err := s.formRepo.ListRideSourcesForSlot(ctx, before.CaseID, before.ServiceDate, before.LegSeq)
+	if err != nil {
+		return fmt.Errorf("failed to load ride sources for correction: %w", err)
+	}
+	fingerprint := sourceFingerprint(sources, before.ServiceDate, before.LegSeq)
+	if req.BasedOnFingerprint != nil && *req.BasedOnFingerprint != fingerprint {
+		return ErrStaleCorrection
+	}
+	if store, ok := s.formRepo.(CorrectionFingerprintingStore); ok {
+		err = store.CorrectRideRecordWithFingerprint(
+			ctx, rideID, req.EffectiveStatus, req.VehicleID, req.DriverID,
+			req.DepartTimeOverride, req.DurationMinOverride, req.NotClaimedAA09,
+			req.Reason, actorID, fingerprint,
+		)
+	} else {
+		err = s.formRepo.CorrectRideRecord(
+			ctx, rideID, req.EffectiveStatus, req.VehicleID, req.DriverID,
+			req.DepartTimeOverride, req.DurationMinOverride, req.NotClaimedAA09, req.Reason, actorID,
+		)
+		if err == nil {
+			if store, ok := s.formRepo.(CorrectionFingerprintStore); ok {
+				err = store.SetCorrectionFingerprint(ctx, rideID, fingerprint)
+			}
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("failed to correct ride record: %w", err)
 	}
@@ -494,7 +599,7 @@ func (s *RideService) ManualReportRide(
 		return nil, fmt.Errorf("無效的搭乘狀態：%s", req.EffectiveStatus)
 	}
 
-	serviceDate, err := time.Parse("2006-01-02", req.ServiceDate)
+	serviceDate, err := rocdate.ParseDate(req.ServiceDate)
 	if err != nil {
 		return nil, fmt.Errorf("無效的服務日期格式：%s", req.ServiceDate)
 	}
@@ -504,7 +609,10 @@ func (s *RideService) ManualReportRide(
 	if req.VehicleID != nil && *req.VehicleID != uuid.Nil {
 		vehicleID = *req.VehicleID
 	} else if s.caseRepo != nil {
-		sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, req.CaseID, serviceDate)
+		sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, req.CaseID, serviceDate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load active schedule: %w", err)
+		}
 		if sched != nil {
 			for _, l := range sched.Legs {
 				if l.LegSeq == req.LegSeq && l.VehicleID != nil {
@@ -515,8 +623,11 @@ func (s *RideService) ManualReportRide(
 		}
 	}
 
-	existingRec, _ := s.formRepo.GetRideRecordForSlot(ctx, req.CaseID, serviceDate, req.LegSeq)
-	now := time.Now().UTC()
+	existingRec, err := s.formRepo.GetRideRecordForSlot(ctx, req.CaseID, serviceDate, req.LegSeq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load existing ride record: %w", err)
+	}
+	now := clock.Now()
 
 	rec := RideRecord{
 		CaseID:              req.CaseID,
@@ -609,7 +720,7 @@ func (s *RideService) ResolveConflict(ctx context.Context, rideID uuid.UUID, req
 			Action:     "resolve_conflict",
 			EntityType: "ride_records",
 			EntityID:   &entityIDStr,
-			BeforeData: before,
+			BeforeData: newRideAuditSnapshot(before),
 			AfterData:  req,
 		})
 	}

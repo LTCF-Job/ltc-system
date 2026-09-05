@@ -207,6 +207,29 @@ type RideRecordStore interface {
 	UpdateRideSourceDriverID(ctx context.Context, sourceID, driverID uuid.UUID) error
 }
 
+// CorrectionFingerprintStore 保存人工更正所依據的來源快照；由 composition root 以 optional port
+// 擴充既有 store，避免離線 fake 必須同時實作新欄位。
+type CorrectionFingerprintStore interface {
+	SetCorrectionFingerprint(ctx context.Context, rideID uuid.UUID, fingerprint string) error
+}
+
+// CorrectionFingerprintingStore 將人工更正與來源快照以同一筆資料庫更新寫入，
+// 避免更正成功後 fingerprint 寫入失敗，留下無法判斷來源版本的半完成狀態。
+type CorrectionFingerprintingStore interface {
+	CorrectRideRecordWithFingerprint(
+		ctx context.Context,
+		rideID uuid.UUID,
+		effectiveStatus *string,
+		vehicleID, driverID *uuid.UUID,
+		departTimeOverride *string,
+		durationMinOverride *int16,
+		notClaimedAA09 *bool,
+		reason *string,
+		operatorID uuid.UUID,
+		fingerprint string,
+	) error
+}
+
 // ConflictRide 是一筆待裁決混車衝突。
 type ConflictRide struct {
 	ID          uuid.UUID

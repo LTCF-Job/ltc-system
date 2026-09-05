@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	caregiverapp "ltc-system/apps/api/internal/modules/caregiver/app"
 	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
@@ -37,7 +40,13 @@ type rideDriverResolver struct{ repo *masterinfra.DriverRepository }
 func (a rideDriverResolver) GetByNameNormalized(ctx context.Context, nameNorm string) (*rideapp.DriverRef, error) {
 	d, err := a.repo.GetByNameNormalized(ctx, nameNorm)
 	if err != nil {
+		if errors.Is(err, masterapp.ErrDriverNotFound) {
+			return nil, nil
+		}
 		return nil, err
+	}
+	if d == nil {
+		return nil, nil
 	}
 	return &rideapp.DriverRef{ID: d.ID, Name: d.Name}, nil
 }
@@ -79,7 +88,10 @@ func (a rideMissingReportProvider) ListMissingForMonth(ctx context.Context, year
 	}
 	out := make([]rideapp.MissingRide, 0, len(items))
 	for _, item := range items {
-		serviceDate, _ := time.Parse("2006-01-02", item.ServiceDate)
+		serviceDate, err := rocdate.ParseDate(item.ServiceDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse missing ride service date: %w", err)
+		}
 		out = append(out, rideapp.MissingRide{
 			CaseID:      item.CaseID,
 			CaseName:    item.CaseName,
@@ -158,13 +170,31 @@ func (a opsVehicleLister) List(ctx context.Context, region, q string, page, page
 	return out, total, nil
 }
 
+func (a opsVehicleLister) ListAll(ctx context.Context) ([]opsapp.VehicleRef, error) {
+	list, err := a.repo.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]opsapp.VehicleRef, 0, len(list))
+	for _, v := range list {
+		out = append(out, opsapp.VehicleRef{ID: v.ID, DisplayName: v.DisplayName, PlateNo: v.PlateNo})
+	}
+	return out, nil
+}
+
 // importSiteLookup 讓 caseimport 以名稱或區域比對單位。
 type importSiteLookup struct{ repo *masterinfra.SiteRepository }
 
 func (a importSiteLookup) GetByName(ctx context.Context, name string) (*importapp.SiteRef, error) {
 	s, err := a.repo.GetByName(ctx, name)
 	if err != nil {
+		if errors.Is(err, masterapp.ErrSiteNotFound) {
+			return nil, nil
+		}
 		return nil, err
+	}
+	if s == nil {
+		return nil, nil
 	}
 	return &importapp.SiteRef{ID: s.ID, Name: s.Name}, nil
 }
@@ -189,7 +219,13 @@ type importVehicleLookup struct {
 func (a importVehicleLookup) GetByDisplayName(ctx context.Context, displayName string) (*importapp.VehicleRef, error) {
 	v, err := a.repo.GetByDisplayName(ctx, displayName)
 	if err != nil {
+		if errors.Is(err, masterapp.ErrVehicleNotFound) {
+			return nil, nil
+		}
 		return nil, err
+	}
+	if v == nil {
+		return nil, nil
 	}
 	return &importapp.VehicleRef{ID: v.ID}, nil
 }
@@ -233,7 +269,13 @@ type caregiverSiteLookup struct{ repo *masterinfra.SiteRepository }
 func (a caregiverSiteLookup) GetByName(ctx context.Context, name string) (*caregiverapp.SiteRef, error) {
 	s, err := a.repo.GetByName(ctx, name)
 	if err != nil {
+		if errors.Is(err, masterapp.ErrSiteNotFound) {
+			return nil, nil
+		}
 		return nil, err
+	}
+	if s == nil {
+		return nil, nil
 	}
 	return &caregiverapp.SiteRef{ID: s.ID, Name: s.Name}, nil
 }
@@ -258,8 +300,14 @@ type driverReportDriverResolver struct{ repo *masterinfra.DriverRepository }
 
 func (a driverReportDriverResolver) GetByNameNormalized(ctx context.Context, nameNorm string) (*drapp.DriverRef, error) {
 	d, err := a.repo.GetByNameNormalized(ctx, nameNorm)
-	if err != nil || d == nil {
+	if err != nil {
+		if errors.Is(err, masterapp.ErrDriverNotFound) {
+			return nil, nil
+		}
 		return nil, err
+	}
+	if d == nil {
+		return nil, nil
 	}
 	return &drapp.DriverRef{ID: d.ID, Name: d.Name}, nil
 }

@@ -3,16 +3,22 @@ package app
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/crypto"
+	"ltc-system/apps/api/internal/platform/clock"
 )
 
 // GenerateCaseProfileWorkbook 匯出與來源工作簿一致的個案彙整欄位。
 // caseIDs 為空時匯出全部個案；非空時只匯出指定個案，欄位與順序不受影響。
 func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs []uuid.UUID) ([]byte, error) {
-	cases, _, err := s.caseRepo.List(ctx, "", "", "", 1, 10000, false, false)
+	lister, ok := s.caseRepo.(interface {
+		ListAll(ctx context.Context) ([]Case, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("case repository does not support complete listing")
+	}
+	cases, err := lister.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list case profiles: %w", err)
 	}
@@ -43,7 +49,7 @@ func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs [
 		birthday, age := "", ""
 		if item.BirthDate != nil {
 			birthday = fmt.Sprintf("%03d/%02d/%02d", item.BirthDate.Year()-1911, item.BirthDate.Month(), item.BirthDate.Day())
-			age = fmt.Sprintf("%d", time.Now().Year()-item.BirthDate.Year())
+			age = fmt.Sprintf("%d", clock.Now().Year()-item.BirthDate.Year())
 		}
 		value := func(v *string) string {
 			if v == nil {

@@ -7,6 +7,7 @@ import (
 
 var (
 	ErrNegativeDuration = errors.New("duration must be greater than 0")
+	ErrExcessiveDuration = errors.New("duration exceeds the maximum allowed minutes")
 	ErrSpansAcrossDay   = errors.New("service end time exceeds same day (23:59)")
 )
 
@@ -15,11 +16,14 @@ func EndTime(depart time.Time, durationMin int) (hour, minute int, err error) {
 	if durationMin <= 0 {
 		return 0, 0, ErrNegativeDuration
 	}
+	if durationMin > 240 {
+		return 0, 0, ErrExcessiveDuration
+	}
 
 	endTime := depart.Add(time.Duration(durationMin) * time.Minute)
 
 	// 跨日視為排班設定錯誤
-	if endTime.Day() != depart.Day() {
+	if endTime.Year() != depart.Year() || endTime.Month() != depart.Month() || endTime.Day() != depart.Day() {
 		return 0, 0, ErrSpansAcrossDay
 	}
 

@@ -28,7 +28,7 @@ func TestRideService_ManualReportRide_Validation(t *testing.T) {
 	t.Run("Invalid date format", func(t *testing.T) {
 		req := ManualReportRideRequest{
 			CaseID:          uuid.New(),
-			ServiceDate:     "2026/08/24",
+			ServiceDate:     "2026/13/24",
 			LegSeq:          1,
 			EffectiveStatus: "boarded",
 		}

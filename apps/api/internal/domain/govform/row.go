@@ -2,6 +2,7 @@ package govform
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"ltc-system/apps/api/internal/domain/rocdate"
@@ -42,6 +43,49 @@ type ClaimRow struct {
 
 // BuildClaimRow 依據規格書 7.3 與 7.4 將業務實體轉換為精確型別的 33 欄資料。
 func BuildClaimRow(input ClaimRowInput) (ClaimRow, error) {
+	if strings.TrimSpace(input.NationalIDPlain) == "" {
+		return ClaimRow{}, fmt.Errorf("national id is required")
+	}
+	if input.ServiceDate.IsZero() {
+		return ClaimRow{}, fmt.Errorf("service date is required")
+	}
+	if strings.TrimSpace(input.ServiceCode) == "" {
+		return ClaimRow{}, fmt.Errorf("service code is required")
+	}
+	if input.ServiceCategory != 1 && input.ServiceCategory != 2 {
+		return ClaimRow{}, fmt.Errorf("service category must be 1 or 2")
+	}
+	if input.UnitPrice <= 0 {
+		return ClaimRow{}, fmt.Errorf("unit price must be greater than zero")
+	}
+	if strings.TrimSpace(input.DriverNationalID) == "" {
+		return ClaimRow{}, fmt.Errorf("driver national id is required")
+	}
+	if input.DepartTime.IsZero() || input.DepartTime.Year() != input.ServiceDate.Year() || input.DepartTime.YearDay() != input.ServiceDate.YearDay() {
+		return ClaimRow{}, fmt.Errorf("departure date must match service date")
+	}
+	if input.DurationMin <= 0 {
+		return ClaimRow{}, fmt.Errorf("duration must be greater than zero")
+	}
+	if input.Direction != "outbound" && input.Direction != "inbound" {
+		return ClaimRow{}, fmt.Errorf("direction is invalid")
+	}
+	if input.LegSeq < 1 || input.LegSeq > 4 {
+		return ClaimRow{}, fmt.Errorf("leg sequence is invalid")
+	}
+	if strings.TrimSpace(input.HomeAddress) == "" || strings.TrimSpace(input.SiteAddress) == "" {
+		return ClaimRow{}, fmt.Errorf("addresses are required")
+	}
+	if input.DistanceKM <= 0 {
+		return ClaimRow{}, fmt.Errorf("distance must be greater than zero")
+	}
+	if strings.TrimSpace(input.PlateNo) == "" {
+		return ClaimRow{}, fmt.Errorf("plate number is required")
+	}
+	if input.ServiceUsageType < 1 || input.ServiceUsageType > 4 {
+		return ClaimRow{}, fmt.Errorf("service usage type is invalid")
+	}
+
 	var row ClaimRow
 	row.ServiceDate = input.ServiceDate
 	row.Direction = input.Direction
@@ -84,11 +128,7 @@ func BuildClaimRow(input ClaimRowInput) (ClaimRow, error) {
 	row.Cells[8] = depMin
 
 	// 10, 11. 結束時段 (數值，經 timeslot 跨小時進位運算)
-	duration := input.DurationMin
-	if duration <= 0 {
-		duration = 10
-	}
-	endHour, endMin, err := timeslot.EndTime(input.DepartTime, duration)
+	endHour, endMin, err := timeslot.EndTime(input.DepartTime, input.DurationMin)
 	if err != nil {
 		return row, fmt.Errorf("failed to calculate end time: %w", err)
 	}

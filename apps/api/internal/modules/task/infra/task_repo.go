@@ -22,7 +22,7 @@ func NewTaskRepository(db *pgxpool.Pool) *TaskRepository {
 // GetReportedRideSlotsInRange 查詢區間內已回報且非未回報狀態之趟次清單。
 func (r *TaskRepository) GetReportedRideSlotsInRange(ctx context.Context, start, end time.Time) ([]app.ReportedRideSlotOnDate, error) {
 	if r.db == nil {
-		return []app.ReportedRideSlotOnDate{}, nil
+		return nil, fmt.Errorf("task database is not configured")
 	}
 
 	query := `
@@ -44,6 +44,9 @@ func (r *TaskRepository) GetReportedRideSlotsInRange(ctx context.Context, start,
 		}
 		list = append(list, slot)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate reported rides: %w", err)
+	}
 	return list, nil
 }
 
@@ -51,7 +54,7 @@ func (r *TaskRepository) GetReportedRideSlotsInRange(ctx context.Context, start,
 func (r *TaskRepository) GetMonthEndRideStats(ctx context.Context, start, end time.Time) (app.MonthEndRideStats, error) {
 	var stats app.MonthEndRideStats
 	if r.db == nil {
-		return stats, nil
+		return stats, fmt.Errorf("task database is not configured")
 	}
 
 	query := `
