@@ -126,13 +126,18 @@ func (r *VehicleRepository) List(ctx context.Context, filter app.VehicleFilter, 
 		}
 		list = append(list, v.toApp())
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate vehicles: %w", err)
+	}
 
 	var total int64
 	countQuery := `
 		SELECT COUNT(*) FROM vehicles v
 		LEFT JOIN sites s ON s.id = v.site_id
 	` + vehicleFilterSQL
-	_ = r.db.QueryRow(ctx, countQuery, filter.SiteID, filter.Region, filter.Q, filter.Status).Scan(&total)
+	if err := r.db.QueryRow(ctx, countQuery, filter.SiteID, filter.Region, filter.Q, filter.Status).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count vehicles: %w", err)
+	}
 
 	return list, total, nil
 }

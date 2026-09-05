@@ -75,6 +75,9 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 		}
 		sites = append(sites, s.toApp())
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate sites: %w", err)
+	}
 
 	var total int64
 	countQuery := `
@@ -83,7 +86,9 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR address ILIKE '%' || $2 || '%')
 		  AND ($3 = '' OR status = $3)
 	`
-	_ = r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total)
+	if err := r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count sites: %w", err)
+	}
 
 	return sites, total, nil
 }

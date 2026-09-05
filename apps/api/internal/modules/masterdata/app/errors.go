@@ -5,6 +5,10 @@ import "errors"
 var (
 	// ErrDriverNotFound 代表查無司機資料。
 	ErrDriverNotFound = errors.New("driver not found")
+	// ErrNationalIDNotConfigured 代表資料尚未設定身分證密文。
+	ErrNationalIDNotConfigured = errors.New("national id is not configured")
+	// ErrRevealAuditUnavailable 代表高風險個資揭露無法留下稽核紀錄。
+	ErrRevealAuditUnavailable = errors.New("reveal audit is unavailable")
 	// ErrInvalidDriverNationalID 代表司機身分證檢查碼錯誤。
 	ErrInvalidDriverNationalID = errors.New("invalid driver national id format")
 	// ErrInvalidDriverLicenseClass 代表駕照類別不在允許的代碼清單內。

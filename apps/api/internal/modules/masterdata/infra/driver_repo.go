@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
 	"ltc-system/apps/api/internal/platform/pgxdb"
@@ -114,6 +115,38 @@ func (r *DriverRepository) List(ctx context.Context, region, q, status string, p
 	return list, total, nil
 }
 
+// ListAllActive 取得所有未刪除且啟用的司機，供完整業務資料集使用。
+func (r *DriverRepository) ListAllActive(ctx context.Context) ([]app.Driver, error) {
+	if r.db == nil {
+		return []app.Driver{}, nil
+	}
+	query := `
+		SELECT ` + driverColumns + `
+		FROM drivers
+		WHERE deleted_at IS NULL
+		  AND status = 'active'
+		ORDER BY name ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all active drivers: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]app.Driver, 0)
+	for rows.Next() {
+		var d driverRow
+		if err := rows.Scan(d.scanTargets()...); err != nil {
+			return nil, fmt.Errorf("scan active driver: %w", err)
+		}
+		list = append(list, d.toApp())
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate active drivers: %w", err)
+	}
+	return list, nil
+}
+
 // GetByID 依 UUID 取得司機。
 func (r *DriverRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Driver, error) {
 	return r.getOne(ctx, `SELECT `+driverColumns+` FROM drivers WHERE id = $1 AND deleted_at IS NULL`, id)
@@ -132,6 +165,9 @@ func (r *DriverRepository) GetByNameNormalized(ctx context.Context, nameNorm str
 func (r *DriverRepository) getOne(ctx context.Context, query string, args ...interface{}) (*app.Driver, error) {
 	var d driverRow
 	if err := r.db.QueryRow(ctx, query, args...).Scan(d.scanTargets()...); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, app.ErrDriverNotFound
+		}
 		return nil, err
 	}
 	driver := d.toApp()

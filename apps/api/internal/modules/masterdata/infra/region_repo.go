@@ -77,6 +77,9 @@ func (r *RegionRepository) List(ctx context.Context, q, status string, page, pag
 		}
 		regions = append(regions, reg.toApp())
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate regions: %w", err)
+	}
 
 	var total int64
 	countQuery := `
@@ -84,7 +87,9 @@ func (r *RegionRepository) List(ctx context.Context, q, status string, page, pag
 		WHERE ($1 = '' OR name ILIKE '%' || $1 || '%' OR description ILIKE '%' || $1 || '%')
 		  AND ($2 = '' OR status = $2)
 	`
-	_ = r.db.QueryRow(ctx, countQuery, q, status).Scan(&total)
+	if err := r.db.QueryRow(ctx, countQuery, q, status).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count regions: %w", err)
+	}
 
 	return regions, total, nil
 }
@@ -107,6 +112,9 @@ func (r *RegionRepository) ListAll(ctx context.Context) ([]app.Region, error) {
 			return nil, err
 		}
 		regions = append(regions, reg.toApp())
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate all regions: %w", err)
 	}
 	return regions, nil
 }

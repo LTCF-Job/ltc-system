@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -117,7 +118,10 @@ type UpdateDriverInput struct {
 func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDriverInput) (*Driver, error) {
 	existing, err := s.store.GetByID(ctx, id)
 	if err != nil {
-		return nil, ErrDriverNotFound
+		if errors.Is(err, ErrDriverNotFound) {
+			return nil, ErrDriverNotFound
+		}
+		return nil, fmt.Errorf("failed to get driver: %w", err)
 	}
 
 	if in.Name != nil {
@@ -153,11 +157,35 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 	return existing, nil
 }
 
-// Reveal 解密司機身分證明碼。呼叫端負責寫入稽核紀錄。
-func (s *DriverService) Reveal(ctx context.Context, id uuid.UUID) (string, error) {
+// Reveal 解密司機身分證明碼；高風險揭露必須先成功寫入稽核紀錄。
+func (s *DriverService) Reveal(ctx context.Context, id, actorID uuid.UUID, actorRole, ip, ua string) (string, error) {
 	d, err := s.store.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, ErrDriverNotFound) {
+			return "", ErrDriverNotFound
+		}
+		return "", fmt.Errorf("failed to get driver: %w", err)
+	}
+	if d == nil {
 		return "", ErrDriverNotFound
+	}
+	if len(d.NationalIDCipher) == 0 {
+		return "", ErrNationalIDNotConfigured
+	}
+	if s.auditRepo == nil {
+		return "", ErrRevealAuditUnavailable
+	}
+	entityIDStr := id.String()
+	if err := s.auditRepo.Write(ctx, AuditEntry{
+		ActorID:    &actorID,
+		ActorRole:  &actorRole,
+		Action:     "reveal_pii",
+		EntityType: "drivers",
+		EntityID:   &entityIDStr,
+		IPAddress:  &ip,
+		UserAgent:  &ua,
+	}); err != nil {
+		return "", fmt.Errorf("%w: %v", ErrRevealAuditUnavailable, err)
 	}
 	return crypto.Decrypt(d.NationalIDCipher, s.cfg.EncryptionKey)
 }

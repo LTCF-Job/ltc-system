@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -58,7 +57,7 @@ func (f *fakeDriverStore) List(ctx context.Context, region, q, status string, pa
 func (f *fakeDriverStore) GetByID(ctx context.Context, id uuid.UUID) (*Driver, error) {
 	d, ok := f.byID[id]
 	if !ok {
-		return nil, errors.New("not found")
+		return nil, ErrDriverNotFound
 	}
 	return d, nil
 }
@@ -308,19 +307,33 @@ func TestDriverService_Update(t *testing.T) {
 func TestDriverService_Reveal(t *testing.T) {
 	cfg := testConfig()
 	store := newFakeDriverStore()
-	svc := NewDriverService(store, cfg, nil)
+	audit := &fakeMasterAuditWriter{}
+	svc := NewDriverService(store, cfg, audit)
 
 	cipher, err := crypto.Encrypt("A123456789", cfg.EncryptionKey)
 	assert.NoError(t, err)
 	id := uuid.New()
 	store.byID[id] = &Driver{ID: id, NationalIDCipher: cipher}
 
-	plain, err := svc.Reveal(context.Background(), id)
+	plain, err := svc.Reveal(context.Background(), id, uuid.New(), "admin", "127.0.0.1", "test-agent")
 	assert.NoError(t, err)
 	assert.Equal(t, "A123456789", plain)
+	assert.Len(t, audit.entries, 1)
+	assert.Equal(t, "reveal_pii", audit.entries[0].Action)
 
-	_, err = svc.Reveal(context.Background(), uuid.New())
+	_, err = svc.Reveal(context.Background(), uuid.New(), uuid.New(), "admin", "", "")
 	assert.ErrorIs(t, err, ErrDriverNotFound)
+}
+
+func TestDriverService_RevealRejectsMissingCipher(t *testing.T) {
+	store := newFakeDriverStore()
+	id := uuid.New()
+	store.byID[id] = &Driver{ID: id, Name: "無身分證司機"}
+	svc := NewDriverService(store, testConfig(), nil)
+
+	_, err := svc.Reveal(context.Background(), id, uuid.New(), "admin", "", "")
+
+	assert.ErrorIs(t, err, ErrNationalIDNotConfigured)
 }
 
 func TestDriverService_AssignVehicle(t *testing.T) {
