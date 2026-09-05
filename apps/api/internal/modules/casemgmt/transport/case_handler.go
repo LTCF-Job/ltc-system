@@ -327,13 +327,19 @@ func (h *CaseHandler) GetSchedule(c *gin.Context) {
 
 // SaveSchedule 儲存/更新個案排班。
 func (h *CaseHandler) SaveSchedule(c *gin.Context) {
-	var req CreateScheduleRequest
+	caseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的個案 ID", nil)
+		return
+	}
+
+	var req SaveScheduleRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req.ToService())
+	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req.ToService(caseID))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return

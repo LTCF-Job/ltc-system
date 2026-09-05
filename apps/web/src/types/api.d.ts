@@ -236,7 +236,7 @@ export interface UpdateCaseTransportPreferenceRequest {
 
 export interface UpdateCaseRequest extends Partial<CreateCaseRequest> { }
 
-export interface CreateScheduleRequest {
+export interface SaveScheduleRequest {
   siteId: string
   effectiveFrom: string
   effectiveTo?: string

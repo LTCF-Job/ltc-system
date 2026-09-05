@@ -73,17 +73,54 @@ type CreateScheduleLegItemRequest struct {
 	VehicleID  *uuid.UUID `json:"vehicleId"`
 }
 
-// ToService 轉換為 service 層的建立排班輸入。
-func (r CreateScheduleRequest) ToService() app.CreateScheduleRequest {
-	legs := make([]app.CreateScheduleLegItemRequest, len(r.Legs))
-	for i, l := range r.Legs {
-		legs[i] = app.CreateScheduleLegItemRequest{
+// SaveScheduleRequest 代表依個案路徑參數儲存排班設定之請求參數。
+type SaveScheduleRequest struct {
+	SiteID             uuid.UUID                      `json:"siteId" binding:"required"`
+	EffectiveFrom      time.Time                      `json:"effectiveFrom" binding:"required"`
+	EffectiveTo        *time.Time                     `json:"effectiveTo"`
+	Weekdays           []int16                        `json:"weekdays" binding:"required"`
+	TripPattern        int16                          `json:"tripPattern" binding:"required"`
+	UnitPrice          float64                        `json:"unitPrice" binding:"required"`
+	DistanceKM         float64                        `json:"distanceKm" binding:"required"`
+	ServiceDurationMin int16                          `json:"serviceDurationMin" binding:"required"`
+	ServiceCode        string                         `json:"serviceCode" binding:"required"`
+	Note               *string                        `json:"note"`
+	Legs               []CreateScheduleLegItemRequest `json:"legs" binding:"required"`
+}
+
+// ToService 以 URL 的個案 ID 組成 service 層的儲存排班輸入。
+func (r SaveScheduleRequest) ToService(caseID uuid.UUID) app.CreateScheduleRequest {
+	return app.CreateScheduleRequest{
+		CaseID:             caseID,
+		SiteID:             r.SiteID,
+		EffectiveFrom:      r.EffectiveFrom,
+		EffectiveTo:        r.EffectiveTo,
+		Weekdays:           r.Weekdays,
+		TripPattern:        r.TripPattern,
+		UnitPrice:          r.UnitPrice,
+		DistanceKM:         r.DistanceKM,
+		ServiceDurationMin: r.ServiceDurationMin,
+		ServiceCode:        r.ServiceCode,
+		Note:               r.Note,
+		Legs:               toServiceScheduleLegs(r.Legs),
+	}
+}
+
+func toServiceScheduleLegs(legs []CreateScheduleLegItemRequest) []app.CreateScheduleLegItemRequest {
+	result := make([]app.CreateScheduleLegItemRequest, len(legs))
+	for i, l := range legs {
+		result[i] = app.CreateScheduleLegItemRequest{
 			LegSeq:     l.LegSeq,
 			Direction:  l.Direction,
 			DepartTime: l.DepartTime,
 			VehicleID:  l.VehicleID,
 		}
 	}
+	return result
+}
+
+// ToService 轉換為 service 層的建立排班輸入。
+func (r CreateScheduleRequest) ToService() app.CreateScheduleRequest {
 	return app.CreateScheduleRequest{
 		CaseID:             r.CaseID,
 		SiteID:             r.SiteID,
@@ -96,7 +133,7 @@ func (r CreateScheduleRequest) ToService() app.CreateScheduleRequest {
 		ServiceDurationMin: r.ServiceDurationMin,
 		ServiceCode:        r.ServiceCode,
 		Note:               r.Note,
-		Legs:               legs,
+		Legs:               toServiceScheduleLegs(r.Legs),
 	}
 }
 

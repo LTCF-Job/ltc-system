@@ -518,6 +518,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
+import dayjs from 'dayjs'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { Calendar, SetUp, RefreshRight, CircleClose } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -526,7 +527,7 @@ import { saveCaseSchedule } from '@/api/cases'
 import { listHolidays } from '@/api/holidays'
 import type {
   CaseScheduleDTO,
-  CreateScheduleRequest,
+  SaveScheduleRequest,
   SiteDTO,
   VehicleDTO,
   ScheduleMode,
@@ -567,9 +568,9 @@ const weekdayConfigs = reactive([
 
 const monthlyConfigs = reactive<Record<string, DayScheduleConfig>>({})
 
-const formData = reactive<CreateScheduleRequest>({
+const formData = reactive<SaveScheduleRequest>({
   siteId: '',
-  effectiveFrom: new Date().toISOString().split('T')[0],
+  effectiveFrom: dayjs().format('YYYY-MM-DD'),
   tripPattern: 2,
   weekdays: [1, 2, 3, 4, 5],
   unitPrice: 115,
@@ -816,7 +817,7 @@ watch(
     if (s) {
       scheduleMode.value = s.scheduleMode || 'monthly'
       formData.siteId = s.siteId
-      formData.effectiveFrom = s.effectiveFrom || new Date().toISOString().split('T')[0]
+      formData.effectiveFrom = s.effectiveFrom || dayjs().format('YYYY-MM-DD')
       formData.tripPattern = s.tripPattern || 2
       // 既有排班從 API 載入，欄位缺漏時保持未填，不得用猜測值頂替申報單價、里程與時長
       formData.weekdays = s.weekdays ? [...s.weekdays] : []
@@ -945,18 +946,6 @@ async function handleSave() {
       formData.weekdays = activeWeekdays.length > 0 ? activeWeekdays : [1, 2, 3, 4, 5]
     }
   }
-
-  // 2. 附加三層級完整設定
-  formData.scheduleMode = scheduleMode.value
-  formData.weeklyConfigs = weekdayConfigs.map((cfg) => ({
-    weekday: cfg.weekday,
-    label: cfg.label,
-    tripCount: cfg.tripCount,
-    departTime: cfg.departTime,
-    returnTime: cfg.returnTime,
-    vehicleId: cfg.vehicleId
-  }))
-  formData.monthlyConfigs = { ...monthlyConfigs }
 
   await formRef.value.validate(async (valid) => {
     if (!valid) return

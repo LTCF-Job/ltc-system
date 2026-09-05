@@ -6,7 +6,7 @@ import type {
   UpdateCaseRequest,
   UpdateCaseTransportPreferenceRequest,
   CaseScheduleDTO,
-  CreateScheduleRequest,
+  SaveScheduleRequest,
   DryRunImportResultDTO,
   CaseImportCommitResult
 } from '@/types/api'
@@ -102,7 +102,7 @@ export async function getCaseSchedule(caseId: string): Promise<CaseScheduleDTO |
   return res?.data ?? res ?? null
 }
 
-export async function saveCaseSchedule(caseId: string, data: CreateScheduleRequest): Promise<CaseScheduleDTO> {
+export async function saveCaseSchedule(caseId: string, data: SaveScheduleRequest): Promise<CaseScheduleDTO> {
   const res: any = await apiClient.put(`/cases/${caseId}/schedule`, data)
   return res?.data ?? res
 }
