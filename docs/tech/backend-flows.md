@@ -124,8 +124,8 @@ merge.MergeRideSources（同車取最新、跨車 OR）
    - `GovClaimRepository.QueryGovClaimSources` 一次撈齊該月 `effective_status = 'boarded'` 且沒有未裁決衝突的趟次，join `cases`／`case_schedules`／`schedule_legs`／`sites`／`vehicles`／`drivers`。
    - 逐筆驗證後呼叫 `domain/govform.BuildClaimRow` 組出 33 欄，再用 `SortClaimRows` 排成「leg1 整月 → leg2 整月」。缺排班趟次、缺司機、缺出發時間等資料的趟次計入 `skipped` 並回報，不套用預設值硬湊。
    - `ExcelRenderer.RenderGovClaim` 產出每個個案的工作簿位元組；壓縮檔模式再由 `ZipArchiver.BuildZip` 打包。
-   - 單一交易寫入 `export_lines`（申報列快照）、`export_job_files`（逐案檔案中繼資料）與 `export_jobs` 狀態。
-4. 下載時不從物件儲存讀檔（專案沒有 storage adapter），改由 `export_lines.raw_payload` 快照重繪。快照的第 1 欄與第 7 欄（個案／服務人員身分證）一律留空，只存 `driverId`，重繪時才由密文解密補回，明文身分證不落資料庫。
+   - 單一交易寫入 `export_lines`（申報列快照）、`export_job_files`（逐案檔案中繼資料）與 `export_jobs` 狀態；原始 XLSX 同步寫入 private Supabase Storage 的 `exports/{jobId}/{fileName}`，資料庫只保存 object path、checksum 與大小。
+4. 下載時優先從 private object storage 讀取匯出成功當下的完整 XLSX，API 驗證權限後才代為轉送，禁止前端取得 service-role key。舊資料若沒有 object path，才由 `export_lines.raw_payload` 快照重繪；快照的第 1 欄與第 7 欄（個案／服務人員身分證）一律留空，只存 `driverId`，重繪時才由密文解密補回，明文身分證不落資料庫。
 5. `GET /exports/:id/files/:caseId/download` 取單一個案的 `.xlsx`；`GET /exports/:id/download` 只服務壓縮檔模式的工作。歷史紀錄頁不提供下載，只能用 `GET /exports/:id` 查看該次匯出包含哪些個案。
 
 ```
@@ -137,9 +137,10 @@ GET/POST /exports/precheck ──未通過──► 前端列出 issue，回去�
    ▼
 POST /exports（同步產檔）
    │  QueryGovClaimSources → BuildClaimRow → SortClaimRows → RenderGovClaim（→ BuildZip）
+   │  Upload private exports/{jobId}/{fileName}
    │  單一交易寫入 export_lines + export_job_files + export_jobs
    ▼
-逐案下載 GET /exports/:id/files/:caseId/download（由快照重繪）
+逐案下載 GET /exports/:id/files/:caseId/download（讀 private object；舊資料才由快照重繪）
 或整包下載 GET /exports/:id/download（僅壓縮檔模式）
 ```
 
