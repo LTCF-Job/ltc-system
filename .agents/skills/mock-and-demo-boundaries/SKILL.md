@@ -7,6 +7,13 @@ description: Use when adding, reviewing, or reorganizing mock data, demo fallbac
 
 Keep development and test conveniences explicit, isolated, and faithful to the real contract. This skill applies across frontend and backend code.
 
+## Project rules
+
+- Demo login、seed、fixture 與 offline mode 必須有明確啟用條件、獨立 data plane 與可重置生命週期；正式流程沿用正式 API／Auth contract。
+- 正式 API、repository 或 provider 發生錯誤時保留錯誤結果；假資料只在明確啟用的 demo boundary 內產生。
+- 未命中的 `/api/v1/*` mock request 直接暴露錯誤；靜態 asset 與非 API request 維持原本處理路徑。
+- Stateful mock 的 reset、seed、fixture version 與每次測試的初始狀態可重現；mock response 與實際 HTTP status、envelope、欄位名稱及錯誤 payload 一致。
+
 ## Classify the data first
 
 - `mock`: a controlled replacement for an external dependency during a test or local development run.

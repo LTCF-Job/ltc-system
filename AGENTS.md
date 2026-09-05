@@ -10,6 +10,13 @@
 
 先依任務讀取對應的完整 `SKILL.md`：
 
+- 所有開發、修正、重構或測試工作：先讀 `.agents/skills/development-guidelines/SKILL.md`，再依實際範圍讀專項規範。
+- API endpoint、route、DTO、request／response、API client、query parameter 或 error mapping：讀 `.agents/skills/api-contract-guidelines/SKILL.md`。
+- 資料寫入、transaction、刪除、稽核、stale protection 或併發處理：讀 `.agents/skills/mutation-guidelines/SKILL.md`。
+- JWT、登入、actor、角色、權限矩陣、權限 cache 或使用者管理：讀 `.agents/skills/auth-permission-guidelines/SKILL.md`。
+- migration、schema、index、constraint、seed 或資料庫版本：讀 `.agents/skills/migration-guidelines/SKILL.md`。
+- CI/CD、Docker、Vercel、Cloud Run、環境變數、secret 或部署檢查：讀 `.agents/skills/deployment-guidelines/SKILL.md`。
+- 業務日期、民國日期、時區、排班、搭乘、假日、狀態、合併或 UUID array filter：讀 `.agents/skills/domain-data-guidelines/SKILL.md`。
 - 後端架構、Go 分層、use case、repository、SQL 或 adapter：讀 `.agents/skills/backend-architecture/SKILL.md`。
 - Go backend 程式碼風格、錯誤處理、pgx、transaction、API response 或 dependency wiring：讀 `.agents/skills/go-backend-code-style/SKILL.md`。
 - Go unit test、table-driven test、domain rule、parser 或 service test：讀 `.agents/skills/golang-unit-testing/SKILL.md`。

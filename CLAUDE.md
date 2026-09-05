@@ -12,6 +12,13 @@
 
 適用範圍如下：
 
+- 所有開發、修正、重構或測試工作：`.agents/skills/development-guidelines/SKILL.md`
+- API endpoint、route、DTO、request／response、API client 或 error mapping：`.agents/skills/api-contract-guidelines/SKILL.md`
+- 資料寫入、transaction、刪除、稽核、stale protection 或併發處理：`.agents/skills/mutation-guidelines/SKILL.md`
+- JWT、登入、actor、角色、權限矩陣、權限 cache 或使用者管理：`.agents/skills/auth-permission-guidelines/SKILL.md`
+- migration、schema、index、constraint、seed 或資料庫版本：`.agents/skills/migration-guidelines/SKILL.md`
+- CI/CD、Docker、Vercel、Cloud Run、環境變數、secret 或部署檢查：`.agents/skills/deployment-guidelines/SKILL.md`
+- 業務日期、民國日期、時區、排班、搭乘、假日、狀態、合併或 UUID array filter：`.agents/skills/domain-data-guidelines/SKILL.md`
 - Go backend：`.agents/skills/backend-architecture/SKILL.md`
 - Go backend code style：`.agents/skills/go-backend-code-style/SKILL.md`
 - Go unit testing：`.agents/skills/golang-unit-testing/SKILL.md`
