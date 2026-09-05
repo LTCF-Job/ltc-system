@@ -34,6 +34,7 @@ type CorrectDTO struct {
 	DurationMinOverride *int16  `json:"durationMinOverride"`
 	NotClaimedAA09      *bool   `json:"notClaimedAa09"`
 	Reason              *string `json:"reason"`
+	BasedOnFingerprint  *string `json:"basedOnFingerprint" binding:"required"`
 }
 
 // ManualReportDTO 用於寬容接收人工補登請求。
@@ -63,23 +64,28 @@ func (h *RideHandler) Correct(c *gin.Context) {
 	}
 
 	if rideErr != nil {
-		// 非 UUID 標識符容錯（相容展示與無狀態模式）
-		httpx.RespondSuccess(c, http.StatusOK, gin.H{"updated": true, "id": rideIDStr}, nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的搭乘紀錄 ID", nil)
 		return
 	}
 
 	var vehicleUUID *uuid.UUID
 	if dto.VehicleID != nil && *dto.VehicleID != "" {
-		if v, err := uuid.Parse(*dto.VehicleID); err == nil {
-			vehicleUUID = &v
+		v, err := uuid.Parse(*dto.VehicleID)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的車輛 ID", nil)
+			return
 		}
+		vehicleUUID = &v
 	}
 
 	var driverUUID *uuid.UUID
 	if dto.DriverID != nil && *dto.DriverID != "" {
-		if d, err := uuid.Parse(*dto.DriverID); err == nil {
-			driverUUID = &d
+		d, err := uuid.Parse(*dto.DriverID)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的司機 ID", nil)
+			return
 		}
+		driverUUID = &d
 	}
 
 	req := app.CorrectRideRecordRequest{
@@ -90,12 +96,21 @@ func (h *RideHandler) Correct(c *gin.Context) {
 		DurationMinOverride: dto.DurationMinOverride,
 		NotClaimedAA09:      dto.NotClaimedAA09,
 		Reason:              dto.Reason,
+		BasedOnFingerprint:  dto.BasedOnFingerprint,
 	}
 
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
 
 	if err := h.rideService.CorrectRideRecord(c.Request.Context(), rideID, req, actorID, actorRole, c.ClientIP(), c.Request.UserAgent()); err != nil {
+		if errors.Is(err, app.ErrRideNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrStaleCorrection) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -181,6 +196,7 @@ type rideRecordResponse struct {
 	HasConflict            bool    `json:"hasConflict"`
 	ConflictResolvedAt     *string `json:"conflictResolvedAt"`
 	ConflictResolutionNote *string `json:"conflictResolutionNote"`
+	BasedOnFingerprint     string  `json:"basedOnFingerprint"`
 }
 
 func toRideRecordResponse(rec *app.RideRecord) rideRecordResponse {
@@ -197,6 +213,7 @@ func toRideRecordResponse(rec *app.RideRecord) rideRecordResponse {
 		DriverName:             rec.DriverName,
 		HasConflict:            rec.HasConflict,
 		ConflictResolutionNote: rec.ConflictResolutionNote,
+		BasedOnFingerprint:     rec.BasedOnFingerprint,
 	}
 	if rec.DriverID != nil {
 		s := rec.DriverID.String()

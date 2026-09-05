@@ -11,25 +11,31 @@
         <template #header>
           <div class="card-header">
             <span>司機原始表單回報來源</span>
-            <el-tag
-              :type="record.hasConflict ? 'danger' : 'info'"
-              size="small"
-            >
-              {{ record.hasConflict ? '發現混車衝突' : `${record.sources?.length || 0} 筆回報來源` }}
+            <el-tag :type="record.hasConflict ? 'danger' : 'info'" size="small">
+              {{
+                record.hasConflict
+                  ? "發現混車衝突"
+                  : `${record.sources?.length || 0} 筆回報來源`
+              }}
             </el-tag>
           </div>
         </template>
 
-        <div v-if="record.sources && record.sources.length > 0" class="sources-list">
+        <div
+          v-if="record.sources && record.sources.length > 0"
+          class="sources-list"
+        >
           <div v-for="src in record.sources" :key="src.id" class="source-item">
             <div class="source-main">
-              <span class="vehicle-name">{{ src.vehicleName || '車輛' }}</span>
-              <span class="driver-name">司機：{{ src.driverName || '未指定' }}</span>
+              <span class="vehicle-name">{{ src.vehicleName || "車輛" }}</span>
+              <span class="driver-name"
+                >司機：{{ src.driverName || "未指定" }}</span
+              >
               <el-tag
                 size="small"
                 :type="src.reported === 'boarded' ? 'success' : 'info'"
               >
-                {{ src.reported === 'boarded' ? '有坐' : '沒坐' }}
+                {{ src.reported === "boarded" ? "有坐" : "沒坐" }}
               </el-tag>
             </div>
             <div class="source-sub">
@@ -126,9 +132,18 @@
               :disabled="isAbsent || !canEdit"
               style="width: 100%"
             />
-            <div class="field-hint" v-if="!isAbsent && record.scheduledDepartTime">
+            <div
+              class="field-hint"
+              v-if="!isAbsent && record.scheduledDepartTime"
+            >
               排班設定原值：{{ record.scheduledDepartTime }}
-              <span v-if="form.departTimeOverride && form.departTimeOverride !== record.scheduledDepartTime" class="diff-tag">
+              <span
+                v-if="
+                  form.departTimeOverride &&
+                  form.departTimeOverride !== record.scheduledDepartTime
+                "
+                class="diff-tag"
+              >
                 (已更動)
               </span>
             </div>
@@ -143,7 +158,10 @@
               :disabled="isAbsent || !canEdit"
               style="width: 100%"
             />
-            <div class="field-hint" v-if="!isAbsent && record.scheduledDurationMin">
+            <div
+              class="field-hint"
+              v-if="!isAbsent && record.scheduledDurationMin"
+            >
               排班設定原值：{{ record.scheduledDurationMin }} 分鐘
             </div>
           </el-form-item>
@@ -173,7 +191,7 @@
               type="textarea"
               :rows="2"
               placeholder="可自訂填寫更正原因或留空"
-              style="margin-top: 6px;"
+              style="margin-top: 6px"
             />
           </el-form-item>
         </el-form>
@@ -181,8 +199,11 @@
 
       <!-- 歷次更正稽核資訊 -->
       <div v-if="record.correctedAt" class="audit-hint">
-        最後更正者：{{ record.correctedByName || '承辦人員' }} 於 {{ formatDateTime(record.correctedAt) }}
-        <span v-if="record.correctionReason">（原因：{{ record.correctionReason }}）</span>
+        最後更正者：{{ record.correctedByName || "承辦人員" }} 於
+        {{ formatDateTime(record.correctedAt) }}
+        <span v-if="record.correctionReason"
+          >（原因：{{ record.correctionReason }}）</span
+        >
       </div>
     </div>
 
@@ -198,167 +219,202 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { patchRideRecord } from '@/api/rides'
-import DialogFooter from '@/components/DialogFooter.vue'
-import { listAllVehicles, listAllDrivers } from '@/api/masters'
-import { useAuthStore } from '@/stores/auth'
-import { formatDateTime } from '@/utils/formatters'
-import { CORRECTION_REASONS } from '@/types/domain'
-import type { RideRecordDTO, VehicleDTO, DriverDTO, PatchRideRequest } from '@/types/api'
+import { ref, reactive, computed, watch } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { patchRideRecord } from "@/api/rides";
+import DialogFooter from "@/components/DialogFooter.vue";
+import { listAllVehicles, listAllDrivers } from "@/api/masters";
+import { useAuthStore } from "@/stores/auth";
+import { formatDateTime } from "@/utils/formatters";
+import { CORRECTION_REASONS } from "@/types/domain";
+import type {
+  RideRecordDTO,
+  VehicleDTO,
+  DriverDTO,
+  PatchRideRequest,
+} from "@/types/api";
 
 const emit = defineEmits<{
-  (e: 'updated'): void
-}>()
+  (e: "updated"): void;
+}>();
 
-const authStore = useAuthStore()
-const visible = ref(false)
-const submitting = ref(false)
-const record = ref<RideRecordDTO | null>(null)
-const vehicles = ref<VehicleDTO[]>([])
-const drivers = ref<DriverDTO[]>([])
-const masterDataError = ref(false)
+const authStore = useAuthStore();
+const visible = ref(false);
+const submitting = ref(false);
+const record = ref<RideRecordDTO | null>(null);
+const vehicles = ref<VehicleDTO[]>([]);
+const drivers = ref<DriverDTO[]>([]);
+const masterDataError = ref(false);
 
 async function loadMasterData() {
-  masterDataError.value = false
+  masterDataError.value = false;
   try {
     const [vRes, dRes] = await Promise.all([
-      listAllVehicles({ status: 'active' }),
-      listAllDrivers({ status: 'active' })
-    ])
-    vehicles.value = (vRes as any)?.data || vRes || []
-    drivers.value = (dRes as any)?.data || dRes || []
+      listAllVehicles({ status: "active" }),
+      listAllDrivers({ status: "active" }),
+    ]);
+    vehicles.value = (vRes as any)?.data || vRes || [];
+    drivers.value = (dRes as any)?.data || dRes || [];
   } catch {
     // 全域攔截器已彈出錯誤訊息；這裡另外標記狀態，讓下拉選單旁能顯示可重試的空清單原因
-    masterDataError.value = true
+    masterDataError.value = true;
   }
 }
 
 const canEdit = computed(() => {
   // 對應後端 PATCH /rides/:id 實際檢查的 rides_issues:edit
-  return authStore.hasPermission('rides_issues', 'edit')
-})
+  return authStore.hasPermission("rides_issues", "edit");
+});
 
 const form = reactive<PatchRideRequest>({
-  effectiveStatus: 'boarded',
-  vehicleId: '',
-  driverId: '',
+  effectiveStatus: "boarded",
+  vehicleId: "",
+  driverId: "",
   departTimeOverride: null,
   durationMinOverride: null,
   notClaimedAa09: false,
-  reason: ''
-})
+  reason: "",
+  basedOnFingerprint: "",
+});
 
 // 一台車可能有多位司機：選定車輛後只列該車的司機，並保留紀錄上原本的司機以免被藏起來
 const driverOptions = computed(() => {
-  const vehicle = vehicles.value.find((v) => v.id === form.vehicleId)
-  const assignedIds = (vehicle?.drivers || []).map((d) => d.id)
-  if (assignedIds.length === 0) return drivers.value
-  return drivers.value.filter((d) => assignedIds.includes(d.id) || d.id === record.value?.driverId)
-})
+  const vehicle = vehicles.value.find((v) => v.id === form.vehicleId);
+  const assignedIds = (vehicle?.drivers || []).map((d) => d.id);
+  if (assignedIds.length === 0) return drivers.value;
+  return drivers.value.filter(
+    (d) => assignedIds.includes(d.id) || d.id === record.value?.driverId,
+  );
+});
 
-watch(() => form.vehicleId, (vehicleId) => {
-  const switchedAway = vehicleId !== record.value?.vehicleId
-  if (switchedAway && form.driverId && !driverOptions.value.some((d) => d.id === form.driverId)) {
-    form.driverId = ''
-  }
-})
+watch(
+  () => form.vehicleId,
+  (vehicleId) => {
+    const switchedAway = vehicleId !== record.value?.vehicleId;
+    if (
+      switchedAway &&
+      form.driverId &&
+      !driverOptions.value.some((d) => d.id === form.driverId)
+    ) {
+      form.driverId = "";
+    }
+  },
+);
 
-const isAbsent = computed(() => form.effectiveStatus === 'absent')
+const isAbsent = computed(() => form.effectiveStatus === "absent");
 
 watch(
   () => form.effectiveStatus,
   (newStatus, oldStatus) => {
-    if (newStatus === 'absent') {
-      form.vehicleId = ''
-      form.driverId = ''
-      form.departTimeOverride = null
-      form.durationMinOverride = null
-      form.notClaimedAa09 = false
-    } else if (oldStatus === 'absent' && newStatus === 'boarded') {
+    if (newStatus === "absent") {
+      form.vehicleId = "";
+      form.driverId = "";
+      form.departTimeOverride = null;
+      form.durationMinOverride = null;
+      form.notClaimedAa09 = false;
+    } else if (oldStatus === "absent" && newStatus === "boarded") {
       if (!form.vehicleId && record.value?.vehicleId) {
-        form.vehicleId = record.value.vehicleId
+        form.vehicleId = record.value.vehicleId;
       }
       if (!form.driverId && record.value?.driverId) {
-        form.driverId = record.value.driverId
+        form.driverId = record.value.driverId;
       }
-      if (form.departTimeOverride === null && record.value?.departTimeOverride) {
-        form.departTimeOverride = record.value.departTimeOverride
+      if (
+        form.departTimeOverride === null &&
+        record.value?.departTimeOverride
+      ) {
+        form.departTimeOverride = record.value.departTimeOverride;
       }
-      if (form.durationMinOverride === null && record.value?.durationMinOverride) {
-        form.durationMinOverride = record.value.durationMinOverride
+      if (
+        form.durationMinOverride === null &&
+        record.value?.durationMinOverride
+      ) {
+        form.durationMinOverride = record.value.durationMinOverride;
       }
       if (record.value?.notClaimedAa09 !== undefined) {
-        form.notClaimedAa09 = record.value.notClaimedAa09
+        form.notClaimedAa09 = record.value.notClaimedAa09;
       }
     }
-  }
-)
+  },
+);
 
 async function open(rideRecord: RideRecordDTO) {
-  record.value = rideRecord
-  form.effectiveStatus = rideRecord.effectiveStatus
-  form.vehicleId = rideRecord.effectiveStatus === 'absent' ? '' : (rideRecord.vehicleId || '')
-  form.driverId = rideRecord.effectiveStatus === 'absent' ? '' : (rideRecord.driverId || '')
-  form.departTimeOverride = rideRecord.effectiveStatus === 'absent' ? null : (rideRecord.departTimeOverride || null)
-  form.durationMinOverride = rideRecord.effectiveStatus === 'absent' ? null : (rideRecord.durationMinOverride || null)
-  form.notClaimedAa09 = rideRecord.effectiveStatus === 'absent' ? false : (rideRecord.notClaimedAa09 || false)
-  form.reason = rideRecord.correctionReason || ''
+  record.value = rideRecord;
+  form.effectiveStatus = rideRecord.effectiveStatus;
+  form.vehicleId =
+    rideRecord.effectiveStatus === "absent" ? "" : rideRecord.vehicleId || "";
+  form.driverId =
+    rideRecord.effectiveStatus === "absent" ? "" : rideRecord.driverId || "";
+  form.departTimeOverride =
+    rideRecord.effectiveStatus === "absent"
+      ? null
+      : rideRecord.departTimeOverride || null;
+  form.durationMinOverride =
+    rideRecord.effectiveStatus === "absent"
+      ? null
+      : rideRecord.durationMinOverride || null;
+  form.notClaimedAa09 =
+    rideRecord.effectiveStatus === "absent"
+      ? false
+      : rideRecord.notClaimedAa09 || false;
+  form.reason = rideRecord.correctionReason || "";
+  form.basedOnFingerprint = rideRecord.basedOnFingerprint;
 
-  visible.value = true
+  visible.value = true;
 
   if (vehicles.value.length === 0) {
-    await loadMasterData()
+    await loadMasterData();
   }
 }
 
 async function handleSubmitCorrection() {
-  if (!record.value) return
+  if (!record.value) return;
 
   // 二次確認
   try {
     await ElMessageBox.confirm(
       `確定更正 ${record.value.serviceDate} 第 ${record.value.legSeq} 趟搭乘紀錄？此操作將記錄於稽核紀錄。`,
-      '確認更正紀錄',
+      "確認更正紀錄",
       {
-        confirmButtonText: '確認送出',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
+        confirmButtonText: "確認送出",
+        cancelButtonText: "取消",
+        type: "warning",
+      },
+    );
   } catch {
-    return
+    return;
   }
 
-  submitting.value = true
+  submitting.value = true;
   try {
-    const payload: PatchRideRequest & { caseId?: string; serviceDate?: string } = {
-      caseId: record.value.caseId,
-      serviceDate: record.value.serviceDate,
-      legSeq: record.value.legSeq,
+    const payload: PatchRideRequest = {
       effectiveStatus: form.effectiveStatus,
-      vehicleId: isAbsent.value ? undefined : (form.vehicleId || undefined),
-      driverId: isAbsent.value ? undefined : (form.driverId || undefined),
-      departTimeOverride: isAbsent.value ? null : (form.departTimeOverride || null),
-      durationMinOverride: isAbsent.value ? null : (form.durationMinOverride || null),
-      notClaimedAa09: isAbsent.value ? false : (form.notClaimedAa09 || false),
-      reason: form.reason || undefined
-    }
-    await patchRideRecord(record.value.id, payload)
-    ElMessage.success('搭乘紀錄已成功更正')
-    visible.value = false
-    emit('updated')
+      vehicleId: isAbsent.value ? undefined : form.vehicleId || undefined,
+      driverId: isAbsent.value ? undefined : form.driverId || undefined,
+      departTimeOverride: isAbsent.value
+        ? null
+        : form.departTimeOverride || null,
+      durationMinOverride: isAbsent.value
+        ? null
+        : form.durationMinOverride || null,
+      notClaimedAa09: isAbsent.value ? false : form.notClaimedAa09 || false,
+      reason: form.reason || undefined,
+      basedOnFingerprint: record.value.basedOnFingerprint,
+    };
+    await patchRideRecord(record.value.id, payload);
+    ElMessage.success("搭乘紀錄已成功更正");
+    visible.value = false;
+    emit("updated");
   } catch (err: any) {
-    ElMessage.error(err?.message || '更正搭乘紀錄失敗')
+    ElMessage.error(err?.message || "更正搭乘紀錄失敗");
   } finally {
-    submitting.value = false
+    submitting.value = false;
   }
 }
 
 defineExpose({
-  open
-})
+  open,
+});
 </script>
 
 <style scoped>
@@ -368,7 +424,8 @@ defineExpose({
   gap: 16px;
 }
 
-.source-card, .form-card {
+.source-card,
+.form-card {
   border-radius: 8px;
 }
 
@@ -451,5 +508,4 @@ defineExpose({
   padding: 8px 12px;
   border-radius: 6px;
 }
-
 </style>
