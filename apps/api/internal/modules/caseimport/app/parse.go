@@ -17,7 +17,7 @@ func (s *ImportService) ParseCasesFromExcel(ctx context.Context, r io.Reader) (*
 	return s.ParseCases(ctx, r, "upload.xlsx")
 }
 
-// ParseCases 僅支援解析 .xlsx／.xls 檔案，對齊「進系統個案個資」欄位格式。
+// ParseCases 僅支援解析 .xlsx 檔案，對齊「進系統個案個資」欄位格式。
 func (s *ImportService) ParseCases(ctx context.Context, r io.Reader, fileName string) (*CaseImportPreviewResult, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -26,7 +26,7 @@ func (s *ImportService) ParseCases(ctx context.Context, r io.Reader, fileName st
 
 	// 檢查是否為 Excel ZIP 格式 (Magic Number: PK\x03\x04)
 	isExcel := len(data) >= 4 && data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x03 && data[3] == 0x04
-	if !isExcel && !strings.HasSuffix(strings.ToLower(fileName), ".xlsx") && !strings.HasSuffix(strings.ToLower(fileName), ".xls") {
+	if !isExcel || !strings.HasSuffix(strings.ToLower(fileName), ".xlsx") {
 		return nil, errors.New("僅支援 .xlsx 匯入格式")
 	}
 
@@ -153,6 +153,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 
 			totalRows++
 			actualRowIndex := rIdx + 1
+			rowID := fmt.Sprintf("%s:%d", sheetName, actualRowIndex)
 			rawValues := make(map[string]string)
 			for label, index := range colMap {
 				if index < len(row) {
@@ -181,6 +182,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			}
 
 			rowRes := CaseImportRowResult{
+				RowID:             rowID,
 				RowIndex:          actualRowIndex,
 				SheetName:         sheetName,
 				Name:              name,
@@ -205,7 +207,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			if strings.TrimSpace(getVal("生日")) != "" && birthDate == "" {
 				message := "生日：格式錯誤"
 				rowRes.ErrorMessage = appendMessage(rowRes.ErrorMessage, message)
-				errorsList = append(errorsList, CaseImportErrorItem{RowIndex: actualRowIndex, CaseName: name, Field: "生日", Message: message})
+				errorsList = append(errorsList, CaseImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "生日", Message: message})
 				hasError = true
 			}
 
@@ -213,7 +215,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			if normalizedNationalID != "" && !crypto.ValidateNationalID(normalizedNationalID) {
 				message := "身分證字號：格式錯誤"
 				rowRes.ErrorMessage = appendMessage(rowRes.ErrorMessage, message)
-				errorsList = append(errorsList, CaseImportErrorItem{RowIndex: actualRowIndex, CaseName: name, Field: "身分證字號", Message: message})
+				errorsList = append(errorsList, CaseImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "身分證字號", Message: message})
 				hasError = true
 			}
 
@@ -225,7 +227,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 					rowRes.DuplicateCaseID = &dup.CaseID
 					message := fmt.Sprintf("疑似重複個案（既有個案姓名 %s），預設略過，需勾選才會匯入", dup.CaseName)
 					rowRes.WarningMessage = appendMessage(rowRes.WarningMessage, message)
-					warningsList = append(warningsList, CaseImportWarningItem{RowIndex: actualRowIndex, CaseName: name, Field: "重複個案", Message: message})
+					warningsList = append(warningsList, CaseImportWarningItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "重複個案", Message: message})
 					hasWarning = true
 				}
 			}
@@ -242,6 +244,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			results = append(results, rowRes)
 
 			previewRow := map[string]interface{}{
+				"rowId":             rowID,
 				"rowIndex":          actualRowIndex,
 				"name":              name,
 				"nationalId":        crypto.Mask(nationalID),

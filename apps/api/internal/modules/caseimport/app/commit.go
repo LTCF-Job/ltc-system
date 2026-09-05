@@ -29,9 +29,9 @@ func stringPointer(value string) *string {
 // 跨列一致性需求，逐列事務讓已成功的列立即落地可見、避免整批因單一長交易
 // 持有鎖與可見性延遲，且與 CaseRepository 既有逐方法自管事務的慣例一致。
 //
-// includeDuplicateRows 是使用者於預覽階段勾選「仍要匯入」的列號集合；dry-run
+// includeDuplicateRows 是使用者於預覽階段勾選「仍要匯入」的 rowId 集合；dry-run
 // 標記為 IsDuplicate 的列若未在此集合中，直接記為略過，不寫入資料庫。
-func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPreviewResult, includeDuplicateRows map[int]bool, actor Actor) (*CaseImportCommitResult, error) {
+func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPreviewResult, includeDuplicateRows map[string]bool, actor Actor) (*CaseImportCommitResult, error) {
 	if preview == nil || len(preview.Rows) == 0 {
 		return &CaseImportCommitResult{}, nil
 	}
@@ -50,8 +50,8 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			continue
 		}
 
-		if row.IsDuplicate && !includeDuplicateRows[row.RowIndex] {
-			item := CaseImportSkippedRow{RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{"偵測為重複個案，未勾選匯入"}, RawValues: row.RawValues}
+		if row.IsDuplicate && !includeDuplicateRows[importRowKey(row.RowID, row.RowIndex)] {
+			item := CaseImportSkippedRow{RowID: row.RowID, RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{"偵測為重複個案，未勾選匯入"}, RawValues: row.RawValues}
 			result.SkippedRows = append(result.SkippedRows, item)
 			if s.cases != nil {
 				s.cases.RecordSkipped(ctx, item, actor)
@@ -106,7 +106,7 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 		})
 
 		if txErr != nil {
-			item := CaseImportSkippedRow{RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{txErr.Error()}, RawValues: row.RawValues}
+			item := CaseImportSkippedRow{RowID: row.RowID, RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{txErr.Error()}, RawValues: row.RawValues}
 			result.SkippedRows = append(result.SkippedRows, item)
 			if s.cases != nil {
 				s.cases.RecordSkipped(ctx, item, actor)
@@ -146,5 +146,12 @@ func (s *ImportService) resolveVehicle(ctx context.Context, name, fieldLabel str
 
 func skippedRow(row CaseImportRowResult) CaseImportSkippedRow {
 	reasons := strings.Split(row.ErrorMessage, "；")
-	return CaseImportSkippedRow{RowIndex: row.RowIndex, CaseName: row.Name, Reasons: reasons, RawValues: row.RawValues}
+	return CaseImportSkippedRow{RowID: row.RowID, RowIndex: row.RowIndex, CaseName: row.Name, Reasons: reasons, RawValues: row.RawValues}
+}
+
+func importRowKey(rowID string, rowIndex int) string {
+	if rowID != "" {
+		return rowID
+	}
+	return fmt.Sprintf("legacy:%d", rowIndex)
 }

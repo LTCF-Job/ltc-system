@@ -205,7 +205,7 @@ func TestCommitCaregivers_SkipsDuplicateRowUnlessIncluded(t *testing.T) {
 	require.Len(t, skipped.SkippedRows, 1, "未勾選的重複列應略過")
 	assert.Equal(t, 2, skipped.SkippedRows[0].RowIndex)
 
-	included, err := svc.CommitCaregivers(context.Background(), preview, map[int]bool{2: true})
+	included, err := svc.CommitCaregivers(context.Background(), preview, map[string]bool{"legacy:2": true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, included.ImportedCount, "已勾選的重複列應正常匯入")
 	assert.Empty(t, included.SkippedRows)

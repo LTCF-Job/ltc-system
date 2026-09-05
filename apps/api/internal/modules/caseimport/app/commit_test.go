@@ -93,7 +93,7 @@ func TestCommitCases_SkipsUnflaggedDuplicateAndImportsFlaggedOne(t *testing.T) {
 		{RowIndex: 3, Name: "非重複個案"},
 	}}
 
-	result, err := svc.CommitCases(context.Background(), preview, map[int]bool{2: true}, Actor{ActorID: uuid.New()})
+	result, err := svc.CommitCases(context.Background(), preview, map[string]bool{"legacy:2": true}, Actor{ActorID: uuid.New()})
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.ImportedCount, "第 2、3 列應成功匯入")
@@ -104,6 +104,24 @@ func TestCommitCases_SkipsUnflaggedDuplicateAndImportsFlaggedOne(t *testing.T) {
 	require.Len(t, registrar.created, 2)
 	assert.Equal(t, "已勾選重複", registrar.created[0].Name)
 	assert.Equal(t, "非重複個案", registrar.created[1].Name)
+}
+
+func TestCommitCases_UsesRowIDAcrossSheets(t *testing.T) {
+	registrar := &fakeCaseRegistrar{}
+	svc := &ImportService{cases: registrar, prefRepo: &fakeTransportPreferenceWriter{}, txRunner: fakeTxRunner{}}
+	dupID := uuid.New()
+	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
+		{RowID: "Sheet-A:2", RowIndex: 2, Name: "A 工作表", IsDuplicate: true, DuplicateCaseID: &dupID},
+		{RowID: "Sheet-B:2", RowIndex: 2, Name: "B 工作表", IsDuplicate: true, DuplicateCaseID: &dupID},
+	}}
+
+	result, err := svc.CommitCases(context.Background(), preview, map[string]bool{"Sheet-B:2": true}, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ImportedCount)
+	require.Len(t, result.SkippedRows, 1)
+	assert.Equal(t, "Sheet-A:2", result.SkippedRows[0].RowID)
+	assert.Equal(t, "B 工作表", registrar.created[0].Name)
 }
 
 func TestCommitCases_CreatesCaseWhenSiteAndVehicleNamesDoNotMatch(t *testing.T) {

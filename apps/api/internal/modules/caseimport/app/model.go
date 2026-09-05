@@ -6,6 +6,7 @@ import (
 
 // CaseImportErrorItem 代表單筆匯入錯誤明細。
 type CaseImportErrorItem struct {
+	RowID    string `json:"rowId,omitempty"`
 	RowIndex int    `json:"rowIndex"`
 	CaseName string `json:"caseName,omitempty"`
 	Field    string `json:"field,omitempty"`
@@ -14,6 +15,7 @@ type CaseImportErrorItem struct {
 
 // CaseImportWarningItem 代表單筆匯入警告或預設值提醒明細。
 type CaseImportWarningItem struct {
+	RowID    string `json:"rowId,omitempty"`
 	RowIndex int    `json:"rowIndex"`
 	CaseName string `json:"caseName,omitempty"`
 	Field    string `json:"field,omitempty"`
@@ -22,6 +24,7 @@ type CaseImportWarningItem struct {
 
 // CaseImportRowResult 代表個案批次匯入單列解析結果。
 type CaseImportRowResult struct {
+	RowID             string            `json:"rowId"`
 	RowIndex          int               `json:"rowIndex"`
 	SheetName         string            `json:"sheetName"`
 	Name              string            `json:"name"`
@@ -51,6 +54,7 @@ type CaseImportRowResult struct {
 
 // CaseImportSkippedRow 保留未寫入資料庫的來源列與欄位錯誤。
 type CaseImportSkippedRow struct {
+	RowID     string            `json:"rowId"`
 	RowIndex  int               `json:"rowIndex"`
 	CaseName  string            `json:"caseName"`
 	Reasons   []string          `json:"reasons"`

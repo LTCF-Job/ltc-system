@@ -18,7 +18,8 @@ import (
 // 匯入語意是覆蓋而非疊加，重匯同一個月的結果與只匯一次相同。清除與重寫落在同一個
 // 交易內；任何資料庫層級的失敗都整份回滾，避免留下只刪不寫的空月份。
 //
-// 解析層級的失敗仍逐列略過：單列日期打錯只跳過該列，其餘日期照常寫入。
+// 未宣告月份時，解析層級的失敗仍逐列略過；宣告整月覆蓋時，日期無法解析屬於阻斷性錯誤，
+// 整份不清除也不寫入。
 //
 // yearMonth 為選填的宣告匯入月份（YYYY-MM）。有宣告時清除整個月，未宣告時只清除
 // 檔案實際涵蓋的日期；檔案沒有任何有效列時不執行清除，避免傳錯空檔清空整月資料。
@@ -47,6 +48,9 @@ func (s *DriverReportService) CommitDriverReport(
 	preview, err := s.ParseDriverReport(ctx, formID, bytes.NewReader(data), yearMonth)
 	if err != nil {
 		return nil, err
+	}
+	if monthDeclared && !preview.CanCommit {
+		return nil, ErrImportHasBlockingErrors
 	}
 
 	form, err := s.repo.GetForm(ctx, formID)

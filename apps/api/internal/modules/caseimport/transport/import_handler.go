@@ -82,18 +82,21 @@ func (h *ImportHandler) DownloadTemplate(c *gin.Context) {
 
 // parseIncludeDuplicateRows 解析使用者於預覽階段勾選「仍要匯入」的列號 JSON 陣列
 // （如 "[3,7]"）；空字串視為未勾選任何列。
-func parseIncludeDuplicateRows(raw string) (map[int]bool, error) {
-	set := map[int]bool{}
+func parseIncludeDuplicateRows(raw string) (map[string]bool, error) {
+	set := map[string]bool{}
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return set, nil
 	}
-	var rowIndexes []int
-	if err := json.Unmarshal([]byte(raw), &rowIndexes); err != nil {
+	var rowIDs []string
+	if err := json.Unmarshal([]byte(raw), &rowIDs); err != nil {
 		return nil, err
 	}
-	for _, idx := range rowIndexes {
-		set[idx] = true
+	for _, rowID := range rowIDs {
+		if strings.TrimSpace(rowID) == "" {
+			return nil, fmt.Errorf("rowId 不可為空")
+		}
+		set[rowID] = true
 	}
 	return set, nil
 }

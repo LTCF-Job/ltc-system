@@ -208,6 +208,11 @@ func commit(svc *DriverReportService, yearMonth string) (*CommitResult, error) {
 	)
 }
 
+func validSampleTable() [][]string {
+	table := sampleTable()
+	return append([][]string(nil), table[:len(table)-1]...)
+}
+
 func TestCommitDriverReport_ClearsCoveredDatesBeforeWriting(t *testing.T) {
 	ingestor := &fakeIngestor{}
 	svc, _ := newCommitService(sampleTable(), ingestor)
@@ -231,7 +236,7 @@ func TestCommitDriverReport_ClearsCoveredDatesBeforeWriting(t *testing.T) {
 
 func TestCommitDriverReport_DeclaredMonthClearsWholeMonth(t *testing.T) {
 	ingestor := &fakeIngestor{}
-	svc, _ := newCommitService(sampleTable(), ingestor)
+	svc, _ := newCommitService(validSampleTable(), ingestor)
 
 	_, err := commit(svc, "2026-03")
 
@@ -242,14 +247,27 @@ func TestCommitDriverReport_DeclaredMonthClearsWholeMonth(t *testing.T) {
 	assert.Equal(t, "2026-03-31", ingestor.clears[0].dates[30].Format("2006-01-02"))
 }
 
+func TestCommitDriverReport_DeclaredMonthBlocksOnMalformedRow(t *testing.T) {
+	ingestor := &fakeIngestor{}
+	svc, store := newCommitService(sampleTable(), ingestor)
+
+	result, err := commit(svc, "2026-03")
+
+	require.ErrorIs(t, err, ErrImportHasBlockingErrors)
+	assert.Nil(t, result)
+	assert.Empty(t, ingestor.clears, "阻斷性錯誤時不得先清除整月資料")
+	assert.Empty(t, ingestor.submissions, "阻斷性錯誤時不得寫入有效列")
+	assert.False(t, store.markedImported, "阻斷性錯誤時不得更新最後匯入時間")
+}
+
 func TestCommitDriverReport_RepeatedImportProducesSameWrites(t *testing.T) {
 	first := &fakeIngestor{}
-	svcFirst, _ := newCommitService(sampleTable(), first)
+	svcFirst, _ := newCommitService(validSampleTable(), first)
 	firstResult, err := commit(svcFirst, "2026-03")
 	require.NoError(t, err)
 
 	second := &fakeIngestor{}
-	svcSecond, _ := newCommitService(sampleTable(), second)
+	svcSecond, _ := newCommitService(validSampleTable(), second)
 	secondResult, err := commit(svcSecond, "2026-03")
 	require.NoError(t, err)
 
@@ -260,23 +278,28 @@ func TestCommitDriverReport_RepeatedImportProducesSameWrites(t *testing.T) {
 }
 
 func TestCommitDriverReport_SkipsRowsOutsideDeclaredMonth(t *testing.T) {
-	// 月份不符不再整份拒絕：讓使用者在預覽畫面看得到比對結果並自行決定，
-	// 這裡改成比照「單列日期打錯」的規則，逐列略過而不中斷整個匯入。
+	// 同一檔案依月份拆分匯入時，其他月份的有效列應只在這一輪略過。
 	ingestor := &fakeIngestor{}
-	svc, store := newCommitService(sampleTable(), ingestor)
+	table := [][]string{
+		{"民國日期", "駕駛人", "1.吳桂(去程竹3) [去程]", "1.吳桂(去程竹3) [回程]", "備註"},
+		{"1150302", "林彥衡", "有坐", "沒坐", "無"},
+		{"1150303", "林彥衡", "有坐", "有坐", ""},
+		{"1150402", "林彥衡", "有坐", "有坐", ""},
+	}
+	svc, store := newCommitService(table, ingestor)
 
 	result, err := commit(svc, "2026-04")
 
 	require.NoError(t, err)
-	assert.Equal(t, 0, result.ImportedRows)
-	// sampleTable 三列有日期的資料：兩列可解析但落在三月（月份不符），一列日期格式本身無效。
-	require.Len(t, result.SkippedRows, 3)
+	assert.Equal(t, 1, result.ImportedRows)
+	// 兩列落在三月，這一輪只略過；四月的有效列仍可完整覆蓋四月。
+	require.Len(t, result.SkippedRows, 2)
 	assert.Contains(t, result.SkippedRows[0].Reasons[0], "不屬於本次宣告匯入的 2026-04")
 	assert.Contains(t, result.SkippedRows[1].Reasons[0], "不屬於本次宣告匯入的 2026-04")
-	assert.Contains(t, result.SkippedRows[2].Reasons[0], "日期格式無法解析")
-	assert.Empty(t, ingestor.clears, "沒有任何可寫入的列時不得清除既有資料")
-	assert.Empty(t, ingestor.submissions)
-	assert.False(t, store.markedImported, "整份都被跳過時不算成功匯入，不得更新最後匯入時間")
+	require.Len(t, ingestor.clears, 1)
+	assert.Len(t, ingestor.clears[0].dates, 30)
+	assert.Len(t, ingestor.submissions, 1)
+	assert.True(t, store.markedImported)
 }
 
 func TestCommitDriverReport_RejectsMalformedYearMonth(t *testing.T) {
@@ -300,21 +323,21 @@ func TestCommitDriverReport_IngestFailureAbortsWholeImport(t *testing.T) {
 	assert.False(t, store.markedImported, "交易中止時不得更新最後匯入時間")
 }
 
-func TestCommitDriverReport_EmptyFileDoesNotClearAnything(t *testing.T) {
+func TestCommitDriverReport_BlockingErrorDoesNotClearAnything(t *testing.T) {
 	// 只有表頭與一列壞掉的日期：沒有任何可寫入的列，代表多半是傳錯檔案
 	table := [][]string{
 		{"民國日期", "駕駛人", "1.吳桂(去程竹3) [去程]", "備註"},
 		{"壞掉的日期", "林彥衡", "有坐", ""},
 	}
 	ingestor := &fakeIngestor{}
-	svc, _ := newCommitService(table, ingestor)
+	svc, store := newCommitService(table, ingestor)
 
 	result, err := commit(svc, "2026-03")
 
-	require.NoError(t, err)
-	assert.Zero(t, result.ImportedRows)
-	assert.Len(t, result.SkippedRows, 1)
-	assert.Empty(t, ingestor.clears, "沒有有效列時不得清空整個月")
+	require.ErrorIs(t, err, ErrImportHasBlockingErrors)
+	assert.Nil(t, result)
+	assert.Empty(t, ingestor.clears, "阻斷性錯誤時不得清空整個月")
+	assert.False(t, store.markedImported)
 }
 
 func TestCommitDriverReport_PersistsPendingColumnAnswersForLaterBackfill(t *testing.T) {
@@ -338,7 +361,7 @@ func TestCommitDriverReport_PersistsPendingColumnAnswersForLaterBackfill(t *test
 
 func TestCommitDriverReport_SyncsAttendanceForMatchedDriverRows(t *testing.T) {
 	ingestor := &fakeIngestor{}
-	svc, _, attendance := newCommitServiceWithAttendance(sampleTable(), ingestor)
+	svc, _, attendance := newCommitServiceWithAttendance(validSampleTable(), ingestor)
 
 	result, err := commit(svc, "2026-03")
 

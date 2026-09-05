@@ -104,6 +104,7 @@ type PreviewResult struct {
 	FormID          string              `json:"formId"`
 	VehicleID       string              `json:"vehicleId"`
 	VehicleName     string              `json:"vehicleName"`
+	CanCommit       bool                `json:"canCommit"`
 	TotalRows       int                 `json:"totalRows"`
 	ValidRows       int                 `json:"validRows"`
 	ErrorRows       int                 `json:"errorRows"`

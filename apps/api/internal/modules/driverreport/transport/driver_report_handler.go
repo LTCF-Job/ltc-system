@@ -161,6 +161,10 @@ func (h *DriverReportHandler) ImportExcel(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !strings.HasSuffix(strings.ToLower(fileHeader.Filename), ".xlsx") {
+		respondImportInputError(c, "file", "僅支援 .xlsx 匯入格式")
+		return
+	}
 
 	f, err := fileHeader.Open()
 	if err != nil {
@@ -336,8 +340,15 @@ func respondReportError(c *gin.Context, err error) {
 		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "", nil)
 		return
 	}
+	reason := "檔案內容無法解析，請確認為符合範本的 .xlsx 檔案"
+	if errors.Is(err, app.ErrInvalidYearMonth) {
+		reason = "匯入月份格式錯誤，請使用 YYYY-MM"
+	}
+	if errors.Is(err, app.ErrImportHasBlockingErrors) {
+		reason = "檔案包含阻斷性錯誤，未寫入資料"
+	}
 	httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeReportImportFailed, err, []httpx.ErrorDetail{
-		{Field: "file", Reason: err.Error()},
+		{Field: "file", Reason: reason},
 	})
 }
 

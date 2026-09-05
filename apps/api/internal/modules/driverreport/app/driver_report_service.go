@@ -82,7 +82,10 @@ func (s *DriverReportService) ListImportedMonths(ctx context.Context) ([]Importe
 // GetMonthDetail 查詢某份匯報表在指定月份（"YYYY-MM"）已匯入的完整內容，供總覽頁鑽取
 // 單一月份時顯示逐日原始回報與展開後的個案搭乘紀錄，不需重新開啟原始檔案。
 func (s *DriverReportService) GetMonthDetail(ctx context.Context, formID uuid.UUID, yearMonth string) (*MonthDetail, error) {
-	monthStart, monthEnd, _ := rocdate.MonthRange(yearMonth)
+	monthStart, monthEnd, _, err := rocdate.MonthRangeStrict(yearMonth)
+	if err != nil {
+		return nil, err
+	}
 
 	submissions, err := s.rideIngestor.ListSubmissionsForFormMonth(ctx, formID, monthStart, monthEnd)
 	if err != nil {

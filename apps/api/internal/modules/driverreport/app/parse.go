@@ -28,6 +28,9 @@ var ErrFormNotFound = errors.New("driver report form not found")
 // ErrInvalidYearMonth 代表宣告的匯入月份格式不是 YYYY-MM。
 var ErrInvalidYearMonth = errors.New("匯入月份格式錯誤，請使用 YYYY-MM")
 
+// ErrImportHasBlockingErrors 代表宣告整月覆蓋時，檔案含有不能安全略過的錯誤列。
+var ErrImportHasBlockingErrors = errors.New("匯入檔案包含阻斷性錯誤，未寫入任何資料")
+
 // ParseDriverReport 解析上傳的匯報表 .xlsx，產生欄位對應與每日匯報列的預覽。
 //
 // 解析階段不寫入任何資料：未對應的欄位會附上推薦個案與趟次，交由使用者在預覽畫面
@@ -79,6 +82,7 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 		FormID:      form.ID.String(),
 		VehicleID:   form.VehicleID.String(),
 		VehicleName: form.VehicleDisplayName,
+		CanCommit:   true,
 		Columns:     columns,
 		PreviewRows: []RowPreview{},
 		Errors:      []ImportErrorItem{},
@@ -125,6 +129,7 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 		serviceDate, err := parseReportDate(dateRaw)
 		if err != nil {
 			row.ErrorMessage = fmt.Sprintf("日期格式無法解析（%s），請填寫民國日期如 1150302", dateRaw)
+			result.CanCommit = false
 			result.Errors = append(result.Errors, ImportErrorItem{RowIndex: rowNum, Field: headerReportDate, Message: row.ErrorMessage})
 			result.ErrorRows++
 			result.PreviewRows = append(result.PreviewRows, row)

@@ -21,6 +21,9 @@ const driverReportSheetName = "司機接送匯報"
 
 // ReadTables 將 Excel 位元組解碼為逐工作表的儲存格文字；超過解析規模上限時回報錯誤。
 func (r ExcelAdapter) ReadTables(data []byte) ([][][]string, []string, error) {
+	if err := spreadsheet.ValidateXLSXZip(data); err != nil {
+		return nil, nil, err
+	}
 	f, err := excelize.OpenReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, nil, fmt.Errorf("開啟 Excel 檔案失敗: %w", err)
