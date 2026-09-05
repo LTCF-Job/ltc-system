@@ -101,7 +101,7 @@ export async function dryRunImportCases(file: File): Promise<DryRunImportResultD
   })
 }
 
-export async function commitImportCases(file: File, includeDuplicateRows: number[] = []): Promise<CaseImportCommitResult> {
+export async function commitImportCases(file: File, includeDuplicateRows: string[] = []): Promise<CaseImportCommitResult> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('includeDuplicateRows', JSON.stringify(includeDuplicateRows))

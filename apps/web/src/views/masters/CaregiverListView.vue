@@ -221,7 +221,7 @@
       :on-download-template="handleDownloadTemplate"
       @success="handleImportSuccess"
     >
-      <template #columns="{ checkedDuplicateRows, toggleDuplicateRow }">
+      <template #columns="{ checkedDuplicateRows, toggleDuplicateRow, getRowId }">
         <el-table-column prop="type" label="類型" width="80" />
         <el-table-column prop="siteName" label="單位" width="140" />
         <el-table-column prop="name" label="姓名" width="110" />
@@ -232,9 +232,9 @@
             <template v-if="row.isDuplicate">
               <el-tooltip :content="`與既有照護人員「${row.duplicateOf?.name ?? '未知'}」疑似重複`" placement="top">
                 <el-checkbox
-                  :model-value="checkedDuplicateRows.has(row.rowIndex ?? $index)"
+                  :model-value="checkedDuplicateRows.has(getRowId(row, $index))"
                   label="仍要匯入"
-                  @change="(val: string | number | boolean) => toggleDuplicateRow(row.rowIndex ?? $index, !!val)"
+                  @change="(val: string | number | boolean) => toggleDuplicateRow(getRowId(row, $index), !!val)"
                 />
               </el-tooltip>
             </template>
@@ -397,7 +397,7 @@ async function handleDryRun(file: File): Promise<any> {
   }
 }
 
-async function handleCommitImport(file: File, includeDuplicateRows: number[]): Promise<any> {
+async function handleCommitImport(file: File, includeDuplicateRows: string[]): Promise<any> {
   const result: any = await commitImportCaregivers(file, includeDuplicateRows)
   return {
     importedCount: result.importedCount,

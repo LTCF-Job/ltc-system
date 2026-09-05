@@ -10,6 +10,7 @@ import type {
 export async function precheckExport(params: {
   periodYm: string
   region?: string
+  caseIds?: string[]
 }): Promise<PrecheckResultDTO> {
   const res = await apiClient.post('/exports/precheck', params)
   return (res as any).data ?? (res as any)

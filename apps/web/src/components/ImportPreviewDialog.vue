@@ -40,7 +40,7 @@
         :auto-upload="false"
         :limit="1"
         :on-change="handleFileChange"
-        accept=".xlsx,.xls"
+        accept=".xlsx"
         style="width: 100%; margin-top: 16px;"
       >
         <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
@@ -49,7 +49,7 @@
         </div>
         <template #tip>
           <div class="el-upload__tip">
-            僅支援 .xlsx、.xls 格式之批次匯入檔案
+            僅支援 .xlsx 格式之批次匯入檔案
           </div>
         </template>
       </el-upload>
@@ -111,6 +111,7 @@
           name="columns"
           :checked-duplicate-rows="checkedDuplicateRows"
           :toggle-duplicate-row="toggleDuplicateRow"
+          :get-row-id="getRowId"
         />
       </el-table>
 
@@ -168,7 +169,7 @@ interface ImportCommitResult {
 const props = defineProps<{
   title: string
   onDryRun: (file: File) => Promise<DryRunImportResultDTO>
-  onCommit: (file: File, includeDuplicateRows: number[]) => Promise<ImportCommitResult>
+  onCommit: (file: File, includeDuplicateRows: string[]) => Promise<ImportCommitResult>
   onDownloadTemplate?: () => Promise<void> | void
 }>()
 
@@ -184,13 +185,17 @@ const downloadingTemplate = ref(false)
 const dryRunResult = ref<DryRunImportResultDTO | null>(null)
 const commitResult = ref<ImportCommitResult | null>(null)
 // 疑似重複列預設不勾選（略過），使用者需主動勾選才會一併匯入
-const checkedDuplicateRows = ref<Set<number>>(new Set())
+const checkedDuplicateRows = ref<Set<string>>(new Set())
 
-function toggleDuplicateRow(rowIndex: number, checked: boolean) {
+function getRowId(row: Record<string, any>, index: number): string {
+  return String(row.rowId ?? `${row.sheetName ?? 'sheet'}:${row.rowIndex ?? index}`)
+}
+
+function toggleDuplicateRow(rowId: string, checked: boolean) {
   if (checked) {
-    checkedDuplicateRows.value.add(rowIndex)
+    checkedDuplicateRows.value.add(rowId)
   } else {
-    checkedDuplicateRows.value.delete(rowIndex)
+    checkedDuplicateRows.value.delete(rowId)
   }
 }
 

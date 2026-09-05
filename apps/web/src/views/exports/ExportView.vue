@@ -364,7 +364,8 @@ async function handleRunPrecheck() {
   try {
     const res = await precheckExport({
       periodYm: toRocPeriodYm(selectedDate.value),
-      region: form.region || undefined
+      region: form.region || undefined,
+      caseIds: [...form.caseIds]
     })
     precheckResult.value = res
   } finally {

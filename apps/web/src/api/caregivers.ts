@@ -47,8 +47,8 @@ export async function dryRunImportCaregivers(file: File): Promise<DryRunImportRe
 }
 
 export async function commitImportCaregivers(
-  file: File,
-  includeDuplicateRows: number[] = []
+	file: File,
+	includeDuplicateRows: string[] = []
 ): Promise<CaregiverImportCommitResult> {
   const formData = new FormData()
   formData.append('file', file)

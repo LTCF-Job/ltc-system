@@ -813,20 +813,21 @@ export interface CaseImportDuplicateOfDTO {
 
 // 個案匯入預覽列：isDuplicate/duplicateOf 之外的欄位沿用 DryRunImportResultDTO.previewRows 的動態結構
 export interface CaseImportPreviewRowDTO extends Record<string, any> {
-  isDuplicate?: boolean
+	rowId?: string
+	isDuplicate?: boolean
   duplicateOf?: CaseImportDuplicateOfDTO
 }
 
 export interface CaseImportCommitResult {
-  importedCount: number
-  skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
+	importedCount: number
+	skippedRows: Array<{ rowId?: string; rowIndex: number; caseName: string; reasons: string[] }>
   warnings?: Array<{ rowIndex: number; caseName?: string; field?: string; message: string }>
 }
 
 // 照護人員匯入結果：warnings 的 field 為 "site"／"contact"／"notes"，供「待維護」頁籤分類顯示
 export interface CaregiverImportCommitResult {
-  importedCount: number
-  skippedRows: Array<{ rowIndex: number; name: string; reasons: string[] }>
+	importedCount: number
+	skippedRows: Array<{ rowId?: string; rowIndex: number; name: string; reasons: string[] }>
   warnings?: Array<{ rowIndex: number; name?: string; field?: string; message: string }>
 }
 

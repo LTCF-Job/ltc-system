@@ -297,7 +297,7 @@
       :on-download-template="handleDownloadTemplate"
       @success="handleImportSuccess"
     >
-      <template #columns="{ checkedDuplicateRows, toggleDuplicateRow }">
+      <template #columns="{ checkedDuplicateRows, toggleDuplicateRow, getRowId }">
         <el-table-column prop="name" label="姓名" width="100" />
         <el-table-column prop="householdType" label="戶別" width="90" />
         <el-table-column prop="nationalId" label="身分證字號" width="120" />
@@ -319,9 +319,9 @@
                 placement="top"
               >
                 <el-checkbox
-                  :model-value="checkedDuplicateRows.has(row.rowIndex ?? $index)"
+                  :model-value="checkedDuplicateRows.has(getRowId(row, $index))"
                   label="仍要匯入"
-                  @change="(val: string | number | boolean) => toggleDuplicateRow(row.rowIndex ?? $index, !!val)"
+                  @change="(val: string | number | boolean) => toggleDuplicateRow(getRowId(row, $index), !!val)"
                 />
               </el-tooltip>
             </template>
@@ -513,7 +513,7 @@ function openImportDialog() {
   importDialogRef.value?.open()
 }
 
-async function handleCommitImport(file: File, includeDuplicateRows: number[]) {
+async function handleCommitImport(file: File, includeDuplicateRows: string[]) {
   return commitImportCases(file, includeDuplicateRows)
 }
 
