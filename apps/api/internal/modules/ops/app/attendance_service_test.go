@@ -13,7 +13,7 @@ import (
 
 func TestAttendanceService_GetMonthAttendance(t *testing.T) {
 	attendanceRepo := stubAttendanceStore{}
-	driverRepo := emptyDriverLister{}
+	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機", Region: "hsinchu"}}}
 	auditRepo := discardAuditWriter{}
 
 	svc := NewAttendanceService(attendanceRepo, driverRepo, auditRepo, stubHolidayReader{})
@@ -28,7 +28,7 @@ func TestAttendanceService_GetMonthAttendance(t *testing.T) {
 
 func TestAttendanceService_GetMonthAttendance_FlagsAbsentForPastWeekdayWithoutRecord(t *testing.T) {
 	attendanceRepo := stubAttendanceStore{}
-	driverRepo := emptyDriverLister{}
+	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機", Region: "hsinchu"}}}
 	auditRepo := discardAuditWriter{}
 
 	svc := NewAttendanceService(attendanceRepo, driverRepo, auditRepo, stubHolidayReader{})
@@ -58,7 +58,7 @@ func TestAttendanceService_GetMonthAttendance_FlagsAbsentForPastWeekdayWithoutRe
 
 func TestAttendanceService_GetMonthAttendance_HolidayWeekdayMarkedOff(t *testing.T) {
 	attendanceRepo := stubAttendanceStore{}
-	driverRepo := emptyDriverLister{}
+	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機", Region: "hsinchu"}}}
 	auditRepo := discardAuditWriter{}
 
 	past := time.Now().UTC().AddDate(0, -2, 0)

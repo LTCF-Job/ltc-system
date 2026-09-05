@@ -101,6 +101,7 @@ type AuditWriter interface {
 // DriverLister 提供出勤月報所需的司機清單。
 type DriverLister interface {
 	List(ctx context.Context, region, q string, page, pageSize int) ([]DriverRef, int64, error)
+	ListAllActive(ctx context.Context) ([]DriverRef, error)
 }
 
 // VehicleLister 提供維修紀錄組裝車輛顯示名稱所需的車輛清單。

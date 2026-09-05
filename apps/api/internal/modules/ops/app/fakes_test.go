@@ -15,6 +15,10 @@ func (emptyDriverLister) List(context.Context, string, string, int, int) ([]Driv
 	return nil, 0, nil
 }
 
+func (emptyDriverLister) ListAllActive(context.Context) ([]DriverRef, error) {
+	return nil, nil
+}
+
 type emptyVehicleLister struct{}
 
 func (emptyVehicleLister) List(context.Context, string, string, int, int) ([]VehicleRef, int64, error) {

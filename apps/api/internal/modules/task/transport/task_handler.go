@@ -58,7 +58,7 @@ func (h *TaskHandler) GetMissingReports(c *gin.Context) {
 		return
 	}
 
-	missingList, err := h.svc.CheckMissingReports(c.Request.Context(), targetDate, region)
+	missingList, err := h.svc.ListMissingReports(c.Request.Context(), targetDate, region)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return

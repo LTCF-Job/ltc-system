@@ -85,19 +85,17 @@ func NewAttendanceService(
 
 // GetMonthAttendance 查詢指定月份司機月曆出勤矩陣。
 func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm string, driverID *uuid.UUID) (*MonthAttendanceReportDTO, error) {
-	startDate, endDate, daysInMonth := rocdate.MonthRange(periodYm)
-
-	var drivers []DriverRef
-	if s.driverRepo != nil {
-		dList, _, _ := s.driverRepo.List(ctx, "", "", 1, 100)
-		drivers = dList
+	startDate, endDate, daysInMonth, err := rocdate.MonthRangeStrict(periodYm)
+	if err != nil {
+		return nil, err
 	}
-	if len(drivers) == 0 {
-		drivers = []DriverRef{
-			{ID: uuid.New(), Name: "郭澤威", Region: "hsinchu"},
-			{ID: uuid.New(), Name: "林大慶", Region: "hsinchu"},
-			{ID: uuid.New(), Name: "陳志豪", Region: "miaoli"},
-		}
+
+	if s.driverRepo == nil {
+		return nil, errors.New("driver repository is not configured")
+	}
+	drivers, err := s.driverRepo.ListAllActive(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list active drivers: %w", err)
 	}
 
 	records, err := s.attendanceRepo.GetMonthRecords(ctx, startDate, endDate, driverID)
@@ -105,11 +103,12 @@ func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm str
 		return nil, fmt.Errorf("failed to get month attendance records: %w", err)
 	}
 
-	holidayMap := map[string]bool{}
-	if s.holidayRepo != nil {
-		if hm, err := s.holidayRepo.GetHolidayMap(ctx, startDate.Year(), int(startDate.Month()), ""); err == nil {
-			holidayMap = hm
-		}
+	if s.holidayRepo == nil {
+		return nil, errors.New("holiday repository is not configured")
+	}
+	holidayMap, err := s.holidayRepo.GetHolidayMap(ctx, startDate.Year(), int(startDate.Month()), "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get holiday map: %w", err)
 	}
 	today := time.Now().UTC()
 	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)

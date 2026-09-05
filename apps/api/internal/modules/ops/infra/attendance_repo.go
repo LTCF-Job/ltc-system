@@ -64,6 +64,9 @@ func (r *AttendanceRepository) GetMonthRecords(ctx context.Context, startDate, e
 		}
 		list = append(list, item)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate attendance records: %w", err)
+	}
 
 	return list, nil
 }
@@ -220,6 +223,9 @@ func (r *AttendanceRepository) ListConflicts(ctx context.Context, status string)
 			return nil, fmt.Errorf("failed to scan attendance import conflict: %w", err)
 		}
 		list = append(list, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate attendance import conflicts: %w", err)
 	}
 	return list, nil
 }

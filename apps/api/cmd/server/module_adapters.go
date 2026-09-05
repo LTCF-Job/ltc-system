@@ -129,6 +129,18 @@ func (a opsDriverLister) List(ctx context.Context, region, q string, page, pageS
 	return out, total, nil
 }
 
+func (a opsDriverLister) ListAllActive(ctx context.Context) ([]opsapp.DriverRef, error) {
+	list, err := a.repo.ListAllActive(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]opsapp.DriverRef, 0, len(list))
+	for _, d := range list {
+		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name, Region: d.Region})
+	}
+	return out, nil
+}
+
 // opsVehicleLister 讓 ops 的維修紀錄取得車輛清單。
 type opsVehicleLister struct {
 	repo *masterinfra.VehicleRepository
@@ -202,7 +214,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 
 func (a caseRegistrar) RecordSkipped(ctx context.Context, row importapp.CaseImportSkippedRow, actor importapp.Actor) {
 	a.svc.RecordSkippedCaseImport(ctx, caseapp.CaseImportSkippedRow{
-		RowIndex: row.RowIndex, CaseName: row.CaseName, Reasons: row.Reasons, RawValues: row.RawValues,
+		RowID: row.RowID, RowIndex: row.RowIndex, CaseName: row.CaseName, Reasons: row.Reasons, RawValues: row.RawValues,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 }
 

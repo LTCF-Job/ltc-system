@@ -94,6 +94,9 @@ func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID
 		}
 		list = append(list, item)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate fuel logs: %w", err)
+	}
 
 	return list, total, nil
 }

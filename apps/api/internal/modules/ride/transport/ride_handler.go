@@ -235,7 +235,11 @@ func (h *RideHandler) GetCalendar(c *gin.Context) {
 	now := time.Now()
 	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(now.Year(), int(now.Month())))
 
-	start, _, _ := rocdate.MonthRange(monthStr)
+	start, _, _, err := rocdate.MonthRangeStrict(monthStr)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "月份格式錯誤，請使用 RRR-MM 或 YYYY-MM", nil)
+		return
+	}
 	matrix, err := h.rideService.GetCalendar(c.Request.Context(), start.Year(), int(start.Month()), c.Query("region"), c.Query("q"))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
@@ -281,7 +285,11 @@ func (h *RideHandler) ListIssues(c *gin.Context) {
 
 	now := time.Now()
 	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(now.Year(), int(now.Month())))
-	start, _, _ := rocdate.MonthRange(monthStr)
+	start, _, _, err := rocdate.MonthRangeStrict(monthStr)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "月份格式錯誤，請使用 RRR-MM 或 YYYY-MM", nil)
+		return
+	}
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if page < 1 {

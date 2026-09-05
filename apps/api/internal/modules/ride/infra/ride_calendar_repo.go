@@ -17,11 +17,14 @@ func (r *RideRepository) ListRideSourcesForSlot(
 	legSeq int16,
 ) ([]app.RideSourceRow, error) {
 	query := `
-		SELECT rs.vehicle_id, rs.driver_id, rs.reported, fs.submitted_at
+		SELECT rs.id, CASE fs.source WHEN 'manual' THEN 2 WHEN 'import' THEN 1 ELSE 0 END,
+		       rs.vehicle_id, rs.driver_id, rs.reported, fs.submitted_at
 		FROM ride_sources rs
 		JOIN form_submissions fs ON rs.submission_id = fs.id
 		WHERE rs.case_id = $1 AND rs.service_date = $2 AND rs.leg_seq = $3
-		ORDER BY fs.submitted_at ASC
+		ORDER BY fs.submitted_at DESC,
+		         CASE fs.source WHEN 'manual' THEN 2 WHEN 'import' THEN 1 ELSE 0 END DESC,
+		         rs.id DESC
 	`
 	db := pgxdb.FromContext(ctx, r.db)
 	rows, err := db.Query(ctx, query, caseID, serviceDate, legSeq)
@@ -33,7 +36,7 @@ func (r *RideRepository) ListRideSourcesForSlot(
 	var sources []app.RideSourceRow
 	for rows.Next() {
 		var s app.RideSourceRow
-		if err := rows.Scan(&s.VehicleID, &s.DriverID, &s.Reported, &s.SubmittedAt); err != nil {
+		if err := rows.Scan(&s.SourceID, &s.SourcePriority, &s.VehicleID, &s.DriverID, &s.Reported, &s.SubmittedAt); err != nil {
 			return nil, err
 		}
 		sources = append(sources, s)

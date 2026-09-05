@@ -387,10 +387,12 @@ func (s *RideService) recalculateRideRecord(
 	sources := make([]merge.RideSourceInput, 0, len(rows))
 	for _, row := range rows {
 		sources = append(sources, merge.RideSourceInput{
-			VehicleID:   row.VehicleID,
-			DriverID:    row.DriverID,
-			Reported:    row.Reported,
-			SubmittedAt: row.SubmittedAt,
+			SourceID:       row.SourceID,
+			SourcePriority: row.SourcePriority,
+			VehicleID:      row.VehicleID,
+			DriverID:       row.DriverID,
+			Reported:       row.Reported,
+			SubmittedAt:    row.SubmittedAt,
 		})
 	}
 

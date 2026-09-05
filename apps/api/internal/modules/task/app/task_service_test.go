@@ -138,3 +138,16 @@ func TestTaskService_CheckMissingReports_SingleDayStillNotifies(t *testing.T) {
 	assert.Len(t, items, 1)
 	assert.Equal(t, 1, notifier.calls, "單日模式偵測到未回報時仍應觸發通知")
 }
+
+func TestTaskService_ListMissingReports_SingleDayDoesNotNotify(t *testing.T) {
+	caseID := uuid.New()
+	scheduleReader := &fakeScheduleReader{schedules: []ActiveSchedule{weekdayScheduleFixture(caseID, 2026, 7)}}
+	notifier := &fakeNotifier{}
+	svc := NewTaskService(&mockTaskRepo{}, scheduleReader, &fakeHolidayMapReader{}, notifier)
+
+	items, err := svc.ListMissingReports(context.Background(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC), "")
+
+	assert.NoError(t, err)
+	assert.Len(t, items, 1)
+	assert.Zero(t, notifier.calls, "查詢單日未回報資料不應觸發通知")
+}

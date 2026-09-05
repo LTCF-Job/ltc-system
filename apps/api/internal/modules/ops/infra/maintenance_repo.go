@@ -88,6 +88,9 @@ func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, ve
 		}
 		list = append(list, item)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate maintenance logs: %w", err)
+	}
 
 	return list, total, nil
 }

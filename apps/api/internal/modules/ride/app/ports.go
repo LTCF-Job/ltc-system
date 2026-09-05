@@ -98,10 +98,12 @@ type MonthRideEntry struct {
 
 // RideSourceRow 是單一 slot 已寫入的一筆回報來源，混車合併以此為輸入。
 type RideSourceRow struct {
-	VehicleID   uuid.UUID
-	DriverID    *uuid.UUID
-	Reported    string
-	SubmittedAt time.Time
+	SourceID       uuid.UUID
+	SourcePriority int
+	VehicleID      uuid.UUID
+	DriverID       *uuid.UUID
+	Reported       string
+	SubmittedAt    time.Time
 }
 
 // SubmissionAnswer 是某欄位在一筆既有回報中留下的原始儲存格文字，供欄位補綁定後
