@@ -5,17 +5,149 @@ name: CI
 on:
   pull_request:
     branches: [develop, main]
-    paths:
-      - 'apps/api/**'
-      - 'apps/web/**'
-      - 'tests/**'
-      - 'docker-compose*.yml'
-      - '.github/workflows/**'
 
 permissions:
   contents: read
 
 jobs:
+  dependency-review:
+    name: Dependency security review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  migration-schema:
+    name: Migration schema static check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate migration filenames and pairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          files=(migrations/*.sql)
+          if ((${#files[@]} == 0)); then
+            echo "No migration files found" >&2
+            exit 1
+          fi
+
+          declare -A up_names=()
+          declare -A down_names=()
+          declare -A version_names=()
+
+          for path in "${files[@]}"; do
+            file="${path##*/}"
+            if [[ ! "$file" =~ ^([0-9]{6})_([a-z0-9_]+)\.(up|down)\.sql$ ]]; then
+              echo "Invalid migration filename: $file" >&2
+              exit 1
+            fi
+
+            version="${BASH_REMATCH[1]}"
+            name="${BASH_REMATCH[2]}"
+            direction="${BASH_REMATCH[3]}"
+            key="${version}_${name}"
+
+            if [[ ! -s "$path" ]]; then
+              echo "Empty migration file: $file" >&2
+              exit 1
+            fi
+
+            if [[ -n "${version_names[$version]+set}" && "${version_names[$version]}" != "$key" ]]; then
+              echo "Duplicate migration version: $version" >&2
+              exit 1
+            fi
+            version_names["$version"]="$key"
+
+            if [[ "$direction" == "up" ]]; then
+              if [[ -n "${up_names[$key]+set}" ]]; then
+                echo "Duplicate up migration: $file" >&2
+                exit 1
+              fi
+              up_names["$key"]=1
+            else
+              if [[ -n "${down_names[$key]+set}" ]]; then
+                echo "Duplicate down migration: $file" >&2
+                exit 1
+              fi
+              down_names["$key"]=1
+            fi
+          done
+
+          for key in "${!up_names[@]}"; do
+            if [[ -z "${down_names[$key]+set}" ]]; then
+              echo "Missing down migration for: ${key}.up.sql" >&2
+              exit 1
+            fi
+          done
+
+          for key in "${!down_names[@]}"; do
+            if [[ -z "${up_names[$key]+set}" ]]; then
+              echo "Missing up migration for: ${key}.down.sql" >&2
+              exit 1
+            fi
+          done
+
+          echo "Validated ${#version_names[@]} migration versions with matching up/down files."
+
+  migration-integration:
+    name: PostgreSQL migration and integration test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: ltc_system
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ltc_system"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      APP_ENV: local
+      DATABASE_URL: postgres://postgres:postgrespassword@localhost:5432/ltc_system?sslmode=disable
+      ENCRYPTION_KEY: MDEwMjAzMDQwNTA2MDcwODAxMDIwMzA0MDUwNjA3MDg=
+      HMAC_KEY: MDkwODAwMDcwNjA1MDQwMzA5MDgwMDA3MDYwNTA0MDM=
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache: true
+
+      - name: Apply all migrations
+        run: go run ./cmd/migrate up
+
+      - name: Roll back and re-apply latest migration
+        run: |
+          go run ./cmd/migrate down
+          go run ./cmd/migrate up
+
+      - name: Run PostgreSQL integration tests
+        run: go test -tags=integration ./internal/modules/caseimport/app -run TestCommitCases_TransactionRollback -v
+
   api:
     name: API test and build
     runs-on: ubuntu-latest
@@ -31,6 +163,14 @@ jobs:
         with:
           go-version-file: apps/api/go.mod
           cache: true
+
+      - name: Go vulnerability check
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-file: apps/api/go.mod
+          work-dir: apps/api
+          cache-dependency-path: apps/api/go.sum
+          repo-checkout: false
 
       - name: Vet
         run: go vet ./...
@@ -63,8 +203,75 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Unit tests
+        run: npm run test
+
       - name: Type-check
         run: npm run type-check
 
       - name: Build
         run: npm run build
+
+  web-critical-smoke:
+    name: Web critical live smoke tests
+    if: ${{ vars.RUN_LIVE_E2E == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      LIVE_SUPABASE_URL: ${{ secrets.LIVE_SUPABASE_URL }}
+      LIVE_SUPABASE_ANON_KEY: ${{ secrets.LIVE_SUPABASE_ANON_KEY }}
+      LIVE_DEMO_API_BASE_URL: ${{ secrets.LIVE_DEMO_API_BASE_URL }}
+      LIVE_DEMO_TEST_EMAIL: ${{ secrets.LIVE_DEMO_TEST_EMAIL }}
+      LIVE_DEMO_TEST_PASSWORD: ${{ secrets.LIVE_DEMO_TEST_PASSWORD }}
+      LIVE_PROD_API_BASE_URL: ${{ secrets.LIVE_PROD_API_BASE_URL }}
+      LIVE_PROD_TEST_EMAIL: ${{ secrets.LIVE_PROD_TEST_EMAIL }}
+      LIVE_PROD_TEST_PASSWORD: ${{ secrets.LIVE_PROD_TEST_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Require demo smoke credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in LIVE_SUPABASE_URL LIVE_SUPABASE_ANON_KEY LIVE_DEMO_API_BASE_URL LIVE_DEMO_TEST_EMAIL LIVE_DEMO_TEST_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required live smoke variable: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Run critical smoke tests
+        run: npm run test:e2e:live
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan repository for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -24,6 +24,18 @@ make migrate-down    # 回滾最新一支
 
 `DATABASE_URL` 要指向 Supabase 的連線池網址（port 6543，pgbouncer transaction pooling）。
 
+### Migration 發布相容性
+
+Migration 採 Expand / Contract 節奏，避免新版服務尚未完成部署時，舊版服務先因欄位被刪除而中斷：
+
+```text
+Release A: 新增欄位／表／索引，App 同時相容新舊結構
+Release B: Backfill 與資料驗證，App 切換至新結構
+Release C: 確認舊版已不再讀寫後，才移除舊欄位或舊表
+```
+
+同一個 release 不得先執行破壞性 `DROP` 再部署只支援新結構的 App。Pull request CI 會檢查 migration 的 up/down 配對，並在乾淨 PostgreSQL service 中執行完整 up、down、up 與 transaction integration test；實際正式資料庫仍需依部署流程執行 migration job。
+
 ### 已知坑：手動塞 `auth.users` 一定要補 `auth.identities`
 
 Supabase 目前版本的 GoTrue 驗證 email/password 登入時，除了比對 `auth.users.encrypted_password`，還要求該使用者在 `auth.identities` 有一筆 `provider = 'email'` 的對應紀錄。只 `INSERT INTO auth.users` 不補 `auth.identities`，密碼即使完全正確，`signInWithPassword` 也會回 `Invalid login credentials`。
@@ -53,14 +65,16 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 | 變數 | 本機 `.env` | Cloud Run | 說明 |
 |---|---|---|---|
 | `PORT` | `8080` | Cloud Run 自動注入，不用設 | HTTP 監聽埠 |
-| `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`、`RESEND_API_KEY` 與 `NOTIFY_FROM`，否則直接拒絕啟動 |
+| `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL`、`SUPABASE_URL`（或 `SUPABASE_PROJECT_REF`）、`SUPABASE_SERVICE_ROLE_KEY`、`ALLOWED_ORIGINS`、`RESEND_API_KEY` 與 `NOTIFY_FROM`，否則直接拒絕啟動 |
 | `DATABASE_URL` | Supabase 連線池網址 | 同左，存在 Secret Manager | 見上方 pgbouncer 說明 |
-| `DB_MAX_OPEN_CONNS` / `DB_MAX_IDLE_CONNS` | `5` / `2` | 同左 | 對應 `pgxpool` 的 `MaxConns`／`MinConns` |
+| `DB_MAX_CONNS` / `DB_MIN_CONNS` | `5` / `2` | 同左 | 對應 `pgxpool` 的 `MaxConns`／`MinConns`；另可設定 `DB_MAX_CONN_LIFETIME`、`DB_MAX_CONN_IDLE_TIME` |
 | `ENCRYPTION_KEY` / `HMAC_KEY` | 32 bytes base64 | 同左，存在 Secret Manager | 個案身分證等敏感欄位加密用 |
 | `SUPABASE_JWKS_URL` | 可留空（本機不驗簽） | `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json` | `production` 必填 |
 | `SUPABASE_PROJECT_REF` | Supabase 專案 ref | 同左 | |
 | `ALLOWED_ORIGINS` | 不需要（`local` 時 CORS 全開） | 逗號分隔的網域清單 | `production` 必填，見下方常見錯誤 |
-| `STORAGE_BUCKET` | `ltc-exports` | 同左 | |
+| `SUPABASE_URL` | 可由 `SUPABASE_PROJECT_REF` 推導 | 同左 | private object storage API 的專案網址；正式環境用 service-role key 存取，不可暴露給前端 |
+| `SUPABASE_SERVICE_ROLE_KEY` | 可留空 | Secret Manager | private export object storage 與使用者管理 API；正式環境必填 |
+| `STORAGE_BUCKET` | `ltc-exports` | 同左 | 必須在 Supabase Storage 建立為 private bucket；匯出檔案存於 `exports/{jobId}/{fileName}` |
 | `STORAGE_SIGNED_URL_TTL` | `24h` | 同左 | |
 | `RESEND_API_KEY` | 可留空 | Secret Manager | `production` 必填，正式環境透過 Resend API 寄送通知 |
 | `NOTIFY_FROM` | `.env` 明確設定 | 同左 | `production` 必填，通知寄件人地址 |
@@ -183,7 +197,7 @@ gcloud run jobs execute ltc-api-migrate --region=asia-east1 --wait
 
 ### 已知坑：migration job 跟 API service 要各自設定同一套 production 必填變數
 
-`cmd/migrate` 跟 `cmd/server`（`ltc-api` 服務本體）共用同一套設定驗證（`internal/platform/config`）：`APP_ENV=production` 時少了 `SUPABASE_JWKS_URL` 或 `ALLOWED_ORIGINS` 任何一個都會直接拒絕啟動。這兩個環境變數（以及 `APP_ENV`、`SUPABASE_PROJECT_REF`）**migration job 跟 API service 是各自獨立的環境變數集合**，只在 `ltc-api` 服務上設定過不代表 `ltc-api-migrate` job 也有——曾經發生過 job 只設了 `DATABASE_URL` 這個 secret，`APP_ENV` 從未設定，實際跑起來因為 `config.LoadFromEnv()` 沒驗證過就直接把整包環境變數丟給 job，結果是不知道哪來的舊設定殘留了 `APP_ENV=develope`（打錯字，不是 `develop` 也不是 `production`），導致 `gcloud run jobs execute` 每次都以 `Failed to load config` 失敗，連帶讓 `deploy-api.yml` 卡在「Run database migrations」那步。
+`cmd/migrate` 跟 `cmd/server`（`ltc-api` 服務本體）共用同一套設定驗證（`internal/platform/config`）：`APP_ENV=production` 時少了 `SUPABASE_JWKS_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`RESEND_API_KEY` 或 `ALLOWED_ORIGINS` 任何一個都會直接拒絕啟動；`SUPABASE_URL` 可由 `SUPABASE_PROJECT_REF` 推導。這些變數（以及 `APP_ENV`、`SUPABASE_PROJECT_REF`）**migration job 跟 API service 是各自獨立的環境變數集合**，只在 `ltc-api` 服務上設定過不代表 `ltc-api-migrate` job 也有——曾經發生過 job 只設了 `DATABASE_URL` 這個 secret，`APP_ENV` 從未設定，實際跑起來因為 `config.LoadFromEnv()` 沒驗證過就直接把整包環境變數丟給 job，結果是不知道哪來的舊設定殘留了 `APP_ENV=develope`（打錯字，不是 `develop` 也不是 `production`），導致 `gcloud run jobs execute` 每次都以 `Failed to load config` 失敗，連帶讓 `deploy-api.yml` 卡在「Run database migrations」那步。
 
 `ALLOWED_ORIGINS` 在 migration job 上只是為了通過設定檢查，job 不會真的處理 HTTP 請求，填什麼網域都不影響功能。用下面指令核對兩邊變數是否一致：
 

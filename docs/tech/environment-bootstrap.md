@@ -144,14 +144,15 @@ GitHub 自動化機器人只會「更新」已經存在的服務，第一次要�
 
 系統的後端程式要知道資料庫在哪裡、密碼是什麼、可以接受哪些網站呼叫它，這些都要先設定好。
 
-### 先把四個機密值存起來（Secret Manager）
+### 先把五個機密值存起來（Secret Manager）
 
-Console →「Security」→「Secret Manager」→「建立密鑰」，重複三次，分別建立以下三個名稱，「密鑰值」欄位貼上對應的值：
+Console →「Security」→「Secret Manager」→「建立密鑰」，建立以下五個名稱，「密鑰值」欄位貼上對應的值：
 
 - `DATABASE_URL`：步驟一記下的資料庫連線字串
 - `ENCRYPTION_KEY`：一組隨機產生的密碼，執行 `openssl rand -base64 32`（終端機指令）就能產生一組
 - `HMAC_KEY`：跟上面一樣的方式再產生一組（兩個要不一樣）
 - `RESEND_API_KEY`：Resend 控制台建立的 API key，正式環境用來實際寄送通知信
+- `SUPABASE_SERVICE_ROLE_KEY`：Supabase Project Settings → API 的 service_role secret，供後端管理使用者與存取 private export bucket；不可放進前端或一般環境變數截圖
 
 ### 幫服務跟工作補上其他設定
 
@@ -166,13 +167,14 @@ Console →「Cloud Run」→「服務」→ 點進 `ltc-api` →「編輯並部
   - `LOG_LEVEL=info`
   - `ALLOWED_ORIGINS=https://placeholder.example.com`（先填這個佔位值，步驟五拿到真正的網站網址後記得回來換掉，這欄位是「允許呼叫這個後端的網站清單」）
   - `NOTIFY_FROM=noreply@你的正式網域`
-- 「密鑰」區塊「參照密鑰」，把 `DATABASE_URL`／`ENCRYPTION_KEY`／`HMAC_KEY`／`RESEND_API_KEY` 四個密鑰各自掛成同名環境變數（版本選「最新」）。
+- 「密鑰」區塊「參照密鑰」，把 `DATABASE_URL`／`ENCRYPTION_KEY`／`HMAC_KEY`／`RESEND_API_KEY`／`SUPABASE_SERVICE_ROLE_KEY` 五個密鑰各自掛成同名環境變數（版本選「最新」）。
+- Supabase Dashboard → Storage 建立 `ltc-exports` bucket，Access 必須選 **Private**；API 會以 `exports/{jobId}/{fileName}` 保存歷史申報檔，前端不直接拿 Storage 金鑰。
 - 按「部署」。
 
 再到「Cloud Run」→「工作」→ 點進 `ltc-api-migrate` →「編輯」，一樣在「變數與密鑰」頁籤：
 
 - 「環境變數」加入 `APP_ENV=production`、`SUPABASE_PROJECT_REF=...`、`SUPABASE_JWKS_URL=...`（值跟上面一樣）、`ALLOWED_ORIGINS=https://placeholder.example.com`、`NOTIFY_FROM=noreply@你的正式網域`。
-- 「密鑰」掛上 `DATABASE_URL`、`RESEND_API_KEY`。
+- 「密鑰」掛上 `DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`、`RESEND_API_KEY`、`SUPABASE_SERVICE_ROLE_KEY`。
 - 儲存。
 
 > **為什麼工作（job）也要設一次？** 因為「服務」跟「工作」是兩個獨立的東西，各自有各自的設定，不會互相共用。少設了任何一個，資料庫初始化工作在每次自動部署時都會失敗，錯誤訊息通常是 `Failed to load config`。填錯字也會有一樣的症狀（例如打成 `APP_ENV=produciton`），這種情況錯誤訊息不會明確告訴你是哪裡打錯，遇到問題先把這兩邊的設定值一字一字核對一次。
@@ -336,13 +338,14 @@ echo -n '<DATABASE_URL>'   | gcloud secrets create DATABASE_URL   --data-file=-
 echo -n '<ENCRYPTION_KEY>' | gcloud secrets create ENCRYPTION_KEY --data-file=-
 echo -n '<HMAC_KEY>'       | gcloud secrets create HMAC_KEY       --data-file=-
 echo -n '<RESEND_API_KEY>' | gcloud secrets create RESEND_API_KEY --data-file=-
+echo -n '<SUPABASE_SERVICE_ROLE_KEY>' | gcloud secrets create SUPABASE_SERVICE_ROLE_KEY --data-file=-
 
 gcloud run services update ltc-api --region <GCP_REGION> \
-  --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest" \
+  --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
   --update-env-vars="APP_ENV=production,SUPABASE_PROJECT_REF=<project-ref>,SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json,STORAGE_BUCKET=ltc-exports,STORAGE_SIGNED_URL_TTL=24h,LOG_LEVEL=info,ALLOWED_ORIGINS=https://placeholder.example.com,NOTIFY_FROM=noreply@your-domain.example"
 
 gcloud run jobs update ltc-api-migrate --region <GCP_REGION> \
-  --set-secrets="DATABASE_URL=DATABASE_URL:latest" \
+  --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
   --update-env-vars="APP_ENV=production,SUPABASE_PROJECT_REF=<project-ref>,SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json,ALLOWED_ORIGINS=https://placeholder.example.com,NOTIFY_FROM=noreply@your-domain.example"
 
 # 步驟六：建立 GitHub Environment 並填入設定值
