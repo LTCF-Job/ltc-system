@@ -70,6 +70,10 @@ type CreateDriverInput struct {
 
 // Create 新增司機：驗證身分證檢查碼，寫入加密密文與 HMAC 索引。
 func (s *DriverService) Create(ctx context.Context, in CreateDriverInput) (*Driver, error) {
+	in.Name = strings.TrimSpace(in.Name)
+	if in.Name == "" {
+		return nil, ErrDriverNameRequired
+	}
 	nationalID := strings.ToUpper(strings.TrimSpace(in.NationalID))
 	if !crypto.ValidateNationalID(nationalID) {
 		return nil, ErrInvalidDriverNationalID
@@ -130,7 +134,11 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 	}
 
 	if in.Name != nil {
-		existing.Name = *in.Name
+		name := strings.TrimSpace(*in.Name)
+		if name == "" {
+			return nil, ErrDriverNameRequired
+		}
+		existing.Name = name
 		existing.NameNormalized = namenorm.Normalize(*in.Name)
 	}
 	if in.Email != nil {

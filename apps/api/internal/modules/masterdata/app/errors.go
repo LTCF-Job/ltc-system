@@ -4,7 +4,8 @@ import "errors"
 
 var (
 	// ErrDriverNotFound 代表查無司機資料。
-	ErrDriverNotFound = errors.New("driver not found")
+	ErrDriverNotFound     = errors.New("driver not found")
+	ErrDriverNameRequired = errors.New("driver name is required")
 	// ErrNationalIDNotConfigured 代表資料尚未設定身分證密文。
 	ErrNationalIDNotConfigured = errors.New("national id is not configured")
 	// ErrRevealAuditUnavailable 代表高風險個資揭露無法留下稽核紀錄。

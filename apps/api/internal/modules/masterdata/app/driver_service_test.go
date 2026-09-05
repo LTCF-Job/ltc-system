@@ -122,6 +122,20 @@ func (f *fakeDriverStore) CloseActiveAssignments(ctx context.Context, driverID u
 func TestDriverService_Create(t *testing.T) {
 	cfg := testConfig()
 
+	t.Run("rejects blank name", func(t *testing.T) {
+		store := newFakeDriverStore()
+		svc := NewDriverService(store, cfg, nil)
+
+		_, err := svc.Create(context.Background(), CreateDriverInput{
+			Name:       "  ",
+			NationalID: "A123456789",
+			Region:     "hsinchu",
+		})
+
+		assert.ErrorIs(t, err, ErrDriverNameRequired)
+		assert.Nil(t, store.lastCreate)
+	})
+
 	t.Run("rejects invalid national id", func(t *testing.T) {
 		store := newFakeDriverStore()
 		svc := NewDriverService(store, cfg, nil)

@@ -59,6 +59,10 @@ func (h *DriverHandler) Create(c *gin.Context) {
 		LicenseExpiryDate: req.LicenseExpiryDate.toTimePtr(),
 	})
 	if err != nil {
+		if errors.Is(err, app.ErrDriverNameRequired) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "司機姓名不可為空白", nil)
+			return
+		}
 		if errors.Is(err, app.ErrInvalidDriverNationalID) {
 			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "身分證檢查碼錯誤", nil)
 			return
@@ -98,6 +102,10 @@ func (h *DriverHandler) Update(c *gin.Context) {
 		ClearLicenseExpiryDate: req.LicenseExpiryDate.Present && req.LicenseExpiryDate.Value == nil,
 	})
 	if err != nil {
+		if errors.Is(err, app.ErrDriverNameRequired) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "司機姓名不可為空白", nil)
+			return
+		}
 		if errors.Is(err, app.ErrDriverNotFound) {
 			respondNotFound(c, "查無司機資料")
 			return
