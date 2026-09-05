@@ -22,7 +22,7 @@ func NewDashboardRepository(db *pgxpool.Pool) *DashboardRepository {
 // GetActiveCasesCount 查詢有效個案總數。
 func (r *DashboardRepository) GetActiveCasesCount(ctx context.Context) (int, error) {
 	if r.db == nil {
-		return 0, nil
+		return 0, fmt.Errorf("dashboard database is not configured")
 	}
 	var count int
 	err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM cases WHERE status = 'active'").Scan(&count)
@@ -32,7 +32,7 @@ func (r *DashboardRepository) GetActiveCasesCount(ctx context.Context) (int, err
 // GetReportedTripsCount 查詢指定區間之已搭乘總趟數。
 func (r *DashboardRepository) GetReportedTripsCount(ctx context.Context, start, end time.Time) (int, error) {
 	if r.db == nil {
-		return 0, nil
+		return 0, fmt.Errorf("dashboard database is not configured")
 	}
 	var count int
 	query := `
@@ -47,7 +47,7 @@ func (r *DashboardRepository) GetReportedTripsCount(ctx context.Context, start, 
 // GetPendingConflictsCount 查詢未裁決之混車衝突數量。
 func (r *DashboardRepository) GetPendingConflictsCount(ctx context.Context) (int, error) {
 	if r.db == nil {
-		return 0, nil
+		return 0, fmt.Errorf("dashboard database is not configured")
 	}
 	var count int
 	query := `
@@ -62,7 +62,7 @@ func (r *DashboardRepository) GetPendingConflictsCount(ctx context.Context) (int
 // GetPendingFormColumnsCount 查詢待對應之表單欄位數量。
 func (r *DashboardRepository) GetPendingFormColumnsCount(ctx context.Context) (int, error) {
 	if r.db == nil {
-		return 0, nil
+		return 0, fmt.Errorf("dashboard database is not configured")
 	}
 	var count int
 	query := `
@@ -77,7 +77,7 @@ func (r *DashboardRepository) GetPendingFormColumnsCount(ctx context.Context) (i
 // GetVehicleTripTrends 查詢各車輛於指定區間之趟數趨勢。
 func (r *DashboardRepository) GetVehicleTripTrends(ctx context.Context, start, end time.Time) ([]app.VehicleTripTrend, error) {
 	if r.db == nil {
-		return []app.VehicleTripTrend{}, nil
+		return nil, fmt.Errorf("dashboard database is not configured")
 	}
 	query := `
 		SELECT v.display_name, v.plate_no, COUNT(r.id) as trips
@@ -112,7 +112,7 @@ func (r *DashboardRepository) GetVehicleTripTrends(ctx context.Context, start, e
 func (r *DashboardRepository) GetAttendanceDistribution(ctx context.Context, start, end time.Time) (map[string]int, error) {
 	dist := make(map[string]int)
 	if r.db == nil {
-		return dist, nil
+		return nil, fmt.Errorf("dashboard database is not configured")
 	}
 	query := `
 		SELECT status, COUNT(*)

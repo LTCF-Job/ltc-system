@@ -43,19 +43,13 @@ func (f *fakeDashboardRepo) GetAttendanceDistribution(ctx context.Context, start
 	return f.attendance, nil
 }
 
-func TestDashboardService_GetMetrics_NilRepoReturnsHonestZeroValues(t *testing.T) {
+func TestDashboardService_GetMetrics_NilRepoFailsClosed(t *testing.T) {
 	svc := NewDashboardService(nil, nil)
 	ctx := context.Background()
 
 	metrics, err := svc.GetMetrics(ctx, "115-07")
-	assert.NoError(t, err)
-	assert.NotNil(t, metrics)
-	assert.Equal(t, "115-07", metrics.CurrentMonth)
-	assert.Equal(t, 0, metrics.TotalCasesCount)
-	assert.Equal(t, 0, metrics.ReportedTripsCount)
-	assert.Equal(t, 0, metrics.PendingConflictsCount)
-	assert.Empty(t, metrics.VehicleTripTrends)
-	assert.Equal(t, 0, metrics.AttendanceDistribution.WorkCount)
+	assert.ErrorIs(t, err, errDashboardRepositoryNotConfigured)
+	assert.Nil(t, metrics)
 }
 
 func TestDashboardService_GetMetrics_QueriesRepoWhenConfigured(t *testing.T) {
@@ -117,11 +111,11 @@ func (f *fakeExportJobStore) LoadNationalIDCiphers(ctx context.Context, caseID u
 	return NationalIDCiphers{}, nil
 }
 
-func TestDashboardService_GetRecentExports_NilJobStoreReturnsEmpty(t *testing.T) {
+func TestDashboardService_GetRecentExports_NilJobStoreFailsClosed(t *testing.T) {
 	svc := NewDashboardService(nil, nil)
 	jobs, err := svc.GetRecentExports(context.Background())
-	assert.NoError(t, err)
-	assert.Empty(t, jobs)
+	assert.ErrorIs(t, err, errExportJobStoreNotConfigured)
+	assert.Nil(t, jobs)
 }
 
 func TestDashboardService_GetRecentExports_QueriesFirstPageOfFive(t *testing.T) {

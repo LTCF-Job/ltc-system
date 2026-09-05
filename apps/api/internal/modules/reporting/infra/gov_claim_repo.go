@@ -57,7 +57,7 @@ func (r *GovClaimRepository) QueryGovClaimSources(
 	scope app.ClaimScope,
 ) ([]app.GovClaimSource, error) {
 	if r.db == nil {
-		return []app.GovClaimSource{}, nil
+		return nil, fmt.Errorf("government claim database is not configured")
 	}
 	if scope.CaseIDs == nil {
 		scope.CaseIDs = []uuid.UUID{}

@@ -109,6 +109,20 @@ func TestExportHandler_CreateBlockedByPrecheck(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "PRECHECK_FAILED")
 }
 
+func TestExportHandler_PrecheckRejectsUnknownJSONField(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h, _ := newTestExportHandler(t, app.GovClaimModeDirect)
+
+	w := performPrecheckRequest(h, http.MethodPost, map[string]interface{}{
+		"periodYm": "11507",
+		"caseIds":  []string{testCaseID.String()},
+		"caseID":   "typo",
+	})
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "VALIDATION_FAILED")
+}
+
 func TestExportHandler_DownloadCaseFileServesOpenableWorkbook(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h, jobID := newTestExportHandler(t, app.GovClaimModeDirect)
@@ -267,6 +281,8 @@ func newExportHandlerWithPrecheckFailure(t *testing.T) *ExportHandler {
 func performRequest(h *ExportHandler, method, path string, body interface{}) *httptest.ResponseRecorder {
 	r := gin.New()
 	r.POST("/api/v1/exports", h.Create)
+	r.POST("/api/v1/exports/precheck", h.Precheck)
+	r.GET("/api/v1/exports/precheck", h.Precheck)
 	r.GET("/api/v1/exports", h.List)
 	r.GET("/api/v1/exports/:id", h.Get)
 	r.GET("/api/v1/exports/:id/download", h.Download)
@@ -286,6 +302,10 @@ func performRequest(h *ExportHandler, method, path string, body interface{}) *ht
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
+}
+
+func performPrecheckRequest(h *ExportHandler, method string, body interface{}) *httptest.ResponseRecorder {
+	return performRequest(h, method, "/api/v1/exports/precheck", body)
 }
 
 // --- 測試替身 ---

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/reporting/app"
+	"ltc-system/apps/api/internal/platform/clock"
 )
 
 // ReportRepository 提供報表統計查詢操作。
@@ -23,7 +24,7 @@ func NewReportRepository(db *pgxpool.Pool) *ReportRepository {
 // QueryTripSummaryData 查詢車輛趟數表所需之資料庫聚合資料。
 func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, region *string, vehicleID *uuid.UUID) ([]app.ReportVehicleTripSummary, error) {
 	if r.db == nil {
-		return []app.ReportVehicleTripSummary{}, nil
+		return nil, fmt.Errorf("report database is not configured")
 	}
 
 	vehQuery := `
@@ -114,8 +115,13 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 
 // QueryHsinchuScheduleData 查詢新竹接送時刻表排班資料。
 func (r *ReportRepository) QueryHsinchuScheduleData(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID) ([]app.ReportHsinchuScheduleRow, error) {
+	return r.QueryHsinchuScheduleDataAsOf(ctx, clock.Today(), siteID, vehicleID)
+}
+
+// QueryHsinchuScheduleDataAsOf 僅查詢指定日期有效的排班，避免歷史、目前與未來版本混在同一份報表。
+func (r *ReportRepository) QueryHsinchuScheduleDataAsOf(ctx context.Context, asOfDate time.Time, siteID *uuid.UUID, vehicleID *uuid.UUID) ([]app.ReportHsinchuScheduleRow, error) {
 	if r.db == nil {
-		return []app.ReportHsinchuScheduleRow{}, nil
+		return nil, fmt.Errorf("report database is not configured")
 	}
 
 	query := `
@@ -133,9 +139,11 @@ func (r *ReportRepository) QueryHsinchuScheduleData(ctx context.Context, siteID 
 		LEFT JOIN vehicles v ON v.id = l.vehicle_id
 		WHERE c.region = 'hsinchu'
 		  AND c.status = 'active'
+		  AND cs.effective_range @> $1::date
 	`
 	var args []interface{}
-	argIdx := 1
+	args = append(args, asOfDate)
+	argIdx := 2
 
 	if siteID != nil {
 		query += fmt.Sprintf(" AND s.id = $%d", argIdx)

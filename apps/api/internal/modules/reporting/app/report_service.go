@@ -2,17 +2,26 @@ package app
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/govform"
 	"ltc-system/apps/api/internal/domain/rocdate"
+	"ltc-system/apps/api/internal/platform/clock"
 )
+
+var errReportRepositoryNotConfigured = errors.New("report repository is not configured")
 
 // ReportRepositoryPort 定義報表資料存取介面。
 type ReportRepositoryPort interface {
 	QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, region *string, vehicleID *uuid.UUID) ([]ReportVehicleTripSummary, error)
 	QueryHsinchuScheduleData(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID) ([]ReportHsinchuScheduleRow, error)
+}
+
+// HsinchuScheduleAsOfReader 讓歷史報表只取指定日期當下有效的排班；保留舊 port 供既有測試使用。
+type HsinchuScheduleAsOfReader interface {
+	QueryHsinchuScheduleDataAsOf(ctx context.Context, asOfDate time.Time, siteID *uuid.UUID, vehicleID *uuid.UUID) ([]ReportHsinchuScheduleRow, error)
 }
 
 // TripSummaryCaseRow 代表單一個案之趟數統計。
@@ -86,12 +95,12 @@ func (s *ReportService) GetTripSummary(ctx context.Context, periodYm string, reg
 	report := &TripSummaryReport{
 		PeriodYM:    periodYm,
 		Region:      region,
-		GeneratedAt: time.Now().Format("2006-01-02 15:04:05"),
+		GeneratedAt: clock.Now().Format("2006-01-02 15:04:05"),
 		Vehicles:    []TripSummaryVehicle{},
 	}
 
 	if s.repo == nil {
-		return report, nil
+		return nil, errReportRepositoryNotConfigured
 	}
 
 	startDate, endDate, _, err := rocdate.MonthRangeStrict(periodYm)
@@ -146,18 +155,28 @@ func (s *ReportService) GenerateTripSummaryExcel(ctx context.Context, periodYm s
 }
 
 // GetHsinchuSchedule 查詢新竹接送時刻表排班結構。
-func (s *ReportService) GetHsinchuSchedule(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID) (*HsinchuScheduleReport, error) {
+func (s *ReportService) GetHsinchuSchedule(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID, asOfDate ...time.Time) (*HsinchuScheduleReport, error) {
 	report := &HsinchuScheduleReport{
-		GeneratedAt: time.Now().Format("2006-01-02 15:04:05"),
+		GeneratedAt: clock.Now().Format("2006-01-02 15:04:05"),
 		Outbound:    []HsinchuScheduleItem{},
 		Inbound:     []HsinchuScheduleItem{},
 	}
 
 	if s.repo == nil {
-		return report, nil
+		return nil, errReportRepositoryNotConfigured
 	}
 
-	items, err := s.repo.QueryHsinchuScheduleData(ctx, siteID, vehicleID)
+	effectiveDate := clock.Today()
+	if len(asOfDate) > 0 && !asOfDate[0].IsZero() {
+		effectiveDate = asOfDate[0]
+	}
+	var items []ReportHsinchuScheduleRow
+	var err error
+	if reader, ok := s.repo.(HsinchuScheduleAsOfReader); ok {
+		items, err = reader.QueryHsinchuScheduleDataAsOf(ctx, effectiveDate, siteID, vehicleID)
+	} else {
+		items, err = s.repo.QueryHsinchuScheduleData(ctx, siteID, vehicleID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -196,8 +215,8 @@ func (s *ReportService) GetHsinchuSchedule(ctx context.Context, siteID *uuid.UUI
 }
 
 // GenerateHsinchuScheduleExcel 產生符合規格書的新竹接送時刻表 Excel 檔案。
-func (s *ReportService) GenerateHsinchuScheduleExcel(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID) ([]byte, error) {
-	report, err := s.GetHsinchuSchedule(ctx, siteID, vehicleID)
+func (s *ReportService) GenerateHsinchuScheduleExcel(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID, asOfDate ...time.Time) ([]byte, error) {
+	report, err := s.GetHsinchuSchedule(ctx, siteID, vehicleID, asOfDate...)
 	if err != nil {
 		return nil, err
 	}

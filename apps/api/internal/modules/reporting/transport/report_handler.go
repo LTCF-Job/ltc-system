@@ -3,11 +3,13 @@ package transport
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/reporting/app"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
@@ -77,6 +79,10 @@ func (h *ReportHandler) ExportTripSummaryExcel(c *gin.Context) {
 
 // GetHsinchuSchedule 查詢新竹接送時刻表。
 func (h *ReportHandler) GetHsinchuSchedule(c *gin.Context) {
+	asOfDate, ok := parseAsOfDate(c)
+	if !ok {
+		return
+	}
 	siteID, ok := parseOptionalUUID(c, "siteId")
 	if !ok {
 		return
@@ -86,7 +92,7 @@ func (h *ReportHandler) GetHsinchuSchedule(c *gin.Context) {
 		return
 	}
 
-	report, err := h.reportSvc.GetHsinchuSchedule(c.Request.Context(), siteID, vehID)
+	report, err := h.reportSvc.GetHsinchuSchedule(c.Request.Context(), siteID, vehID, asOfDate)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
@@ -97,6 +103,10 @@ func (h *ReportHandler) GetHsinchuSchedule(c *gin.Context) {
 
 // ExportHsinchuScheduleExcel 匯出新竹接送時刻表 Excel 檔案。
 func (h *ReportHandler) ExportHsinchuScheduleExcel(c *gin.Context) {
+	asOfDate, ok := parseAsOfDate(c)
+	if !ok {
+		return
+	}
 	siteID, ok := parseOptionalUUID(c, "siteId")
 	if !ok {
 		return
@@ -106,7 +116,7 @@ func (h *ReportHandler) ExportHsinchuScheduleExcel(c *gin.Context) {
 		return
 	}
 
-	excelBytes, err := h.reportSvc.GenerateHsinchuScheduleExcel(c.Request.Context(), siteID, vehID)
+	excelBytes, err := h.reportSvc.GenerateHsinchuScheduleExcel(c.Request.Context(), siteID, vehID, asOfDate)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
@@ -115,6 +125,19 @@ func (h *ReportHandler) ExportHsinchuScheduleExcel(c *gin.Context) {
 	filename := "hsinchu-schedule.xlsx"
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
+}
+
+func parseAsOfDate(c *gin.Context) (time.Time, bool) {
+	raw := c.Query("asOfDate")
+	if raw == "" {
+		return clock.Today(), true
+	}
+	date, err := rocdate.ParseDate(raw)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "asOfDate 必須為有效日期", nil)
+		return time.Time{}, false
+	}
+	return date, true
 }
 
 func validatePeriod(c *gin.Context, period string) bool {

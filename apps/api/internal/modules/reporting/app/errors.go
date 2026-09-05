@@ -13,6 +13,10 @@ var (
 	ErrNotZipJob = errors.New("export job is not a zip job")
 	// ErrNoClaimRows 指定條件下沒有任何可申報的資料列。
 	ErrNoClaimRows = errors.New("no claimable rows for the given filters")
+	// ErrInvalidExportMode 代表匯出模式不在正式支援的白名單內。
+	ErrInvalidExportMode = errors.New("invalid export mode")
+	// ErrCaseIDsRequired 代表匯出範圍未明確指定個案。
+	ErrCaseIDsRequired = errors.New("case ids are required")
 	// ErrInvalidPeriodYM 申報年月格式不是民國 5 碼（例如 11507）。
 	ErrInvalidPeriodYM = errors.New("invalid ROC period, expected RRRMM")
 )

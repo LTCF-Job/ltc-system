@@ -2,10 +2,17 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"ltc-system/apps/api/internal/domain/rocdate"
+	"ltc-system/apps/api/internal/platform/clock"
+)
+
+var (
+	errDashboardRepositoryNotConfigured = errors.New("dashboard repository is not configured")
+	errExportJobStoreNotConfigured      = errors.New("export job store is not configured")
 )
 
 // DashboardRepositoryPort 定義儀表板資料庫操作介面。
@@ -61,7 +68,7 @@ func NewDashboardService(repo DashboardRepositoryPort, jobStore ExportJobStore) 
 // GetRecentExports 取得最近的申報匯出工作紀錄。
 func (s *DashboardService) GetRecentExports(ctx context.Context) ([]GovClaimJob, error) {
 	if s.jobStore == nil {
-		return []GovClaimJob{}, nil
+		return nil, errExportJobStoreNotConfigured
 	}
 	jobs, _, err := s.jobStore.ListJobs(ctx, 1, 5)
 	if err != nil {
@@ -72,7 +79,7 @@ func (s *DashboardService) GetRecentExports(ctx context.Context) ([]GovClaimJob,
 
 // GetMetrics 查詢儀表板完整營運與圖表統計指標。
 func (s *DashboardService) GetMetrics(ctx context.Context, periodYm string) (*DashboardMetricsDTO, error) {
-	now := time.Now()
+	now := clock.Now()
 	rocYear := now.Year() - 1911
 	currentMonthStr := fmt.Sprintf("%03d-%02d", rocYear, int(now.Month()))
 	if periodYm != "" {
@@ -93,14 +100,13 @@ func (s *DashboardService) GetMetrics(ctx context.Context, periodYm string) (*Da
 			OffCount:        0,
 			LeavePercentage: 0.0,
 		},
-		VehicleTripTrends:    []VehicleTripTrendItemDTO{},
-		ClaimFulfillmentRate: 95.0,
+		VehicleTripTrends: []VehicleTripTrendItemDTO{},
+		// 目前 repository 尚未提供可驗證的申報母數；不可用固定示範值冒充真實指標。
+		ClaimFulfillmentRate: 0,
 	}
 
-	// 無資料庫連線時回傳誠實的零值指標，與 ReportService 的離線行為一致，
-	// 不再回傳假造的固定示範數字。
 	if s.repo == nil {
-		return dto, nil
+		return nil, errDashboardRepositoryNotConfigured
 	}
 
 	if casesCount, err := s.repo.GetActiveCasesCount(ctx); err != nil {

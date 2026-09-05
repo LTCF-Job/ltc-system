@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"ltc-system/apps/api/internal/domain/crypto"
 	"ltc-system/apps/api/internal/domain/govform"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/reporting/app"
 	"ltc-system/apps/api/internal/platform/config"
 )
@@ -122,6 +124,20 @@ type discardAuditWriter struct{}
 
 func (discardAuditWriter) Write(context.Context, app.AuditEntry) error { return nil }
 
+type failingAuditWriter struct{ err error }
+
+func (w failingAuditWriter) Write(context.Context, app.AuditEntry) error { return w.err }
+
+type immutableExportStore struct {
+	*fakeExportStore
+	content []byte
+	err     error
+}
+
+func (s *immutableExportStore) LoadExportFile(context.Context, uuid.UUID, uuid.UUID) ([]byte, error) {
+	return s.content, s.err
+}
+
 type stubPrecheckRepo struct {
 	incomplete []app.IncompleteCase
 }
@@ -204,8 +220,12 @@ func newSource(t *testing.T, caseID uuid.UUID, caseCode, caseName string, driver
 }
 
 func newService(reader app.GovClaimSourceReader, store app.ExportJobStore, renderer app.Renderer, archiver app.Archiver, precheckRepo app.PrecheckRepositoryPort) *app.GovClaimService {
+	return newServiceWithAudit(reader, store, renderer, archiver, precheckRepo, discardAuditWriter{})
+}
+
+func newServiceWithAudit(reader app.GovClaimSourceReader, store app.ExportJobStore, renderer app.Renderer, archiver app.Archiver, precheckRepo app.PrecheckRepositoryPort, audit app.AuditWriter) *app.GovClaimService {
 	cfg := &config.Config{EncryptionKey: testEncryptionKey}
-	return app.NewGovClaimService(cfg, reader, store, renderer, archiver, app.NewPrecheckService(precheckRepo), discardAuditWriter{})
+	return app.NewGovClaimService(cfg, reader, store, renderer, archiver, app.NewPrecheckService(precheckRepo), audit)
 }
 
 func newInput(mode app.GovClaimMode, caseIDs ...uuid.UUID) app.CreateGovClaimInput {
@@ -319,7 +339,31 @@ func TestCreateGovClaimJob_SnapshotOmitsPlainNationalIDs(t *testing.T) {
 	assert.Equal(t, 1, line.LineNo)
 }
 
-func TestCreateGovClaimJob_SkipsIncompleteSources(t *testing.T) {
+func TestCreateGovClaimJob_RejectsAuditFailureBeforeCompletingExport(t *testing.T) {
+	caseID := uuid.New()
+	driverID := uuid.New()
+	auditErr := errors.New("audit store unavailable")
+	store := &fakeExportStore{jobID: uuid.New()}
+
+	_, err := newServiceWithAudit(
+		&fakeSourceReader{sources: []app.GovClaimSource{
+			newSource(t, caseID, "C001", "蔡曾切", driverID, 1, 1, "outbound", "09:40"),
+		}},
+		store,
+		&recordingRenderer{},
+		&recordingArchiver{},
+		stubPrecheckRepo{},
+		failingAuditWriter{err: auditErr},
+	).CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseID))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, auditErr)
+	assert.Contains(t, err.Error(), "write export audit")
+	assert.Empty(t, store.completed, "稽核失敗時不可把工作標為成功")
+	assert.Len(t, store.failed, 1, "稽核失敗時應把工作標為失敗")
+}
+
+func TestCreateGovClaimJob_BlocksIncompleteSources(t *testing.T) {
 	driver := uuid.New()
 	tests := []struct {
 		name   string
@@ -344,15 +388,12 @@ func TestCreateGovClaimJob_SkipsIncompleteSources(t *testing.T) {
 			bad := newSource(t, caseA, "C001", "蔡曾切", driver, 2, 1, "outbound", "09:40", tt.mutate)
 			store := &fakeExportStore{jobID: uuid.New()}
 
-			job, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{good, bad}}, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{}).
+			_, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{good, bad}}, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{}).
 				CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseA))
-			require.NoError(t, err)
-
-			require.Len(t, store.completed, 1)
-			assert.Equal(t, 1, store.completed[0].RowCount, "缺資料的趟次不得被預設值補成申報行")
-			require.Len(t, job.Skipped, 1)
-			assert.Equal(t, tt.reason, job.Skipped[0].Reason)
-			assert.Equal(t, 1, job.Skipped[0].Count)
+			assert.ErrorIs(t, err, app.ErrInvalidClaimData)
+			assert.Empty(t, store.completed, "存在非法列時不可產生部分申報檔")
+			assert.Len(t, store.failed, 1)
+			assert.Equal(t, "申報資料不完整，請修正後重新匯出", store.failed[0])
 		})
 	}
 }
@@ -366,7 +407,7 @@ func TestCreateGovClaimJob_CaseWithoutUsableRowsProducesNoFile(t *testing.T) {
 	_, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{source}}, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{}).
 		CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseA))
 
-	assert.ErrorIs(t, err, app.ErrNoClaimRows)
+	assert.ErrorIs(t, err, app.ErrInvalidClaimData)
 	assert.Empty(t, store.completed)
 	assert.Len(t, store.failed, 1, "產不出檔案仍要留下失敗紀錄")
 }
@@ -489,4 +530,78 @@ func TestRenderCaseFile_UnknownCaseReturnsNotFound(t *testing.T) {
 		RenderCaseFile(context.Background(), uuid.New(), uuid.New())
 
 	assert.ErrorIs(t, err, app.ErrExportFileNotFound)
+}
+
+func TestRenderCaseFile_UsesImmutableFileContent(t *testing.T) {
+	jobID := uuid.New()
+	caseID := uuid.New()
+	renderer := &recordingRenderer{}
+	store := &immutableExportStore{
+		fakeExportStore: &fakeExportStore{
+			jobID: jobID,
+			storedJob: app.GovClaimJob{
+				ID: jobID,
+				Files: []app.GovClaimCaseFile{{
+					CaseID:   caseID,
+					FileName: "蔡曾切11507.xlsx",
+				}},
+			},
+		},
+		content: []byte("immutable-xlsx"),
+	}
+
+	file, err := newService(&fakeSourceReader{}, store, renderer, &recordingArchiver{}, stubPrecheckRepo{}).
+		RenderCaseFile(context.Background(), jobID, caseID)
+
+	require.NoError(t, err)
+	assert.Equal(t, []byte("immutable-xlsx"), file.Bytes)
+	assert.Empty(t, renderer.batches, "有 immutable 檔案時不應重新產檔")
+}
+
+func TestRenderCaseFile_PropagatesImmutableFileError(t *testing.T) {
+	jobID := uuid.New()
+	caseID := uuid.New()
+	immutableErr := errors.New("immutable file unavailable")
+	store := &immutableExportStore{
+		fakeExportStore: &fakeExportStore{
+			jobID: jobID,
+			storedJob: app.GovClaimJob{
+				ID: jobID,
+				Files: []app.GovClaimCaseFile{{
+					CaseID:   caseID,
+					FileName: "蔡曾切11507.xlsx",
+				}},
+			},
+		},
+		err: immutableErr,
+	}
+
+	_, err := newService(&fakeSourceReader{}, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{}).
+		RenderCaseFile(context.Background(), jobID, caseID)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, immutableErr)
+	assert.Contains(t, err.Error(), "load immutable export file")
+}
+
+func TestRenderCaseFile_ReturnsSnapshotROCDateError(t *testing.T) {
+	jobID := uuid.New()
+	caseID := uuid.New()
+	store := &fakeExportStore{
+		jobID: jobID,
+		storedJob: app.GovClaimJob{
+			ID:    jobID,
+			Files: []app.GovClaimCaseFile{{CaseID: caseID, FileName: "蔡曾切11507.xlsx"}},
+		},
+		caseLines: map[uuid.UUID][]app.ExportLine{
+			caseID: {{CaseID: caseID, ServiceDateROC: 1150230}},
+		},
+	}
+
+	_, err := newService(&fakeSourceReader{}, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{}).
+		RenderCaseFile(context.Background(), jobID, caseID)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, rocdate.ErrInvalidROCVal)
+	assert.Contains(t, err.Error(), "convert service date from ROC")
 }

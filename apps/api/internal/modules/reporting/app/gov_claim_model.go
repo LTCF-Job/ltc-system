@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +37,10 @@ const (
 	SkipReasonNoNationalID      = "NO_NATIONAL_ID"
 	SkipReasonBuildRowFailed    = "BUILD_ROW_FAILED"
 )
+
+// ErrInvalidClaimData 代表申報範圍內存在任何無法可靠組成申報列的資料。
+// 政府申報採 all-or-nothing，不允許以跳過錯誤列的方式產生部分檔案。
+var ErrInvalidClaimData = errors.New("government claim contains invalid data")
 
 // GovClaimSource 代表組出單列申報資料所需的原始查詢結果。
 // 指標欄位代表來源可能缺漏，由 service 判斷是否跳過該列。

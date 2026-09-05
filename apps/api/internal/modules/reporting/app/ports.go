@@ -22,6 +22,19 @@ type ExportJobStore interface {
 	LoadNationalIDCiphers(ctx context.Context, caseID uuid.UUID, driverIDs []uuid.UUID) (NationalIDCiphers, error)
 }
 
+// ImmutableExportFileStore 保存並讀取匯出成功當下的完整檔案位元組。
+// 歷史下載優先走此 port，不依賴目前個案或司機主檔重新產檔。
+type ImmutableExportFileStore interface {
+	LoadExportFile(ctx context.Context, jobID, caseID uuid.UUID) ([]byte, error)
+}
+
+// ObjectStorage 保存政府申報原始檔案；bucket 必須是 private，下載權限由 API 授權後代為轉送。
+type ObjectStorage interface {
+	Put(ctx context.Context, path, contentType string, content []byte) error
+	Get(ctx context.Context, path string) ([]byte, error)
+	Delete(ctx context.Context, path string) error
+}
+
 // Archiver 將多個檔案打包成單一壓縮檔位元組。
 type Archiver interface {
 	BuildZip(entries []ZipEntry) ([]byte, error)

@@ -68,6 +68,12 @@ func NewGovClaimService(
 // CreateGovClaimJob 前置檢核通過後同步產生逐案申報工作簿，並將申報列快照與檔案中繼資料落地。
 // 檢核有阻斷性錯誤時回傳 ErrPrecheckBlocked，且不建立任何工作紀錄。
 func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGovClaimInput) (GovClaimJob, error) {
+	if input.Mode != GovClaimModeDirect && input.Mode != GovClaimModeZip {
+		return GovClaimJob{}, ErrInvalidExportMode
+	}
+	if len(input.CaseIDs) == 0 {
+		return GovClaimJob{}, ErrCaseIDsRequired
+	}
 	periodYM, start, end, err := parsePeriodYM(input.PeriodYM)
 	if err != nil {
 		return GovClaimJob{}, err
@@ -110,7 +116,27 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 		return GovClaimJob{}, err
 	}
 
+	// 申報匯出屬高風險操作；先確保稽核可寫，再允許工作進入 succeeded。
+	auditJob := GovClaimJob{
+		ID:         jobID,
+		PeriodYM:   periodYM,
+		Region:     input.Region,
+		Mode:       input.Mode,
+		TotalCases: len(files),
+		TotalRows:  len(lines),
+		Files:      files,
+	}
+	if err := s.recordExportAudit(ctx, auditJob, input); err != nil {
+		if failErr := s.store.FailJob(ctx, jobID, exportFailureMessage(err)); failErr != nil {
+			return GovClaimJob{}, fmt.Errorf("mark export job failed after audit error: %w", failErr)
+		}
+		return GovClaimJob{}, fmt.Errorf("write export audit: %w", err)
+	}
+
 	if err := s.store.CompleteJob(ctx, jobID, files, lines); err != nil {
+		if failErr := s.store.FailJob(ctx, jobID, exportFailureMessage(err)); failErr != nil {
+			return GovClaimJob{}, fmt.Errorf("mark export job failed: %w", failErr)
+		}
 		return GovClaimJob{}, fmt.Errorf("complete export job: %w", err)
 	}
 
@@ -120,12 +146,14 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 	}
 	job.Skipped = skipped
 
-	s.recordExportAudit(ctx, job, input)
 	return job, nil
 }
 
-// recordExportAudit 留下一筆匯出稽核紀錄；稽核寫入失敗不影響已完成的匯出結果，僅盡力而為。
-func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob, input CreateGovClaimInput) {
+// recordExportAudit 留下一筆政府申報匯出稽核紀錄。
+func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob, input CreateGovClaimInput) error {
+	if s.audit == nil {
+		return errors.New("export audit is unavailable")
+	}
 	entityID := job.ID.String()
 	var actorID *uuid.UUID
 	if input.CreatedBy != uuid.Nil {
@@ -146,7 +174,7 @@ func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob
 		})
 	}
 
-	_ = s.audit.Write(ctx, AuditEntry{
+	return s.audit.Write(ctx, AuditEntry{
 		ActorID:    actorID,
 		ActorRole:  actorRole,
 		Action:     "export",
@@ -185,7 +213,7 @@ func (s *GovClaimService) RenderCaseFile(ctx context.Context, jobID, caseID uuid
 		return GovClaimCaseFile{}, ErrExportFileNotFound
 	}
 
-	content, err := s.renderSnapshot(ctx, jobID, caseID)
+	content, err := s.loadImmutableFile(ctx, jobID, caseID)
 	if err != nil {
 		return GovClaimCaseFile{}, err
 	}
@@ -205,7 +233,7 @@ func (s *GovClaimService) RenderZip(ctx context.Context, jobID uuid.UUID) (strin
 
 	entries := make([]ZipEntry, 0, len(job.Files))
 	for _, f := range job.Files {
-		content, err := s.renderSnapshot(ctx, jobID, f.CaseID)
+		content, err := s.loadImmutableFile(ctx, jobID, f.CaseID)
 		if err != nil {
 			return "", nil, err
 		}
@@ -272,8 +300,15 @@ func (s *GovClaimService) buildJobContent(
 
 		for _, row := range rows {
 			lineNo++
-			lines = append(lines, newExportLine(lineNo, group, row, rowDrivers[rowKeyOf(row)]))
+			line, err := newExportLine(lineNo, group, row, rowDrivers[rowKeyOf(row)])
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("build export line for case %s: %w", group.caseName, err)
+			}
+			lines = append(lines, line)
 		}
+	}
+	if skipped := skips.list(); len(skipped) > 0 {
+		return nil, nil, skipped, fmt.Errorf("%w: %s", ErrInvalidClaimData, skipped[0].Reason)
 	}
 
 	if len(files) == 0 {
@@ -381,9 +416,11 @@ func (s *GovClaimService) renderSnapshot(ctx context.Context, jobID, caseID uuid
 			}
 			row.Cells[6] = driverNationalID
 		}
-		if serviceDate, err := rocdate.FromROC(line.ServiceDateROC); err == nil {
-			row.ServiceDate = serviceDate
+		serviceDate, err := rocdate.FromROC(line.ServiceDateROC)
+		if err != nil {
+			return nil, fmt.Errorf("convert service date from ROC %d: %w", line.ServiceDateROC, err)
 		}
+		row.ServiceDate = serviceDate
 		rows = append(rows, row)
 	}
 
@@ -469,7 +506,7 @@ func combineDepartTime(serviceDate time.Time, hhmm string) (time.Time, error) {
 }
 
 // newExportLine 組出落地用的申報列快照；兩個身分證欄位一律清空，改以 driverId 保留關聯。
-func newExportLine(lineNo int, group caseGroup, row govform.ClaimRow, driverID *uuid.UUID) ExportLine {
+func newExportLine(lineNo int, group caseGroup, row govform.ClaimRow, driverID *uuid.UUID) (ExportLine, error) {
 	payload := ClaimLinePayload{
 		Cells:     row.Cells,
 		DriverID:  driverID,
@@ -479,14 +516,17 @@ func newExportLine(lineNo int, group caseGroup, row govform.ClaimRow, driverID *
 	payload.Cells[0] = ""
 	payload.Cells[6] = ""
 
-	serviceDateROC, _ := rocdate.ToROC(row.ServiceDate)
+	serviceDateROC, err := rocdate.ToROC(row.ServiceDate)
+	if err != nil {
+		return ExportLine{}, fmt.Errorf("convert service date to ROC: %w", err)
+	}
 	return ExportLine{
 		LineNo:           lineNo,
 		CaseID:           group.caseID,
 		NationalIDMasked: group.nationalIDMasked,
 		ServiceDateROC:   serviceDateROC,
 		Payload:          payload,
-	}
+	}, nil
 }
 
 // uniqueFileName 以「個案姓名＋民國年月」命名，比照政府端收到的範本檔名；同名時補序號。
@@ -506,7 +546,24 @@ func exportFailureMessage(err error) string {
 	if errors.Is(err, ErrNoClaimRows) {
 		return "指定條件下沒有可申報的搭乘紀錄"
 	}
+	if errors.Is(err, ErrInvalidClaimData) {
+		return "申報資料不完整，請修正後重新匯出"
+	}
 	return "產生申報檔案失敗"
+}
+
+func (s *GovClaimService) loadImmutableFile(ctx context.Context, jobID, caseID uuid.UUID) ([]byte, error) {
+	if store, ok := s.store.(ImmutableExportFileStore); ok {
+		content, err := store.LoadExportFile(ctx, jobID, caseID)
+		if err != nil {
+			return nil, fmt.Errorf("load immutable export file: %w", err)
+		}
+		if len(content) > 0 {
+			return content, nil
+		}
+	}
+	// 相容尚未具備檔案內容欄位的舊匯出資料；新匯出一律由 immutable store 提供。
+	return s.renderSnapshot(ctx, jobID, caseID)
 }
 
 func findCaseFile(files []GovClaimCaseFile, caseID uuid.UUID) (GovClaimCaseFile, bool) {
