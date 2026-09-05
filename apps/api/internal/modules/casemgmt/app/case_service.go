@@ -14,14 +14,22 @@ import (
 )
 
 var (
-	ErrSiteRegionMismatch      = errors.New("site region does not match case region")
-	ErrCaseRegionUnset         = errors.New("個案尚未設定所屬區域，無法建立排班")
-	ErrInvalidTripPattern      = errors.New("trip pattern must match schedule legs count")
-	ErrLegTimesNotOrdered      = errors.New("schedule leg departure times must be strictly increasing")
-	ErrCaseNotFound            = errors.New("case not found")
-	ErrCaseNameRequired        = errors.New("case name is required")
-	ErrNationalIDNotConfigured = errors.New("national id is not configured")
-	ErrRevealAuditUnavailable  = errors.New("reveal audit is unavailable")
+	ErrSiteRegionMismatch       = errors.New("site region does not match case region")
+	ErrCaseRegionUnset          = errors.New("個案尚未設定所屬區域，無法建立排班")
+	ErrInvalidTripPattern       = errors.New("trip pattern must match schedule legs count")
+	ErrLegTimesNotOrdered       = errors.New("schedule leg departure times must be strictly increasing")
+	ErrInvalidScheduleWeekday   = errors.New("schedule weekdays must be unique values from 1 to 7")
+	ErrInvalidScheduleLegSeq    = errors.New("schedule leg sequence must be unique and within trip pattern")
+	ErrInvalidScheduleDirection = errors.New("schedule leg direction must be outbound or inbound")
+	ErrInvalidScheduleTime      = errors.New("schedule leg departure time must use HH:MM format")
+	ErrInvalidSchedulePrice     = errors.New("schedule unit price must be greater than zero")
+	ErrInvalidScheduleDistance  = errors.New("schedule distance must not be negative")
+	ErrInvalidScheduleDuration  = errors.New("schedule service duration must be between 1 and 240 minutes")
+	ErrInvalidScheduleDateRange = errors.New("schedule effective end date must not be before start date")
+	ErrCaseNotFound             = errors.New("case not found")
+	ErrCaseNameRequired         = errors.New("case name is required")
+	ErrNationalIDNotConfigured  = errors.New("national id is not configured")
+	ErrRevealAuditUnavailable   = errors.New("reveal audit is unavailable")
 )
 
 // CaseService 封裝個案、單位、車輛、司機與排班之業務邏輯。
@@ -452,6 +460,9 @@ func (s *CaseService) CreateCaseSchedule(ctx context.Context, req CreateSchedule
 	if int(req.TripPattern) != len(req.Legs) {
 		return nil, ErrInvalidTripPattern
 	}
+	if err := validateScheduleRequest(req); err != nil {
+		return nil, err
+	}
 
 	caseObj, err := s.caseRepo.GetByID(ctx, req.CaseID)
 	if err != nil {
@@ -513,4 +524,48 @@ func (s *CaseService) CreateCaseSchedule(ctx context.Context, req CreateSchedule
 	}
 
 	return &entity, nil
+}
+
+func validateScheduleRequest(req CreateScheduleRequest) error {
+	weekdays := make(map[int16]struct{}, len(req.Weekdays))
+	for _, weekday := range req.Weekdays {
+		if weekday < 1 || weekday > 7 {
+			return ErrInvalidScheduleWeekday
+		}
+		if _, exists := weekdays[weekday]; exists {
+			return ErrInvalidScheduleWeekday
+		}
+		weekdays[weekday] = struct{}{}
+	}
+	if req.UnitPrice <= 0 {
+		return ErrInvalidSchedulePrice
+	}
+	if req.DistanceKM < 0 {
+		return ErrInvalidScheduleDistance
+	}
+	if req.ServiceDurationMin < 1 || req.ServiceDurationMin > 240 {
+		return ErrInvalidScheduleDuration
+	}
+	if req.EffectiveTo != nil && req.EffectiveTo.Before(req.EffectiveFrom) {
+		return ErrInvalidScheduleDateRange
+	}
+
+	legSeqs := make(map[int16]struct{}, len(req.Legs))
+	for _, leg := range req.Legs {
+		if leg.LegSeq < 1 || leg.LegSeq > req.TripPattern {
+			return ErrInvalidScheduleLegSeq
+		}
+		if _, exists := legSeqs[leg.LegSeq]; exists {
+			return ErrInvalidScheduleLegSeq
+		}
+		legSeqs[leg.LegSeq] = struct{}{}
+		if leg.Direction != "outbound" && leg.Direction != "inbound" {
+			return ErrInvalidScheduleDirection
+		}
+		parsedTime, err := time.Parse("15:04", leg.DepartTime)
+		if err != nil || parsedTime.Format("15:04") != leg.DepartTime {
+			return ErrInvalidScheduleTime
+		}
+	}
+	return nil
 }

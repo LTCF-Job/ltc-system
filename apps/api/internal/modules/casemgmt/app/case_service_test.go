@@ -40,6 +40,14 @@ type fakeCaseStore struct {
 	closeSchedulesErr  error
 }
 
+type fakeSiteFinder struct {
+	site *SiteRef
+}
+
+func (f *fakeSiteFinder) GetByID(context.Context, uuid.UUID) (*SiteRef, error) {
+	return f.site, nil
+}
+
 func newFakeCaseStore() *fakeCaseStore {
 	return &fakeCaseStore{
 		byID:       map[uuid.UUID]*Case{},
@@ -133,6 +141,55 @@ func (f *fakeCaseStore) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (
 func (f *fakeCaseStore) CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error {
 	f.closedSchedulesFor = caseID
 	return f.closeSchedulesErr
+}
+
+func TestCaseService_CreateCaseSchedule_ValidatesRequest(t *testing.T) {
+	from := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	to := from.AddDate(0, 1, 0)
+	base := CreateScheduleRequest{
+		CaseID:             uuid.New(),
+		SiteID:             uuid.New(),
+		EffectiveFrom:      from,
+		EffectiveTo:        &to,
+		Weekdays:           []int16{1, 3},
+		TripPattern:        2,
+		UnitPrice:          100,
+		DistanceKM:         5,
+		ServiceDurationMin: 30,
+		Legs: []CreateScheduleLegItemRequest{
+			{LegSeq: 1, Direction: "outbound", DepartTime: "09:00"},
+			{LegSeq: 2, Direction: "inbound", DepartTime: "17:00"},
+		},
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*CreateScheduleRequest)
+		want   error
+	}{
+		{"星期值超出範圍", func(r *CreateScheduleRequest) { r.Weekdays = []int16{0} }, ErrInvalidScheduleWeekday},
+		{"星期重複", func(r *CreateScheduleRequest) { r.Weekdays = []int16{1, 1} }, ErrInvalidScheduleWeekday},
+		{"趟次序號重複", func(r *CreateScheduleRequest) { r.Legs[1].LegSeq = 1 }, ErrInvalidScheduleLegSeq},
+		{"方向不合法", func(r *CreateScheduleRequest) { r.Legs[0].Direction = "return" }, ErrInvalidScheduleDirection},
+		{"時間格式不合法", func(r *CreateScheduleRequest) { r.Legs[0].DepartTime = "9:00" }, ErrInvalidScheduleTime},
+		{"單價不合法", func(r *CreateScheduleRequest) { r.UnitPrice = 0 }, ErrInvalidSchedulePrice},
+		{"距離不合法", func(r *CreateScheduleRequest) { r.DistanceKM = -1 }, ErrInvalidScheduleDistance},
+		{"服務時長不合法", func(r *CreateScheduleRequest) { r.ServiceDurationMin = 241 }, ErrInvalidScheduleDuration},
+		{"有效日期區間不合法", func(r *CreateScheduleRequest) { earlier := from.AddDate(0, 0, -1); r.EffectiveTo = &earlier }, ErrInvalidScheduleDateRange},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := base
+			req.Weekdays = append([]int16(nil), base.Weekdays...)
+			req.Legs = append([]CreateScheduleLegItemRequest(nil), base.Legs...)
+			tt.mutate(&req)
+			svc := NewCaseService(testConfig(), newFakeCaseStore(), &fakeSiteFinder{site: &SiteRef{ID: req.SiteID, Region: "north"}}, nil, nil)
+
+			_, err := svc.CreateCaseSchedule(context.Background(), req)
+			require.ErrorIs(t, err, tt.want)
+		})
+	}
 }
 
 type fakeCaseAuditWriter struct {
