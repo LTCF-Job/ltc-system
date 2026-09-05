@@ -273,7 +273,7 @@ import { Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import PrecheckResult from '@/components/PrecheckResult.vue'
-import { formatDateTime } from '@/utils/formatters'
+import { formatDateTime, currentLocalMonth } from '@/utils/formatters'
 import {
   precheckExport,
   createExportJob,
@@ -302,7 +302,7 @@ import type {
 const authStore = useAuthStore()
 const { toRocMonth, toRocPeriodYm, formatRocMonthLabel } = useRocMonth()
 
-const selectedDate = ref<string>('2026-07')
+const selectedDate = ref<string>(currentLocalMonth())
 const checking = ref(false)
 const exporting = ref(false)
 const precheckResult = ref<PrecheckResultDTO | null>(null)

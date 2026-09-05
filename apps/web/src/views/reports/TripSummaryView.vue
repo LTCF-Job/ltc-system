@@ -153,8 +153,9 @@ import { listAllVehicles } from '@/api/masters'
 import type { TripSummaryReportDTO, VehicleDTO } from '@/types/api'
 import { REGION_LABELS } from '@/types/domain'
 import { downloadBlob } from '@/utils/download'
+import { currentLocalMonth } from '@/utils/formatters'
 
-const queryMonth = ref('2026-07')
+const queryMonth = ref(currentLocalMonth())
 const queryKeyword = ref('')
 const queryRegion = ref<string | undefined>(undefined)
 const queryVehicle = ref<string | undefined>(undefined)

@@ -282,7 +282,7 @@ import {
 } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
-import { formatDateTime, formatRocDate, formatYearMonth } from '@/utils/formatters'
+import { formatDateTime, formatRocDate, formatYearMonth, todayLocal } from '@/utils/formatters'
 import { emptyVehicleForm, vehicleFormRules } from '@/utils/vehicleForm'
 import type { VehicleDTO, CreateVehicleRequest, DriverDTO, SiteDTO } from '@/types/api'
 
@@ -297,7 +297,7 @@ const driverDialogVehicle = ref<VehicleDTO | null>(null)
 const savingDrivers = ref(false)
 const driverDialogForm = reactive<{ driverIds: string[]; effectiveFrom: string }>({
   driverIds: [],
-  effectiveFrom: new Date().toISOString().split('T')[0]
+  effectiveFrom: todayLocal()
 })
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
@@ -365,7 +365,7 @@ onMounted(() => {
 function openDriverDialog(row: VehicleDTO) {
   driverDialogVehicle.value = row
   driverDialogForm.driverIds = (row.drivers || []).map((d) => d.id)
-  driverDialogForm.effectiveFrom = new Date().toISOString().split('T')[0]
+  driverDialogForm.effectiveFrom = todayLocal()
   driverDialogVisible.value = true
 }
 

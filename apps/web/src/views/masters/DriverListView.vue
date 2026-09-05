@@ -281,7 +281,7 @@ import {
 } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
-import { formatDate } from '@/utils/formatters'
+import { formatDate, todayLocal } from '@/utils/formatters'
 import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass, REGION_LABELS } from '@/types/domain'
 import type { DriverDTO, CreateDriverRequest, UpdateDriverRequest, VehicleDTO } from '@/types/api'
 
@@ -300,7 +300,7 @@ const selectedDriverId = ref<string | null>(null)
 const assignFormRef = ref<FormInstance>()
 const assignForm = reactive({
   vehicleId: '',
-  startDate: new Date().toISOString().split('T')[0],
+  startDate: todayLocal(),
   endDate: ''
 })
 
@@ -411,7 +411,7 @@ function openAssignDialog(row: any) {
   selectedDriverId.value = row.id
   const assignment = row.assignments?.[row.assignments.length - 1]
   assignForm.vehicleId = assignment?.vehicleId || ''
-  assignForm.startDate = new Date().toISOString().split('T')[0]
+  assignForm.startDate = todayLocal()
   assignForm.endDate = ''
   assignDialogVisible.value = true
 }

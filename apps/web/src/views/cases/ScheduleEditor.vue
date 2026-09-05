@@ -519,6 +519,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import dayjs from 'dayjs'
+import { currentLocalMonth, todayLocal } from '@/utils/formatters'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { Calendar, SetUp, RefreshRight, CircleClose } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -551,7 +552,7 @@ const saving = ref(false)
 const availableSites = ref<SiteDTO[]>([])
 const availableVehicles = ref<VehicleDTO[]>([])
 const scheduleMode = ref<ScheduleMode>('monthly')
-const selectedMonth = ref<string>('2026-07')
+const selectedMonth = ref<string>(currentLocalMonth())
 const holidayMap = ref<Record<string, { name: string; isDayOff?: boolean }>>({})
 
 const weekdayLabels = ['週一', '週二', '週三', '週四', '週五', '週六', '週日']
@@ -570,7 +571,7 @@ const monthlyConfigs = reactive<Record<string, DayScheduleConfig>>({})
 
 const formData = reactive<SaveScheduleRequest>({
   siteId: '',
-  effectiveFrom: dayjs().format('YYYY-MM-DD'),
+  effectiveFrom: todayLocal(),
   tripPattern: 2,
   weekdays: [1, 2, 3, 4, 5],
   unitPrice: 115,
@@ -817,7 +818,7 @@ watch(
     if (s) {
       scheduleMode.value = s.scheduleMode || 'monthly'
       formData.siteId = s.siteId
-      formData.effectiveFrom = s.effectiveFrom || dayjs().format('YYYY-MM-DD')
+      formData.effectiveFrom = s.effectiveFrom || todayLocal()
       formData.tripPattern = s.tripPattern || 2
       // 既有排班從 API 載入，欄位缺漏時保持未填，不得用猜測值頂替申報單價、里程與時長
       formData.weekdays = s.weekdays ? [...s.weekdays] : []

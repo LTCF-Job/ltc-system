@@ -508,6 +508,7 @@ import {
 } from '@/api/attendance'
 import { listHolidays, type HolidayItem } from '@/api/holidays'
 import { listAllDrivers, listAllVehicles } from '@/api/masters'
+import { currentLocalMonth, todayLocal } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/auth'
 import type {
   MonthAttendanceReportDTO,
@@ -524,7 +525,7 @@ const activeTab = ref('attendance')
 // --- 出勤相關狀態 ---
 const attendanceLoading = ref(false)
 const attendanceSaving = ref(false)
-const attendanceMonth = ref('2026-07')
+const attendanceMonth = ref(currentLocalMonth())
 const attendanceQuery = ref('')
 const selectedDriverId = ref<string>()
 const attendanceReport = ref<MonthAttendanceReportDTO | null>(null)
@@ -796,7 +797,7 @@ function openFuelDialog(row?: any) {
     editingFuelId.value = null
     fuelForm.vehicleId = fuelVehicleId.value || ''
     fuelForm.driverId = undefined
-    fuelForm.fuelDate = new Date().toISOString().slice(0, 10)
+    fuelForm.fuelDate = todayLocal()
     fuelForm.liters = 0
     fuelForm.cost = 0
     fuelForm.receiptUrl = ''

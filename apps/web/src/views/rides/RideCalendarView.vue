@@ -237,13 +237,13 @@ import RideCorrectionDrawer from './RideCorrectionDrawer.vue'
 import RideManualEntryDialog from './RideManualEntryDialog.vue'
 import { getRideCalendarMatrix } from '@/api/rides'
 import { listHolidays } from '@/api/holidays'
-import { formatDateTime } from '@/utils/formatters'
+import { formatDateTime, currentLocalMonth } from '@/utils/formatters'
 import { useRocMonth } from '@/composables/useRocMonth'
 import type { RideCalendarMatrixDTO, CaseRideCalendarRowDTO, RideRecordDTO } from '@/types/api'
 
 const { toRocMonth } = useRocMonth()
 
-const selectedDate = ref<string>('2026-07')
+const selectedDate = ref<string>(currentLocalMonth())
 const searchQuery = ref<string>('')
 const loading = ref(false)
 const matrixData = ref<RideCalendarMatrixDTO | null>(null)
@@ -263,7 +263,7 @@ const daysInMonth = computed(() => {
 
 function changeMonth(delta: number) {
   if (!selectedDate.value) {
-    selectedDate.value = '2026-07'
+    selectedDate.value = currentLocalMonth()
   }
   const [yearStr, monthStr] = selectedDate.value.split('-')
   let year = parseInt(yearStr, 10)

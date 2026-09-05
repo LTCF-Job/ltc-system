@@ -243,6 +243,7 @@ import {
 import { listAllVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { downloadBlob } from '@/utils/download'
+import { todayLocal } from '@/utils/formatters'
 import type { MaintenanceLogDTO, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
@@ -323,7 +324,7 @@ function handleReset() {
 function openCreateDialog() {
   editingId.value = null
   form.vehicleId = queryVehicleId.value || ''
-  form.serviceDate = new Date().toISOString().slice(0, 10)
+  form.serviceDate = todayLocal()
   form.mileage = 0
   form.items = ''
   form.vendor = ''
