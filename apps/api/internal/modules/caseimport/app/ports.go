@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+var ErrLookupNotFound = errors.New("lookup not found")
 
 // SiteRef 是匯入比對單位時需要的最小資訊。
 type SiteRef struct {

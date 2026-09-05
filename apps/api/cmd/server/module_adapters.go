@@ -189,7 +189,7 @@ func (a importSiteLookup) GetByName(ctx context.Context, name string) (*importap
 	s, err := a.repo.GetByName(ctx, name)
 	if err != nil {
 		if errors.Is(err, masterapp.ErrSiteNotFound) {
-			return nil, nil
+			return nil, importapp.ErrLookupNotFound
 		}
 		return nil, err
 	}
@@ -220,7 +220,7 @@ func (a importVehicleLookup) GetByDisplayName(ctx context.Context, displayName s
 	v, err := a.repo.GetByDisplayName(ctx, displayName)
 	if err != nil {
 		if errors.Is(err, masterapp.ErrVehicleNotFound) {
-			return nil, nil
+			return nil, importapp.ErrLookupNotFound
 		}
 		return nil, err
 	}

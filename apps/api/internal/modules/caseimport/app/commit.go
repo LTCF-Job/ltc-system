@@ -81,9 +81,18 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 		}
 		// 單位／去回程車輛各自獨立比對：比對到則寫入 ID，比對不到但有填名稱則保留
 		// 原始名稱待人工關聯，兩種情況都不影響個案主檔本身的建立。
-		siteID, siteNameRaw, siteWarning := s.resolveSite(ctx, row.SiteName)
-		outboundID, outboundNameRaw, outboundWarning := s.resolveVehicle(ctx, row.OutboundVehicle, "接送車輛(去)")
-		inboundID, inboundNameRaw, inboundWarning := s.resolveVehicle(ctx, row.InboundVehicle, "接送車輛(回)")
+		siteID, siteNameRaw, siteWarning, err := s.resolveSite(ctx, row.SiteName)
+		if err != nil {
+			return nil, fmt.Errorf("解析單位失敗：%w", err)
+		}
+		outboundID, outboundNameRaw, outboundWarning, err := s.resolveVehicle(ctx, row.OutboundVehicle, "接送車輛(去)")
+		if err != nil {
+			return nil, fmt.Errorf("解析去程車輛失敗：%w", err)
+		}
+		inboundID, inboundNameRaw, inboundWarning, err := s.resolveVehicle(ctx, row.InboundVehicle, "接送車輛(回)")
+		if err != nil {
+			return nil, fmt.Errorf("解析回程車輛失敗：%w", err)
+		}
 		for _, w := range []string{siteWarning, outboundWarning, inboundWarning} {
 			if w != "" {
 				result.Warnings = append(result.Warnings, CaseImportWarningItem{RowIndex: row.RowIndex, CaseName: row.Name, Message: w})
@@ -121,27 +130,33 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 }
 
 // resolveSite 依名稱比對既有單位；查無資料時回傳空 ID 與原始名稱，並附上待人工關聯的提示。
-func (s *ImportService) resolveSite(ctx context.Context, name string) (id *uuid.UUID, nameRaw string, warning string) {
+func (s *ImportService) resolveSite(ctx context.Context, name string) (id *uuid.UUID, nameRaw string, warning string, err error) {
 	if name == "" || s.siteRepo == nil {
-		return nil, "", ""
+		return nil, "", "", nil
 	}
 	site, err := s.siteRepo.GetByName(ctx, name)
-	if err != nil || site == nil {
-		return nil, name, fmt.Sprintf("單位「%s」未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", name)
+	if errors.Is(err, ErrLookupNotFound) || site == nil {
+		return nil, name, fmt.Sprintf("單位「%s」未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", name), nil
 	}
-	return &site.ID, "", ""
+	if err != nil {
+		return nil, "", "", err
+	}
+	return &site.ID, "", "", nil
 }
 
 // resolveVehicle 依顯示名稱比對既有車輛；查無資料時回傳空 ID 與原始名稱，並附上待人工關聯的提示。
-func (s *ImportService) resolveVehicle(ctx context.Context, name, fieldLabel string) (id *uuid.UUID, nameRaw string, warning string) {
+func (s *ImportService) resolveVehicle(ctx context.Context, name, fieldLabel string) (id *uuid.UUID, nameRaw string, warning string, err error) {
 	if name == "" || s.vehicleRepo == nil {
-		return nil, "", ""
+		return nil, "", "", nil
 	}
 	vehicle, err := s.vehicleRepo.GetByDisplayName(ctx, name)
-	if err != nil || vehicle == nil {
-		return nil, name, fmt.Sprintf("%s『%s』未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name)
+	if errors.Is(err, ErrLookupNotFound) || vehicle == nil {
+		return nil, name, fmt.Sprintf("%s『%s』未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name), nil
 	}
-	return &vehicle.ID, "", ""
+	if err != nil {
+		return nil, "", "", err
+	}
+	return &vehicle.ID, "", "", nil
 }
 
 func skippedRow(row CaseImportRowResult) CaseImportSkippedRow {
