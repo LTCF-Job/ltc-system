@@ -195,6 +195,12 @@ type rideRecordResponse struct {
 	ConflictResolvedAt     *string `json:"conflictResolvedAt"`
 	ConflictResolutionNote *string `json:"conflictResolutionNote"`
 	BasedOnFingerprint     string  `json:"basedOnFingerprint"`
+	DepartTimeOverride     *string `json:"departTimeOverride"`
+	DurationMinOverride    *int16  `json:"durationMinOverride"`
+	NotClaimedAA09         bool    `json:"notClaimedAa09"`
+	CorrectedBy            *string `json:"correctedBy"`
+	CorrectedAt            *string `json:"correctedAt"`
+	CorrectionReason       *string `json:"correctionReason"`
 }
 
 func toRideRecordResponse(rec *app.RideRecord) rideRecordResponse {
@@ -212,10 +218,22 @@ func toRideRecordResponse(rec *app.RideRecord) rideRecordResponse {
 		HasConflict:            rec.HasConflict,
 		ConflictResolutionNote: rec.ConflictResolutionNote,
 		BasedOnFingerprint:     rec.BasedOnFingerprint,
+		DepartTimeOverride:     rec.DepartTimeOverride,
+		DurationMinOverride:    rec.DurationMinOverride,
+		NotClaimedAA09:         rec.NotClaimedAA09,
+		CorrectionReason:       rec.CorrectionReason,
 	}
 	if rec.DriverID != nil {
 		s := rec.DriverID.String()
 		resp.DriverID = &s
+	}
+	if rec.CorrectedBy != nil {
+		s := rec.CorrectedBy.String()
+		resp.CorrectedBy = &s
+	}
+	if rec.CorrectedAt != nil {
+		s := rec.CorrectedAt.Format(time.RFC3339)
+		resp.CorrectedAt = &s
 	}
 	if rec.ConflictResolvedAt != nil {
 		s := rec.ConflictResolvedAt.Format(time.RFC3339)
