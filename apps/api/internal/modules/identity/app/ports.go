@@ -31,6 +31,12 @@ type TxRunner interface {
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
+// PermissionCacheInvalidator 由 composition root 注入，避免 identity 模組直接依賴 platform/auth。
+type PermissionCacheInvalidator interface {
+	InvalidateRole(roleKey string)
+	InvalidateUser(userID uuid.UUID)
+}
+
 // AdminIdentityProvider 是 Supabase Auth Admin API 的邊界；Configured 回 false 時
 // 呼叫任何其他方法都必須回 ErrIdentityProviderUnconfigured，不得靜默退化成假資料。
 type AdminIdentityProvider interface {

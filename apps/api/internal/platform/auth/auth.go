@@ -21,6 +21,11 @@ const (
 	ContextKeyActorName = "actor_name"
 )
 
+// UserStateResolver 讓高風險 API 在 JWT 尚未過期時仍能即時拒絕已停用帳號。
+type UserStateResolver interface {
+	Validate(ctx context.Context, actorID uuid.UUID, role string) (bool, error)
+}
+
 // newSupabaseJWKS 建立向 Supabase JWKS 端點取金鑰並自動輪替的 Keyfunc；未設定 URL 時回傳 nil。
 func newSupabaseJWKS(jwksURL string) (keyfunc.Keyfunc, error) {
 	if jwksURL == "" {
@@ -78,6 +83,11 @@ func setActorFromClaims(c *gin.Context, claims jwt.MapClaims) bool {
 
 // Middleware 驗證傳入的 Supabase JWT Token 簽章並將使用者角色與 ID 注入 Gin Context。
 func Middleware(cfg *config.Config) gin.HandlerFunc {
+	return MiddlewareWithUserState(cfg, nil)
+}
+
+// MiddlewareWithUserState 驗證 JWT，並可選擇查詢目前使用者狀態。
+func MiddlewareWithUserState(cfg *config.Config, userState UserStateResolver) gin.HandlerFunc {
 	jwks, err := newSupabaseJWKS(cfg.SupabaseJWKSURL)
 	if err != nil {
 		// 正式環境缺少可用 JWKS 時無法驗證任何憑證，直接 fail fast 避免帶著漏洞啟動
@@ -100,7 +110,7 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 		tokenStr := parts[1]
 
 		// 本機開發支援 mock_jwt_ 形式之憑證快速解析
-		if cfg.AppEnv == "local" && strings.HasPrefix(tokenStr, "mock_jwt_") {
+		if cfg.AppEnv == "local" && cfg.AllowInsecureMockAuth && strings.HasPrefix(tokenStr, "mock_jwt_") {
 			role := "staff"
 			if strings.Contains(tokenStr, "admin") {
 				role = "admin"
@@ -120,7 +130,7 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		// 本機且未設定 JWKS 時，安全降級為未驗證解析，僅限本機開發使用
-		if cfg.AppEnv == "local" && jwks == nil {
+		if cfg.AppEnv == "local" && cfg.AllowInsecureMockAuth && jwks == nil {
 			claims := jwt.MapClaims{}
 			token, _, err := new(jwt.Parser).ParseUnverified(tokenStr, claims)
 			if err != nil || token == nil {
@@ -153,6 +163,17 @@ func Middleware(cfg *config.Config) gin.HandlerFunc {
 
 		if !setActorFromClaims(c, claims) {
 			return
+		}
+		if userState != nil {
+			active, err := userState.Validate(c.Request.Context(), GetActorID(c), GetActorRole(c))
+			if err != nil {
+				httpx.RespondError(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "無法確認使用者狀態", nil)
+				return
+			}
+			if !active {
+				httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "使用者帳號已停用", nil)
+				return
+			}
 		}
 		c.Next()
 	}

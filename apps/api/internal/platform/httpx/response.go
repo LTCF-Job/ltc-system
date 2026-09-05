@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -103,7 +104,7 @@ func RespondErrorCode(c *gin.Context, httpStatus int, code string, err error, de
 			slog.String("code", code),
 			slog.String("path", c.Request.URL.Path),
 			slog.String("method", c.Request.Method),
-			slog.String("error", err.Error()),
+			slog.String("error_type", fmt.Sprintf("%T", err)),
 		)
 	}
 	message, ok := codeMessages[code]

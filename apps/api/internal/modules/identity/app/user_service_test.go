@@ -120,6 +120,41 @@ func TestUserService_Create_RejectsUnknownRole(t *testing.T) {
 	assert.ErrorIs(t, err, ErrUnknownRole)
 }
 
+func TestUserService_Create_AuditSnapshotRedactsPersonalFields(t *testing.T) {
+	admin := &fakeAdminProvider{configured: true, users: map[uuid.UUID]*AuthUser{}}
+	audit := &fakeIdentityAuditWriter{}
+	svc := NewUserService(admin, newFakeRoleStore(), audit)
+
+	user, err := svc.Create(context.Background(), CreateAuthUserInput{
+		Email:       "sensitive@example.com",
+		Password:    "not-recorded",
+		DisplayName: "敏感姓名",
+		Phone:       "0912345678",
+	}, uuid.New(), "admin")
+
+	require.NoError(t, err)
+	require.Len(t, audit.entries, 1)
+	snapshot, ok := audit.entries[0].AfterData.(userAuditSnapshot)
+	require.True(t, ok)
+	assert.Equal(t, user.ID, snapshot.ID)
+	assert.Equal(t, "[REDACTED]", snapshot.EmailMasked)
+	assert.Empty(t, snapshot.RoleKey)
+	assert.Empty(t, snapshot.Status)
+}
+
+func TestUserService_Update_RequiresAuditBeforeMutation(t *testing.T) {
+	targetID := uuid.New()
+	admin := &fakeAdminProvider{
+		configured: true,
+		users:      map[uuid.UUID]*AuthUser{targetID: {ID: targetID, Email: "a@example.com", RoleKey: "viewer"}},
+	}
+	svc := NewUserService(admin, newFakeRoleStore(), nil)
+
+	_, err := svc.Update(context.Background(), targetID, UpdateAuthUserInput{}, uuid.New(), "admin")
+
+	assert.ErrorIs(t, err, ErrAuditUnavailable)
+}
+
 func TestUserService_ChangeSelfPassword_WrongOldPasswordDoesNotCallSetPassword(t *testing.T) {
 	admin := &fakeAdminProvider{configured: true, verifyErr: assert.AnError}
 	svc := NewUserService(admin, newFakeRoleStore(), nil)

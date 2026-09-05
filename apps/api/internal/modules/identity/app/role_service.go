@@ -11,10 +11,16 @@ import (
 
 // RoleService 封裝角色身分與權限矩陣之業務邏輯。
 type RoleService struct {
-	store       RoleStore
-	userCounter UserCounter
-	auditRepo   AuditWriter
-	txRunner    TxRunner
+	store           RoleStore
+	userCounter     UserCounter
+	auditRepo       AuditWriter
+	txRunner        TxRunner
+	permissionCache PermissionCacheInvalidator
+}
+
+// SetPermissionCacheInvalidator 設定角色異動後的即時權限快取失效器。
+func (s *RoleService) SetPermissionCacheInvalidator(invalidator PermissionCacheInvalidator) {
+	s.permissionCache = invalidator
 }
 
 // NewRoleService 建立 RoleService 實例。
@@ -81,6 +87,9 @@ func (s *RoleService) Create(ctx context.Context, in CreateRoleInput, actorID uu
 	if err := validateModuleKeys(in.Permissions); err != nil {
 		return nil, err
 	}
+	if err := s.ensureAuditConfigured(); err != nil {
+		return nil, err
+	}
 	key := strings.TrimSpace(in.Key)
 	if key == "" {
 		key = slugify(in.Name)
@@ -143,6 +152,9 @@ func (s *RoleService) Update(ctx context.Context, id uuid.UUID, in UpdateRoleInp
 	if before.IsSystem {
 		return nil, ErrSystemRoleImmutable
 	}
+	if err := s.ensureAuditConfigured(); err != nil {
+		return nil, err
+	}
 
 	after := *before
 	if in.Name != nil {
@@ -170,6 +182,9 @@ func (s *RoleService) Update(ctx context.Context, id uuid.UUID, in UpdateRoleInp
 	if err != nil {
 		return nil, err
 	}
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateRole(after.Key)
+	}
 	return &after, nil
 }
 
@@ -193,13 +208,20 @@ func (s *RoleService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRo
 	if count > 0 {
 		return ErrRoleInUse
 	}
+	if err := s.ensureAuditConfigured(); err != nil {
+		return err
+	}
 
-	return s.runInTx(ctx, func(ctx context.Context) error {
+	err = s.runInTx(ctx, func(ctx context.Context) error {
 		if err := s.store.Delete(ctx, id); err != nil {
 			return err
 		}
 		return s.writeAudit(ctx, "delete", id, actorID, actorRole, before, nil)
 	})
+	if err == nil && s.permissionCache != nil {
+		s.permissionCache.InvalidateRole(before.Key)
+	}
+	return err
 }
 
 func (s *RoleService) runInTx(ctx context.Context, fn func(ctx context.Context) error) error {
@@ -211,7 +233,7 @@ func (s *RoleService) runInTx(ctx context.Context, fn func(ctx context.Context) 
 
 func (s *RoleService) writeAudit(ctx context.Context, action string, id, actorID uuid.UUID, actorRole string, before, after any) error {
 	if s.auditRepo == nil {
-		return nil
+		return ErrAuditUnavailable
 	}
 	entityIDStr := id.String()
 	return s.auditRepo.Write(ctx, AuditEntry{
@@ -223,6 +245,13 @@ func (s *RoleService) writeAudit(ctx context.Context, action string, id, actorID
 		BeforeData: before,
 		AfterData:  after,
 	})
+}
+
+func (s *RoleService) ensureAuditConfigured() error {
+	if s.auditRepo == nil {
+		return ErrAuditUnavailable
+	}
+	return nil
 }
 
 var slugSanitizer = regexp.MustCompile(`[^a-z0-9]+`)

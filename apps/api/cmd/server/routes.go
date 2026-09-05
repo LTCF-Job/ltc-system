@@ -53,7 +53,7 @@ type handlers struct {
 }
 
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
-func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.PermissionResolver, customPerm auth.CustomPermissionResolver) *gin.Engine {
+func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.PermissionResolver, customPerm auth.CustomPermissionResolver, userState auth.UserStateResolver) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logging.Middleware())
@@ -101,7 +101,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 
 	// 需要 JWT 認證之 API 群組
 	apiV1 := r.Group("/api/v1")
-	apiV1.Use(auth.Middleware(cfg))
+	apiV1.Use(auth.MiddlewareWithUserState(cfg, userState))
 	{
 		// 所有需授權的路由一律走 perm.RequirePermission(module, action) 查角色的模組權限矩陣，
 		// 不再有寫死角色字面值的路由；自訂角色在「角色身分管理」頁調整矩陣後，API 存取範圍會

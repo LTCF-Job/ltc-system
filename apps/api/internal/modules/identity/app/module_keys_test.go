@@ -25,7 +25,7 @@ func TestRoleService_Create_RejectsUnknownModuleKey(t *testing.T) {
 }
 
 func TestRoleService_Create_AcceptsRegisteredModuleKeys(t *testing.T) {
-	svc := NewRoleService(newFakeRoleStore(), nil, nil, nil)
+	svc := NewRoleService(newFakeRoleStore(), nil, &fakeIdentityAuditWriter{}, nil)
 	perms := map[string]ModulePermission{}
 	for _, k := range ModuleKeys {
 		perms[k] = ModulePermission{View: true}
@@ -64,7 +64,7 @@ func TestUserService_UpdatePermissions_RejectsUnknownModuleKey(t *testing.T) {
 
 func TestUserService_UpdatePermissions_AcceptsRegisteredModuleKeys(t *testing.T) {
 	admin := &fakeAdminProvider{configured: true, users: map[uuid.UUID]*AuthUser{}}
-	svc := NewUserService(admin, newFakeRoleStore(), nil)
+	svc := NewUserService(admin, newFakeRoleStore(), &fakeIdentityAuditWriter{})
 
 	err := svc.UpdatePermissions(context.Background(), uuid.New(), map[string]ModulePermission{
 		"settings_users": {View: true, Edit: true, Delete: true},

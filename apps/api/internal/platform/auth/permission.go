@@ -35,6 +35,7 @@ type CustomPermissionResolver interface {
 // 不需要使用者重新登入換發 JWT；同時避免每個受保護請求都直接查一次 roles 表。個人層級的
 // customPermissions 也採同一 TTL，取捨見 docs/decisions/custom-permission-admin-api-enforcement.md。
 const permissionCacheTTL = 30 * time.Second
+const permissionCacheMaxEntries = 1024
 
 type permissionCacheEntry struct {
 	perms   map[string]ModulePermission
@@ -67,9 +68,35 @@ func (c *CachedPermissionResolver) Resolve(ctx context.Context, roleKey string) 
 		return nil, err
 	}
 	c.mu.Lock()
+	c.pruneExpiredLocked(time.Now())
 	c.cache[roleKey] = permissionCacheEntry{perms: perms, expires: time.Now().Add(permissionCacheTTL)}
+	if len(c.cache) > permissionCacheMaxEntries {
+		c.evictOneLocked()
+	}
 	c.mu.Unlock()
 	return perms, nil
+}
+
+// InvalidateRole 讓角色或角色權限異動立即失效，不等待 TTL。
+func (c *CachedPermissionResolver) InvalidateRole(roleKey string) {
+	c.mu.Lock()
+	delete(c.cache, roleKey)
+	c.mu.Unlock()
+}
+
+func (c *CachedPermissionResolver) pruneExpiredLocked(now time.Time) {
+	for key, entry := range c.cache {
+		if !now.Before(entry.expires) {
+			delete(c.cache, key)
+		}
+	}
+}
+
+func (c *CachedPermissionResolver) evictOneLocked() {
+	for key := range c.cache {
+		delete(c.cache, key)
+		return
+	}
 }
 
 // CachedCustomPermissionResolver 比照 CachedPermissionResolver，對 CustomPermissionResolver
@@ -99,9 +126,35 @@ func (c *CachedCustomPermissionResolver) Resolve(ctx context.Context, actorID uu
 		return nil, err
 	}
 	c.mu.Lock()
+	c.pruneExpiredLocked(time.Now())
 	c.cache[actorID] = permissionCacheEntry{perms: perms, expires: time.Now().Add(permissionCacheTTL)}
+	if len(c.cache) > permissionCacheMaxEntries {
+		c.evictOneLocked()
+	}
 	c.mu.Unlock()
 	return perms, nil
+}
+
+// InvalidateUser 讓個人權限或使用者停用立即失效，不等待 TTL。
+func (c *CachedCustomPermissionResolver) InvalidateUser(actorID uuid.UUID) {
+	c.mu.Lock()
+	delete(c.cache, actorID)
+	c.mu.Unlock()
+}
+
+func (c *CachedCustomPermissionResolver) pruneExpiredLocked(now time.Time) {
+	for key, entry := range c.cache {
+		if !now.Before(entry.expires) {
+			delete(c.cache, key)
+		}
+	}
+}
+
+func (c *CachedCustomPermissionResolver) evictOneLocked() {
+	for key := range c.cache {
+		delete(c.cache, key)
+		return
+	}
 }
 
 // RequirePermission 依角色的模組權限矩陣驗證請求是否具備指定模組的 view／edit／delete 權限；

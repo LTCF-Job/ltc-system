@@ -20,9 +20,12 @@ const (
 type Config struct {
 	Port                        string        `envconfig:"PORT" default:"8080"`
 	AppEnv                      string        `envconfig:"APP_ENV" required:"true"`
+	AllowInsecureMockAuth       bool          `envconfig:"ALLOW_INSECURE_MOCK_AUTH" default:"false"`
 	DatabaseURL                 string        `envconfig:"DATABASE_URL" default:"postgres://postgres:postgres@localhost:5432/ltc_system?sslmode=disable"`
-	DBMaxOpenConns              int           `envconfig:"DB_MAX_OPEN_CONNS" default:"5"`
-	DBMaxIdleConns              int           `envconfig:"DB_MAX_IDLE_CONNS" default:"2"`
+	DBMaxConns                  int           `envconfig:"DB_MAX_CONNS" default:"5"`
+	DBMinConns                  int           `envconfig:"DB_MIN_CONNS" default:"2"`
+	DBMaxConnLifetime           time.Duration `envconfig:"DB_MAX_CONN_LIFETIME" default:"1h"`
+	DBMaxConnIdleTime           time.Duration `envconfig:"DB_MAX_CONN_IDLE_TIME" default:"30m"`
 	EncryptionKeyB64            string        `envconfig:"ENCRYPTION_KEY" default:"MDEwMjAzMDQwNTA2MDcwODAxMDIwMzA0MDUwNjA3MDg="` // 32 bytes base64 for dev
 	HMACKeyB64                  string        `envconfig:"HMAC_KEY" default:"MDkwODAwMDcwNjA1MDQwMzA5MDgwMDA3MDYwNTA0MDM="`       // 32 bytes base64 for dev
 	SupabaseJWKSURL             string        `envconfig:"SUPABASE_JWKS_URL"`
@@ -57,6 +60,9 @@ func LoadFromEnv() (*Config, error) {
 	// APP_ENV 決定 AuthMiddleware 是否放行 mock 憑證，禁止靜默預設值以避免正式環境誤留開發後門
 	if cfg.AppEnv != "local" && cfg.AppEnv != "production" {
 		return nil, fmt.Errorf("APP_ENV must be explicitly set to \"local\" or \"production\", got %q", cfg.AppEnv)
+	}
+	if cfg.AppEnv == "production" && cfg.AllowInsecureMockAuth {
+		return nil, errors.New("ALLOW_INSECURE_MOCK_AUTH must be false when APP_ENV=production")
 	}
 
 	// 正式環境缺少 JWKS 時 AuthMiddleware 會對每個請求回應 500，改為啟動時直接拒絕啟動
@@ -103,6 +109,10 @@ func LoadFromEnv() (*Config, error) {
 
 	if cfg.SupabaseURL == "" && cfg.SupabaseProjectRef != "" {
 		cfg.SupabaseURL = fmt.Sprintf("https://%s.supabase.co", cfg.SupabaseProjectRef)
+	}
+
+	if cfg.AppEnv == "production" && cfg.SupabaseURL == "" {
+		return nil, errors.New("SUPABASE_URL (or SUPABASE_PROJECT_REF to derive it) is required when APP_ENV=production")
 	}
 
 	if cfg.SupabaseJWTIssuer == "" && cfg.SupabaseProjectRef != "" {

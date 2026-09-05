@@ -66,7 +66,9 @@ func (c *SupabaseAdminClient) do(ctx context.Context, method, path string, body 
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("supabase admin request returned %d: %s", resp.StatusCode, string(respBody))
+		// 第三方 response body 可能含 email、request detail 或其他個資，不進入 error
+		// chain，避免被 API log 或 audit snapshot 長期保存。
+		return fmt.Errorf("supabase admin request returned HTTP %d", resp.StatusCode)
 	}
 
 	if out != nil && len(respBody) > 0 {
@@ -126,15 +128,21 @@ func toAuthUser(u supabaseUserResponse) app.AuthUser {
 
 // ListUsers 取得所有使用者帳號。
 func (c *SupabaseAdminClient) ListUsers(ctx context.Context) ([]app.AuthUser, error) {
-	var resp supabaseListUsersResponse
-	if err := c.do(ctx, http.MethodGet, "/auth/v1/admin/users", nil, &resp); err != nil {
-		return nil, err
+	const perPage = 100
+	out := make([]app.AuthUser, 0)
+	for page := 1; ; page++ {
+		var resp supabaseListUsersResponse
+		path := fmt.Sprintf("/auth/v1/admin/users?page=%d&per_page=%d", page, perPage)
+		if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+			return nil, err
+		}
+		for _, u := range resp.Users {
+			out = append(out, toAuthUser(u))
+		}
+		if len(resp.Users) < perPage {
+			return out, nil
+		}
 	}
-	out := make([]app.AuthUser, 0, len(resp.Users))
-	for _, u := range resp.Users {
-		out = append(out, toAuthUser(u))
-	}
-	return out, nil
 }
 
 // GetUser 取得單一使用者帳號。
@@ -231,7 +239,7 @@ func (c *SupabaseAdminClient) SetPassword(ctx context.Context, id uuid.UUID, new
 // CountUsersByRoleKey 統計採用該角色的使用者數。
 func (c *SupabaseAdminClient) CountUsersByRoleKey(ctx context.Context, key string) (int, error) {
 	if !c.Configured() {
-		return 0, nil
+		return 0, app.ErrIdentityProviderUnconfigured
 	}
 	users, err := c.ListUsers(ctx)
 	if err != nil {

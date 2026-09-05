@@ -10,9 +10,40 @@ import (
 
 // UserService 封裝使用者帳號管理業務邏輯，底層由 Supabase Auth Admin API 支撐。
 type UserService struct {
-	admin     AdminIdentityProvider
-	roleStore RoleStore
-	auditRepo AuditWriter
+	admin           AdminIdentityProvider
+	roleStore       RoleStore
+	auditRepo       AuditWriter
+	permissionCache PermissionCacheInvalidator
+}
+
+// userAuditSnapshot 是帳號異動稽核的安全快照；不直接保存 AuthUser，避免把電子郵件、電話、
+// 顯示名稱或外部 Auth 回傳的其他個人資料寫入長期稽核資料。
+type userAuditSnapshot struct {
+	ID          uuid.UUID `json:"id"`
+	EmailMasked string    `json:"emailMasked,omitempty"`
+	RoleKey     string    `json:"roleKey"`
+	Status      string    `json:"status"`
+}
+
+func newUserAuditSnapshot(user *AuthUser) userAuditSnapshot {
+	if user == nil {
+		return userAuditSnapshot{}
+	}
+	emailMasked := ""
+	if strings.TrimSpace(user.Email) != "" {
+		emailMasked = "[REDACTED]"
+	}
+	return userAuditSnapshot{
+		ID:          user.ID,
+		EmailMasked: emailMasked,
+		RoleKey:     user.RoleKey,
+		Status:      user.Status,
+	}
+}
+
+// SetPermissionCacheInvalidator 設定使用者異動後的即時權限快取失效器。
+func (s *UserService) SetPermissionCacheInvalidator(invalidator PermissionCacheInvalidator) {
+	s.permissionCache = invalidator
 }
 
 // NewUserService 建立 UserService 實例。
@@ -74,9 +105,15 @@ func (s *UserService) Create(ctx context.Context, in CreateAuthUserInput, actorI
 	if err := s.checkRoleExists(ctx, in.RoleKey); err != nil {
 		return nil, err
 	}
+	if err := s.ensureAuditConfigured(); err != nil {
+		return nil, err
+	}
 
 	u, err := s.admin.CreateUser(ctx, in)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureAuditConfigured(); err != nil {
 		return nil, err
 	}
 
@@ -84,14 +121,19 @@ func (s *UserService) Create(ctx context.Context, in CreateAuthUserInput, actorI
 	// 使用者回報失敗。
 	if s.auditRepo != nil {
 		entityIDStr := u.ID.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "create",
 			EntityType: "users",
 			EntityID:   &entityIDStr,
-			AfterData:  u,
-		})
+			AfterData:  newUserAuditSnapshot(u),
+		}); err != nil {
+			return nil, fmt.Errorf("failed to write user audit: %w", err)
+		}
+	}
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateUser(u.ID)
 	}
 	return u, nil
 }
@@ -111,6 +153,12 @@ func (s *UserService) Update(ctx context.Context, id uuid.UUID, in UpdateAuthUse
 	if err != nil {
 		return nil, err
 	}
+	if before == nil {
+		return nil, ErrUserNotFound
+	}
+	if err := s.ensureAuditConfigured(); err != nil {
+		return nil, err
+	}
 
 	u, err := s.admin.UpdateUser(ctx, id, in)
 	if err != nil {
@@ -119,15 +167,24 @@ func (s *UserService) Update(ctx context.Context, id uuid.UUID, in UpdateAuthUse
 
 	if s.auditRepo != nil {
 		entityIDStr := id.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "update",
 			EntityType: "users",
 			EntityID:   &entityIDStr,
-			BeforeData: before,
-			AfterData:  u,
-		})
+			BeforeData: newUserAuditSnapshot(before),
+			AfterData:  newUserAuditSnapshot(u),
+		}); err != nil {
+			return nil, fmt.Errorf("failed to write user audit: %w", err)
+		}
+	}
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateUser(id)
+		if before != nil && in.RoleKey != nil {
+			s.permissionCache.InvalidateRole(before.RoleKey)
+			s.permissionCache.InvalidateRole(*in.RoleKey)
+		}
 	}
 	return u, nil
 }
@@ -140,20 +197,28 @@ func (s *UserService) UpdatePermissions(ctx context.Context, id uuid.UUID, perms
 	if err := validateModuleKeys(perms); err != nil {
 		return err
 	}
+	if err := s.ensureAuditConfigured(); err != nil {
+		return err
+	}
 	if err := s.admin.SetCustomPermissions(ctx, id, perms); err != nil {
 		return err
 	}
 
 	if s.auditRepo != nil {
 		entityIDStr := id.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "update_permissions",
 			EntityType: "users",
 			EntityID:   &entityIDStr,
 			AfterData:  perms,
-		})
+		}); err != nil {
+			return fmt.Errorf("failed to write user audit: %w", err)
+		}
+	}
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateUser(id)
 	}
 	return nil
 }
@@ -166,8 +231,14 @@ func (s *UserService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRo
 	if id == actorID {
 		return ErrCannotDeleteSelf
 	}
+	if err := s.ensureAuditConfigured(); err != nil {
+		return err
+	}
 
-	before, _ := s.admin.GetUser(ctx, id)
+	before, err := s.admin.GetUser(ctx, id)
+	if err != nil {
+		return err
+	}
 
 	if err := s.admin.DeleteUser(ctx, id); err != nil {
 		return err
@@ -175,14 +246,19 @@ func (s *UserService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRo
 
 	if s.auditRepo != nil {
 		entityIDStr := id.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "delete",
 			EntityType: "users",
 			EntityID:   &entityIDStr,
-			BeforeData: before,
-		})
+			BeforeData: newUserAuditSnapshot(before),
+		}); err != nil {
+			return fmt.Errorf("failed to write user audit: %w", err)
+		}
+	}
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateUser(id)
 	}
 	return nil
 }
@@ -197,6 +273,9 @@ func (s *UserService) ChangeSelfPassword(ctx context.Context, actorID uuid.UUID,
 	if err := s.admin.VerifyPassword(ctx, email, oldPassword); err != nil {
 		return ErrInvalidCredentials
 	}
+	if err := s.ensureAuditConfigured(); err != nil {
+		return err
+	}
 
 	if err := s.admin.SetPassword(ctx, actorID, newPassword); err != nil {
 		return fmt.Errorf("failed to set new password: %w", err)
@@ -205,13 +284,15 @@ func (s *UserService) ChangeSelfPassword(ctx context.Context, actorID uuid.UUID,
 	if s.auditRepo != nil {
 		entityIDStr := actorID.String()
 		actorRole := ""
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "change_password",
 			EntityType: "users",
 			EntityID:   &entityIDStr,
-		})
+		}); err != nil {
+			return fmt.Errorf("failed to write user audit: %w", err)
+		}
 	}
 	return nil
 }
@@ -224,6 +305,9 @@ func (s *UserService) ResetPassword(ctx context.Context, id, actorID uuid.UUID, 
 	if id == actorID {
 		return ErrCannotResetOwnPassword
 	}
+	if err := s.ensureAuditConfigured(); err != nil {
+		return err
+	}
 
 	if err := s.admin.SetPassword(ctx, id, newPassword); err != nil {
 		return fmt.Errorf("failed to reset password: %w", err)
@@ -231,13 +315,15 @@ func (s *UserService) ResetPassword(ctx context.Context, id, actorID uuid.UUID, 
 
 	if s.auditRepo != nil {
 		entityIDStr := id.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "reset_password",
 			EntityType: "users",
 			EntityID:   &entityIDStr,
-		})
+		}); err != nil {
+			return fmt.Errorf("failed to write user audit: %w", err)
+		}
 	}
 	return nil
 }
@@ -252,6 +338,13 @@ func (s *UserService) checkRoleExists(ctx context.Context, roleKey string) error
 	}
 	if role == nil {
 		return ErrUnknownRole
+	}
+	return nil
+}
+
+func (s *UserService) ensureAuditConfigured() error {
+	if s.auditRepo == nil {
+		return ErrAuditUnavailable
 	}
 	return nil
 }

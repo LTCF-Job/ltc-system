@@ -6,11 +6,57 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 )
+
+const (
+	DefaultPage     = 1
+	DefaultPageSize = 20
+	MaxPageSize     = 100
+)
+
+// ParsePagination 統一解析清單 API 的 page/pageSize query。
+// 參數未提供時使用預設值；明確提供但格式或範圍錯誤時回傳錯誤，避免
+// pageSize=0 造成除以零，或把呼叫端的 typo 靜默改成另一個查詢。
+func ParsePagination(c *gin.Context) (page, pageSize int, err error) {
+	page = DefaultPage
+	pageSize = DefaultPageSize
+	if raw := c.Query("page"); raw != "" {
+		page, err = strconv.Atoi(raw)
+		if err != nil || page < 1 {
+			return 0, 0, fmt.Errorf("page must be a positive integer")
+		}
+	}
+	if raw := c.Query("pageSize"); raw != "" {
+		pageSize, err = strconv.Atoi(raw)
+		if err != nil || pageSize < 1 || pageSize > MaxPageSize {
+			return 0, 0, fmt.Errorf("pageSize must be between 1 and %d", MaxPageSize)
+		}
+	}
+	return page, pageSize, nil
+}
+
+// BindJSONStrict 解析 mutation request，拒絕未知 JSON 欄位與多餘內容。
+func BindJSONStrict(c *gin.Context, dst any) error {
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errors.New("request body must contain a single JSON object")
+		}
+		return err
+	}
+	return binding.Validator.ValidateStruct(dst)
+}
 
 func init() {
 	// 設定驗證器使用結構體的 json tag 作為欄位名稱，避免回傳 Go 內部 struct 欄位名

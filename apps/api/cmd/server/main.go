@@ -77,18 +77,13 @@ func main() {
 	ctx := context.Background()
 	pool, err := connectDatabase(ctx, cfg)
 	if err != nil {
-		// production 下無資料庫連線代表這台伺服器無法提供任何真實資料，
-		// 啟動即失敗比讓所有 repository 帶著 nil pool 悄悄上線更安全。
-		// local 下允許離線啟動，方便前端在沒有本機 DB 時開發。
-		if cfg.AppEnv == "production" {
-			slog.Error("Database connection failed, refusing to start in production", slog.String("error", err.Error()))
-			os.Exit(1)
-		}
-		slog.Warn("Could not connect to database (running in offline mode, local only)", slog.String("error", err.Error()))
-	} else {
-		defer pool.Close()
-		slog.Info("Connected to PostgreSQL database successfully")
+		// API 沒有可安全替代資料庫的離線資料層；任何環境都必須在依賴不可用時
+		// 拒絕啟動，避免 nil pool 讓查詢變成假空結果或在 mutation 路徑 panic。
+		slog.Error("Database connection failed, refusing to start", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
+	defer pool.Close()
+	slog.Info("Connected to PostgreSQL database successfully")
 
 	// 初始化 Repositories
 	caseRepo := caseinfra.NewCaseRepository(pool)
@@ -109,17 +104,31 @@ func main() {
 	dashboardRepo := reportinfra.NewDashboardRepository(pool)
 	precheckRepo := reportinfra.NewPrecheckRepository(pool)
 	govClaimRepo := reportinfra.NewGovClaimRepository(pool)
-	exportJobRepo := reportinfra.NewExportJobRepository(pool)
+	exportStorageAdapter := reportinfra.NewSupabaseObjectStorage(
+		cfg.SupabaseURL,
+		cfg.SupabaseServiceRoleKey,
+		cfg.StorageBucket,
+		&http.Client{Timeout: 30 * time.Second},
+	)
+	if cfg.AppEnv == "production" && !exportStorageAdapter.Configured() {
+		slog.Error("Private export object storage is not configured, refusing to start")
+		os.Exit(1)
+	}
+	var exportStorage reportapp.ObjectStorage
+	if exportStorageAdapter.Configured() {
+		exportStorage = exportStorageAdapter
+	}
+	exportJobRepo := reportinfra.NewExportJobRepository(pool, exportStorage)
 	taskRepo := taskinfra.NewTaskRepository(pool)
 	caregiverRepo := caregiverinfra.NewCaregiverRepository(pool)
 
 	// 初始化 Services
 	mdAudit := masterdataAuditWriter{svc: auditSvc}
+	txRunner := pgxdb.NewTxRunner(pool)
 	regionSvc := masterapp.NewRegionService(mdRegionRepo, mdAudit)
 	siteSvc := masterapp.NewSiteService(mdSiteRepo)
-	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo, mdAudit)
-	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg, mdAudit)
-	txRunner := pgxdb.NewTxRunner(pool)
+	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo, mdAudit, txRunner)
+	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg, mdAudit, txRunner)
 	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer(), txRunner)
 	excelAdapter := importinfra.NewExcelAdapter()
 	importSvc := importapp.NewImportService(
@@ -132,9 +141,12 @@ func main() {
 		excelAdapter,
 		txRunner,
 	)
-	var emailSender notifyapp.EmailSender = &notifyapp.LogEmailSender{}
-	if cfg.ResendAPIKey != "" {
+	var emailSender notifyapp.EmailSender
+	if cfg.AppEnv == "production" || cfg.ResendAPIKey != "" {
 		emailSender = notifyinfra.NewResendEmailSender(cfg.ResendAPIKey, cfg.NotifyFrom, &http.Client{Timeout: 10 * time.Second})
+	} else {
+		// LogEmailSender 僅限 local；production 的設定驗證已要求真正的 provider 金鑰。
+		emailSender = &notifyapp.LogEmailSender{}
 	}
 	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, emailSender)
 	taskSvc := taskapp.NewTaskService(taskRepo, taskScheduleReader{repo: caseRepo}, holidayRepo, notificationSvc)
@@ -175,6 +187,9 @@ func main() {
 	customPermResolver := auth.NewCachedCustomPermissionResolver(userCustomPermissionResolver{admin: adminClient})
 	roleSvc := identityapp.NewRoleService(roleRepo, adminClient, identityAudit, txRunner)
 	userSvc := identityapp.NewUserService(adminClient, roleRepo, identityAudit)
+	permissionCaches := permissionCacheInvalidator{roles: permResolver, users: customPermResolver}
+	roleSvc.SetPermissionCacheInvalidator(permissionCaches)
+	userSvc.SetPermissionCacheInvalidator(permissionCaches)
 
 	// 初始化 Handlers
 	h := handlers{
@@ -201,7 +216,11 @@ func main() {
 		identity:     identitytransport.NewIdentityHandler(userSvc),
 	}
 
-	r := newRouter(cfg, pool, h, permResolver, customPermResolver)
+	var userState auth.UserStateResolver
+	if cfg.AppEnv == "production" && adminClient.Configured() {
+		userState = authUserStateChecker{admin: adminClient}
+	}
+	r := newRouter(cfg, pool, h, permResolver, customPermResolver, userState)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	slog.Info("Starting LTC API Server", slog.String("addr", addr), slog.String("env", cfg.AppEnv))
@@ -248,8 +267,10 @@ func connectDatabase(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, er
 		return nil, fmt.Errorf("parse database config: %w", err)
 	}
 	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
-	poolCfg.MaxConns = int32(cfg.DBMaxOpenConns)
-	poolCfg.MinConns = int32(cfg.DBMaxIdleConns)
+	poolCfg.MaxConns = int32(cfg.DBMaxConns)
+	poolCfg.MinConns = int32(cfg.DBMinConns)
+	poolCfg.MaxConnLifetime = cfg.DBMaxConnLifetime
+	poolCfg.MaxConnIdleTime = cfg.DBMaxConnIdleTime
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {

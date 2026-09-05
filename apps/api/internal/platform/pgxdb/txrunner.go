@@ -27,11 +27,17 @@ type TxRunner struct {
 
 // NewTxRunner 建立 TxRunner 實例。
 func NewTxRunner(pool *pgxpool.Pool) *TxRunner {
+	if pool == nil {
+		return nil
+	}
 	return &TxRunner{pool: pool}
 }
 
 // WithTx 在單一事務中執行 fn；fn 回傳 nil 時提交，否則回滾並回傳原始錯誤。
 func (r *TxRunner) WithTx(ctx context.Context, fn func(ctx context.Context) error) (err error) {
+	if r == nil || r.pool == nil {
+		return fmt.Errorf("transaction runner is not configured")
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)

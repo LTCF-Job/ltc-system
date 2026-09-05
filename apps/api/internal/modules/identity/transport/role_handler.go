@@ -52,7 +52,7 @@ func (h *RoleHandler) GetRole(c *gin.Context) {
 // CreateRole 新增自訂角色。
 func (h *RoleHandler) CreateRole(c *gin.Context) {
 	var req createRoleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -80,7 +80,7 @@ func (h *RoleHandler) UpdateRole(c *gin.Context) {
 	}
 
 	var req updateRoleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
