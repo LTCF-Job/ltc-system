@@ -21,6 +21,20 @@ export async function listCaregivers(params?: {
   return apiClient.get('/caregivers', { params })
 }
 
+export async function listAllCaregivers(params?: Omit<NonNullable<Parameters<typeof listCaregivers>[0]>, 'page' | 'pageSize'>): Promise<CaregiverDTO[]> {
+  const items: CaregiverDTO[] = []
+  let page = 1
+  const pageSize = 100
+  while (true) {
+    const result = await listCaregivers({ ...params, page, pageSize })
+    const pageItems = result.data || []
+    items.push(...pageItems)
+    if (page >= (result.meta?.totalPages || Math.ceil((result.meta?.total || items.length) / pageSize)) || pageItems.length === 0) break
+    page += 1
+  }
+  return items
+}
+
 export async function createCaregiver(data: CreateCaregiverRequest): Promise<CaregiverDTO> {
   return apiClient.post('/caregivers', data)
 }

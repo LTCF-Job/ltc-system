@@ -202,7 +202,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { patchRideRecord } from '@/api/rides'
 import DialogFooter from '@/components/DialogFooter.vue'
-import { listVehicles, listDrivers } from '@/api/masters'
+import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
 import { CORRECTION_REASONS } from '@/types/domain'
@@ -224,8 +224,8 @@ async function loadMasterData() {
   masterDataError.value = false
   try {
     const [vRes, dRes] = await Promise.all([
-      listVehicles({ status: 'active', pageSize: 100 }),
-      listDrivers({ status: 'active', pageSize: 100 })
+      listAllVehicles({ status: 'active' }),
+      listAllDrivers({ status: 'active' })
     ])
     vehicles.value = (vRes as any)?.data || vRes || []
     drivers.value = (dRes as any)?.data || dRes || []

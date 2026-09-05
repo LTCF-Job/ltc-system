@@ -245,6 +245,19 @@
 
       <!-- 主要頁面檢視區 -->
       <el-main id="main-content" class="layout-main" tabindex="-1" aria-label="主要內容">
+        <el-alert
+          v-if="authStore.permissionState === 'error'"
+          class="permission-load-alert"
+          title="權限資料載入失敗"
+          type="error"
+          :closable="false"
+          show-icon
+        >
+          <template #default>
+            <span>目前無法取得最新權限，請重試後再繼續操作。</span>
+            <el-button link type="danger" @click="authStore.loadPermissions()">重新載入</el-button>
+          </template>
+        </el-alert>
         <Transition name="page" mode="out-in">
           <router-view />
         </Transition>

@@ -194,7 +194,7 @@ import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listIssueRides, resolveConflict } from '@/api/rides'
-import { listVehicles, listDrivers } from '@/api/masters'
+import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import type { IssueRideDTO, VehicleDTO, DriverDTO } from '@/types/api'
 
@@ -277,11 +277,11 @@ async function handleResolveSubmit() {
 
 onMounted(async () => {
   const [vRes, dRes] = await Promise.all([
-    listVehicles({ status: 'active', pageSize: 100 }),
-    listDrivers({ status: 'active', pageSize: 100 })
+    listAllVehicles({ status: 'active' }),
+    listAllDrivers({ status: 'active' })
   ])
-  allVehicles.value = vRes.data
-  allDrivers.value = dRes.data
+  allVehicles.value = vRes
+  allDrivers.value = dRes
 
   fetchIssues()
 })

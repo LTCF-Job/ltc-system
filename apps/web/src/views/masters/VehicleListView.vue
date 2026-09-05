@@ -276,8 +276,8 @@ import {
   createVehicle,
   updateVehicle,
   deleteVehicle,
-  listDrivers,
-  listSites,
+  listAllDrivers,
+  listAllSites,
   setVehicleDrivers
 } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
@@ -343,8 +343,7 @@ function rowIndex(index: number) {
 
 async function loadDrivers() {
   try {
-    const res = await listDrivers({ status: 'active', pageSize: 200 })
-    allDrivers.value = res.data
+    allDrivers.value = await listAllDrivers({ status: 'active' })
   } catch {
     allDrivers.value = []
   }
@@ -352,8 +351,7 @@ async function loadDrivers() {
 
 async function loadSites() {
   try {
-    const res = await listSites({ status: 'active', pageSize: 200 })
-    allSites.value = res.data
+    allSites.value = await listAllSites({ status: 'active' })
   } catch {
     allSites.value = []
   }

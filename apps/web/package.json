@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
     "gen:types": "openapi-typescript $VITE_API_SPEC_URL -o src/types/api.d.ts",
+    "test": "node --experimental-strip-types --test \"tests/unit/*.test.ts\"",
     "test:e2e:live": "playwright test --config=playwright.config.live.ts"
   },
   "dependencies": {

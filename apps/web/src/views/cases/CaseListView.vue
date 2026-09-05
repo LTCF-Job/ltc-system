@@ -359,6 +359,7 @@ import VehicleFormFields from '@/components/VehicleFormFields.vue'
 import CaseCreateDialog from '@/components/cases/CaseCreateDialog.vue'
 import {
   listCases,
+  listAllCases,
   updateCase,
   deleteCase,
   downloadCaseImportTemplate,
@@ -367,7 +368,7 @@ import {
   commitImportCases,
   updateCaseTransportPreference
 } from '@/api/cases'
-import { listSites, listVehicles, createSite, createVehicle } from '@/api/masters'
+import { listAllSites, listAllVehicles, listSites, listVehicles, createSite, createVehicle } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
@@ -558,8 +559,7 @@ const availableVehicles = ref<VehicleDTO[]>([])
 async function fetchUnresolvedCases() {
   unresolvedLoading.value = true
   try {
-    const res = await listCases({ unresolvedLink: true, pageSize: 100 })
-    unresolvedCases.value = res.data
+    unresolvedCases.value = await listAllCases({ unresolvedLink: true })
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入待維護清單失敗'))
   } finally {
@@ -569,11 +569,11 @@ async function fetchUnresolvedCases() {
 
 async function loadSitesAndVehicles() {
   const [sitesRes, vehiclesRes] = await Promise.all([
-    listSites({ status: 'active', pageSize: 100 }),
-    listVehicles({ status: 'active', pageSize: 100 })
+    listAllSites({ status: 'active' }),
+    listAllVehicles({ status: 'active' })
   ])
-  availableSites.value = sitesRes.data
-  availableVehicles.value = vehiclesRes.data
+  availableSites.value = sitesRes
+  availableVehicles.value = vehiclesRes
 }
 
 type UnresolvedSlot = 'site' | 'outboundVehicle' | 'inboundVehicle'

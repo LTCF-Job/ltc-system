@@ -149,7 +149,7 @@ import { ref, onMounted } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { ElMessage } from 'element-plus'
 import { getTripSummaryReport, exportTripSummaryExcel } from '@/api/reports'
-import { listVehicles } from '@/api/masters'
+import { listAllVehicles } from '@/api/masters'
 import type { TripSummaryReportDTO, VehicleDTO } from '@/types/api'
 import { REGION_LABELS } from '@/types/domain'
 import { downloadBlob } from '@/utils/download'
@@ -166,8 +166,7 @@ const reportData = ref<TripSummaryReportDTO | null>(null)
 
 async function fetchVehicleOptions() {
   try {
-    const res = await listVehicles()
-    vehicleOptions.value = res.data
+    vehicleOptions.value = await listAllVehicles()
   } catch (error) {
     // handled
   }

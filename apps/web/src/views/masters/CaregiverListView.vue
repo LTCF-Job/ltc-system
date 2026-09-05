@@ -321,9 +321,10 @@ import {
   linkCaregiverSite,
   downloadCaregiverTemplate,
   dryRunImportCaregivers,
-  commitImportCaregivers
+  commitImportCaregivers,
+  listAllCaregivers
 } from '@/api/caregivers'
-import { listSites, createSite } from '@/api/masters'
+import { listAllSites, createSite } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
@@ -363,8 +364,7 @@ const {
 })
 
 async function loadSites() {
-  const res = await listSites({ status: 'active', pageSize: 100 })
-  availableSites.value = res.data
+  availableSites.value = await listAllSites({ status: 'active' })
 }
 
 // 下載匯入範本
@@ -401,7 +401,7 @@ async function handleCommitImport(file: File, includeDuplicateRows: string[]): P
   const result: any = await commitImportCaregivers(file, includeDuplicateRows)
   return {
     importedCount: result.importedCount,
-    skippedRows: (result.skippedRows || []).map((row: any) => ({ rowIndex: row.rowIndex, caseName: row.name, reasons: row.reasons })),
+    skippedRows: (result.skippedRows || []).map((row: any) => ({ rowId: row.rowId, rowIndex: row.rowIndex, caseName: row.name, reasons: row.reasons })),
     warnings: withCaseNameAlias(result.warnings)
   }
 }
@@ -552,11 +552,11 @@ async function fetchPending() {
   pendingLoading.value = true
   try {
     const [unresolvedRes, incompleteRes] = await Promise.all([
-      listCaregivers({ unresolvedLink: true, pageSize: 100 }),
-      listCaregivers({ incomplete: true, pageSize: 100 })
+      listAllCaregivers({ unresolvedLink: true }),
+      listAllCaregivers({ incomplete: true })
     ])
     const merged = new Map<string, CaregiverDTO>()
-    for (const row of [...(unresolvedRes.data ?? []), ...(incompleteRes.data ?? [])]) {
+    for (const row of [...unresolvedRes, ...incompleteRes]) {
       merged.set(row.id, row)
     }
     pendingCaregivers.value = Array.from(merged.values())

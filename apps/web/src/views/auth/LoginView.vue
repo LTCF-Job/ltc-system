@@ -132,13 +132,9 @@ async function handleLogin() {
         return
       }
 
-      const role = (data.user.app_metadata?.role ?? data.user.user_metadata?.role ?? 'viewer') as UserRole
-      await authStore.setSession(data.session.access_token, {
-        id: data.user.id,
-        email: data.user.email || form.email,
-        displayName: data.user.user_metadata?.display_name || data.user.email || form.email,
-        role
-      })
+      // 角色只接受 Supabase app_metadata；user_metadata 可由使用者自行修改，不可作為授權來源。
+      await authStore.syncSession(data.session)
+      await authStore.loadPermissions()
       goAfterLogin()
     } finally {
       loading.value = false

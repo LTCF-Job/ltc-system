@@ -190,7 +190,7 @@ import {
 import { ElMessage } from 'element-plus'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import { getHsinchuSchedule, exportHsinchuScheduleExcel } from '@/api/reports'
-import { listSites, listVehicles } from '@/api/masters'
+import { listAllSites, listAllVehicles } from '@/api/masters'
 import { formatDateTime } from '@/utils/formatters'
 import type { HsinchuScheduleReportDTO, SiteDTO, VehicleDTO } from '@/types/api'
 import { downloadBlob } from '@/utils/download'
@@ -208,11 +208,11 @@ const selectedVehicleId = ref<string>()
 async function fetchFilterOptions() {
   try {
     const [siteRes, vehRes] = await Promise.all([
-      listSites({ pageSize: 100 }),
-      listVehicles({ pageSize: 100 })
+      listAllSites(),
+      listAllVehicles()
     ])
-    sites.value = siteRes.data.filter(s => s.region === 'hsinchu')
-    vehicles.value = vehRes.data.filter(v => v.region === 'hsinchu')
+    sites.value = siteRes.filter(s => s.region === 'hsinchu')
+    vehicles.value = vehRes.filter(v => v.region === 'hsinchu')
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入篩選條件失敗'))
   }

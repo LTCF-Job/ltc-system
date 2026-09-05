@@ -17,6 +17,24 @@ import type {
 } from '@/types/api'
 import { sanitizeVehiclePayload } from '@/utils/vehicleForm'
 
+const MAX_PAGE_SIZE = 100
+
+async function collectAllPages<T>(fetchPage: (page: number, pageSize: number) => Promise<Paged<T>>): Promise<T[]> {
+  const items: T[] = []
+  let page = 1
+
+  while (true) {
+    const result = await fetchPage(page, MAX_PAGE_SIZE)
+    const pageItems = result.data || []
+    items.push(...pageItems)
+    const totalPages = result.meta?.totalPages || Math.ceil((result.meta?.total || items.length) / MAX_PAGE_SIZE)
+    if (page >= totalPages || pageItems.length === 0) break
+    page += 1
+  }
+
+  return items
+}
+
 // 區域 Regions
 export async function listRegions(params?: {
   page?: number
@@ -56,6 +74,10 @@ export async function listSites(params?: {
   return apiClient.get('/sites', { params })
 }
 
+export async function listAllSites(params?: Omit<NonNullable<Parameters<typeof listSites>[0]>, 'page' | 'pageSize'>): Promise<SiteDTO[]> {
+  return collectAllPages((page, pageSize) => listSites({ ...params, page, pageSize }))
+}
+
 export async function createSite(data: CreateSiteRequest): Promise<SiteDTO> {
   const res = await apiClient.post('/sites', data)
   return (res as any).data ?? (res as any)
@@ -81,6 +103,10 @@ export async function listVehicles(params?: {
   return apiClient.get('/vehicles', { params })
 }
 
+export async function listAllVehicles(params?: Omit<NonNullable<Parameters<typeof listVehicles>[0]>, 'page' | 'pageSize'>): Promise<VehicleDTO[]> {
+  return collectAllPages((page, pageSize) => listVehicles({ ...params, page, pageSize }))
+}
+
 export async function createVehicle(data: CreateVehicleRequest): Promise<VehicleDTO> {
   const payload = sanitizeVehiclePayload(data)
   const res = await apiClient.post('/vehicles', payload)
@@ -104,6 +130,10 @@ export async function listDrivers(params?: {
   q?: string
 }): Promise<Paged<DriverDTO>> {
   return apiClient.get('/drivers', { params })
+}
+
+export async function listAllDrivers(params?: Omit<NonNullable<Parameters<typeof listDrivers>[0]>, 'page' | 'pageSize'>): Promise<DriverDTO[]> {
+  return collectAllPages((page, pageSize) => listDrivers({ ...params, page, pageSize }))
 }
 
 export async function createDriver(data: CreateDriverRequest): Promise<DriverDTO> {

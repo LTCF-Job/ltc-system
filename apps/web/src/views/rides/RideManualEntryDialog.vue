@@ -159,7 +159,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { submitManualRideReport } from '@/api/rides'
 import DialogFooter from '@/components/DialogFooter.vue'
-import { listVehicles, listDrivers } from '@/api/masters'
+import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import type { VehicleDTO, DriverDTO, ManualReportRideRequest } from '@/types/api'
 
 interface OpenOptions {
@@ -258,11 +258,11 @@ async function fetchMasterData() {
     masterDataError.value = false
     try {
       const [vRes, dRes] = await Promise.all([
-        listVehicles({ status: 'active', pageSize: 100 }),
-        listDrivers({ status: 'active', pageSize: 100 })
+        listAllVehicles({ status: 'active' }),
+        listAllDrivers({ status: 'active' })
       ])
-      vehicles.value = vRes.data
-      drivers.value = dRes.data
+      vehicles.value = vRes
+      drivers.value = dRes
     } catch {
       // 全域攔截器已彈出錯誤訊息；這裡另外標記狀態，讓下拉選單旁能顯示可重試的空清單原因
       masterDataError.value = true

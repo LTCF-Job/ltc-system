@@ -507,7 +507,7 @@ import {
   deleteFuelLog
 } from '@/api/attendance'
 import { listHolidays, type HolidayItem } from '@/api/holidays'
-import { listDrivers, listVehicles } from '@/api/masters'
+import { listAllDrivers, listAllVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import type {
   MonthAttendanceReportDTO,
@@ -594,11 +594,11 @@ const fuelRules = {
 async function fetchOptions() {
   try {
     const [dRes, vRes] = await Promise.all([
-      listDrivers({ status: 'active', pageSize: 100 }),
-      listVehicles({ status: 'active', pageSize: 100 })
+      listAllDrivers({ status: 'active' }),
+      listAllVehicles({ status: 'active' })
     ])
-    drivers.value = dRes.data
-    vehicles.value = vRes.data
+    drivers.value = dRes
+    vehicles.value = vRes
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入主檔選項失敗'))
   }

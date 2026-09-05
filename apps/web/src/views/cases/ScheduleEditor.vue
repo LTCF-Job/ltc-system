@@ -521,7 +521,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { Calendar, SetUp, RefreshRight, CircleClose } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { listSites, listVehicles } from '@/api/masters'
+import { listAllSites, listAllVehicles } from '@/api/masters'
 import { saveCaseSchedule } from '@/api/cases'
 import { listHolidays } from '@/api/holidays'
 import type {
@@ -873,11 +873,11 @@ watch(
 
 async function loadSitesAndVehicles() {
   const [sitesRes, vehiclesRes] = await Promise.all([
-    listSites({ region: props.region, status: 'active', pageSize: 100 }),
-    listVehicles({ region: props.region, status: 'active', pageSize: 100 })
+    listAllSites({ region: props.region, status: 'active' }),
+    listAllVehicles({ region: props.region, status: 'active' })
   ])
-  availableSites.value = sitesRes.data
-  availableVehicles.value = vehiclesRes.data
+  availableSites.value = sitesRes
+  availableVehicles.value = vehiclesRes
 
   if (!formData.siteId && availableSites.value.length > 0) {
     formData.siteId = availableSites.value[0].id

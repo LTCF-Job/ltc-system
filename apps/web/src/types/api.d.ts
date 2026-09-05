@@ -486,6 +486,7 @@ export interface DriverReportPreviewColumn {
 
 // 匯入預覽的資料段：一列一天
 export interface DriverReportPreviewRow {
+  rowId: string
   rowIndex: number
   reportDate: string
   serviceDate: string
@@ -503,6 +504,7 @@ export interface DriverReportPreviewDTO {
   formId: string
   vehicleId: string
   vehicleName: string
+  canCommit: boolean
   totalRows: number
   validRows: number
   errorRows: number
@@ -510,8 +512,8 @@ export interface DriverReportPreviewDTO {
   unmappedColumns: number
   columns: DriverReportPreviewColumn[]
   previewRows: DriverReportPreviewRow[]
-  errors: Array<{ rowIndex: number; field?: string; message: string }>
-  warnings: Array<{ rowIndex: number; field?: string; message: string }>
+  errors: Array<{ rowId?: string; rowIndex: number; field?: string; message: string }>
+  warnings: Array<{ rowId?: string; rowIndex: number; field?: string; message: string }>
 }
 
 export interface DriverReportColumnDecision {
@@ -525,8 +527,8 @@ export interface DriverReportCommitResultDTO {
   importedRows: number
   rideRecordRows: number
   mappedColumns: number
-  skippedRows: Array<{ rowIndex: number; reportDate: string; reasons: string[] }>
-  warnings?: Array<{ rowIndex: number; field?: string; message: string }>
+  skippedRows: Array<{ rowId: string; rowIndex: number; reportDate: string; reasons: string[] }>
+  warnings?: Array<{ rowId?: string; rowIndex: number; field?: string; message: string }>
 }
 
 export interface UpdateColumnMappingRequest {

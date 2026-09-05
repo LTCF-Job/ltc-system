@@ -424,8 +424,8 @@ import {
   bindPendingDriver
 } from '@/api/driverReports'
 import { listAttendanceConflicts, resolveAttendanceConflict } from '@/api/attendance'
-import { listCases } from '@/api/cases'
-import { listVehicles, listDrivers } from '@/api/masters'
+import { listAllCases } from '@/api/cases'
+import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import PageHeader from '@/components/PageHeader.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
@@ -827,11 +827,11 @@ async function runImport() {
 async function loadUploadContext() {
   try {
     const [vehiclePage, formList, months] = await Promise.all([
-      listVehicles({ pageSize: 200, status: 'active' }),
+      listAllVehicles({ status: 'active' }),
       listDriverReportForms(),
       listDriverReportImportedMonths()
     ])
-    vehicles.value = vehiclePage.data ?? []
+    vehicles.value = vehiclePage ?? []
     forms.value = formList ?? []
     importedMonths.value = months ?? []
   } catch (error) {
@@ -844,8 +844,7 @@ async function loadUploadContext() {
 
 async function loadCases() {
   try {
-    const res = await listCases({ pageSize: 200 })
-    cases.value = res.data ?? []
+    cases.value = await listAllCases()
   } catch (error) {
     ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入個案清單失敗，請重新整理頁面再試'))
   }
@@ -887,8 +886,7 @@ const pendingTabCount = computed(() => submissionReviews.value.length + attendan
 
 async function loadDrivers() {
   try {
-    const res = await listDrivers({ status: 'active', pageSize: 200 })
-    drivers.value = res.data ?? []
+    drivers.value = await listAllDrivers({ status: 'active' })
   } catch (error) {
     ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入司機清單失敗，請重新整理頁面再試'))
   }

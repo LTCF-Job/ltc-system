@@ -247,7 +247,7 @@ import { resolveErrorMessage } from '@/api/errorCodes'
 import ScheduleEditor from './ScheduleEditor.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { getCase, updateCase, deleteCase, getCaseSchedule, updateCaseTransportPreference } from '@/api/cases'
-import { listSites, listVehicles } from '@/api/masters'
+import { listAllSites, listAllVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
 import { REGION_LABELS } from '@/types/domain'
@@ -338,11 +338,11 @@ async function fetchDetail() {
 
 async function loadSitesAndVehicles() {
   const [sitesRes, vehiclesRes] = await Promise.all([
-    listSites({ status: 'active', pageSize: 100 }),
-    listVehicles({ status: 'active', pageSize: 100 })
+    listAllSites({ status: 'active' }),
+    listAllVehicles({ status: 'active' })
   ])
-  availableSites.value = sitesRes.data
-  availableVehicles.value = vehiclesRes.data
+  availableSites.value = sitesRes
+  availableVehicles.value = vehiclesRes
 }
 
 async function handleUpdateCase() {

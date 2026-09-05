@@ -240,7 +240,7 @@ import {
   deleteMaintenance,
   downloadBlankMaintenanceExcel
 } from '@/api/maintenance'
-import { listVehicles } from '@/api/masters'
+import { listAllVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { downloadBlob } from '@/utils/download'
 import type { MaintenanceLogDTO, VehicleDTO } from '@/types/api'
@@ -286,8 +286,7 @@ const rules = {
 
 async function fetchFilterOptions() {
   try {
-    const res = await listVehicles({ status: 'active', pageSize: 100 })
-    vehicles.value = res.data
+    vehicles.value = await listAllVehicles({ status: 'active' })
   } catch (err: any) {
     ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入車輛清單失敗'))
   }

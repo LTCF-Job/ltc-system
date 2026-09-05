@@ -398,7 +398,7 @@ import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import { formatDateTime } from '@/utils/formatters'
 import { listMissingRides, submitManualRideReport } from '@/api/rides'
-import { listVehicles, listDrivers } from '@/api/masters'
+import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import { listNotificationLogs, triggerMissingReportsCheck } from '@/api/notifications'
 import { useAuthStore } from '@/stores/auth'
 import type { MissingRideDTO, NotificationLogDTO, VehicleDTO, DriverDTO, ManualReportRideRequest } from '@/types/api'
@@ -498,8 +498,7 @@ function openLogDetail(row: any) {
 
 async function fetchVehicles() {
   try {
-    const res = await listVehicles({ status: 'active', pageSize: 100 })
-    vehicles.value = res.data
+    vehicles.value = await listAllVehicles({ status: 'active' })
   } catch (error) {
     // handled by interceptor
   }
@@ -507,8 +506,7 @@ async function fetchVehicles() {
 
 async function fetchDrivers() {
   try {
-    const res = await listDrivers({ status: 'active', pageSize: 100 })
-    drivers.value = res.data
+    drivers.value = await listAllDrivers({ status: 'active' })
   } catch (error) {
     // handled by interceptor
   }

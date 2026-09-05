@@ -38,6 +38,20 @@ export async function listCases(params?: {
   }
 }
 
+export async function listAllCases(params?: Omit<NonNullable<Parameters<typeof listCases>[0]>, 'page' | 'pageSize'>): Promise<CaseDTO[]> {
+  const items: CaseDTO[] = []
+  let page = 1
+  const pageSize = 100
+  while (true) {
+    const result = await listCases({ ...params, page, pageSize })
+    const pageItems = result.data || []
+    items.push(...pageItems)
+    if (page >= (result.meta?.totalPages || Math.ceil((result.meta?.total || items.length) / pageSize)) || pageItems.length === 0) break
+    page += 1
+  }
+  return items
+}
+
 export async function getCase(id: string): Promise<CaseDTO> {
   const res: any = await apiClient.get(`/cases/${id}`)
   const data = res?.data ?? res

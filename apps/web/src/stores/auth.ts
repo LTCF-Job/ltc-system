@@ -1,82 +1,162 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import type { Session } from '@supabase/supabase-js'
 import type { UserRole, SystemPermissions } from '@/types/domain'
 import type { UserDTO } from '@/types/api'
 import { getAuthMe } from '@/api/auth'
+import { supabase } from '@/lib/supabase'
 
 const TOKEN_KEY = 'ltc_auth_token'
 const USER_KEY = 'ltc_auth_user'
 
-export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem(TOKEN_KEY))
-  const user = ref<UserDTO | null>(
-    localStorage.getItem(USER_KEY) ? JSON.parse(localStorage.getItem(USER_KEY)!) : null
-  )
+type PermissionState = 'idle' | 'loading' | 'loaded' | 'error'
 
-  // 權限矩陣一律來自後端 /auth/me（已合併個人 customPermissions），不快取到 localStorage，
-  // 避免權限異動後舊分頁仍讀到舊快取；F5 還原 session 一律重新打一次
+function readStoredUser(): UserDTO | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY)
+    return raw ? (JSON.parse(raw) as UserDTO) : null
+  } catch {
+    localStorage.removeItem(USER_KEY)
+    return null
+  }
+}
+
+function isLocalMockToken(value: string | null): boolean {
+  return value?.startsWith('mock_jwt_') === true
+}
+
+function mapSupabaseUser(session: Session): UserDTO {
+  const metadata = session.user.user_metadata || {}
+  const role = (session.user.app_metadata?.role || 'viewer') as UserRole
+  return {
+    id: session.user.id,
+    email: session.user.email || '',
+    displayName: metadata.display_name || session.user.email || '使用者',
+    role
+  }
+}
+
+export const useAuthStore = defineStore('auth', () => {
+  // Supabase session 是正式環境的唯一 token 來源；localStorage 只保留本機明確建立的 mock session。
+  const storedToken = localStorage.getItem(TOKEN_KEY)
+  const token = ref<string | null>(isLocalMockToken(storedToken) ? storedToken : null)
+  const user = ref<UserDTO | null>(isLocalMockToken(storedToken) ? readStoredUser() : null)
+
   const permissions = ref<SystemPermissions>({})
-  const permissionsLoaded = ref(false)
+  const permissionState = ref<PermissionState>('idle')
+  const permissionsLoaded = computed(() => permissionState.value === 'loaded')
   let permissionsRequest: Promise<void> | null = null
+  let initialized = false
 
   const isAuthenticated = computed(() => !!token.value && !!user.value)
   const currentRole = computed<UserRole>(() => user.value?.role || 'viewer')
 
-  // 供 router guard 與版面在權限尚未回來前等待，避免誤判無權限或選單瞬間全滅
+  function resetPermissions(state: PermissionState = 'idle') {
+    permissions.value = {}
+    permissionState.value = state
+    permissionsRequest = null
+  }
+
+  function clearSession() {
+    token.value = null
+    user.value = null
+    resetPermissions()
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
+  }
+
+  function syncSession(session: Session | null) {
+    const nextToken = session?.access_token || null
+    const nextUser = session ? mapSupabaseUser(session) : null
+    const changed = token.value !== nextToken || user.value?.id !== nextUser?.id
+
+    token.value = nextToken
+    user.value = nextUser
+    if (!session) {
+      clearSession()
+      return
+    }
+
+    // 避免把 Supabase access token 寫入自有 localStorage；Supabase SDK 會自行管理 session。
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
+    if (changed) resetPermissions()
+  }
+
   function loadPermissions(): Promise<void> {
-    if (!token.value) {
+    if (!token.value || !user.value) {
       permissions.value = {}
-      permissionsLoaded.value = true
+      permissionState.value = 'loaded'
       return Promise.resolve()
     }
     if (permissionsRequest) return permissionsRequest
 
+    permissionState.value = 'loading'
     permissionsRequest = getAuthMe()
       .then((me) => {
         permissions.value = me.permissions || {}
+        permissionState.value = 'loaded'
       })
       .catch(() => {
-        // 攔截器已處理 401/錯誤提示；這裡保持安全預設（全部視為無權限）
         permissions.value = {}
+        permissionState.value = token.value ? 'error' : 'idle'
       })
       .finally(() => {
-        permissionsLoaded.value = true
         permissionsRequest = null
       })
     return permissionsRequest
   }
 
-  // 頁面重整時以現有 token 立即補打一次 /auth/me，讓 router guard 有 promise 可等待
-  if (token.value && user.value) {
-    loadPermissions()
+  async function initializeAuth() {
+    if (initialized) return
+    initialized = true
+
+    if (!supabase) {
+      if (token.value && user.value) await loadPermissions()
+      return
+    }
+
+    supabase.auth.onAuthStateChange((_event, session) => {
+      syncSession(session)
+      if (session) setTimeout(() => void loadPermissions(), 0)
+    })
+
+    const { data, error } = await supabase.auth.getSession()
+    if (error) {
+      clearSession()
+      permissionState.value = 'error'
+      return
+    }
+
+    syncSession(data.session)
+    if (data.session) await loadPermissions()
   }
 
   async function setSession(newToken: string, newUser: UserDTO) {
+    // 只提供給本機 mock 登入與測試；正式 Supabase session 必須透過 syncSession 建立。
     token.value = newToken
     user.value = newUser
     localStorage.setItem(TOKEN_KEY, newToken)
     localStorage.setItem(USER_KEY, JSON.stringify(newUser))
-    permissionsLoaded.value = false
-    permissionsRequest = null
+    resetPermissions()
     await loadPermissions()
   }
 
   async function logout() {
-    token.value = null
-    user.value = null
-    permissions.value = {}
-    permissionsLoaded.value = false
-    permissionsRequest = null
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
+    if (supabase && !isLocalMockToken(token.value)) {
+      try {
+        await supabase.auth.signOut({ scope: 'local' })
+      } catch {
+        // 即使遠端 session 清除失敗，也要清除本機的畫面狀態。
+      }
+    }
+    clearSession()
   }
 
-  // 檢查特定功能區塊的檢視 (view)／編輯 (edit)／刪除 (delete) 權限；權限未載入完成前一律回傳 false（安全預設）
   function hasPermission(moduleId: string, action: 'view' | 'edit' | 'delete' = 'view'): boolean {
-    if (!user.value || !permissionsLoaded.value) return false
+    if (!user.value || permissionState.value !== 'loaded') return false
     const modPerm = permissions.value[moduleId]
-    if (!modPerm) return false
-    return !!modPerm[action]
+    return !!modPerm?.[action]
   }
 
   return {
@@ -85,7 +165,10 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     currentRole,
     permissions,
+    permissionState,
     permissionsLoaded,
+    initializeAuth,
+    syncSession,
     loadPermissions,
     setSession,
     logout,

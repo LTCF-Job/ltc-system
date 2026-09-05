@@ -23,8 +23,14 @@ export function setupRouterGuards(router: Router) {
     }
 
     // F5 重整時 /auth/me 可能還沒回來；guard 在此等待既有請求，避免誤判無權限把使用者踢出當前頁面
-    if (authStore.isAuthenticated && !authStore.permissionsLoaded) {
+    if (authStore.isAuthenticated && authStore.permissionState !== 'loaded') {
       await authStore.loadPermissions()
+    }
+
+    if (authStore.isAuthenticated && authStore.permissionState === 'error') {
+      ElMessage.error('權限資料載入失敗，請稍後重試')
+      next(false)
+      return
     }
 
     // 3. 模組權限比對：畫面顯示與 API 放行一律以後端 /auth/me 回傳的權限矩陣為準

@@ -283,7 +283,7 @@ import {
   updateDriver,
   deleteDriver,
   assignDriverVehicle,
-  listVehicles
+  listAllVehicles
 } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
@@ -481,8 +481,7 @@ async function handleDeleteDriver(row: DriverDTO) {
 }
 
 onMounted(async () => {
-  const vRes = await listVehicles({ status: 'active', pageSize: 100 })
-  allVehicles.value = vRes.data
+  allVehicles.value = await listAllVehicles({ status: 'active' })
 })
 
 executeFetch()

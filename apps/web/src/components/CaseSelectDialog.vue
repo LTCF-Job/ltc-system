@@ -58,7 +58,7 @@ import { ref, computed, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { TableInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
-import { listCases } from '@/api/cases'
+import { listAllCases } from '@/api/cases'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import { REGION_LABELS, CASE_STATUS_LABELS } from '@/types/domain'
 import type { Region, CaseStatus } from '@/types/domain'
@@ -107,8 +107,7 @@ async function loadCandidates() {
   tableRef.value?.clearSelection()
   loading.value = true
   try {
-    const res = await listCases({ pageSize: 1000, region: props.region || undefined })
-    candidates.value = res.data
+    candidates.value = await listAllCases({ region: props.region || undefined })
     await nextTick()
     restoreInitialSelection()
   } catch (err: any) {
