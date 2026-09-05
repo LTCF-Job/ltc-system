@@ -53,7 +53,7 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 | 變數 | 本機 `.env` | Cloud Run | 說明 |
 |---|---|---|---|
 | `PORT` | `8080` | Cloud Run 自動注入，不用設 | HTTP 監聽埠 |
-| `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL` 與 `ALLOWED_ORIGINS`，否則直接拒絕啟動 |
+| `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`、`RESEND_API_KEY` 與 `NOTIFY_FROM`，否則直接拒絕啟動 |
 | `DATABASE_URL` | Supabase 連線池網址 | 同左，存在 Secret Manager | 見上方 pgbouncer 說明 |
 | `DB_MAX_OPEN_CONNS` / `DB_MAX_IDLE_CONNS` | `5` / `2` | 同左 | 對應 `pgxpool` 的 `MaxConns`／`MinConns` |
 | `ENCRYPTION_KEY` / `HMAC_KEY` | 32 bytes base64 | 同左，存在 Secret Manager | 個案身分證等敏感欄位加密用 |
@@ -62,7 +62,8 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 | `ALLOWED_ORIGINS` | 不需要（`local` 時 CORS 全開） | 逗號分隔的網域清單 | `production` 必填，見下方常見錯誤 |
 | `STORAGE_BUCKET` | `ltc-exports` | 同左 | |
 | `STORAGE_SIGNED_URL_TTL` | `24h` | 同左 | |
-| `RESEND_API_KEY` / `NOTIFY_FROM` | 可留空 | 通知信件用 | |
+| `RESEND_API_KEY` | 可留空 | Secret Manager | `production` 必填，正式環境透過 Resend API 寄送通知 |
+| `NOTIFY_FROM` | `.env` 明確設定 | 同左 | `production` 必填，通知寄件人地址 |
 | `SENTRY_DSN` | 可留空 | 錯誤追蹤 | |
 | `LOG_LEVEL` | `info` | 同左 | |
 
@@ -232,7 +233,7 @@ gcloud run jobs describe ltc-api-migrate --region=asia-east1 --format="value(spe
 
 ## 部署後檢查清單
 
-1. `curl -i https://<cloud-run-url>/api/v1/healthz`（若有健康檢查端點）或直接打一個需要認證的端點確認回 401 而不是 500／連不上。
+1. `curl -i https://<cloud-run-url>/api/livez` 確認 process 存活，再以 `curl -i https://<cloud-run-url>/api/readyz` 確認 DB readiness；DB 不可用時 readiness 必須回 503，不得只在 body 回報 disconnected 卻仍回 200。
 2. 用實際帳密在目標網域登入一次，不要只信任「畫面沒有紅字」——CORS 失敗、`supabase` client 為 `null` 都不會讓瀏覽器整頁報錯，要看 DevTools console 有沒有 CORS 或網路錯誤。
 3. 前端瀏覽器對同一批 API 快速觸發多個並發請求（例如快速切換好幾個選單頁面），確認沒有隨機出現的 500——這類 prepared statement 撞名的 bug 在低併發下不容易重現。
 4. 若剛執行過 `vercel env add` 或改過 Cloud Run 環境變數，記得變數是**建置期**／**啟動時**生效，一定要有一次新的 build／新的 revision 才會套用，不能只改設定就期待既有部署自動吃到。

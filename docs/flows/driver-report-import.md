@@ -69,7 +69,7 @@ covers:
   > ParseDriverReport（認表頭、欄位對照、逐列解析民國日期與司機）
   > 宣告月份時檢查所有有效列都落在該月，不符即整份拒絕
   > [dryRun] 回傳預覽，使用者就地確認未對應欄位
-  > CommitDriverReport（以下全部在同一個 pgxdb.TxRunner 交易內）
+  > CommitDriverReport（宣告整月覆蓋時先確認預覽 `CanCommit`；以下寫入全部在同一個 pgxdb.TxRunner 交易內）
       > persistColumnDecisions 寫回 form_columns（以表頭文字為鍵）
       > collectImportableRows 挑出可寫入的列，其餘記入 SkippedRows
       > clearPreviousImport > ride.ClearImportedDates
@@ -160,7 +160,8 @@ POST /attendance/conflicts/:id/resolve { choice }
 
 - **重複匯入**：覆蓋而非疊加，重匯同一份檔案的結果與只匯一次相同。決策與替代方案見
   [driver-report-import-overwrite.md](../decisions/driver-report-import-overwrite.md)。
-- **解析層級失敗**（日期打錯、欄位缺失）：逐列略過並記入 `SkippedRows`，其餘日期照常寫入。
+- **解析層級失敗**：未宣告月份時，日期打錯的列逐列略過並記入 `SkippedRows`；宣告整月覆蓋時，日期無法解析是
+  blocking error，整份拒絕且不清除既有月份資料。
 - **資料庫層級失敗**：整份回滾，`last_imported_at` 不更新。先刪後寫若不回滾，該月資料會消失。
 - **月份不符**：宣告 `yearMonth` 後，檔案內落在該月以外的有效日期僅該列標記為錯誤、記入
   `SkippedRows`，不中斷整份解析，其餘列照常產生預覽並可正常寫入；commit 時這些列一併略過，
@@ -168,6 +169,7 @@ POST /attendance/conflicts/:id/resolve { choice }
   檔案橫跨多個月份」是預期情境，不屬於此列表示的月份不符——這些列會在其所屬月份的那一輪
   commit 正常匯入，提示訊息只說明「這一輪略過、另行處理」，不是要求使用者重新確認上傳檔案。
 - **空檔**：沒有任何可寫入的列時不執行清除，避免傳錯空檔清空整月資料。
+- **檔案格式與規模**：API 只接受 `.xlsx`；共用 reader 會先檢查 XLSX ZIP 項目數、解壓後總量、worksheet XML 大小與壓縮倍率，超過限制時在 parser 前拒絕。
 - **混車**：只刪本匯報表的 `form_submissions`，其他車輛對同一 slot 的來源保留並參與重算。
 - **人工成果**：帶 `corrected_at`、`conflict_resolved_at` 或 `not_claimed_aa09` 的 `ride_records`
   不會被覆蓋式重匯刪除。

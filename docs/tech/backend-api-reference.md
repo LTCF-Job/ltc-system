@@ -112,8 +112,8 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/exports/precheck` | staff, admin | 執行匯出前置檢核 |
-| POST | `/exports/precheck` | staff, admin | 同上 |
+| GET | `/exports/precheck` | staff, admin | 依 `periodYm`、`region` 與可選 `caseIds` 執行匯出前置檢核 |
+| POST | `/exports/precheck` | staff, admin | 同上；body 可帶 `periodYm`、`region`、`caseIds` |
 | GET | `/exports` | viewer, staff, admin | 匯出工作歷史清單（不含檔案明細與下載連結） |
 | POST | `/exports` | staff, admin | 建立政府申報匯出工作並同步產檔；body 需帶 `periodYm`(民國 5 碼)、`mode`(`direct`\|`zip`)、`caseIds`(至少一筆) |
 | GET | `/exports/:id` | viewer, staff, admin | 單筆匯出工作詳情，含逐案檔案清單 `files` |

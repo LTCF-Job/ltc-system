@@ -38,7 +38,7 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 |---|---|
 | `masterdata` | 單位、車輛、司機、區域主檔 |
 | `casemgmt` | 個案主檔、排班設定、交通偏好、個案彙整表匯出 |
-| `caseimport` | 個案批次 Excel／CSV 解析、預覽與匯入 |
+| `caseimport` | 個案批次 `.xlsx` 解析、預覽與匯入 |
 | `ride` | 司機接送匯報展開、搭乘紀錄合併與人工更正 |
 | `driverreport` | 車輛匯報表登錄、`.xlsx` 匯入與欄位對應 |
 | `reporting` | 趟數表、新竹時刻表、儀表板、前置檢核、政府申報匯出 |
@@ -100,4 +100,5 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 
 - 必填：`APP_ENV`（僅接受 `local` 或 `production`）、`DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`（兩把 32 bytes base64 金鑰，且不可相同）。
 - `APP_ENV=production` 時額外必填：`SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`。
-- 選填：`PORT`、`DB_MAX_OPEN_CONNS`、`DB_MAX_IDLE_CONNS`、`SUPABASE_PROJECT_REF`、`STORAGE_BUCKET`、`STORAGE_SIGNED_URL_TTL`、`GOOGLE_SA_JSON`、`RESEND_API_KEY`、`NOTIFY_FROM`、`SENTRY_DSN`、`LOG_LEVEL`。
+- 選填：`PORT`、`DB_MAX_OPEN_CONNS`、`DB_MAX_IDLE_CONNS`、`SUPABASE_PROJECT_REF`、`STORAGE_BUCKET`、`STORAGE_SIGNED_URL_TTL`、`GOOGLE_SA_JSON`、`SENTRY_DSN`、`LOG_LEVEL`。
+- `APP_ENV=production` 時額外必填：`RESEND_API_KEY`、`NOTIFY_FROM`；正式環境會使用 Resend API 寄信，不會使用 `LogEmailSender`。
