@@ -3,7 +3,6 @@ package transport
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -44,8 +43,11 @@ func (h *RegionHandler) List(c *gin.Context) {
 		return
 	}
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
+	}
 
 	list, total, err := h.svc.ListRegions(c.Request.Context(), c.Query("q"), c.Query("status"), page, pageSize)
 	if err != nil {
@@ -86,7 +88,7 @@ func (h *RegionHandler) Get(c *gin.Context) {
 // Create 新增區域主檔。
 func (h *RegionHandler) Create(c *gin.Context) {
 	var req CreateRegionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -98,6 +100,10 @@ func (h *RegionHandler) Create(c *gin.Context) {
 		SortOrder:   req.SortOrder,
 	}, actorOf(c))
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidStatus) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			return
+		}
 		if errors.Is(err, app.ErrDuplicateRegionName) {
 			httpx.RespondError(c, http.StatusConflict, httpx.CodeValidationFailed, "區域名稱已存在", nil)
 			return
@@ -122,7 +128,7 @@ func (h *RegionHandler) Update(c *gin.Context) {
 	}
 
 	var req UpdateRegionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -134,6 +140,10 @@ func (h *RegionHandler) Update(c *gin.Context) {
 		SortOrder:   req.SortOrder,
 	}, actorOf(c))
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidStatus) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			return
+		}
 		if errors.Is(err, app.ErrRegionNotFound) {
 			respondNotFound(c, "查無此區域")
 			return

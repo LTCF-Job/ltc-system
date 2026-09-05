@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // vehicleRow 是 vehicles 資料表的一列，另帶所屬單位 join 出來的名稱與區域。
@@ -105,14 +107,15 @@ const vehicleFilterSQL = `
 // List 取得車輛清單。
 func (r *VehicleRepository) List(ctx context.Context, filter app.VehicleFilter, page, pageSize int) ([]app.Vehicle, int64, error) {
 	if r.db == nil {
-		return []app.Vehicle{}, 0, nil
+		return nil, 0, fmt.Errorf("vehicle database is not configured")
 	}
+	db := pgxdb.FromContext(ctx, r.db)
 	offset := (page - 1) * pageSize
 	query := vehicleSelect + vehicleFilterSQL + `
 		ORDER BY v.display_name ASC
 		LIMIT $5 OFFSET $6
 	`
-	rows, err := r.db.Query(ctx, query, filter.SiteID, filter.Region, filter.Q, filter.Status, pageSize, offset)
+	rows, err := db.Query(ctx, query, filter.SiteID, filter.Region, filter.Q, filter.Status, pageSize, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query vehicles: %w", err)
 	}
@@ -135,11 +138,36 @@ func (r *VehicleRepository) List(ctx context.Context, filter app.VehicleFilter, 
 		SELECT COUNT(*) FROM vehicles v
 		LEFT JOIN sites s ON s.id = v.site_id
 	` + vehicleFilterSQL
-	if err := r.db.QueryRow(ctx, countQuery, filter.SiteID, filter.Region, filter.Q, filter.Status).Scan(&total); err != nil {
+	if err := db.QueryRow(ctx, countQuery, filter.SiteID, filter.Region, filter.Q, filter.Status).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count vehicles: %w", err)
 	}
 
 	return list, total, nil
+}
+
+// ListAll 取得完整的未刪除車輛資料集，供範本與匯出等非分頁業務使用。
+func (r *VehicleRepository) ListAll(ctx context.Context) ([]app.Vehicle, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("vehicle database is not configured")
+	}
+	rows, err := pgxdb.FromContext(ctx, r.db).Query(ctx, vehicleSelect+` WHERE v.deleted_at IS NULL ORDER BY v.display_name ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all vehicles: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]app.Vehicle, 0)
+	for rows.Next() {
+		var v vehicleRow
+		if err := rows.Scan(scanVehicle(&v)...); err != nil {
+			return nil, fmt.Errorf("failed to scan all vehicles: %w", err)
+		}
+		list = append(list, v.toApp())
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate all vehicles: %w", err)
+	}
+	return list, nil
 }
 
 // GetByID 依 UUID 取得車輛。
@@ -154,7 +182,10 @@ func (r *VehicleRepository) GetByDisplayName(ctx context.Context, displayName st
 
 func (r *VehicleRepository) getOne(ctx context.Context, query string, arg interface{}) (*app.Vehicle, error) {
 	var v vehicleRow
-	if err := r.db.QueryRow(ctx, query, arg).Scan(scanVehicle(&v)...); err != nil {
+	if err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, query, arg).Scan(scanVehicle(&v)...); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, app.ErrVehicleNotFound
+		}
 		return nil, err
 	}
 	vehicle := v.toApp()
@@ -192,7 +223,8 @@ func (r *VehicleRepository) Create(ctx context.Context, v *app.Vehicle) error {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING created_at, updated_at
 	`
-	if err := r.db.QueryRow(ctx, query, vehicleWriteArgs(v)...).Scan(&v.CreatedAt, &v.UpdatedAt); err != nil {
+	db := pgxdb.FromContext(ctx, r.db)
+	if err := db.QueryRow(ctx, query, vehicleWriteArgs(v)...).Scan(&v.CreatedAt, &v.UpdatedAt); err != nil {
 		return handleVehicleDBError(err)
 	}
 	return r.fillSite(ctx, v)
@@ -210,7 +242,8 @@ func (r *VehicleRepository) Update(ctx context.Context, v *app.Vehicle) error {
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING created_at, updated_at
 	`
-	if err := r.db.QueryRow(ctx, query, vehicleWriteArgs(v)...).Scan(&v.CreatedAt, &v.UpdatedAt); err != nil {
+	db := pgxdb.FromContext(ctx, r.db)
+	if err := db.QueryRow(ctx, query, vehicleWriteArgs(v)...).Scan(&v.CreatedAt, &v.UpdatedAt); err != nil {
 		return handleVehicleDBError(err)
 	}
 	return r.fillSite(ctx, v)
@@ -237,7 +270,7 @@ func (r *VehicleRepository) fillSite(ctx context.Context, v *app.Vehicle) error 
 		return nil
 	}
 	var name, region string
-	err := r.db.QueryRow(ctx, `SELECT name, region FROM sites WHERE id = $1`, *v.SiteID).Scan(&name, &region)
+	err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, `SELECT name, region FROM sites WHERE id = $1`, *v.SiteID).Scan(&name, &region)
 	if err != nil {
 		return err
 	}
@@ -247,7 +280,7 @@ func (r *VehicleRepository) fillSite(ctx context.Context, v *app.Vehicle) error 
 
 // SoftDelete 軟刪除車輛，回傳 false 代表該筆已被刪除過。
 func (r *VehicleRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
-	tag, err := r.db.Exec(ctx, `UPDATE vehicles SET deleted_at = now(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
+	tag, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `UPDATE vehicles SET deleted_at = now(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
 	if err != nil {
 		return false, err
 	}
@@ -257,7 +290,7 @@ func (r *VehicleRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUI
 // CountActiveDriverAssignments 統計該車輛目前生效中的司機指派筆數。
 func (r *VehicleRepository) CountActiveDriverAssignments(ctx context.Context, vehicleID uuid.UUID) (int, error) {
 	var count int
-	err := r.db.QueryRow(ctx, `
+	err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, `
 		SELECT COUNT(*) FROM driver_assignments
 		WHERE vehicle_id = $1 AND upper_inf(effective_range)
 	`, vehicleID).Scan(&count)
@@ -267,7 +300,7 @@ func (r *VehicleRepository) CountActiveDriverAssignments(ctx context.Context, ve
 // CountScheduleLegs 統計該車輛目前仍被生效中排班綁定的趟次筆數。
 func (r *VehicleRepository) CountScheduleLegs(ctx context.Context, vehicleID uuid.UUID) (int, error) {
 	var count int
-	err := r.db.QueryRow(ctx, `
+	err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, `
 		SELECT COUNT(*) FROM schedule_legs sl
 		JOIN case_schedules cs ON sl.schedule_id = cs.id
 		WHERE sl.vehicle_id = $1 AND upper_inf(cs.effective_range)

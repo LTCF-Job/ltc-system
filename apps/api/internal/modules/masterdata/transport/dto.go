@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
 )
 
@@ -151,13 +152,13 @@ type VehicleWriteFields struct {
 	SiteID                    *uuid.UUID `json:"siteId" binding:"required"`
 	Brand                     string     `json:"brand"`
 	Model                     string     `json:"model"`
-	ManufactureYM             string    `json:"manufactureYm"`
-	CompulsoryInsuranceExpiry *wireDate `json:"compulsoryInsuranceExpiry"`
-	PassengerInsuranceExpiry  *wireDate `json:"passengerInsuranceExpiry"`
-	ThirdPartyInsuranceExpiry *wireDate `json:"thirdPartyInsuranceExpiry"`
-	LastInspectionDate        *wireDate `json:"lastInspectionDate"`
-	WheelchairAccessible      *bool     `json:"wheelchairAccessible"`
-	Status                    string    `json:"status"`
+	ManufactureYM             string     `json:"manufactureYm"`
+	CompulsoryInsuranceExpiry *wireDate  `json:"compulsoryInsuranceExpiry"`
+	PassengerInsuranceExpiry  *wireDate  `json:"passengerInsuranceExpiry"`
+	ThirdPartyInsuranceExpiry *wireDate  `json:"thirdPartyInsuranceExpiry"`
+	LastInspectionDate        *wireDate  `json:"lastInspectionDate"`
+	WheelchairAccessible      *bool      `json:"wheelchairAccessible"`
+	Status                    string     `json:"status"`
 }
 
 func (f VehicleWriteFields) toInput() app.VehicleInput {
@@ -249,9 +250,9 @@ func newDriverAssignmentResponse(a app.DriverAssignment) DriverAssignmentRespons
 
 // CreateDriverRequest 代表新增司機請求。
 type CreateDriverRequest struct {
-	Name              string     `json:"name" binding:"required"`
-	NationalID        string     `json:"nationalId" binding:"required"`
-	Email             *string    `json:"email"`
+	Name              string    `json:"name" binding:"required"`
+	NationalID        string    `json:"nationalId" binding:"required"`
+	Email             *string   `json:"email"`
 	Region            string    `json:"region" binding:"required"`
 	LicenseClass      *string   `json:"licenseClass"`
 	LicenseExpiryDate *wireDate `json:"licenseExpiryDate"`
@@ -318,7 +319,7 @@ func parseWireDate(data []byte) (*time.Time, error) {
 	if s == "" {
 		return nil, nil
 	}
-	if t, err := time.Parse("2006-01-02", s); err == nil {
+	if t, err := rocdate.ParseDate(s); err == nil {
 		return &t, nil
 	}
 	t, err := time.Parse(time.RFC3339, s)

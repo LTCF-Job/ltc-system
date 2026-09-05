@@ -13,6 +13,7 @@ var (
 	ErrInvalidDriverNationalID = errors.New("invalid driver national id format")
 	// ErrInvalidDriverLicenseClass 代表駕照類別不在允許的代碼清單內。
 	ErrInvalidDriverLicenseClass = errors.New("invalid driver license class")
+	ErrInvalidStatus             = errors.New("invalid status")
 	// ErrRegionNameRequired 代表未提供區域名稱。
 	ErrRegionNameRequired = errors.New("region name is required")
 	// ErrDuplicateRegionName 代表區域名稱重複。
@@ -35,4 +36,6 @@ var (
 	ErrDuplicateVehiclePlateNo = errors.New("vehicle plate number already exists")
 	// ErrDuplicateVehicleDisplayName 代表車輛代稱已存在。
 	ErrDuplicateVehicleDisplayName = errors.New("vehicle display name already exists")
+	// ErrVehicleNotFound 代表查無車輛資料。
+	ErrVehicleNotFound = errors.New("vehicle not found")
 )

@@ -46,10 +46,12 @@ func (s *SiteService) Create(ctx context.Context, in CreateSiteInput) (*Site, er
 		return nil, ErrSiteRegionRequired
 	}
 
-	// 確保 status 符合資料庫 check constraint，空值或非法值預設 active
+	// 未提供狀態時預設 active；非法值不可靜默改寫。
 	status := strings.TrimSpace(in.Status)
-	if status != "active" && status != "inactive" {
+	if status == "" {
 		status = "active"
+	} else if status != "active" && status != "inactive" {
+		return nil, ErrInvalidStatus
 	}
 
 	openDays := in.OpenDays
@@ -95,8 +97,10 @@ func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInp
 	}
 
 	status := strings.TrimSpace(in.Status)
-	if status != "active" && status != "inactive" {
+	if status == "" {
 		status = "active"
+	} else if status != "active" && status != "inactive" {
+		return nil, ErrInvalidStatus
 	}
 
 	openDays := in.OpenDays

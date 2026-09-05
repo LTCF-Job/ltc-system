@@ -18,11 +18,16 @@ type DriverService struct {
 	store     DriverStore
 	cfg       *config.Config
 	auditRepo AuditWriter
+	txRunner  TransactionRunner
 }
 
 // NewDriverService 建立 DriverService 實例。
-func NewDriverService(store DriverStore, cfg *config.Config, auditRepo AuditWriter) *DriverService {
-	return &DriverService{store: store, cfg: cfg, auditRepo: auditRepo}
+func NewDriverService(store DriverStore, cfg *config.Config, auditRepo AuditWriter, txRunners ...TransactionRunner) *DriverService {
+	var txRunner TransactionRunner
+	if len(txRunners) > 0 {
+		txRunner = txRunners[0]
+	}
+	return &DriverService{store: store, cfg: cfg, auditRepo: auditRepo, txRunner: txRunner}
 }
 
 // List 查詢司機清單。
@@ -134,8 +139,10 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 	if in.Region != nil {
 		existing.Region = *in.Region
 	}
-	// 只接受兩種狀態，非法值一律保留原本的值不變更
-	if in.Status != nil && (*in.Status == "active" || *in.Status == "inactive") {
+	if in.Status != nil {
+		if *in.Status != "active" && *in.Status != "inactive" {
+			return nil, ErrInvalidStatus
+		}
 		existing.Status = *in.Status
 	}
 	if in.LicenseClass != nil {
@@ -213,27 +220,36 @@ func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, i
 
 // Delete 軟刪除司機並收斂其生效中車輛指派。
 func (s *DriverService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRole string) error {
-	ok, err := s.store.SoftDelete(ctx, id, actorID)
-	if err != nil {
-		return fmt.Errorf("failed to soft delete driver: %w", err)
-	}
-	if !ok {
-		return ErrDriverNotFound
+	deleteFn := func(txCtx context.Context) error {
+		ok, err := s.store.SoftDelete(txCtx, id, actorID)
+		if err != nil {
+			return fmt.Errorf("failed to soft delete driver: %w", err)
+		}
+		if !ok {
+			return ErrDriverNotFound
+		}
+
+		if err := s.store.CloseActiveAssignments(txCtx, id); err != nil {
+			return fmt.Errorf("failed to close active assignments: %w", err)
+		}
+
+		if s.auditRepo != nil {
+			entityIDStr := id.String()
+			if err := s.auditRepo.Write(txCtx, AuditEntry{
+				ActorID:    &actorID,
+				ActorRole:  &actorRole,
+				Action:     "delete",
+				EntityType: "drivers",
+				EntityID:   &entityIDStr,
+			}); err != nil {
+				return fmt.Errorf("failed to write driver audit: %w", err)
+			}
+		}
+		return nil
 	}
 
-	if err := s.store.CloseActiveAssignments(ctx, id); err != nil {
-		return fmt.Errorf("failed to close active assignments: %w", err)
+	if s.txRunner != nil {
+		return s.txRunner.WithTx(ctx, deleteFn)
 	}
-
-	if s.auditRepo != nil {
-		entityIDStr := id.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    &actorID,
-			ActorRole:  &actorRole,
-			Action:     "delete",
-			EntityType: "drivers",
-			EntityID:   &entityIDStr,
-		})
-	}
-	return nil
+	return deleteFn(ctx)
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"ltc-system/apps/api/internal/platform/clock"
 )
 
 // ErrVehicleInUse 表示車輛仍有生效中之司機指派或排班趟次綁定，不可刪除。
@@ -18,11 +19,16 @@ type VehicleService struct {
 	store     VehicleStore
 	drivers   DriverStore
 	auditRepo AuditWriter
+	txRunner  TransactionRunner
 }
 
 // NewVehicleService 建立 VehicleService 實例。
-func NewVehicleService(store VehicleStore, drivers DriverStore, auditRepo AuditWriter) *VehicleService {
-	return &VehicleService{store: store, drivers: drivers, auditRepo: auditRepo}
+func NewVehicleService(store VehicleStore, drivers DriverStore, auditRepo AuditWriter, txRunners ...TransactionRunner) *VehicleService {
+	var txRunner TransactionRunner
+	if len(txRunners) > 0 {
+		txRunner = txRunners[0]
+	}
+	return &VehicleService{store: store, drivers: drivers, auditRepo: auditRepo, txRunner: txRunner}
 }
 
 // List 查詢車輛清單，並帶出每台車今日生效的司機。
@@ -36,7 +42,7 @@ func (s *VehicleService) List(ctx context.Context, filter VehicleFilter, page, p
 	for _, v := range list {
 		ids = append(ids, v.ID)
 	}
-	byVehicle, err := s.drivers.ListByVehicleIDsOnDate(ctx, ids, time.Now())
+	byVehicle, err := s.drivers.ListByVehicleIDsOnDate(ctx, ids, clock.Now())
 	if err != nil {
 		return nil, 0, err
 	}
@@ -69,7 +75,7 @@ type VehicleInput struct {
 	Status                    string
 }
 
-func (in VehicleInput) apply(v *Vehicle) {
+func (in VehicleInput) apply(v *Vehicle) error {
 	v.PlateNo = strings.TrimSpace(in.PlateNo)
 	v.DisplayName = strings.TrimSpace(in.DisplayName)
 	v.SiteID = in.SiteID
@@ -81,18 +87,23 @@ func (in VehicleInput) apply(v *Vehicle) {
 	v.ThirdPartyInsuranceExpiry = in.ThirdPartyInsuranceExpiry
 	v.LastInspectionDate = in.LastInspectionDate
 	v.WheelchairAccessible = in.WheelchairAccessible
-	// 確保 status 符合資料庫 check constraint，空值或非法值預設 active
+	// 未提供狀態時預設 active；非法值不可靜默改寫。
 	status := strings.TrimSpace(in.Status)
-	if status != "active" && status != "inactive" {
+	if status == "" {
 		status = "active"
+	} else if status != "active" && status != "inactive" {
+		return ErrInvalidStatus
 	}
 	v.Status = status
+	return nil
 }
 
 // Create 新增車輛。
 func (s *VehicleService) Create(ctx context.Context, in VehicleInput) (*Vehicle, error) {
 	v := Vehicle{ID: uuid.New()}
-	in.apply(&v)
+	if err := in.apply(&v); err != nil {
+		return nil, err
+	}
 	if err := s.store.Create(ctx, &v); err != nil {
 		return nil, err
 	}
@@ -102,7 +113,9 @@ func (s *VehicleService) Create(ctx context.Context, in VehicleInput) (*Vehicle,
 // Update 更新車輛。
 func (s *VehicleService) Update(ctx context.Context, id uuid.UUID, in VehicleInput) (*Vehicle, error) {
 	v := Vehicle{ID: id}
-	in.apply(&v)
+	if err := in.apply(&v); err != nil {
+		return nil, err
+	}
 	if err := s.store.Update(ctx, &v); err != nil {
 		return nil, err
 	}
@@ -111,35 +124,44 @@ func (s *VehicleService) Update(ctx context.Context, id uuid.UUID, in VehicleInp
 
 // Delete 軟刪除車輛；仍有生效中司機指派或排班趟次綁定時回 ErrVehicleInUse。
 func (s *VehicleService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRole string) error {
-	assignments, err := s.store.CountActiveDriverAssignments(ctx, id)
-	if err != nil {
-		return fmt.Errorf("failed to count active driver assignments: %w", err)
-	}
-	legs, err := s.store.CountScheduleLegs(ctx, id)
-	if err != nil {
-		return fmt.Errorf("failed to count schedule legs: %w", err)
-	}
-	if assignments > 0 || legs > 0 {
-		return ErrVehicleInUse
+	deleteFn := func(txCtx context.Context) error {
+		assignments, err := s.store.CountActiveDriverAssignments(txCtx, id)
+		if err != nil {
+			return fmt.Errorf("failed to count active driver assignments: %w", err)
+		}
+		legs, err := s.store.CountScheduleLegs(txCtx, id)
+		if err != nil {
+			return fmt.Errorf("failed to count schedule legs: %w", err)
+		}
+		if assignments > 0 || legs > 0 {
+			return ErrVehicleInUse
+		}
+
+		ok, err := s.store.SoftDelete(txCtx, id, actorID)
+		if err != nil {
+			return fmt.Errorf("failed to soft delete vehicle: %w", err)
+		}
+		if !ok {
+			return ErrVehicleNotFound
+		}
+
+		if s.auditRepo != nil {
+			entityIDStr := id.String()
+			if err := s.auditRepo.Write(txCtx, AuditEntry{
+				ActorID:    &actorID,
+				ActorRole:  &actorRole,
+				Action:     "delete",
+				EntityType: "vehicles",
+				EntityID:   &entityIDStr,
+			}); err != nil {
+				return fmt.Errorf("failed to write vehicle audit: %w", err)
+			}
+		}
+		return nil
 	}
 
-	ok, err := s.store.SoftDelete(ctx, id, actorID)
-	if err != nil {
-		return fmt.Errorf("failed to soft delete vehicle: %w", err)
+	if s.txRunner != nil {
+		return s.txRunner.WithTx(ctx, deleteFn)
 	}
-	if !ok {
-		return fmt.Errorf("vehicle not found")
-	}
-
-	if s.auditRepo != nil {
-		entityIDStr := id.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    &actorID,
-			ActorRole:  &actorRole,
-			Action:     "delete",
-			EntityType: "vehicles",
-			EntityID:   &entityIDStr,
-		})
-	}
-	return nil
+	return deleteFn(ctx)
 }

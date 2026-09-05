@@ -3,7 +3,6 @@ package transport
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -24,8 +23,11 @@ func NewDriverHandler(svc *app.DriverService) *DriverHandler {
 
 // List 查詢司機清單。
 func (h *DriverHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
+	}
 
 	drivers, total, err := h.svc.List(c.Request.Context(), c.Query("region"), c.Query("q"), c.Query("status"), page, pageSize)
 	if err != nil {
@@ -43,7 +45,7 @@ func (h *DriverHandler) List(c *gin.Context) {
 // Create 新增司機（身分證加密與 HMAC 索引）。
 func (h *DriverHandler) Create(c *gin.Context) {
 	var req CreateDriverRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -81,7 +83,7 @@ func (h *DriverHandler) Update(c *gin.Context) {
 	}
 
 	var req UpdateDriverRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -98,6 +100,10 @@ func (h *DriverHandler) Update(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, app.ErrDriverNotFound) {
 			respondNotFound(c, "查無司機資料")
+			return
+		}
+		if errors.Is(err, app.ErrInvalidStatus) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
 			return
 		}
 		if errors.Is(err, app.ErrInvalidDriverLicenseClass) {
@@ -174,7 +180,7 @@ func (h *DriverHandler) AssignVehicle(c *gin.Context) {
 	}
 
 	var req AssignVehicleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}

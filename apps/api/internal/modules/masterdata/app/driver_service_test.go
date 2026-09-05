@@ -263,16 +263,15 @@ func TestDriverService_Update(t *testing.T) {
 		assert.Equal(t, "inactive", d.Status)
 	})
 
-	t.Run("非法狀態值不變更既有值", func(t *testing.T) {
+	t.Run("拒絕非法狀態值", func(t *testing.T) {
 		id := uuid.New()
 		store := newFakeDriverStore()
 		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active"}
 		svc := NewDriverService(store, cfg, nil)
 
-		d, err := svc.Update(context.Background(), id, UpdateDriverInput{Status: strPtr("resigned")})
+		_, err := svc.Update(context.Background(), id, UpdateDriverInput{Status: strPtr("resigned")})
 
-		assert.NoError(t, err)
-		assert.Equal(t, "active", d.Status)
+		assert.ErrorIs(t, err, ErrInvalidStatus)
 	})
 
 	t.Run("rejects an unknown license class", func(t *testing.T) {

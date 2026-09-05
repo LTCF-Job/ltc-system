@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -71,13 +72,18 @@ func (s *RegionService) CreateRegion(ctx context.Context, in CreateRegionInput, 
 		return nil, ErrRegionNameRequired
 	}
 
-	// 只接受兩種狀態，其餘輸入（含空字串）一律視為 active
+	// 未提供狀態時預設 active；一旦提供非白名單值就拒絕，不猜測使用者意圖。
 	status := in.Status
-	if status != "active" && status != "inactive" {
+	if status == "" {
 		status = "active"
+	} else if status != "active" && status != "inactive" {
+		return nil, ErrInvalidStatus
 	}
 
-	existing, _ := s.store.GetByName(ctx, name)
+	existing, err := s.store.GetByName(ctx, name)
+	if err != nil && !errors.Is(err, ErrRegionNotFound) {
+		return nil, fmt.Errorf("failed to check duplicate region name: %w", err)
+	}
 	if existing != nil {
 		return nil, ErrDuplicateRegionName
 	}
@@ -101,7 +107,7 @@ func (s *RegionService) CreateRegion(ctx context.Context, in CreateRegionInput, 
 func (s *RegionService) UpdateRegion(ctx context.Context, id uuid.UUID, in UpdateRegionInput, actor ActorContext) (*Region, error) {
 	existing, err := s.store.GetByID(ctx, id)
 	if err != nil {
-		return nil, ErrRegionNotFound
+		return nil, err
 	}
 
 	before := existing.Snapshot()
@@ -112,7 +118,10 @@ func (s *RegionService) UpdateRegion(ctx context.Context, id uuid.UUID, in Updat
 	if in.Description != nil {
 		existing.Description = strings.TrimSpace(*in.Description)
 	}
-	if in.Status != nil && (*in.Status == "active" || *in.Status == "inactive") {
+	if in.Status != nil {
+		if *in.Status != "active" && *in.Status != "inactive" {
+			return nil, ErrInvalidStatus
+		}
 		existing.Status = *in.Status
 	}
 	if in.SortOrder != nil {
@@ -131,7 +140,10 @@ func (s *RegionService) UpdateRegion(ctx context.Context, id uuid.UUID, in Updat
 func (s *RegionService) DeleteRegion(ctx context.Context, id uuid.UUID, actor ActorContext) error {
 	existing, err := s.store.GetByID(ctx, id)
 	if err != nil {
-		return ErrRegionNotFound
+		if errors.Is(err, ErrRegionNotFound) {
+			return ErrRegionNotFound
+		}
+		return fmt.Errorf("failed to load region: %w", err)
 	}
 
 	if err := s.store.Delete(ctx, id); err != nil {

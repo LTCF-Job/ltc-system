@@ -2,10 +2,12 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
 )
@@ -52,7 +54,7 @@ func NewRegionRepository(db *pgxpool.Pool) *RegionRepository {
 // List 取得區域分頁清單，支援關鍵字與狀態篩選。
 func (r *RegionRepository) List(ctx context.Context, q, status string, page, pageSize int) ([]app.Region, int64, error) {
 	if r.db == nil {
-		return []app.Region{}, 0, nil
+		return nil, 0, fmt.Errorf("region database is not configured")
 	}
 	offset := (page - 1) * pageSize
 	query := `
@@ -97,7 +99,7 @@ func (r *RegionRepository) List(ctx context.Context, q, status string, page, pag
 // ListAll 取得所有區域清單（供下拉選單使用）。
 func (r *RegionRepository) ListAll(ctx context.Context) ([]app.Region, error) {
 	if r.db == nil {
-		return []app.Region{}, nil
+		return nil, fmt.Errorf("region database is not configured")
 	}
 	rows, err := r.db.Query(ctx, `SELECT `+regionColumns+` FROM regions WHERE status = 'active' ORDER BY sort_order ASC, name ASC`)
 	if err != nil {
@@ -135,6 +137,9 @@ func (r *RegionRepository) getOne(ctx context.Context, query string, arg interfa
 	}
 	var reg regionRow
 	if err := r.db.QueryRow(ctx, query, arg).Scan(reg.scanTargets()...); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, app.ErrRegionNotFound
+		}
 		return nil, err
 	}
 	region := reg.toApp()

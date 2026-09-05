@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
@@ -108,6 +109,9 @@ func (r *SiteRepository) getOne(ctx context.Context, query string, arg interface
 	err := r.db.QueryRow(ctx, query, arg).
 		Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.OpenDays, &s.Status, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, app.ErrSiteNotFound
+		}
 		return nil, err
 	}
 	site := s.toApp()

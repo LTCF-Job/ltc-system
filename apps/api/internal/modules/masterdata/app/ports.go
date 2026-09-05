@@ -39,6 +39,11 @@ type DriverStore interface {
 	CloseActiveAssignments(ctx context.Context, driverID uuid.UUID) error
 }
 
+// TransactionRunner 讓涉及司機主檔與車輛指派的多步驟異動共用同一筆交易。
+type TransactionRunner interface {
+	WithTx(ctx context.Context, fn func(context.Context) error) error
+}
+
 // RegionStore 定義區域主檔的讀寫邊界。
 type RegionStore interface {
 	List(ctx context.Context, q, status string, page, pageSize int) ([]Region, int64, error)

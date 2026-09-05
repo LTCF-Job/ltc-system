@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
@@ -74,7 +75,7 @@ func NewDriverRepository(db *pgxpool.Pool) *DriverRepository {
 // List 取得司機清單。
 func (r *DriverRepository) List(ctx context.Context, region, q, status string, page, pageSize int) ([]app.Driver, int64, error) {
 	if r.db == nil {
-		return []app.Driver{}, 0, nil
+		return nil, 0, fmt.Errorf("driver database is not configured")
 	}
 	offset := (page - 1) * pageSize
 	query := `
@@ -101,6 +102,9 @@ func (r *DriverRepository) List(ctx context.Context, region, q, status string, p
 		}
 		list = append(list, d.toApp())
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate drivers: %w", err)
+	}
 
 	var total int64
 	countQuery := `
@@ -110,7 +114,9 @@ func (r *DriverRepository) List(ctx context.Context, region, q, status string, p
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
 		  AND ($3 = '' OR status = $3)
 	`
-	_ = r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total)
+	if err := r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count drivers: %w", err)
+	}
 
 	return list, total, nil
 }
@@ -118,7 +124,7 @@ func (r *DriverRepository) List(ctx context.Context, region, q, status string, p
 // ListAllActive 取得所有未刪除且啟用的司機，供完整業務資料集使用。
 func (r *DriverRepository) ListAllActive(ctx context.Context) ([]app.Driver, error) {
 	if r.db == nil {
-		return []app.Driver{}, nil
+		return nil, fmt.Errorf("driver database is not configured")
 	}
 	query := `
 		SELECT ` + driverColumns + `
@@ -163,6 +169,9 @@ func (r *DriverRepository) GetByNameNormalized(ctx context.Context, nameNorm str
 }
 
 func (r *DriverRepository) getOne(ctx context.Context, query string, args ...interface{}) (*app.Driver, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("driver database is not configured")
+	}
 	var d driverRow
 	if err := r.db.QueryRow(ctx, query, args...).Scan(d.scanTargets()...); err != nil {
 		if err == pgx.ErrNoRows {
@@ -211,20 +220,25 @@ func (r *DriverRepository) AssignVehicle(ctx context.Context, a *app.DriverAssig
 	query := `
 		INSERT INTO driver_assignments (
 			id, driver_id, vehicle_id, effective_range
-		) VALUES ($1, $2, $3, daterange($4, $5, '[]'))
+		) VALUES ($1, $2, $3, daterange($4, $5, '[)'))
 		RETURNING created_at
 	`
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
 	}
-	return r.db.QueryRow(ctx, query, a.ID, a.DriverID, a.VehicleID, a.EffectiveFrom, a.EffectiveTo).
+	var exclusiveTo *time.Time
+	if a.EffectiveTo != nil {
+		end := a.EffectiveTo.AddDate(0, 0, 1)
+		exclusiveTo = &end
+	}
+	return r.db.QueryRow(ctx, query, a.ID, a.DriverID, a.VehicleID, a.EffectiveFrom, exclusiveTo).
 		Scan(&a.CreatedAt)
 }
 
 // ListDriversForVehicleOnDate 查詢某車輛在特定日期生效的所有司機，依司機姓名排序。
 func (r *DriverRepository) ListDriversForVehicleOnDate(ctx context.Context, vehicleID uuid.UUID, serviceDate time.Time) ([]app.Driver, error) {
 	if r.db == nil {
-		return nil, nil
+		return nil, fmt.Errorf("driver database is not configured")
 	}
 	query := `
 		SELECT ` + driverColumnsWithAlias + `
@@ -255,7 +269,10 @@ func (r *DriverRepository) ListDriversForVehicleOnDate(ctx context.Context, vehi
 // ListByVehicleIDsOnDate 一次查出多台車在特定日期生效的司機，供車輛清單批次帶出。
 func (r *DriverRepository) ListByVehicleIDsOnDate(ctx context.Context, vehicleIDs []uuid.UUID, on time.Time) (map[uuid.UUID][]app.Driver, error) {
 	result := make(map[uuid.UUID][]app.Driver, len(vehicleIDs))
-	if r.db == nil || len(vehicleIDs) == 0 {
+	if r.db == nil {
+		return nil, fmt.Errorf("driver database is not configured")
+	}
+	if len(vehicleIDs) == 0 {
 		return result, nil
 	}
 	query := `
@@ -373,8 +390,8 @@ func (r *DriverRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUID
 func (r *DriverRepository) CloseActiveAssignments(ctx context.Context, driverID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE driver_assignments
-		SET effective_range = daterange(lower(effective_range), CURRENT_DATE, '[)')
+		SET effective_range = daterange(lower(effective_range), $2::date, '[)')
 		WHERE driver_id = $1 AND upper_inf(effective_range)
-	`, driverID)
+	`, driverID, clock.Today())
 	return err
 }
