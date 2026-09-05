@@ -39,7 +39,7 @@ export async function listIssueRides(params?: {
   pageSize?: number
   month?: string
   issueType?: 'conflict' | 'unreported' | 'import_error'
-  q?: string
+  keyword?: string
 }): Promise<Paged<IssueRideDTO>> {
   return apiClient.get('/rides/issues', { params })
 }

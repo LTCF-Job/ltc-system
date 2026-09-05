@@ -226,7 +226,7 @@ async function fetchIssues() {
     const res = await listIssueRides({
       issueType: activeTab.value,
       pageSize: 50,
-      q: issueQuery.value || undefined
+      keyword: issueQuery.value || undefined
     })
     issueList.value = res.data
   } finally {
