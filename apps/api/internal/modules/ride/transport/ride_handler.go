@@ -128,30 +128,28 @@ func (h *RideHandler) ManualReport(c *gin.Context) {
 
 	caseUUID, err := uuid.Parse(dto.CaseID)
 	if err != nil {
-		// 非 UUID CaseID（相容展示與自訂字串模式）
-		httpx.RespondSuccess(c, http.StatusOK, gin.H{
-			"id":              "ride_" + dto.CaseID + "_" + dto.ServiceDate + "_" + string(rune('0'+dto.LegSeq)),
-			"caseId":          dto.CaseID,
-			"serviceDate":     dto.ServiceDate,
-			"legSeq":          dto.LegSeq,
-			"effectiveStatus": dto.EffectiveStatus,
-			"reason":          dto.Reason,
-		}, nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的個案 ID", nil)
 		return
 	}
 
 	var vehicleUUID *uuid.UUID
 	if dto.VehicleID != nil && *dto.VehicleID != "" {
-		if v, err := uuid.Parse(*dto.VehicleID); err == nil {
-			vehicleUUID = &v
+		v, err := uuid.Parse(*dto.VehicleID)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的車輛 ID", nil)
+			return
 		}
+		vehicleUUID = &v
 	}
 
 	var driverUUID *uuid.UUID
 	if dto.DriverID != nil && *dto.DriverID != "" {
-		if d, err := uuid.Parse(*dto.DriverID); err == nil {
-			driverUUID = &d
+		d, err := uuid.Parse(*dto.DriverID)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的司機 ID", nil)
+			return
 		}
+		driverUUID = &d
 	}
 
 	req := app.ManualReportRideRequest{
