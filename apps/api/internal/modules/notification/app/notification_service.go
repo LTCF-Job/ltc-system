@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
+	"strings"
 
 	"github.com/google/uuid"
+	"ltc-system/apps/api/internal/platform/clock"
 )
 
 // EmailSender 定義電子郵件發送介面。
@@ -24,8 +25,20 @@ type SendResult struct {
 type LogEmailSender struct{}
 
 func (s *LogEmailSender) SendEmail(ctx context.Context, to, subject, body string) error {
-	slog.Info("Simulated email sent", slog.String("to", to), slog.String("subject", subject))
+	slog.Info("Simulated email sent")
 	return nil
+}
+
+type dedupStore interface {
+	ClaimNotificationEvent(ctx context.Context, dedupKey, topic string) (bool, error)
+	CompleteNotificationEvent(ctx context.Context, dedupKey string) error
+	ReleaseNotificationEvent(ctx context.Context, dedupKey string) error
+}
+
+type unavailableEmailSender struct{}
+
+func (s *unavailableEmailSender) SendEmail(ctx context.Context, to, subject, body string) error {
+	return fmt.Errorf("email sender is not configured")
 }
 
 // NotificationService 負責系統告警與通知派送及收件人管理。
@@ -38,7 +51,8 @@ type NotificationService struct {
 // NewNotificationService 建立 NotificationService 實例。
 func NewNotificationService(repo Store, auditRepo AuditWriter, sender EmailSender) *NotificationService {
 	if sender == nil {
-		sender = &LogEmailSender{}
+		// 缺少 sender 必須 fail closed；不可把沒有真正寄信的 log sender 當成成功。
+		sender = &unavailableEmailSender{}
 	}
 	return &NotificationService{
 		repo:      repo,
@@ -59,6 +73,32 @@ func (s *NotificationService) SendNotification(ctx context.Context, topic, subje
 	return nil
 }
 
+// SendNotificationDedup 以事件 key 保證 scheduler retry 不會重複寄送同一通知。
+// 舊的測試／離線 store 若未實作 dedup port，仍維持原本的單次派送行為。
+func (s *NotificationService) SendNotificationDedup(ctx context.Context, topic, subject, body, dedupKey string) error {
+	store, ok := s.repo.(dedupStore)
+	if !ok || dedupKey == "" {
+		return s.SendNotification(ctx, topic, subject, body)
+	}
+	claimed, err := store.ClaimNotificationEvent(ctx, dedupKey, topic)
+	if err != nil {
+		return fmt.Errorf("claim notification event: %w", err)
+	}
+	if !claimed {
+		return nil
+	}
+	if err := s.SendNotification(ctx, topic, subject, body); err != nil {
+		if releaseErr := store.ReleaseNotificationEvent(ctx, dedupKey); releaseErr != nil {
+			return fmt.Errorf("%w; release notification event: %v", err, releaseErr)
+		}
+		return err
+	}
+	if err := store.CompleteNotificationEvent(ctx, dedupKey); err != nil {
+		return fmt.Errorf("complete notification event: %w", err)
+	}
+	return nil
+}
+
 // SendNotificationWithResult 派送通知並回傳實際結果；部分收件人失敗時不再
 // 靜默回傳成功，呼叫端可依 Failed 觸發 retry 或告警。
 func (s *NotificationService) SendNotificationWithResult(ctx context.Context, topic, subject, body string) (SendResult, error) {
@@ -75,12 +115,14 @@ func (s *NotificationService) SendNotificationWithResult(ctx context.Context, to
 			Channel:         "email",
 			RecipientEmails: []string{},
 			Subject:         subject,
-			ContentSummary:  &body,
+			ContentSummary:  notificationContentSummary(topic),
 			Status:          "failed",
 			ErrorMessage:    &errMsg,
-			SentAt:          time.Now().UTC(),
+			SentAt:          clock.Now(),
 		}
-		_ = s.repo.InsertLog(ctx, logItem)
+		if err := s.repo.InsertLog(ctx, logItem); err != nil {
+			return SendResult{}, fmt.Errorf("failed to record notification failure: %w", err)
+		}
 		slog.Warn("Notification not sent because recipient list is empty", slog.String("topic", topic))
 		return SendResult{}, nil
 	}
@@ -90,6 +132,20 @@ func (s *NotificationService) SendNotificationWithResult(ctx context.Context, to
 		if r.Email == "" {
 			slog.Warn("Skipping notification recipient without a resolved email",
 				slog.String("topic", topic), slog.String("recipientType", r.RecipientType), slog.Int64("recipientId", r.ID))
+			result.Failed++
+			errMsg := "收件人沒有可用的電子郵件地址"
+			if err := s.repo.InsertLog(ctx, &Log{
+				Topic:           topic,
+				Channel:         "email",
+				RecipientEmails: []string{},
+				Subject:         subject,
+				ContentSummary:  notificationContentSummary(topic),
+				Status:          "failed",
+				ErrorMessage:    &errMsg,
+				SentAt:          clock.Now(),
+			}); err != nil {
+				return result, fmt.Errorf("failed to record notification log: %w", err)
+			}
 			continue
 		}
 
@@ -101,7 +157,8 @@ func (s *NotificationService) SendNotificationWithResult(ctx context.Context, to
 		var errStr *string
 		if sendErr != nil {
 			status = "failed"
-			msg := sendErr.Error()
+			// Provider 的原始錯誤可能含收件人或第三方 request detail，不寫入長期通知紀錄。
+			msg := "電子郵件服務商拒絕寄送"
 			errStr = &msg
 			result.Failed++
 		} else {
@@ -110,12 +167,12 @@ func (s *NotificationService) SendNotificationWithResult(ctx context.Context, to
 		logItem := &Log{
 			Topic:           topic,
 			Channel:         "email",
-			RecipientEmails: []string{r.Email},
+			RecipientEmails: []string{maskEmail(r.Email)},
 			Subject:         subject,
-			ContentSummary:  &body,
+			ContentSummary:  notificationContentSummary(topic),
 			Status:          status,
 			ErrorMessage:    errStr,
-			SentAt:          time.Now().UTC(),
+			SentAt:          clock.Now(),
 		}
 		if err := s.repo.InsertLog(ctx, logItem); err != nil {
 			return result, fmt.Errorf("failed to record notification log: %w", err)
@@ -146,13 +203,14 @@ func (s *NotificationService) CreateRecipient(ctx context.Context, topic, email 
 	}
 
 	if s.auditRepo != nil {
+		auditItem := sanitizedRecipient(item)
 		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "setting_change",
 			EntityType: "notification_recipient",
-			EntityID:   &item.Email,
-			AfterData:  item,
+			EntityID:   &auditItem.Email,
+			AfterData:  auditItem,
 		})
 	}
 
@@ -161,7 +219,10 @@ func (s *NotificationService) CreateRecipient(ctx context.Context, topic, email 
 
 // UpdateRecipient 修改收件人設定。
 func (s *NotificationService) UpdateRecipient(ctx context.Context, id int64, email string, displayName *string, active bool, actorID uuid.UUID, actorRole string) (*Recipient, error) {
-	before, _ := s.repo.GetRecipientByID(ctx, id)
+	before, err := s.repo.GetRecipientByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load notification recipient: %w", err)
+	}
 
 	item, err := s.repo.UpdateRecipient(ctx, id, email, displayName, active)
 	if err != nil {
@@ -169,14 +230,15 @@ func (s *NotificationService) UpdateRecipient(ctx context.Context, id int64, ema
 	}
 
 	if s.auditRepo != nil {
+		auditItem := sanitizedRecipient(item)
 		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "setting_change",
 			EntityType: "notification_recipient",
-			EntityID:   &item.Email,
-			BeforeData: before,
-			AfterData:  item,
+			EntityID:   &auditItem.Email,
+			BeforeData: sanitizedRecipient(before),
+			AfterData:  auditItem,
 		})
 	}
 
@@ -185,7 +247,10 @@ func (s *NotificationService) UpdateRecipient(ctx context.Context, id int64, ema
 
 // DeleteRecipient 刪除收件人。
 func (s *NotificationService) DeleteRecipient(ctx context.Context, id int64, actorID uuid.UUID, actorRole string) error {
-	before, _ := s.repo.GetRecipientByID(ctx, id)
+	before, err := s.repo.GetRecipientByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to load notification recipient: %w", err)
+	}
 
 	if err := s.repo.DeleteRecipient(ctx, id); err != nil {
 		return err
@@ -194,7 +259,7 @@ func (s *NotificationService) DeleteRecipient(ctx context.Context, id int64, act
 	if s.auditRepo != nil {
 		var entityID string
 		if before != nil {
-			entityID = before.Email
+			entityID = maskEmail(before.Email)
 		}
 		_ = s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
@@ -202,7 +267,7 @@ func (s *NotificationService) DeleteRecipient(ctx context.Context, id int64, act
 			Action:     "setting_change",
 			EntityType: "notification_recipient",
 			EntityID:   &entityID,
-			BeforeData: before,
+			BeforeData: sanitizedRecipient(before),
 		})
 	}
 
@@ -252,7 +317,7 @@ func (s *NotificationService) BatchCreateRecipients(ctx context.Context, items [
 	if s.auditRepo != nil && len(created) > 0 {
 		emails := make([]string, 0, len(created))
 		for _, r := range created {
-			emails = append(emails, r.Email)
+			emails = append(emails, maskEmail(r.Email))
 		}
 		entityID := fmt.Sprintf("batch:%d", len(created))
 		_ = s.auditRepo.Write(ctx, AuditEntry{
@@ -288,4 +353,35 @@ func (s *NotificationService) BatchDeleteRecipients(ctx context.Context, ids []i
 	}
 
 	return count, nil
+}
+
+func notificationContentSummary(topic string) *string {
+	summary := fmt.Sprintf("notification topic: %s", topic)
+	return &summary
+}
+
+func maskEmail(email string) string {
+	email = strings.TrimSpace(email)
+	at := strings.LastIndex(email, "@")
+	if at <= 0 || at == len(email)-1 {
+		return "[REDACTED]"
+	}
+	local := []rune(email[:at])
+	if len(local) == 1 {
+		return string(local) + "***" + email[at:]
+	}
+	return string(local[:1]) + "***" + email[at:]
+}
+
+func sanitizedRecipient(item *Recipient) *Recipient {
+	if item == nil {
+		return nil
+	}
+	copy := *item
+	copy.Email = maskEmail(item.Email)
+	if copy.DisplayName != nil {
+		redacted := "[REDACTED]"
+		copy.DisplayName = &redacted
+	}
+	return &copy
 }

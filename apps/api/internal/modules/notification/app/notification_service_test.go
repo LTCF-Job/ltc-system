@@ -150,7 +150,7 @@ func TestNotificationService_BatchDeleteRecipients_ReturnsCount(t *testing.T) {
 	}
 }
 
-func TestNotificationService_SendNotification_SkipsRecipientsWithoutResolvedEmail(t *testing.T) {
+func TestNotificationService_SendNotification_FailsRecipientsWithoutResolvedEmail(t *testing.T) {
 	store := &fakeRecipientStore{
 		listRecipients: []Recipient{
 			{ID: 1, RecipientType: "email", Email: "a@example.com"},
@@ -162,7 +162,7 @@ func TestNotificationService_SendNotification_SkipsRecipientsWithoutResolvedEmai
 
 	err := svc.SendNotification(context.Background(), "missing_report", "測試", "內容")
 
-	assert.NoError(t, err)
+	assert.Error(t, err)
 	require.Len(t, sender.SentList, 1, "只有已解析出 email 的收件人應該被寄送")
 	assert.Equal(t, "a@example.com", sender.SentList[0].To)
 }
