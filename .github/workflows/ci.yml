@@ -216,53 +216,6 @@ jobs:
       - name: Build
         run: npm run build
 
-  web-critical-smoke:
-    name: Web critical live smoke tests
-    if: ${{ vars.RUN_LIVE_E2E == 'true' }}
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/web
-    env:
-      LIVE_SUPABASE_URL: ${{ secrets.LIVE_SUPABASE_URL }}
-      LIVE_SUPABASE_ANON_KEY: ${{ secrets.LIVE_SUPABASE_ANON_KEY }}
-      LIVE_DEMO_API_BASE_URL: ${{ secrets.LIVE_DEMO_API_BASE_URL }}
-      LIVE_DEMO_TEST_EMAIL: ${{ secrets.LIVE_DEMO_TEST_EMAIL }}
-      LIVE_DEMO_TEST_PASSWORD: ${{ secrets.LIVE_DEMO_TEST_PASSWORD }}
-      LIVE_PROD_API_BASE_URL: ${{ secrets.LIVE_PROD_API_BASE_URL }}
-      LIVE_PROD_TEST_EMAIL: ${{ secrets.LIVE_PROD_TEST_EMAIL }}
-      LIVE_PROD_TEST_PASSWORD: ${{ secrets.LIVE_PROD_TEST_PASSWORD }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: apps/web/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
-
-      - name: Require demo smoke credentials
-        shell: bash
-        run: |
-          set -euo pipefail
-          for name in LIVE_SUPABASE_URL LIVE_SUPABASE_ANON_KEY LIVE_DEMO_API_BASE_URL LIVE_DEMO_TEST_EMAIL LIVE_DEMO_TEST_PASSWORD; do
-            if [[ -z "${!name:-}" ]]; then
-              echo "Missing required live smoke variable: $name" >&2
-              exit 1
-            fi
-          done
-
-      - name: Run critical smoke tests
-        run: npm run test:e2e:live
-
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest

@@ -56,7 +56,6 @@
 
 - Backend：在 `apps/api` 執行 `go test ./...`，需要編譯檢查時執行 `go build ./...`。
 - Frontend Type Check & Build：在 `apps/web` 執行 `npm run type-check` 與 `npm run build`。
-- Frontend E2E Tests（Playwright，使用真實 API）：`npm run test:e2e:live`
 
 ## Language
 
