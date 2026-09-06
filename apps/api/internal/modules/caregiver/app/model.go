@@ -22,6 +22,29 @@ type Caregiver struct {
 	UpdatedAt   time.Time
 }
 
+// CaregiverAuditSnapshot 是照護人員主檔的明確稽核快照；聯絡方式與備註屬於
+// 個人資料，不直接寫入 audit_log。
+type CaregiverAuditSnapshot struct {
+	ID          uuid.UUID  `json:"id"`
+	SiteID      *uuid.UUID `json:"siteId,omitempty"`
+	SiteNameRaw string     `json:"siteNameRaw,omitempty"`
+	Name        string     `json:"name"`
+	Type        string     `json:"type"`
+	Status      string     `json:"status"`
+}
+
+// AuditSnapshot 產生照護人員的明確稽核快照。
+func (c Caregiver) AuditSnapshot() CaregiverAuditSnapshot {
+	return CaregiverAuditSnapshot{
+		ID:          c.ID,
+		SiteID:      c.SiteID,
+		SiteNameRaw: c.SiteNameRaw,
+		Name:        c.Name,
+		Type:        c.Type,
+		Status:      c.Status,
+	}
+}
+
 // 照護人員類型為固定二選一，與姓名同為必填。
 const (
 	CaregiverTypeCaseManager = "case_manager"

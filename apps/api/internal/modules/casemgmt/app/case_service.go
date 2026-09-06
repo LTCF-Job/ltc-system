@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -146,16 +147,19 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 
 	if s.auditRepo != nil {
 		entityIDStr := entity.ID.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "create",
 			EntityType: "cases",
 			EntityID:   &entityIDStr,
-			AfterData:  entity,
+			AfterData:  newCaseAuditSnapshot(&entity),
 			IPAddress:  &ip,
 			UserAgent:  &ua,
-		})
+		}); err != nil {
+			// 個案已完成寫入；稽核失敗不可讓用戶端誤以為可安全重試建立。
+			slog.Error("case_audit_write_failed", slog.String("action", "create"), slog.String("case_id", entity.ID.String()), slog.Any("error", err))
+		}
 	}
 
 	return &entity, nil
@@ -194,12 +198,52 @@ type UpdateCaseInput struct {
 	Remarks             *string
 }
 
+// caseAuditSnapshot 是個案異動的固定稽核白名單；不得直接序列化 Case，避免把
+// 身分證密文、HMAC、明文身分證、地址或照護聯絡資訊寫入長期保存的 audit_log。
+type caseAuditSnapshot struct {
+	NameMasked        string     `json:"nameMasked"`
+	Region            *string    `json:"region,omitempty"`
+	LTCLevel          *string    `json:"ltcLevel,omitempty"`
+	HouseholdType     *string    `json:"householdType,omitempty"`
+	Gender            *string    `json:"gender,omitempty"`
+	BirthDate         *time.Time `json:"birthDate,omitempty"`
+	ServiceCategory   *int       `json:"serviceCategory,omitempty"`
+	ServiceUsageType  *int       `json:"serviceUsageType,omitempty"`
+	ClaimEndDate      *time.Time `json:"claimEndDate,omitempty"`
+	Status            string     `json:"status"`
+	SiteID            *uuid.UUID `json:"siteId,omitempty"`
+	OutboundVehicleID *uuid.UUID `json:"outboundVehicleId,omitempty"`
+	InboundVehicleID  *uuid.UUID `json:"inboundVehicleId,omitempty"`
+}
+
+func newCaseAuditSnapshot(c *Case) caseAuditSnapshot {
+	if c == nil {
+		return caseAuditSnapshot{}
+	}
+	return caseAuditSnapshot{
+		NameMasked:        maskAuditName(c.Name),
+		Region:            c.Region,
+		LTCLevel:          c.LTCLevel,
+		HouseholdType:     c.HouseholdType,
+		Gender:            c.Gender,
+		BirthDate:         c.BirthDate,
+		ServiceCategory:   c.ServiceCategory,
+		ServiceUsageType:  c.ServiceUsageType,
+		ClaimEndDate:      c.ClaimEndDate,
+		Status:            c.Status,
+		SiteID:            c.SiteID,
+		OutboundVehicleID: c.OutboundVehicleID,
+		InboundVehicleID:  c.InboundVehicleID,
+	}
+}
+
 // UpdateCase 更新個案主檔資料，僅套用有提供的欄位。
-func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCaseInput) (*Case, error) {
+func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCaseInput, actorID uuid.UUID, actorRole, ip, ua string) (*Case, error) {
 	entity, err := s.caseRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	before := newCaseAuditSnapshot(entity)
 
 	if in.Name != nil {
 		name := strings.TrimSpace(*in.Name)
@@ -255,6 +299,22 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 	if err := s.caseRepo.Update(ctx, entity); err != nil {
 		return nil, err
 	}
+	if s.auditRepo != nil {
+		entityIDStr := entity.ID.String()
+		if err := s.auditRepo.Write(ctx, AuditEntry{
+			ActorID:    &actorID,
+			ActorRole:  &actorRole,
+			Action:     "update",
+			EntityType: "cases",
+			EntityID:   &entityIDStr,
+			BeforeData: before,
+			AfterData:  newCaseAuditSnapshot(entity),
+			IPAddress:  &ip,
+			UserAgent:  &ua,
+		}); err != nil {
+			slog.Error("case_audit_write_failed", slog.String("action", "update"), slog.String("case_id", entity.ID.String()), slog.Any("error", err))
+		}
+	}
 	return entity, nil
 }
 
@@ -289,7 +349,7 @@ func (s *CaseService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRo
 				Action:     "delete",
 				EntityType: "cases",
 				EntityID:   &entityIDStr,
-				BeforeData: before,
+				BeforeData: newCaseAuditSnapshot(before),
 				IPAddress:  &ip,
 				UserAgent:  &ua,
 			}); err != nil {
@@ -306,13 +366,51 @@ func (s *CaseService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRo
 }
 
 // UpdateCaseTransportPreference 更新個案的交通偏好（所屬單位與去回程車輛），回傳更新後的個案主檔。
-// 三個 ID 皆為 nil 表示維持現況，僅提供的欄位會被寫入；raw name 字串只在對應 ID
-// 為 nil 且需要保留原始名稱待人工關聯時才有意義。
-func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) (*Case, error) {
+// PUT 採完整替換語意：nil 的 ID 代表清除欄位，raw name 僅用於保留待人工關聯的來源名稱。
+func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string, auditContexts ...AuditContext) (*Case, error) {
+	var before *Case
+	if s.auditRepo != nil {
+		var err error
+		before, err = s.caseRepo.GetByID(ctx, caseID)
+		if err != nil {
+			return nil, err
+		}
+		if before == nil {
+			return nil, ErrCaseNotFound
+		}
+	}
 	if err := s.caseRepo.UpsertTransportPreference(ctx, caseID, siteID, outboundVehicleID, inboundVehicleID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw); err != nil {
 		return nil, err
 	}
-	return s.caseRepo.GetByID(ctx, caseID)
+	after, err := s.caseRepo.GetByID(ctx, caseID)
+	if err != nil {
+		return nil, err
+	}
+	if after == nil {
+		return nil, ErrCaseNotFound
+	}
+	if s.auditRepo != nil {
+		entry := AuditEntry{
+			Action:     "update_transport_preference",
+			EntityType: "cases",
+			BeforeData: newCaseAuditSnapshot(before),
+			AfterData:  newCaseAuditSnapshot(after),
+		}
+		if len(auditContexts) > 0 {
+			actor := auditContexts[0]
+			entityIDStr := caseID.String()
+			entry.ActorID = &actor.ActorID
+			entry.ActorRole = &actor.ActorRole
+			entry.EntityID = &entityIDStr
+			entry.IPAddress = &actor.IPAddress
+			entry.UserAgent = &actor.UserAgent
+		}
+		if err := s.auditRepo.Write(ctx, entry); err != nil {
+			// 交通偏好已完成更新；事後稽核故障不可讓用戶端誤以為可安全重試。
+			slog.Error("case_audit_write_failed", slog.String("action", "update_transport_preference"), slog.String("case_id", caseID.String()), slog.Any("error", err))
+		}
+	}
+	return after, nil
 }
 
 // FindPossibleDuplicate 依身分證字號（非空時）或正規化姓名比對既有個案，供批次匯入
@@ -431,10 +529,12 @@ func (s *CaseService) RecordSkippedCaseImport(ctx context.Context, item CaseImpo
 	}
 	item = sanitizeCaseImportAuditRow(item)
 	entityID := fmt.Sprintf("row-%d", item.RowIndex)
-	_ = s.auditRepo.Write(ctx, AuditEntry{
+	if err := s.auditRepo.Write(ctx, AuditEntry{
 		ActorID: &actorID, ActorRole: &actorRole, Action: "import_skip", EntityType: "case_import", EntityID: &entityID,
 		AfterData: item, IPAddress: &ip, UserAgent: &ua,
-	})
+	}); err != nil {
+		slog.Error("case import skipped-row audit write failed", "row_index", item.RowIndex, "error", err)
+	}
 }
 
 // CreateScheduleRequest 代表建立個案排班設定之請求參數。

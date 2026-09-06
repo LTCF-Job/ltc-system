@@ -41,14 +41,10 @@ type fakeCaregiverSiteLookup struct{ byName map[string]uuid.UUID }
 func (f fakeCaregiverSiteLookup) GetByName(ctx context.Context, name string) (*SiteRef, error) {
 	id, ok := f.byName[name]
 	if !ok {
-		return nil, errCaregiverImportTestNotFound{}
+		return nil, ErrCaregiverSiteNotFound
 	}
 	return &SiteRef{ID: id, Name: name}, nil
 }
-
-type errCaregiverImportTestNotFound struct{}
-
-func (errCaregiverImportTestNotFound) Error() string { return "not found" }
 
 // xlsxReader 依表頭與逐列字串值組出一份真實 .xlsx 位元組，供測試以既有 ExcelAdapter 解析，
 // 對齊本模組僅支援 .xlsx 匯入格式的限制。
@@ -187,6 +183,18 @@ func TestParseCaregivers_FlagsDuplicateByName(t *testing.T) {
 	assert.True(t, row.IsDuplicate)
 	assert.Equal(t, existingID, *row.DuplicateCaregiverID)
 	assert.Contains(t, row.WarningMessage, "重複照護人員")
+}
+
+func TestParseCaregivers_AbortsWhenDuplicateLookupFails(t *testing.T) {
+	store := newFakeCaregiverStore()
+	store.listErr = assert.AnError
+	svc := NewCaregiverService(store, fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
+
+	_, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
+		[]string{"查無此單位", "王大明", "個管", "0987-000-000", "行動自如"},
+	), "upload.xlsx")
+
+	assert.ErrorIs(t, err, assert.AnError)
 }
 
 func TestCommitCaregivers_SkipsDuplicateRowUnlessIncluded(t *testing.T) {

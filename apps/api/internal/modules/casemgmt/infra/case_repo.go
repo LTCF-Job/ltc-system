@@ -158,13 +158,32 @@ func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID u
 			site_id = EXCLUDED.site_id,
 			outbound_vehicle_id = EXCLUDED.outbound_vehicle_id,
 			inbound_vehicle_id = EXCLUDED.inbound_vehicle_id,
-			site_name_raw = CASE WHEN EXCLUDED.site_id IS NOT NULL THEN NULL WHEN EXCLUDED.site_name_raw IS NOT NULL THEN EXCLUDED.site_name_raw ELSE case_transport_preferences.site_name_raw END,
-			outbound_vehicle_name_raw = CASE WHEN EXCLUDED.outbound_vehicle_id IS NOT NULL THEN NULL WHEN EXCLUDED.outbound_vehicle_name_raw IS NOT NULL THEN EXCLUDED.outbound_vehicle_name_raw ELSE case_transport_preferences.outbound_vehicle_name_raw END,
-			inbound_vehicle_name_raw = CASE WHEN EXCLUDED.inbound_vehicle_id IS NOT NULL THEN NULL WHEN EXCLUDED.inbound_vehicle_name_raw IS NOT NULL THEN EXCLUDED.inbound_vehicle_name_raw ELSE case_transport_preferences.inbound_vehicle_name_raw END,
+			site_name_raw = EXCLUDED.site_name_raw,
+			outbound_vehicle_name_raw = EXCLUDED.outbound_vehicle_name_raw,
+			inbound_vehicle_name_raw = EXCLUDED.inbound_vehicle_name_raw,
 			updated_at = now()`,
 		caseID, siteID, outboundVehicleID, inboundVehicleID,
 		nullIfEmpty(siteNameRaw), nullIfEmpty(outboundVehicleNameRaw), nullIfEmpty(inboundVehicleNameRaw))
 	return err
+}
+
+// ClaimCaseImportRow 以檔案雜湊與來源列鍵保護個案匯入重試；呼叫端應在列交易內執行。
+func (r *CaseRepository) ClaimCaseImportRow(ctx context.Context, fileHash, rowKey string, caseID uuid.UUID) (bool, error) {
+	db := pgxdb.FromContext(ctx, r.db)
+	var claimedID uuid.UUID
+	err := db.QueryRow(ctx, `
+		INSERT INTO case_import_idempotency (file_hash, row_key, case_id)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (file_hash, row_key) DO NOTHING
+		RETURNING id
+	`, fileHash, rowKey, caseID).Scan(&claimedID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	return claimedID != uuid.Nil, nil
 }
 
 // nullIfEmpty 將空字串轉為 nil，讓 SQL 端可用 IS NOT NULL 判斷是否有提供 raw name。

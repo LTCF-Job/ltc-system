@@ -123,6 +123,15 @@ func (r *DriverRepository) List(ctx context.Context, region, q, status string, p
 
 // ListAllActive 取得所有未刪除且啟用的司機，供完整業務資料集使用。
 func (r *DriverRepository) ListAllActive(ctx context.Context) ([]app.Driver, error) {
+	return r.listAllActive(ctx, "")
+}
+
+// ListAllActiveByQuery 取得所有啟用且姓名符合搜尋字串的司機。
+func (r *DriverRepository) ListAllActiveByQuery(ctx context.Context, q string) ([]app.Driver, error) {
+	return r.listAllActive(ctx, q)
+}
+
+func (r *DriverRepository) listAllActive(ctx context.Context, q string) ([]app.Driver, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("driver database is not configured")
 	}
@@ -131,9 +140,10 @@ func (r *DriverRepository) ListAllActive(ctx context.Context) ([]app.Driver, err
 		FROM drivers
 		WHERE deleted_at IS NULL
 		  AND status = 'active'
+		  AND ($1 = '' OR name ILIKE '%' || $1 || '%')
 		ORDER BY name ASC
 	`
-	rows, err := r.db.Query(ctx, query)
+	rows, err := r.db.Query(ctx, query, q)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query all active drivers: %w", err)
 	}

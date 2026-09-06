@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -161,7 +162,7 @@ func (s *RegionService) writeAudit(ctx context.Context, action string, id uuid.U
 		return
 	}
 	idStr := id.String()
-	_ = s.audit.Write(ctx, AuditEntry{
+	if err := s.audit.Write(ctx, AuditEntry{
 		ActorID:    &actor.ActorID,
 		ActorRole:  &actor.ActorRole,
 		Action:     action,
@@ -171,5 +172,7 @@ func (s *RegionService) writeAudit(ctx context.Context, action string, id uuid.U
 		AfterData:  after,
 		IPAddress:  &actor.IPAddress,
 		UserAgent:  &actor.UserAgent,
-	})
+	}); err != nil {
+		slog.Error("region audit write failed", "action", action, "entity_id", idStr, "error", err)
+	}
 }

@@ -265,7 +265,7 @@ func (f *fakeRecordStore) UpsertRideRecord(_ context.Context, rec *RideRecord) e
 	return nil
 }
 
-func (f *fakeRecordStore) CorrectRideRecord(context.Context, uuid.UUID, *string, *uuid.UUID, *uuid.UUID, *string, *int16, *bool, *string, uuid.UUID) error {
+func (f *fakeRecordStore) CorrectRideRecord(context.Context, uuid.UUID, PatchValue[string], PatchValue[uuid.UUID], PatchValue[uuid.UUID], PatchValue[string], PatchValue[int16], PatchValue[bool], PatchValue[string], uuid.UUID) error {
 	return nil
 }
 

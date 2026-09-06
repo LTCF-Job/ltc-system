@@ -20,6 +20,21 @@ type AttendanceRecord struct {
 	UpdatedAt  time.Time
 }
 
+// AttendanceAuditSnapshot 是出勤異動的明確稽核快照，不直接序列化含有顯示姓名與
+// 備註的 AttendanceRecord。
+type AttendanceAuditSnapshot struct {
+	ID         uuid.UUID `json:"id"`
+	DriverID   uuid.UUID `json:"driverId"`
+	RecordDate time.Time `json:"recordDate"`
+	Status     string    `json:"status"`
+	Source     string    `json:"source"`
+}
+
+// AuditSnapshot 產生出勤紀錄的明確稽核快照。
+func (a AttendanceRecord) AuditSnapshot() AttendanceAuditSnapshot {
+	return AttendanceAuditSnapshot{ID: a.ID, DriverID: a.DriverID, RecordDate: a.RecordDate, Status: a.Status, Source: a.Source}
+}
+
 // AttendanceImportConflict 代表匯報匯入比對到司機出勤，但當天已有人工登記且狀態不同，
 // 需要使用者決定要保留人工登記還是改採匯入結果。
 type AttendanceImportConflict struct {
@@ -33,6 +48,36 @@ type AttendanceImportConflict struct {
 	ResolvedChoice *string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+}
+
+// AttendanceConflictAuditSnapshot 是出勤匯入衝突的明確稽核快照，不保存司機顯示姓名。
+type AttendanceConflictAuditSnapshot struct {
+	ID             uuid.UUID `json:"id"`
+	DriverID       uuid.UUID `json:"driverId"`
+	RecordDate     time.Time `json:"recordDate"`
+	ExistingStatus string    `json:"existingStatus"`
+	ImportedStatus string    `json:"importedStatus"`
+	Status         string    `json:"status"`
+	ResolvedChoice *string   `json:"resolvedChoice,omitempty"`
+}
+
+// AuditSnapshot 產生出勤匯入衝突的明確稽核快照。
+func (c AttendanceImportConflict) AuditSnapshot() AttendanceConflictAuditSnapshot {
+	return AttendanceConflictAuditSnapshot{
+		ID:             c.ID,
+		DriverID:       c.DriverID,
+		RecordDate:     c.RecordDate,
+		ExistingStatus: c.ExistingStatus,
+		ImportedStatus: c.ImportedStatus,
+		Status:         c.Status,
+		ResolvedChoice: c.ResolvedChoice,
+	}
+}
+
+// AttendanceConflictResolutionAuditSnapshot 是衝突裁決結果的明確稽核快照。
+type AttendanceConflictResolutionAuditSnapshot struct {
+	ConflictID uuid.UUID `json:"conflictId"`
+	Choice     string    `json:"choice"`
 }
 
 // FuelLog 代表一筆油資紀錄。
@@ -51,6 +96,31 @@ type FuelLog struct {
 	CreatedAt   time.Time
 }
 
+// FuelAuditSnapshot 是油資紀錄的明確稽核快照；不直接序列化 FuelLog，避免把查詢
+// 組裝出的顯示欄位或收據 URL 帶入 audit_log。
+type FuelAuditSnapshot struct {
+	ID        uuid.UUID  `json:"id"`
+	VehicleID uuid.UUID  `json:"vehicleId"`
+	DriverID  *uuid.UUID `json:"driverId,omitempty"`
+	FuelDate  time.Time  `json:"fuelDate"`
+	Liters    float64    `json:"liters"`
+	Cost      float64    `json:"cost"`
+	CreatedBy uuid.UUID  `json:"createdBy"`
+}
+
+// AuditSnapshot 產生油資紀錄的明確稽核快照。
+func (f FuelLog) AuditSnapshot() FuelAuditSnapshot {
+	return FuelAuditSnapshot{
+		ID:        f.ID,
+		VehicleID: f.VehicleID,
+		DriverID:  f.DriverID,
+		FuelDate:  f.FuelDate,
+		Liters:    f.Liters,
+		Cost:      f.Cost,
+		CreatedBy: f.CreatedBy,
+	}
+}
+
 // MaintenanceLog 代表一筆車輛維修保養紀錄。
 type MaintenanceLog struct {
 	ID          uuid.UUID
@@ -66,6 +136,33 @@ type MaintenanceLog struct {
 	Note        *string
 	CreatedBy   uuid.UUID
 	CreatedAt   time.Time
+}
+
+// MaintenanceAuditSnapshot 是維修紀錄的明確稽核快照；收據 URL、查詢顯示欄位與
+// 備註不直接寫入稽核資料。
+type MaintenanceAuditSnapshot struct {
+	ID          uuid.UUID `json:"id"`
+	VehicleID   uuid.UUID `json:"vehicleId"`
+	ServiceDate time.Time `json:"serviceDate"`
+	Mileage     float64   `json:"mileage"`
+	Items       string    `json:"items"`
+	Vendor      *string   `json:"vendor,omitempty"`
+	Cost        float64   `json:"cost"`
+	CreatedBy   uuid.UUID `json:"createdBy"`
+}
+
+// AuditSnapshot 產生維修紀錄的明確稽核快照。
+func (m MaintenanceLog) AuditSnapshot() MaintenanceAuditSnapshot {
+	return MaintenanceAuditSnapshot{
+		ID:          m.ID,
+		VehicleID:   m.VehicleID,
+		ServiceDate: m.ServiceDate,
+		Mileage:     m.Mileage,
+		Items:       m.Items,
+		Vendor:      m.Vendor,
+		Cost:        m.Cost,
+		CreatedBy:   m.CreatedBy,
+	}
 }
 
 // DriverRef 是出勤月報與維修紀錄需要的最小司機／車輛資訊。
@@ -91,6 +188,15 @@ type AuditEntry struct {
 	EntityID   *string
 	BeforeData interface{}
 	AfterData  interface{}
+	IPAddress  *string
+	UserAgent  *string
+}
+
+// AuditContext 是 HTTP mutation 的來源資訊；保留為 optional 參數以維持非 HTTP
+// 呼叫端與既有測試的相容性。
+type AuditContext struct {
+	IPAddress *string
+	UserAgent *string
 }
 
 // AuditWriter 定義營運紀錄異動留痕的寫入邊界。
@@ -102,6 +208,12 @@ type AuditWriter interface {
 type DriverLister interface {
 	List(ctx context.Context, region, q string, page, pageSize int) ([]DriverRef, int64, error)
 	ListAllActive(ctx context.Context) ([]DriverRef, error)
+}
+
+// ActiveDriverQueryLister 提供可在資料庫端依姓名篩選的完整啟用司機清單。
+// 未實作此 optional port 的離線 reader 仍由 service 做保守的記憶體篩選。
+type ActiveDriverQueryLister interface {
+	ListAllActiveByQuery(ctx context.Context, q string) ([]DriverRef, error)
 }
 
 // VehicleLister 提供維修紀錄組裝車輛顯示名稱所需的車輛清單。
@@ -155,4 +267,9 @@ type MaintenanceTemplateRenderer interface {
 type VehicleLabel struct {
 	DisplayName string
 	PlateNo     string
+}
+
+// TxRunner 封裝需要跨多次資料異動的交易邊界。
+type TxRunner interface {
+	WithTx(ctx context.Context, fn func(context.Context) error) error
 }

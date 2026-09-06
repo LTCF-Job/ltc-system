@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -68,8 +69,9 @@ type CreateDriverInput struct {
 	LicenseExpiryDate *time.Time
 }
 
-// Create 新增司機：驗證身分證檢查碼，寫入加密密文與 HMAC 索引。
-func (s *DriverService) Create(ctx context.Context, in CreateDriverInput) (*Driver, error) {
+// Create 新增司機：驗證身分證檢查碼，寫入加密密文與 HMAC 索引。actors 是可選的
+// 稽核來源資訊，保留 application 測試與離線呼叫的相容性。
+func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors ...ActorContext) (*Driver, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" {
 		return nil, ErrDriverNameRequired
@@ -108,6 +110,7 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput) (*Driv
 	if err := s.store.Create(ctx, &d); err != nil {
 		return nil, err
 	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "create", "drivers", d.ID, nil, d.AuditSnapshot())
 	return &d, nil
 }
 
@@ -124,7 +127,7 @@ type UpdateDriverInput struct {
 }
 
 // Update 更新司機基本資料。
-func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDriverInput) (*Driver, error) {
+func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDriverInput, actors ...ActorContext) (*Driver, error) {
 	existing, err := s.store.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrDriverNotFound) {
@@ -132,6 +135,7 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 		}
 		return nil, fmt.Errorf("failed to get driver: %w", err)
 	}
+	before := existing.AuditSnapshot()
 
 	if in.Name != nil {
 		name := strings.TrimSpace(*in.Name)
@@ -169,6 +173,7 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 	if err := s.store.Update(ctx, existing); err != nil {
 		return nil, err
 	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "update", "drivers", id, before, existing.AuditSnapshot())
 	return existing, nil
 }
 
@@ -213,7 +218,7 @@ type AssignVehicleInput struct {
 }
 
 // AssignVehicle 建立司機與車輛之指派期間。
-func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, in AssignVehicleInput) (*DriverAssignment, error) {
+func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, in AssignVehicleInput, actors ...ActorContext) (*DriverAssignment, error) {
 	if driverID == uuid.Nil || in.VehicleID == uuid.Nil || in.EffectiveFrom.IsZero() ||
 		(in.EffectiveTo != nil && !in.EffectiveTo.After(in.EffectiveFrom)) {
 		return nil, ErrInvalidAssignmentRange
@@ -227,11 +232,31 @@ func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, i
 	if err := s.store.AssignVehicle(ctx, assignment); err != nil {
 		return nil, err
 	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "assign_vehicle", "driver_assignments", assignment.ID, nil, assignment.AuditSnapshot())
 	return assignment, nil
 }
 
 // Delete 軟刪除司機並收斂其生效中車輛指派。
-func (s *DriverService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRole string) error {
+func (s *DriverService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRole string, actors ...ActorContext) error {
+	before, err := s.store.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrDriverNotFound) {
+			return ErrDriverNotFound
+		}
+		return fmt.Errorf("failed to get driver: %w", err)
+	}
+	if before == nil {
+		return ErrDriverNotFound
+	}
+	beforeSnapshot := before.AuditSnapshot()
+
+	actor := actorOrEmpty(actors)
+	if actor.ActorID == uuid.Nil {
+		actor.ActorID = actorID
+	}
+	if actor.ActorRole == "" {
+		actor.ActorRole = actorRole
+	}
 	deleteFn := func(txCtx context.Context) error {
 		ok, err := s.store.SoftDelete(txCtx, id, actorID)
 		if err != nil {
@@ -248,12 +273,16 @@ func (s *DriverService) Delete(ctx context.Context, id, actorID uuid.UUID, actor
 		if s.auditRepo != nil {
 			entityIDStr := id.String()
 			if err := s.auditRepo.Write(txCtx, AuditEntry{
-				ActorID:    &actorID,
-				ActorRole:  &actorRole,
+				ActorID:    &actor.ActorID,
+				ActorRole:  &actor.ActorRole,
 				Action:     "delete",
 				EntityType: "drivers",
 				EntityID:   &entityIDStr,
+				BeforeData: beforeSnapshot,
+				IPAddress:  &actor.IPAddress,
+				UserAgent:  &actor.UserAgent,
 			}); err != nil {
+				slog.Error("driver delete audit write failed", "entity_id", id.String(), "error", err)
 				return fmt.Errorf("failed to write driver audit: %w", err)
 			}
 		}

@@ -57,6 +57,11 @@ func (h *DriverHandler) Create(c *gin.Context) {
 		Region:            req.Region,
 		LicenseClass:      req.LicenseClass,
 		LicenseExpiryDate: req.LicenseExpiryDate.toTimePtr(),
+	}, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrDriverNameRequired) {
@@ -100,6 +105,11 @@ func (h *DriverHandler) Update(c *gin.Context) {
 		LicenseClass:           req.LicenseClass,
 		LicenseExpiryDate:      req.LicenseExpiryDate.Value,
 		ClearLicenseExpiryDate: req.LicenseExpiryDate.Present && req.LicenseExpiryDate.Value == nil,
+	}, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrDriverNameRequired) {
@@ -167,7 +177,12 @@ func (h *DriverHandler) Delete(c *gin.Context) {
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
 
-	if err := h.svc.Delete(c.Request.Context(), id, actorID, actorRole); err != nil {
+	if err := h.svc.Delete(c.Request.Context(), id, actorID, actorRole, app.ActorContext{
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}); err != nil {
 		if errors.Is(err, app.ErrDriverNotFound) {
 			respondNotFound(c, "查無司機資料")
 			return
@@ -197,6 +212,11 @@ func (h *DriverHandler) AssignVehicle(c *gin.Context) {
 		VehicleID:     req.VehicleID,
 		EffectiveFrom: req.EffectiveFrom.toTime(),
 		EffectiveTo:   req.EffectiveTo.toTimePtr(),
+	}, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidAssignmentRange) {

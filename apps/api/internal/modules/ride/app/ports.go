@@ -12,6 +12,7 @@ type CaseSchedule struct {
 	ID          uuid.UUID
 	CaseID      uuid.UUID
 	SiteID      uuid.UUID
+	Weekdays    []int16
 	TripPattern int16
 	Legs        []ScheduleLeg
 }
@@ -169,6 +170,13 @@ type CalendarCase struct {
 	Legs          []CalendarLeg
 }
 
+// PatchValue 表示 PATCH 欄位的三態：Present=false 代表保留、Present=true 且
+// Value=nil 代表清除、Present=true 且 Value 非 nil 代表設定新值。
+type PatchValue[T any] struct {
+	Present bool
+	Value   *T
+}
+
 // RideRecordStore 定義表單提交、來源列與搭乘紀錄的讀寫邊界。
 type RideRecordStore interface {
 	GetFormColumns(ctx context.Context, formID uuid.UUID) ([]FormColumn, error)
@@ -190,7 +198,7 @@ type RideRecordStore interface {
 	DeleteDerivedRideRecord(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) error
 	GetRideRecordForSlot(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) (*RideRecord, error)
 	UpsertRideRecord(ctx context.Context, rec *RideRecord) error
-	CorrectRideRecord(ctx context.Context, rideID uuid.UUID, effectiveStatus *string, vehicleID, driverID *uuid.UUID, departTimeOverride *string, durationMinOverride *int16, notClaimedAA09 *bool, reason *string, operatorID uuid.UUID) error
+	CorrectRideRecord(ctx context.Context, rideID uuid.UUID, effectiveStatus PatchValue[string], vehicleID, driverID PatchValue[uuid.UUID], departTimeOverride PatchValue[string], durationMinOverride PatchValue[int16], notClaimedAA09 PatchValue[bool], reason PatchValue[string], operatorID uuid.UUID) error
 	GetRideRecordByID(ctx context.Context, id uuid.UUID) (*RideRecord, error)
 	ResolveConflict(ctx context.Context, rideID, vehicleID uuid.UUID, driverID *uuid.UUID, note *string, operatorID uuid.UUID) (bool, error)
 	ListPendingConflicts(ctx context.Context, start, end time.Time, keyword string, page, pageSize int) ([]ConflictRide, int64, error)
@@ -219,12 +227,12 @@ type CorrectionFingerprintingStore interface {
 	CorrectRideRecordWithFingerprint(
 		ctx context.Context,
 		rideID uuid.UUID,
-		effectiveStatus *string,
-		vehicleID, driverID *uuid.UUID,
-		departTimeOverride *string,
-		durationMinOverride *int16,
-		notClaimedAA09 *bool,
-		reason *string,
+		effectiveStatus PatchValue[string],
+		vehicleID, driverID PatchValue[uuid.UUID],
+		departTimeOverride PatchValue[string],
+		durationMinOverride PatchValue[int16],
+		notClaimedAA09 PatchValue[bool],
+		reason PatchValue[string],
 		operatorID uuid.UUID,
 		fingerprint string,
 	) error

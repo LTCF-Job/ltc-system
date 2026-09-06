@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"sort"
 	"strings"
@@ -33,7 +34,7 @@ type CreateGovClaimInput struct {
 	ActorRole     string
 }
 
-// GovClaimService 產生政府申報工作簿：查詢趟次、組出 33 欄申報列、落地快照並輸出檔案。
+// GovClaimService 產生政府申報工作簿：查詢趟次、組出 33 欄申報列、寫入快照並輸出檔案。
 type GovClaimService struct {
 	cfg      *config.Config
 	reader   GovClaimSourceReader
@@ -65,7 +66,7 @@ func NewGovClaimService(
 	}
 }
 
-// CreateGovClaimJob 前置檢核通過後同步產生逐案申報工作簿，並將申報列快照與檔案中繼資料落地。
+// CreateGovClaimJob 前置檢核通過後同步產生逐案申報工作簿，並將申報列快照與檔案中繼資料寫入。
 // 檢核有阻斷性錯誤時回傳 ErrPrecheckBlocked，且不建立任何工作紀錄。
 func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGovClaimInput) (GovClaimJob, error) {
 	if input.Mode != GovClaimModeDirect && input.Mode != GovClaimModeZip {
@@ -106,6 +107,13 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 	if err != nil {
 		return GovClaimJob{}, fmt.Errorf("create export job: %w", err)
 	}
+	s.recordExportAuditBestEffort(ctx, GovClaimJob{
+		ID:       jobID,
+		PeriodYM: periodYM,
+		Region:   input.Region,
+		Mode:     input.Mode,
+		Status:   ExportStatusRunning,
+	}, input, "export_requested")
 
 	files, lines, skipped, err := s.buildJobContent(ctx, periodYM, input, scope)
 	if err != nil {
@@ -113,32 +121,44 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 		if failErr := s.store.FailJob(ctx, jobID, exportFailureMessage(err)); failErr != nil {
 			return GovClaimJob{}, fmt.Errorf("mark export job failed: %w", failErr)
 		}
+		s.recordExportAuditBestEffort(ctx, GovClaimJob{
+			ID:           jobID,
+			PeriodYM:     periodYM,
+			Region:       input.Region,
+			Mode:         input.Mode,
+			Status:       ExportStatusFailed,
+			ErrorMessage: exportFailureMessage(err),
+		}, input, "export_failed")
 		return GovClaimJob{}, err
-	}
-
-	// 申報匯出屬高風險操作；先確保稽核可寫，再允許工作進入 succeeded。
-	auditJob := GovClaimJob{
-		ID:         jobID,
-		PeriodYM:   periodYM,
-		Region:     input.Region,
-		Mode:       input.Mode,
-		TotalCases: len(files),
-		TotalRows:  len(lines),
-		Files:      files,
-	}
-	if err := s.recordExportAudit(ctx, auditJob, input); err != nil {
-		if failErr := s.store.FailJob(ctx, jobID, exportFailureMessage(err)); failErr != nil {
-			return GovClaimJob{}, fmt.Errorf("mark export job failed after audit error: %w", failErr)
-		}
-		return GovClaimJob{}, fmt.Errorf("write export audit: %w", err)
 	}
 
 	if err := s.store.CompleteJob(ctx, jobID, files, lines); err != nil {
 		if failErr := s.store.FailJob(ctx, jobID, exportFailureMessage(err)); failErr != nil {
 			return GovClaimJob{}, fmt.Errorf("mark export job failed: %w", failErr)
 		}
+		s.recordExportAuditBestEffort(ctx, GovClaimJob{
+			ID:           jobID,
+			PeriodYM:     periodYM,
+			Region:       input.Region,
+			Mode:         input.Mode,
+			Status:       ExportStatusFailed,
+			ErrorMessage: exportFailureMessage(err),
+		}, input, "export_failed")
 		return GovClaimJob{}, fmt.Errorf("complete export job: %w", err)
 	}
+
+	// 成功稽核必須在 CompleteJob 成功後寫入；稽核系統短暫故障不得把已完成的
+	// 匯出改報成失敗，背景 log 會保留補寫線索。
+	s.recordExportAuditBestEffort(ctx, GovClaimJob{
+		ID:         jobID,
+		PeriodYM:   periodYM,
+		Region:     input.Region,
+		Mode:       input.Mode,
+		Status:     ExportStatusSucceeded,
+		TotalCases: len(files),
+		TotalRows:  len(lines),
+		Files:      files,
+	}, input, "export_succeeded")
 
 	job, err := s.store.GetJob(ctx, jobID)
 	if err != nil {
@@ -150,7 +170,7 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 }
 
 // recordExportAudit 留下一筆政府申報匯出稽核紀錄。
-func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob, input CreateGovClaimInput) error {
+func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob, input CreateGovClaimInput, action string) error {
 	if s.audit == nil {
 		return errors.New("export audit is unavailable")
 	}
@@ -177,10 +197,11 @@ func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob
 	return s.audit.Write(ctx, AuditEntry{
 		ActorID:    actorID,
 		ActorRole:  actorRole,
-		Action:     "export",
+		Action:     action,
 		EntityType: "export_jobs",
 		EntityID:   &entityID,
 		AfterData: ExportJobAuditSnapshot{
+			Status:     job.Status,
 			PeriodYM:   job.PeriodYM,
 			Region:     job.Region,
 			Mode:       string(job.Mode),
@@ -189,6 +210,14 @@ func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob
 			Cases:      cases,
 		},
 	})
+}
+
+func (s *GovClaimService) recordExportAuditBestEffort(ctx context.Context, job GovClaimJob, input CreateGovClaimInput, action string) {
+	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := s.recordExportAudit(auditCtx, job, input, action); err != nil {
+		slog.Warn("export_audit_write_failed", slog.String("action", action), slog.String("job_id", job.ID.String()), slog.Any("error", err))
+	}
 }
 
 // GetGovClaimJob 取得單筆匯出工作與其逐案檔案清單。
@@ -505,7 +534,7 @@ func combineDepartTime(serviceDate time.Time, hhmm string) (time.Time, error) {
 	), nil
 }
 
-// newExportLine 組出落地用的申報列快照；兩個身分證欄位一律清空，改以 driverId 保留關聯。
+// newExportLine 組出寫入用的申報列快照；兩個身分證欄位一律清空，改以 driverId 保留關聯。
 func newExportLine(lineNo int, group caseGroup, row govform.ClaimRow, driverID *uuid.UUID) (ExportLine, error) {
 	payload := ClaimLinePayload{
 		Cells:     row.Cells,

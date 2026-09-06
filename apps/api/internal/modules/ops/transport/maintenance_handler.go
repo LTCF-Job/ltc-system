@@ -3,7 +3,6 @@ package transport
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,26 +24,42 @@ func NewMaintenanceHandler(maintenanceSvc *app.MaintenanceService) *MaintenanceH
 
 // List 查詢維修保養清單。
 func (h *MaintenanceHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
 
 	var vehicleID *uuid.UUID
 	if vIDStr := c.Query("vehicleId"); vIDStr != "" {
-		if id, err := uuid.Parse(vIDStr); err == nil {
-			vehicleID = &id
+		id, parseErr := uuid.Parse(vIDStr)
+		if parseErr != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			return
 		}
+		vehicleID = &id
 	}
 
 	var startDate, endDate *time.Time
 	if startStr := c.Query("startDate"); startStr != "" {
-		if t, err := time.Parse("2006-01-02", startStr); err == nil {
-			startDate = &t
+		t, parseErr := time.Parse("2006-01-02", startStr)
+		if parseErr != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			return
 		}
+		startDate = &t
 	}
 	if endStr := c.Query("endDate"); endStr != "" {
-		if t, err := time.Parse("2006-01-02", endStr); err == nil {
-			endDate = &t
+		t, parseErr := time.Parse("2006-01-02", endStr)
+		if parseErr != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			return
 		}
+		endDate = &t
+	}
+	if startDate != nil && endDate != nil && endDate.Before(*startDate) {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, errInvalidDateRange, nil)
+		return
 	}
 
 	q := c.Query("q")
@@ -101,7 +116,7 @@ func (h *MaintenanceHandler) Create(c *gin.Context) {
 		ReceiptURL:  req.ReceiptURL,
 		Note:        req.Note,
 		CreatedBy:   actorID,
-	}, &actorID, &actorRole)
+	}, &actorID, &actorRole, auditContext(c))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
@@ -153,7 +168,7 @@ func (h *MaintenanceHandler) Update(c *gin.Context) {
 		Cost:        req.Cost,
 		ReceiptURL:  req.ReceiptURL,
 		Note:        req.Note,
-	}, &actorID, &actorRole)
+	}, &actorID, &actorRole, auditContext(c))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
@@ -173,7 +188,7 @@ func (h *MaintenanceHandler) Delete(c *gin.Context) {
 
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
-	if err := h.maintenanceSvc.Delete(c.Request.Context(), id, &actorID, &actorRole); err != nil {
+	if err := h.maintenanceSvc.Delete(c.Request.Context(), id, &actorID, &actorRole, auditContext(c)); err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}

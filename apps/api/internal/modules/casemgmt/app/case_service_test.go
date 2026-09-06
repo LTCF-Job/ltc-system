@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -274,6 +275,58 @@ func TestCreateCase_OnlyNameSucceeds(t *testing.T) {
 	assert.Equal(t, "active", entity.Status)
 }
 
+func TestCaseAuditSnapshotsUseWhitelistWithoutSensitiveFields(t *testing.T) {
+	caseEntity := &Case{
+		ID:                uuid.New(),
+		Name:              "王小明",
+		NationalIDCipher:  []byte("ciphertext"),
+		NationalIDHMAC:    []byte("hmac-index"),
+		NationalIDMasked:  "A12***6789",
+		HomeAddress:       stringPtr("新竹市測試路 1 號"),
+		CareContactName:   stringPtr("王大明"),
+		RegisteredAddress: stringPtr("新竹縣測試鄉"),
+		Status:            "active",
+	}
+
+	raw, err := json.Marshal(newCaseAuditSnapshot(caseEntity))
+	require.NoError(t, err)
+	serialized := string(raw)
+	assert.Contains(t, serialized, `"nameMasked":"王○明"`)
+	assert.Contains(t, serialized, `"status":"active"`)
+	assert.NotContains(t, serialized, "ciphertext")
+	assert.NotContains(t, serialized, "hmac-index")
+	assert.NotContains(t, serialized, "nationalIdCipher")
+	assert.NotContains(t, serialized, "nationalIdHmac")
+	assert.NotContains(t, serialized, "homeAddress")
+	assert.NotContains(t, serialized, "careContactName")
+	assert.NotContains(t, serialized, "registeredAddress")
+}
+
+func TestCreateCase_WritesSanitizedAuditSnapshot(t *testing.T) {
+	audit := &fakeCaseAuditWriter{}
+	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, audit, nil)
+
+	_, err := svc.CreateCase(context.Background(), CreateCaseRequest{
+		Name:              "王小明",
+		NationalID:        "A123456789",
+		HomeAddress:       stringPtr("新竹市測試路 1 號"),
+		CareContactName:   stringPtr("王大明"),
+		RegisteredAddress: stringPtr("新竹縣測試鄉"),
+	}, uuid.New(), "admin", "127.0.0.1", "test-agent")
+
+	require.NoError(t, err)
+	require.Len(t, audit.entries, 1)
+	after, ok := audit.entries[0].AfterData.(caseAuditSnapshot)
+	require.True(t, ok)
+	assert.Equal(t, "王○明", after.NameMasked)
+	serialized, err := json.Marshal(after)
+	require.NoError(t, err)
+	assert.NotContains(t, string(serialized), "A123456789")
+	assert.NotContains(t, string(serialized), "homeAddress")
+}
+
+func stringPtr(value string) *string { return &value }
+
 func TestCreateCase_DuplicateNationalIDNoLongerErrors(t *testing.T) {
 	store := newFakeCaseStore()
 	svc := NewCaseService(testConfig(), store, nil, nil, nil)
@@ -303,7 +356,7 @@ func TestUpdateCase_NameSynchronizesNormalizedIndex(t *testing.T) {
 	svc := NewCaseService(testConfig(), store, nil, nil, nil)
 	newName := " 劉温月妹 "
 
-	entity, err := svc.UpdateCase(context.Background(), caseID, UpdateCaseInput{Name: &newName})
+	entity, err := svc.UpdateCase(context.Background(), caseID, UpdateCaseInput{Name: &newName}, uuid.New(), "admin", "127.0.0.1", "test-agent")
 
 	require.NoError(t, err)
 	require.NotNil(t, entity)
@@ -318,7 +371,7 @@ func TestUpdateCase_RejectsBlankName(t *testing.T) {
 	svc := NewCaseService(testConfig(), store, nil, nil, nil)
 	blank := "   "
 
-	_, err := svc.UpdateCase(context.Background(), caseID, UpdateCaseInput{Name: &blank})
+	_, err := svc.UpdateCase(context.Background(), caseID, UpdateCaseInput{Name: &blank}, uuid.New(), "admin", "127.0.0.1", "test-agent")
 
 	assert.ErrorIs(t, err, ErrCaseNameRequired)
 	assert.Equal(t, "原姓名", store.byID[caseID].Name)
@@ -375,7 +428,7 @@ func TestRecordSkippedCaseImport_SanitizesPII(t *testing.T) {
 	assert.Equal(t, "[REDACTED]", row.RawValues["居住地"])
 }
 
-func TestUpdateCaseTransportPreference_PartialUpdateKeepsOtherIDsIntact(t *testing.T) {
+func TestUpdateCaseTransportPreference_PutUsesExplicitFullReplacement(t *testing.T) {
 	store := newFakeCaseStore()
 	svc := NewCaseService(testConfig(), store, nil, nil, nil)
 	caseID := uuid.New()
@@ -386,7 +439,7 @@ func TestUpdateCaseTransportPreference_PartialUpdateKeepsOtherIDsIntact(t *testi
 
 	require.NoError(t, err)
 	assert.Equal(t, &siteID, store.lastUpsertPref.siteID)
-	assert.Nil(t, store.lastUpsertPref.outboundVehicleID, "未提供的去程車 ID 應維持 nil，交由 repo 端 COALESCE 保留現況")
+	assert.Nil(t, store.lastUpsertPref.outboundVehicleID, "PUT 未提供的去程車 ID 應明確傳遞 nil 代表清除")
 	assert.Nil(t, store.lastUpsertPref.inboundVehicleID)
 	assert.Equal(t, "未比對到的去程車", store.lastUpsertPref.outboundVehicleNameRaw)
 	assert.Equal(t, "未比對到的回程車", store.lastUpsertPref.inboundVehicleNameRaw)

@@ -323,33 +323,39 @@ func (r *RideRepository) UpsertRideRecord(ctx context.Context, rec *app.RideReco
 func (r *RideRepository) CorrectRideRecord(
 	ctx context.Context,
 	rideID uuid.UUID,
-	effectiveStatus *string,
-	vehicleID *uuid.UUID,
-	driverID *uuid.UUID,
-	departTimeOverride *string,
-	durationMinOverride *int16,
-	notClaimedAA09 *bool,
-	reason *string,
+	effectiveStatus app.PatchValue[string],
+	vehicleID app.PatchValue[uuid.UUID],
+	driverID app.PatchValue[uuid.UUID],
+	departTimeOverride app.PatchValue[string],
+	durationMinOverride app.PatchValue[int16],
+	notClaimedAA09 app.PatchValue[bool],
+	reason app.PatchValue[string],
 	operatorID uuid.UUID,
 ) error {
 	query := `
 		UPDATE ride_records
-		SET effective_status = COALESCE($2, effective_status),
-		    vehicle_id = COALESCE($3, vehicle_id),
-		    driver_id = COALESCE($4, driver_id),
-		    depart_time_override = $5::time,
-		    duration_min_override = $6,
-		    not_claimed_aa09 = COALESCE($7, not_claimed_aa09),
-		    correction_reason = $8,
-		    corrected_by = $9,
+		SET effective_status = CASE WHEN $2 THEN $3 ELSE effective_status END,
+		    vehicle_id = CASE WHEN $4 THEN $5 ELSE vehicle_id END,
+		    driver_id = CASE WHEN $6 THEN $7 ELSE driver_id END,
+		    depart_time_override = CASE WHEN $8 THEN $9::time ELSE depart_time_override END,
+		    duration_min_override = CASE WHEN $10 THEN $11 ELSE duration_min_override END,
+		    not_claimed_aa09 = CASE WHEN $12 THEN COALESCE($13, false) ELSE not_claimed_aa09 END,
+		    correction_reason = CASE WHEN $14 THEN $15 ELSE correction_reason END,
+		    corrected_by = $16,
 		    corrected_at = now(),
 		    updated_at = now()
 		WHERE id = $1
 	`
 	db := pgxdb.FromContext(ctx, r.db)
 	_, err := db.Exec(ctx, query,
-		rideID, effectiveStatus, vehicleID, driverID, departTimeOverride,
-		durationMinOverride, notClaimedAA09, reason, operatorID,
+		rideID,
+		effectiveStatus.Present, effectiveStatus.Value,
+		vehicleID.Present, vehicleID.Value,
+		driverID.Present, driverID.Value,
+		departTimeOverride.Present, departTimeOverride.Value,
+		durationMinOverride.Present, durationMinOverride.Value,
+		notClaimedAA09.Present, notClaimedAA09.Value,
+		reason.Present, reason.Value, operatorID,
 	)
 	return err
 }
@@ -358,34 +364,40 @@ func (r *RideRepository) CorrectRideRecord(
 func (r *RideRepository) CorrectRideRecordWithFingerprint(
 	ctx context.Context,
 	rideID uuid.UUID,
-	effectiveStatus *string,
-	vehicleID *uuid.UUID,
-	driverID *uuid.UUID,
-	departTimeOverride *string,
-	durationMinOverride *int16,
-	notClaimedAA09 *bool,
-	reason *string,
+	effectiveStatus app.PatchValue[string],
+	vehicleID app.PatchValue[uuid.UUID],
+	driverID app.PatchValue[uuid.UUID],
+	departTimeOverride app.PatchValue[string],
+	durationMinOverride app.PatchValue[int16],
+	notClaimedAA09 app.PatchValue[bool],
+	reason app.PatchValue[string],
 	operatorID uuid.UUID,
 	fingerprint string,
 ) error {
 	query := `
 		UPDATE ride_records
-		SET effective_status = COALESCE($2, effective_status),
-		    vehicle_id = COALESCE($3, vehicle_id),
-		    driver_id = COALESCE($4, driver_id),
-		    depart_time_override = $5::time,
-		    duration_min_override = $6,
-		    not_claimed_aa09 = COALESCE($7, not_claimed_aa09),
-		    correction_reason = $8,
-		    corrected_by = $9,
+		SET effective_status = CASE WHEN $2 THEN $3 ELSE effective_status END,
+		    vehicle_id = CASE WHEN $4 THEN $5 ELSE vehicle_id END,
+		    driver_id = CASE WHEN $6 THEN $7 ELSE driver_id END,
+		    depart_time_override = CASE WHEN $8 THEN $9::time ELSE depart_time_override END,
+		    duration_min_override = CASE WHEN $10 THEN $11 ELSE duration_min_override END,
+		    not_claimed_aa09 = CASE WHEN $12 THEN COALESCE($13, false) ELSE not_claimed_aa09 END,
+		    correction_reason = CASE WHEN $14 THEN $15 ELSE correction_reason END,
+		    corrected_by = $16,
 		    corrected_at = now(),
-		    based_on_fingerprint = $10,
+		    based_on_fingerprint = $17,
 		    updated_at = now()
 		WHERE id = $1
 	`
 	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, query,
-		rideID, effectiveStatus, vehicleID, driverID, departTimeOverride,
-		durationMinOverride, notClaimedAA09, reason, operatorID, fingerprint,
+		rideID,
+		effectiveStatus.Present, effectiveStatus.Value,
+		vehicleID.Present, vehicleID.Value,
+		driverID.Present, driverID.Value,
+		departTimeOverride.Present, departTimeOverride.Value,
+		durationMinOverride.Present, durationMinOverride.Value,
+		notClaimedAA09.Present, notClaimedAA09.Value,
+		reason.Present, reason.Value, operatorID, fingerprint,
 	)
 	return err
 }

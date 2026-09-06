@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
+	"ltc-system/apps/api/internal/platform/auth"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
@@ -56,6 +57,11 @@ func (h *SiteHandler) Create(c *gin.Context) {
 		Region:   req.Region,
 		OpenDays: req.OpenDays,
 		Status:   req.Status,
+	}, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidStatus) {
@@ -114,6 +120,11 @@ func (h *SiteHandler) Update(c *gin.Context) {
 		Region:   req.Region,
 		OpenDays: req.OpenDays,
 		Status:   req.Status,
+	}, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidStatus) {
@@ -163,7 +174,12 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
+	if err := h.svc.Delete(c.Request.Context(), id, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
 			{Field: "id", Reason: "該單位仍有相關資料參照，無法刪除"},
 		})

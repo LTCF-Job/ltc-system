@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -73,8 +74,10 @@ func (r *ExportJobRepository) CompleteJob(ctx context.Context, jobID uuid.UUID, 
 		if err == nil || r.storage == nil {
 			return
 		}
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
 		for _, path := range uploadedPaths {
-			if cleanupErr := r.storage.Delete(ctx, path); cleanupErr != nil {
+			if cleanupErr := r.storage.Delete(cleanupCtx, path); cleanupErr != nil {
 				slog.Warn("failed to clean up export object", slog.String("error_type", fmt.Sprintf("%T", cleanupErr)))
 			}
 		}

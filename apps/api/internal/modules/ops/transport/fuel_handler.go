@@ -1,8 +1,8 @@
 package transport
 
 import (
+	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +11,8 @@ import (
 	"ltc-system/apps/api/internal/platform/auth"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
+
+var errInvalidDateRange = errors.New("end date must not be before start date")
 
 // FuelHandler 處理車輛油資 API 請求。
 type FuelHandler struct {
@@ -24,31 +26,50 @@ func NewFuelHandler(fuelSvc *app.FuelService) *FuelHandler {
 
 // List 查詢油資清單。
 func (h *FuelHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
 
 	var vehicleID, driverID *uuid.UUID
 	if vIDStr := c.Query("vehicleId"); vIDStr != "" {
-		if id, err := uuid.Parse(vIDStr); err == nil {
-			vehicleID = &id
+		id, parseErr := uuid.Parse(vIDStr)
+		if parseErr != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			return
 		}
+		vehicleID = &id
 	}
 	if dIDStr := c.Query("driverId"); dIDStr != "" {
-		if id, err := uuid.Parse(dIDStr); err == nil {
-			driverID = &id
+		id, parseErr := uuid.Parse(dIDStr)
+		if parseErr != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			return
 		}
+		driverID = &id
 	}
 
 	var startDate, endDate *time.Time
 	if startStr := c.Query("startDate"); startStr != "" {
-		if t, err := time.Parse("2006-01-02", startStr); err == nil {
-			startDate = &t
+		t, parseErr := time.Parse("2006-01-02", startStr)
+		if parseErr != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			return
 		}
+		startDate = &t
 	}
 	if endStr := c.Query("endDate"); endStr != "" {
-		if t, err := time.Parse("2006-01-02", endStr); err == nil {
-			endDate = &t
+		t, parseErr := time.Parse("2006-01-02", endStr)
+		if parseErr != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			return
 		}
+		endDate = &t
+	}
+	if startDate != nil && endDate != nil && endDate.Before(*startDate) {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, errInvalidDateRange, nil)
+		return
 	}
 
 	q := c.Query("q")
@@ -101,7 +122,7 @@ func (h *FuelHandler) Create(c *gin.Context) {
 		Cost:       req.Cost,
 		ReceiptURL: req.ReceiptURL,
 		CreatedBy:  actorID,
-	}, &actorID, &actorRole)
+	}, &actorID, &actorRole, auditContext(c))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
@@ -149,7 +170,7 @@ func (h *FuelHandler) Update(c *gin.Context) {
 		Liters:     req.Liters,
 		Cost:       req.Cost,
 		ReceiptURL: req.ReceiptURL,
-	}, &actorID, &actorRole)
+	}, &actorID, &actorRole, auditContext(c))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
@@ -169,7 +190,7 @@ func (h *FuelHandler) Delete(c *gin.Context) {
 
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
-	if err := h.fuelSvc.Delete(c.Request.Context(), id, &actorID, &actorRole); err != nil {
+	if err := h.fuelSvc.Delete(c.Request.Context(), id, &actorID, &actorRole, auditContext(c)); err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}

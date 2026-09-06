@@ -339,13 +339,13 @@ func TestCreateGovClaimJob_SnapshotOmitsPlainNationalIDs(t *testing.T) {
 	assert.Equal(t, 1, line.LineNo)
 }
 
-func TestCreateGovClaimJob_RejectsAuditFailureBeforeCompletingExport(t *testing.T) {
+func TestCreateGovClaimJob_AuditFailureDoesNotBlockCompletedExport(t *testing.T) {
 	caseID := uuid.New()
 	driverID := uuid.New()
 	auditErr := errors.New("audit store unavailable")
 	store := &fakeExportStore{jobID: uuid.New()}
 
-	_, err := newServiceWithAudit(
+	job, err := newServiceWithAudit(
 		&fakeSourceReader{sources: []app.GovClaimSource{
 			newSource(t, caseID, "C001", "蔡曾切", driverID, 1, 1, "outbound", "09:40"),
 		}},
@@ -356,11 +356,10 @@ func TestCreateGovClaimJob_RejectsAuditFailureBeforeCompletingExport(t *testing.
 		failingAuditWriter{err: auditErr},
 	).CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseID))
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, auditErr)
-	assert.Contains(t, err.Error(), "write export audit")
-	assert.Empty(t, store.completed, "稽核失敗時不可把工作標為成功")
-	assert.Len(t, store.failed, 1, "稽核失敗時應把工作標為失敗")
+	require.NoError(t, err)
+	assert.Equal(t, 1, job.TotalCases)
+	assert.Len(t, store.completed, 1, "匯出完成狀態應先於稽核寫入")
+	assert.Empty(t, store.failed)
 }
 
 func TestCreateGovClaimJob_BlocksIncompleteSources(t *testing.T) {

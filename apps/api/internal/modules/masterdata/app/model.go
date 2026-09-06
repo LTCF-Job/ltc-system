@@ -21,6 +21,28 @@ type Site struct {
 	UpdatedAt time.Time
 }
 
+// SiteAuditSnapshot 是單位主檔異動的明確快照。
+type SiteAuditSnapshot struct {
+	ID       uuid.UUID `json:"id"`
+	Name     string    `json:"name"`
+	Address  string    `json:"address"`
+	Region   string    `json:"region"`
+	OpenDays []int16   `json:"openDays"`
+	Status   string    `json:"status"`
+}
+
+// AuditSnapshot 產生單位主檔的明確稽核快照。
+func (s Site) AuditSnapshot() SiteAuditSnapshot {
+	return SiteAuditSnapshot{
+		ID:       s.ID,
+		Name:     s.Name,
+		Address:  s.Address,
+		Region:   s.Region,
+		OpenDays: append([]int16(nil), s.OpenDays...),
+		Status:   s.Status,
+	}
+}
+
 // Vehicle 代表一輛接送車輛。Drivers 是該車目前生效的司機，同一台車可以有多位。
 type Vehicle struct {
 	ID          uuid.UUID
@@ -58,6 +80,50 @@ type VehicleDriver struct {
 	Name string
 }
 
+// VehicleAuditSnapshot 是車輛主檔稽核快照；不直接序列化 Vehicle，避免把查詢組裝
+// 的司機清單或其他非 mutation 欄位寫入 audit_log。
+type VehicleAuditSnapshot struct {
+	ID                        uuid.UUID  `json:"id"`
+	PlateNo                   string     `json:"plateNo"`
+	DisplayName               string     `json:"displayName"`
+	SiteID                    *uuid.UUID `json:"siteId,omitempty"`
+	Brand                     string     `json:"brand"`
+	Model                     string     `json:"model"`
+	ManufactureYM             string     `json:"manufactureYm"`
+	CompulsoryInsuranceExpiry *time.Time `json:"compulsoryInsuranceExpiry,omitempty"`
+	PassengerInsuranceExpiry  *time.Time `json:"passengerInsuranceExpiry,omitempty"`
+	ThirdPartyInsuranceExpiry *time.Time `json:"thirdPartyInsuranceExpiry,omitempty"`
+	LastInspectionDate        *time.Time `json:"lastInspectionDate,omitempty"`
+	WheelchairAccessible      *bool      `json:"wheelchairAccessible,omitempty"`
+	Status                    string     `json:"status"`
+}
+
+// AuditSnapshot 產生車輛主檔的明確稽核快照。
+func (v Vehicle) AuditSnapshot() VehicleAuditSnapshot {
+	return VehicleAuditSnapshot{
+		ID:                        v.ID,
+		PlateNo:                   v.PlateNo,
+		DisplayName:               v.DisplayName,
+		SiteID:                    v.SiteID,
+		Brand:                     v.Brand,
+		Model:                     v.Model,
+		ManufactureYM:             v.ManufactureYM,
+		CompulsoryInsuranceExpiry: v.CompulsoryInsuranceExpiry,
+		PassengerInsuranceExpiry:  v.PassengerInsuranceExpiry,
+		ThirdPartyInsuranceExpiry: v.ThirdPartyInsuranceExpiry,
+		LastInspectionDate:        v.LastInspectionDate,
+		WheelchairAccessible:      v.WheelchairAccessible,
+		Status:                    v.Status,
+	}
+}
+
+// VehicleDriversAuditSnapshot 是車輛司機集合異動的明確快照。
+type VehicleDriversAuditSnapshot struct {
+	VehicleID     uuid.UUID   `json:"vehicleId"`
+	DriverIDs     []uuid.UUID `json:"driverIds"`
+	EffectiveFrom time.Time   `json:"effectiveFrom"`
+}
+
 // Driver 代表一位司機。NationalIDCipher 是身分證密文，只在 Reveal 用例中解密，
 // 不得離開 application 層。
 type Driver struct {
@@ -77,6 +143,31 @@ type Driver struct {
 	UpdatedAt         time.Time
 }
 
+// DriverAuditSnapshot 是司機主檔稽核快照；身分證只保留已遮罩值，不保存密文、HMAC
+// 或明文。
+type DriverAuditSnapshot struct {
+	ID                uuid.UUID  `json:"id"`
+	Name              string     `json:"name"`
+	NationalIDMasked  string     `json:"nationalIdMasked,omitempty"`
+	Region            string     `json:"region"`
+	Status            string     `json:"status"`
+	LicenseClass      *string    `json:"licenseClass,omitempty"`
+	LicenseExpiryDate *time.Time `json:"licenseExpiryDate,omitempty"`
+}
+
+// AuditSnapshot 產生司機主檔的明確稽核快照。
+func (d Driver) AuditSnapshot() DriverAuditSnapshot {
+	return DriverAuditSnapshot{
+		ID:                d.ID,
+		Name:              d.Name,
+		NationalIDMasked:  d.NationalIDMasked,
+		Region:            d.Region,
+		Status:            d.Status,
+		LicenseClass:      d.LicenseClass,
+		LicenseExpiryDate: d.LicenseExpiryDate,
+	}
+}
+
 // DriverAssignment 代表司機與車輛在一段期間內的指派關係。一位司機同期只會有一台車，
 // 因此不再區分主要與備援車輛。
 type DriverAssignment struct {
@@ -89,6 +180,26 @@ type DriverAssignment struct {
 	EffectiveFrom  time.Time
 	EffectiveTo    *time.Time
 	CreatedAt      time.Time
+}
+
+// DriverAssignmentAuditSnapshot 是司機車輛指派異動的明確稽核快照。
+type DriverAssignmentAuditSnapshot struct {
+	ID            uuid.UUID  `json:"id"`
+	DriverID      uuid.UUID  `json:"driverId"`
+	VehicleID     uuid.UUID  `json:"vehicleId"`
+	EffectiveFrom time.Time  `json:"effectiveFrom"`
+	EffectiveTo   *time.Time `json:"effectiveTo,omitempty"`
+}
+
+// AuditSnapshot 產生司機車輛指派的明確稽核快照。
+func (a DriverAssignment) AuditSnapshot() DriverAssignmentAuditSnapshot {
+	return DriverAssignmentAuditSnapshot{
+		ID:            a.ID,
+		DriverID:      a.DriverID,
+		VehicleID:     a.VehicleID,
+		EffectiveFrom: a.EffectiveFrom,
+		EffectiveTo:   a.EffectiveTo,
+	}
 }
 
 // Region 代表一個服務區域。

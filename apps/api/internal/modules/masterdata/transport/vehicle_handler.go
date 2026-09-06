@@ -61,7 +61,12 @@ func (h *VehicleHandler) Create(c *gin.Context) {
 		return
 	}
 
-	v, err := h.svc.Create(c.Request.Context(), req.toInput())
+	v, err := h.svc.Create(c.Request.Context(), req.toInput(), app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidStatus) {
 			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
@@ -100,7 +105,12 @@ func (h *VehicleHandler) Update(c *gin.Context) {
 		return
 	}
 
-	v, err := h.svc.Update(c.Request.Context(), id, req.toInput())
+	v, err := h.svc.Update(c.Request.Context(), id, req.toInput(), app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidStatus) {
 			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
@@ -145,7 +155,12 @@ func (h *VehicleHandler) SetDrivers(c *gin.Context) {
 		effectiveFrom = req.EffectiveFrom.toTime()
 	}
 
-	if err := h.svc.SetDrivers(c.Request.Context(), id, req.DriverIDs, effectiveFrom); err != nil {
+	if err := h.svc.SetDrivers(c.Request.Context(), id, req.DriverIDs, effectiveFrom, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}); err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
@@ -164,7 +179,12 @@ func (h *VehicleHandler) Delete(c *gin.Context) {
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
 
-	if err := h.svc.Delete(c.Request.Context(), id, actorID, actorRole); err != nil {
+	if err := h.svc.Delete(c.Request.Context(), id, actorID, actorRole, app.ActorContext{
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}); err != nil {
 		if errors.Is(err, app.ErrVehicleInUse) {
 			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
 			return

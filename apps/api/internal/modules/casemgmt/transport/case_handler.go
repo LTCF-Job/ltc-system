@@ -251,7 +251,9 @@ func (h *CaseHandler) Update(c *gin.Context) {
 	in.BirthDate = req.BirthDate.Value
 	in.BirthDatePresent = req.BirthDate.Present
 
-	entity, err := h.masterService.UpdateCase(c.Request.Context(), id, in)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+	entity, err := h.masterService.UpdateCase(c.Request.Context(), id, in, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
 		if errors.Is(err, app.ErrCaseNotFound) {
 			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
@@ -289,6 +291,12 @@ func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 	entity, err := h.masterService.UpdateCaseTransportPreference(
 		c.Request.Context(), id, req.SiteID, req.OutboundVehicleID, req.InboundVehicleID,
 		req.SiteNameRaw, req.OutboundVehicleNameRaw, req.InboundVehicleNameRaw,
+		app.AuditContext{
+			ActorID:   auth.GetActorID(c),
+			ActorRole: auth.GetActorRole(c),
+			IPAddress: c.ClientIP(),
+			UserAgent: c.Request.UserAgent(),
+		},
 	)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "更新交通偏好失敗", nil)
@@ -307,9 +315,7 @@ func (h *CaseHandler) GetSchedule(c *gin.Context) {
 		return
 	}
 
-	// TODO: 尚無「個案排班」在無現行排班時的產品規格確認，先誠實回傳查無資料，
-	// 不再回傳假造的竹北日照中心／竹北一車預設排班（原本無論真實查詢成功與否，
-	// 只要查無排班或查詢出錯都會回傳同一組寫死的假資料，兩種情況也未區分）。
+	// TODO: 尚無「無現行排班」的產品規格確認，暫先誠實回傳查無資料而非舊有的寫死假資料。
 	sched, err := h.masterService.GetActiveScheduleForCaseOnDate(c.Request.Context(), id, clock.Today())
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢個案排班失敗", nil)

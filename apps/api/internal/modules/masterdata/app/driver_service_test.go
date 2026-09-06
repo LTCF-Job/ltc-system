@@ -388,6 +388,7 @@ func TestDriverService_Delete(t *testing.T) {
 	t.Run("成功刪除並收斂車輛指派", func(t *testing.T) {
 		store := newFakeDriverStore()
 		driverID := uuid.New()
+		store.byID[driverID] = &Driver{ID: driverID, Name: "待刪除司機", Status: "active"}
 		svc := NewDriverService(store, testConfig(), nil)
 
 		err := svc.Delete(context.Background(), driverID, uuid.New(), "admin")
@@ -399,6 +400,7 @@ func TestDriverService_Delete(t *testing.T) {
 	t.Run("已刪除再次刪除回錯誤", func(t *testing.T) {
 		store := newFakeDriverStore()
 		driverID := uuid.New()
+		store.byID[driverID] = &Driver{ID: driverID, Name: "待刪除司機", Status: "active"}
 		svc := NewDriverService(store, testConfig(), nil)
 
 		require.NoError(t, svc.Delete(context.Background(), driverID, uuid.New(), "admin"))

@@ -1,8 +1,12 @@
 package transport
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"ltc-system/apps/api/internal/domain/rocdate"
@@ -25,16 +29,46 @@ func NewRideHandler(rideService *app.RideService) *RideHandler {
 	return &RideHandler{rideService: rideService}
 }
 
-// CorrectDTO 用於寬容接收搭乘更正請求。
+// CorrectDTO 以 RawMessage 保留 JSON 欄位是否出現，才能區分 PATCH 的保留、清除與設定。
 type CorrectDTO struct {
-	EffectiveStatus     *string `json:"effectiveStatus"`
-	VehicleID           *string `json:"vehicleId"`
-	DriverID            *string `json:"driverId"`
-	DepartTimeOverride  *string `json:"departTimeOverride"`
-	DurationMinOverride *int16  `json:"durationMinOverride"`
-	NotClaimedAA09      *bool   `json:"notClaimedAa09"`
-	Reason              *string `json:"reason"`
-	BasedOnFingerprint  *string `json:"basedOnFingerprint" binding:"required"`
+	EffectiveStatus     json.RawMessage `json:"effectiveStatus"`
+	VehicleID           json.RawMessage `json:"vehicleId"`
+	DriverID            json.RawMessage `json:"driverId"`
+	DepartTimeOverride  json.RawMessage `json:"departTimeOverride"`
+	DurationMinOverride json.RawMessage `json:"durationMinOverride"`
+	NotClaimedAA09      json.RawMessage `json:"notClaimedAa09"`
+	Reason              json.RawMessage `json:"reason"`
+	BasedOnFingerprint  *string         `json:"basedOnFingerprint"`
+}
+
+func parsePatchValue[T any](raw json.RawMessage, fieldName string) (app.PatchValue[T], error) {
+	if len(raw) == 0 {
+		return app.PatchValue[T]{}, nil
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return app.PatchValue[T]{Present: true}, nil
+	}
+
+	var value T
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return app.PatchValue[T]{}, fmt.Errorf("%s 格式錯誤", fieldName)
+	}
+	return app.PatchValue[T]{Present: true, Value: &value}, nil
+}
+
+func parseUUIDPatch(raw json.RawMessage, fieldName string) (app.PatchValue[uuid.UUID], error) {
+	textValue, err := parsePatchValue[string](raw, fieldName)
+	if err != nil || !textValue.Present || textValue.Value == nil {
+		if err != nil {
+			return app.PatchValue[uuid.UUID]{}, err
+		}
+		return app.PatchValue[uuid.UUID]{Present: textValue.Present}, nil
+	}
+	id, err := uuid.Parse(strings.TrimSpace(*textValue.Value))
+	if err != nil {
+		return app.PatchValue[uuid.UUID]{}, fmt.Errorf("%s ID 格式錯誤", fieldName)
+	}
+	return app.PatchValue[uuid.UUID]{Present: true, Value: &id}, nil
 }
 
 // ManualReportDTO 用於寬容接收人工補登請求。
@@ -68,34 +102,54 @@ func (h *RideHandler) Correct(c *gin.Context) {
 		return
 	}
 
-	var vehicleUUID *uuid.UUID
-	if dto.VehicleID != nil && *dto.VehicleID != "" {
-		v, err := uuid.Parse(*dto.VehicleID)
-		if err != nil {
-			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的車輛 ID", nil)
-			return
-		}
-		vehicleUUID = &v
+	effectiveStatus, err := parsePatchValue[string](dto.EffectiveStatus, "搭乘狀態")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
 	}
-
-	var driverUUID *uuid.UUID
-	if dto.DriverID != nil && *dto.DriverID != "" {
-		d, err := uuid.Parse(*dto.DriverID)
-		if err != nil {
-			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的司機 ID", nil)
-			return
-		}
-		driverUUID = &d
+	vehicleID, err := parseUUIDPatch(dto.VehicleID, "車輛")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	driverID, err := parseUUIDPatch(dto.DriverID, "司機")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	departTimeOverride, err := parsePatchValue[string](dto.DepartTimeOverride, "出發時間")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	durationMinOverride, err := parsePatchValue[int16](dto.DurationMinOverride, "服務時長")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	notClaimedAA09, err := parsePatchValue[bool](dto.NotClaimedAA09, "AA09 設定")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	reason, err := parsePatchValue[string](dto.Reason, "更正原因")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	if dto.BasedOnFingerprint == nil || strings.TrimSpace(*dto.BasedOnFingerprint) == "" {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "缺少來源快照指紋", nil)
+		return
 	}
 
 	req := app.CorrectRideRecordRequest{
-		EffectiveStatus:     dto.EffectiveStatus,
-		VehicleID:           vehicleUUID,
-		DriverID:            driverUUID,
-		DepartTimeOverride:  dto.DepartTimeOverride,
-		DurationMinOverride: dto.DurationMinOverride,
-		NotClaimedAA09:      dto.NotClaimedAA09,
-		Reason:              dto.Reason,
+		EffectiveStatus:     effectiveStatus,
+		VehicleID:           vehicleID,
+		DriverID:            driverID,
+		DepartTimeOverride:  departTimeOverride,
+		DurationMinOverride: durationMinOverride,
+		NotClaimedAA09:      notClaimedAA09,
+		Reason:              reason,
 		BasedOnFingerprint:  dto.BasedOnFingerprint,
 	}
 
@@ -384,9 +438,12 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 
 	var driverID *uuid.UUID
 	if dto.DriverID != nil && *dto.DriverID != "" {
-		if d, err := uuid.Parse(*dto.DriverID); err == nil {
-			driverID = &d
+		d, parseErr := uuid.Parse(*dto.DriverID)
+		if parseErr != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的司機 ID", nil)
+			return
 		}
+		driverID = &d
 	}
 
 	actorID := auth.GetActorID(c)
@@ -396,7 +453,7 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 		VehicleID: vehicleID,
 		DriverID:  driverID,
 		Reason:    dto.Reason,
-	}, actorID, actorRole)
+	}, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
 		if errors.Is(err, app.ErrRideNotFound) {
 			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)

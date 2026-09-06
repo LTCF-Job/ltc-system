@@ -35,7 +35,6 @@ func (s *MaintenanceService) List(ctx context.Context, page, pageSize int, vehic
 	return s.maintenanceRepo.List(ctx, page, pageSize, vehicleID, startDate, endDate, q)
 }
 
-// Create 新增維修保養紀錄並記錄稽核留痕。
 // MaintenanceLogInput 代表新增或修改維修保養紀錄所需之輸入。
 type MaintenanceLogInput struct {
 	VehicleID   uuid.UUID
@@ -49,7 +48,8 @@ type MaintenanceLogInput struct {
 	CreatedBy   uuid.UUID
 }
 
-func (s *MaintenanceService) Create(ctx context.Context, in MaintenanceLogInput, actorID *uuid.UUID, actorRole *string) (*MaintenanceLog, error) {
+// Create 新增維修保養紀錄並記錄稽核留痕。
+func (s *MaintenanceService) Create(ctx context.Context, in MaintenanceLogInput, actorID *uuid.UUID, actorRole *string, auditContexts ...AuditContext) (*MaintenanceLog, error) {
 	item := &MaintenanceLog{
 		VehicleID:   in.VehicleID,
 		ServiceDate: in.ServiceDate,
@@ -65,21 +65,20 @@ func (s *MaintenanceService) Create(ctx context.Context, in MaintenanceLogInput,
 		return nil, err
 	}
 
-	if s.auditRepo != nil {
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    actorID,
-			ActorRole:  actorRole,
-			Action:     "create",
-			EntityType: "maintenance_logs",
-			EntityID:   strPtr(item.ID.String()),
-			AfterData:  item,
-		})
-	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorID, actorRole, auditContextOrEmpty(auditContexts), "create", "maintenance_logs", item.ID, nil, item.AuditSnapshot())
 	return item, nil
 }
 
 // Update 修改維修保養紀錄。
-func (s *MaintenanceService) Update(ctx context.Context, id uuid.UUID, in MaintenanceLogInput, actorID *uuid.UUID, actorRole *string) (*MaintenanceLog, error) {
+func (s *MaintenanceService) Update(ctx context.Context, id uuid.UUID, in MaintenanceLogInput, actorID *uuid.UUID, actorRole *string, auditContexts ...AuditContext) (*MaintenanceLog, error) {
+	var before interface{}
+	if s.auditRepo != nil {
+		var err error
+		before, err = loadMaintenanceAuditSnapshot(ctx, s.maintenanceRepo, id)
+		if err != nil {
+			return nil, err
+		}
+	}
 	item := &MaintenanceLog{
 		ID:          id,
 		VehicleID:   in.VehicleID,
@@ -95,34 +94,25 @@ func (s *MaintenanceService) Update(ctx context.Context, id uuid.UUID, in Mainte
 		return nil, err
 	}
 
-	if s.auditRepo != nil {
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    actorID,
-			ActorRole:  actorRole,
-			Action:     "update",
-			EntityType: "maintenance_logs",
-			EntityID:   strPtr(item.ID.String()),
-			AfterData:  item,
-		})
-	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorID, actorRole, auditContextOrEmpty(auditContexts), "update", "maintenance_logs", item.ID, before, item.AuditSnapshot())
 	return item, nil
 }
 
 // Delete 刪除維修保養紀錄。
-func (s *MaintenanceService) Delete(ctx context.Context, id uuid.UUID, actorID *uuid.UUID, actorRole *string) error {
+func (s *MaintenanceService) Delete(ctx context.Context, id uuid.UUID, actorID *uuid.UUID, actorRole *string, auditContexts ...AuditContext) error {
+	var before interface{}
+	if s.auditRepo != nil {
+		var err error
+		before, err = loadMaintenanceAuditSnapshot(ctx, s.maintenanceRepo, id)
+		if err != nil {
+			return err
+		}
+	}
 	if err := s.maintenanceRepo.Delete(ctx, id); err != nil {
 		return err
 	}
 
-	if s.auditRepo != nil {
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    actorID,
-			ActorRole:  actorRole,
-			Action:     "delete",
-			EntityType: "maintenance_logs",
-			EntityID:   strPtr(id.String()),
-		})
-	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorID, actorRole, auditContextOrEmpty(auditContexts), "delete", "maintenance_logs", id, before, nil)
 	return nil
 }
 

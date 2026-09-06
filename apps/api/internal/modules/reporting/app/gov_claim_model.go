@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// 本檔是政府申報匯出的應用層模型。與 readmodel.go 的純查詢投影不同，這些型別會落地到
+// 本檔是政府申報匯出的應用層模型。與 readmodel.go 的純查詢投影不同，這些型別會寫入
 // export_jobs／export_lines／export_job_files，形狀由業務規格決定而非單一查詢決定。
 
 // GovClaimMode 代表匯出檔案模式：逐案下載或打包成單一壓縮檔。
@@ -150,12 +150,14 @@ type AuditEntry struct {
 	Action     string
 	EntityType string
 	EntityID   *string
+	BeforeData interface{}
 	AfterData  interface{}
 }
 
 // ExportJobAuditSnapshot 是寫入稽核日誌的匯出工作快照，json tag 需與既有稽核紀錄慣例一致。
 // Cases 逐案列出這次實際匯出了哪些個案的哪些檔案，讓稽核紀錄看得出「匯出的內容」而不只是統計數字。
 type ExportJobAuditSnapshot struct {
+	Status     string                   `json:"status"`
 	PeriodYM   string                   `json:"periodYm"`
 	Region     string                   `json:"region"`
 	Mode       string                   `json:"mode"`

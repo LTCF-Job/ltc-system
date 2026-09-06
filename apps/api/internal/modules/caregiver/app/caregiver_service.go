@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -9,15 +11,20 @@ import (
 
 // CaregiverService 封裝照護人員主檔的 CRUD 業務邏輯與批次匯入流程。
 type CaregiverService struct {
-	store    CaregiverStore
-	sites    SiteLookup
-	reader   SpreadsheetReader
-	renderer TemplateRenderer
+	store     CaregiverStore
+	sites     SiteLookup
+	reader    SpreadsheetReader
+	renderer  TemplateRenderer
+	auditRepo AuditWriter
 }
 
 // NewCaregiverService 建立 CaregiverService 實例。
-func NewCaregiverService(store CaregiverStore, sites SiteLookup, reader SpreadsheetReader, renderer TemplateRenderer) *CaregiverService {
-	return &CaregiverService{store: store, sites: sites, reader: reader, renderer: renderer}
+func NewCaregiverService(store CaregiverStore, sites SiteLookup, reader SpreadsheetReader, renderer TemplateRenderer, audits ...AuditWriter) *CaregiverService {
+	var auditRepo AuditWriter
+	if len(audits) > 0 {
+		auditRepo = audits[0]
+	}
+	return &CaregiverService{store: store, sites: sites, reader: reader, renderer: renderer, auditRepo: auditRepo}
 }
 
 // List 查詢照護人員清單。unresolvedLink 篩選單位名稱待關聯單位主檔的資料列，
@@ -42,7 +49,8 @@ type CreateCaregiverInput struct {
 }
 
 // Create 新增照護人員。
-func (s *CaregiverService) Create(ctx context.Context, in CreateCaregiverInput) (*Caregiver, error) {
+func (s *CaregiverService) Create(ctx context.Context, in CreateCaregiverInput, actors ...ActorContext) (*Caregiver, error) {
+	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" {
 		return nil, ErrCaregiverNameRequired
 	}
@@ -50,16 +58,19 @@ func (s *CaregiverService) Create(ctx context.Context, in CreateCaregiverInput) 
 		return nil, ErrCaregiverTypeInvalid
 	}
 
-	// 確保 status 符合資料庫 check constraint，空值或非法值預設 active
+	// 空值採用預設狀態；明確傳入的非法狀態必須拒絕，避免 typo 被靜默升權為 active。
 	status := strings.TrimSpace(in.Status)
-	if status != "active" && status != "inactive" {
+	if status == "" {
 		status = "active"
+	} else if status != "active" && status != "inactive" {
+		return nil, ErrCaregiverStatusInvalid
 	}
 
 	c := Caregiver{SiteID: in.SiteID, Name: in.Name, Type: in.Type, Contact: in.Contact, Notes: in.Notes, Status: status}
 	if err := s.store.Create(ctx, &c); err != nil {
 		return nil, err
 	}
+	s.writeAudit(ctx, "create", c.ID, actorOrEmpty(actors), nil, c.AuditSnapshot())
 	return &c, nil
 }
 
@@ -74,11 +85,18 @@ type UpdateCaregiverInput struct {
 }
 
 // Update 更新照護人員。
-func (s *CaregiverService) Update(ctx context.Context, id uuid.UUID, in UpdateCaregiverInput) (*Caregiver, error) {
+func (s *CaregiverService) Update(ctx context.Context, id uuid.UUID, in UpdateCaregiverInput, actors ...ActorContext) (*Caregiver, error) {
 	existing, err := s.store.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, ErrCaregiverNotFound) {
+			return nil, ErrCaregiverNotFound
+		}
+		return nil, err
+	}
+	if existing == nil {
 		return nil, ErrCaregiverNotFound
 	}
+	before := existing.AuditSnapshot()
 
 	if in.SiteID != nil {
 		existing.SiteID = in.SiteID
@@ -86,10 +104,11 @@ func (s *CaregiverService) Update(ctx context.Context, id uuid.UUID, in UpdateCa
 		existing.SiteNameRaw = ""
 	}
 	if in.Name != nil {
-		if *in.Name == "" {
+		name := strings.TrimSpace(*in.Name)
+		if name == "" {
 			return nil, ErrCaregiverNameRequired
 		}
-		existing.Name = *in.Name
+		existing.Name = name
 	}
 	if in.Type != nil {
 		if !IsValidCaregiverType(*in.Type) {
@@ -106,7 +125,7 @@ func (s *CaregiverService) Update(ctx context.Context, id uuid.UUID, in UpdateCa
 	if in.Status != nil {
 		status := strings.TrimSpace(*in.Status)
 		if status != "active" && status != "inactive" {
-			status = "active"
+			return nil, ErrCaregiverStatusInvalid
 		}
 		existing.Status = status
 	}
@@ -114,15 +133,58 @@ func (s *CaregiverService) Update(ctx context.Context, id uuid.UUID, in UpdateCa
 	if err := s.store.Update(ctx, existing); err != nil {
 		return nil, err
 	}
+	s.writeAudit(ctx, "update", id, actorOrEmpty(actors), before, existing.AuditSnapshot())
 	return existing, nil
 }
 
 // Delete 刪除照護人員。
-func (s *CaregiverService) Delete(ctx context.Context, id uuid.UUID) error {
-	return s.store.Delete(ctx, id)
+func (s *CaregiverService) Delete(ctx context.Context, id uuid.UUID, actors ...ActorContext) error {
+	var before interface{}
+	if s.auditRepo != nil {
+		existing, err := s.store.GetByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if existing == nil {
+			return ErrCaregiverNotFound
+		}
+		before = existing.AuditSnapshot()
+	}
+	if err := s.store.Delete(ctx, id); err != nil {
+		return err
+	}
+	s.writeAudit(ctx, "delete", id, actorOrEmpty(actors), before, nil)
+	return nil
 }
 
 // LinkSite 將待關聯的照護人員連結至單位主檔，並清空原始單位名稱。
-func (s *CaregiverService) LinkSite(ctx context.Context, id, siteID uuid.UUID) (*Caregiver, error) {
-	return s.Update(ctx, id, UpdateCaregiverInput{SiteID: &siteID})
+func (s *CaregiverService) LinkSite(ctx context.Context, id, siteID uuid.UUID, actors ...ActorContext) (*Caregiver, error) {
+	return s.Update(ctx, id, UpdateCaregiverInput{SiteID: &siteID}, actors...)
+}
+
+func actorOrEmpty(actors []ActorContext) ActorContext {
+	if len(actors) == 0 {
+		return ActorContext{}
+	}
+	return actors[0]
+}
+
+func (s *CaregiverService) writeAudit(ctx context.Context, action string, id uuid.UUID, actor ActorContext, before, after interface{}) {
+	if s.auditRepo == nil {
+		return
+	}
+	entityID := id.String()
+	if err := s.auditRepo.Write(ctx, AuditEntry{
+		ActorID:    &actor.ActorID,
+		ActorRole:  &actor.ActorRole,
+		Action:     action,
+		EntityType: "caregivers",
+		EntityID:   &entityID,
+		BeforeData: before,
+		AfterData:  after,
+		IPAddress:  &actor.IPAddress,
+		UserAgent:  &actor.UserAgent,
+	}); err != nil {
+		slog.Error("caregiver audit write failed", "action", action, "entity_id", entityID, "error", err)
+	}
 }

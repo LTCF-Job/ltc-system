@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -39,6 +40,34 @@ type rideAuditSnapshot struct {
 	HasConflict     bool       `json:"hasConflict"`
 }
 
+// rideCorrectionAuditSnapshot 是更正 PATCH 的固定快照；用 Present 欄位保留三態語意，
+// 不直接把含有自由文字的 request 寫入稽核資料。
+type rideCorrectionAuditSnapshot struct {
+	RideID                 uuid.UUID  `json:"rideId"`
+	EffectiveStatusPresent bool       `json:"effectiveStatusPresent"`
+	EffectiveStatus        *string    `json:"effectiveStatus,omitempty"`
+	VehicleIDPresent       bool       `json:"vehicleIdPresent"`
+	VehicleID              *uuid.UUID `json:"vehicleId,omitempty"`
+	DriverIDPresent        bool       `json:"driverIdPresent"`
+	DriverID               *uuid.UUID `json:"driverId,omitempty"`
+	DepartTimePresent      bool       `json:"departTimeOverridePresent"`
+	DepartTimeOverride     *string    `json:"departTimeOverride,omitempty"`
+	DurationPresent        bool       `json:"durationMinOverridePresent"`
+	DurationMinOverride    *int16     `json:"durationMinOverride,omitempty"`
+	NotClaimedAA09Present  bool       `json:"notClaimedAa09Present"`
+	NotClaimedAA09         *bool      `json:"notClaimedAa09,omitempty"`
+	ReasonPresent          bool       `json:"reasonPresent"`
+	BasedOnFingerprint     string     `json:"basedOnFingerprint,omitempty"`
+}
+
+// rideConflictResolutionAuditSnapshot 是衝突裁決後的非敏感固定快照，不保存裁決自由文字。
+type rideConflictResolutionAuditSnapshot struct {
+	ID          uuid.UUID  `json:"id"`
+	VehicleID   uuid.UUID  `json:"vehicleId"`
+	DriverID    *uuid.UUID `json:"driverId,omitempty"`
+	HasConflict bool       `json:"hasConflict"`
+}
+
 func newRideAuditSnapshot(item *RideRecord) rideAuditSnapshot {
 	if item == nil {
 		return rideAuditSnapshot{}
@@ -53,6 +82,33 @@ func newRideAuditSnapshot(item *RideRecord) rideAuditSnapshot {
 		DriverID:        item.DriverID,
 		HasConflict:     item.HasConflict,
 	}
+}
+
+func newRideCorrectionAuditSnapshot(rideID uuid.UUID, req CorrectRideRecordRequest) rideCorrectionAuditSnapshot {
+	return rideCorrectionAuditSnapshot{
+		RideID:                 rideID,
+		EffectiveStatusPresent: req.EffectiveStatus.Present,
+		EffectiveStatus:        req.EffectiveStatus.Value,
+		VehicleIDPresent:       req.VehicleID.Present,
+		VehicleID:              req.VehicleID.Value,
+		DriverIDPresent:        req.DriverID.Present,
+		DriverID:               req.DriverID.Value,
+		DepartTimePresent:      req.DepartTimeOverride.Present,
+		DepartTimeOverride:     req.DepartTimeOverride.Value,
+		DurationPresent:        req.DurationMinOverride.Present,
+		DurationMinOverride:    req.DurationMinOverride.Value,
+		NotClaimedAA09Present:  req.NotClaimedAA09.Present,
+		NotClaimedAA09:         req.NotClaimedAA09.Value,
+		ReasonPresent:          req.Reason.Present,
+		BasedOnFingerprint:     valueOrEmpty(req.BasedOnFingerprint),
+	}
+}
+
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // sourceFingerprint 以穩定排序的來源 ID 與內容建立更正依據快照。
@@ -338,7 +394,7 @@ func (s *RideService) ClearImportedDates(ctx context.Context, formID uuid.UUID, 
 
 // ListImportedMonths 統計每份匯報表各月份已匯入的提交筆數與最後一次匯入時間。
 //
-// 月份不落地成欄位，一律由 form_submissions.service_date 推得，避免統計與實際資料不同步。
+// 月份不另外寫入成欄位，一律由 form_submissions.service_date 推得，避免統計與實際資料不同步。
 func (s *RideService) ListImportedMonths(ctx context.Context) ([]ImportedMonth, error) {
 	months, err := s.formRepo.ListImportedMonths(ctx)
 	if err != nil {
@@ -502,14 +558,14 @@ func (s *RideService) recalculateRideRecord(
 
 // CorrectRideRecordRequest 代表更正搭乘紀錄之請求結構體。
 type CorrectRideRecordRequest struct {
-	EffectiveStatus     *string    `json:"effectiveStatus"`
-	VehicleID           *uuid.UUID `json:"vehicleId"`
-	DriverID            *uuid.UUID `json:"driverId"`
-	DepartTimeOverride  *string    `json:"departTimeOverride"`
-	DurationMinOverride *int16     `json:"durationMinOverride"`
-	NotClaimedAA09      *bool      `json:"notClaimedAa09"`
-	Reason              *string    `json:"reason"`
-	BasedOnFingerprint  *string    `json:"basedOnFingerprint"`
+	EffectiveStatus     PatchValue[string]    `json:"effectiveStatus"`
+	VehicleID           PatchValue[uuid.UUID] `json:"vehicleId"`
+	DriverID            PatchValue[uuid.UUID] `json:"driverId"`
+	DepartTimeOverride  PatchValue[string]    `json:"departTimeOverride"`
+	DurationMinOverride PatchValue[int16]     `json:"durationMinOverride"`
+	NotClaimedAA09      PatchValue[bool]      `json:"notClaimedAa09"`
+	Reason              PatchValue[string]    `json:"reason"`
+	BasedOnFingerprint  *string               `json:"basedOnFingerprint"`
 }
 
 // ManualReportRideRequest 代表人工補登或編輯回報內容之請求結構體。
@@ -535,6 +591,12 @@ func (s *RideService) CorrectRideRecord(
 	actorID uuid.UUID,
 	actorRole, ip, ua string,
 ) error {
+	if req.EffectiveStatus.Present && req.EffectiveStatus.Value == nil {
+		return ErrInvalidRideCorrectionField
+	}
+	if req.VehicleID.Present && req.VehicleID.Value == nil {
+		return ErrInvalidRideCorrectionField
+	}
 	before, err := s.formRepo.GetRideRecordByID(ctx, rideID)
 	if err != nil {
 		return fmt.Errorf("failed to load ride record: %w", err)
@@ -573,16 +635,19 @@ func (s *RideService) CorrectRideRecord(
 
 	if s.auditRepo != nil {
 		entityIDStr := rideID.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "correct",
 			EntityType: "ride_records",
 			EntityID:   &entityIDStr,
-			AfterData:  req,
+			BeforeData: newRideAuditSnapshot(before),
+			AfterData:  newRideCorrectionAuditSnapshot(rideID, req),
 			IPAddress:  &ip,
 			UserAgent:  &ua,
-		})
+		}); err != nil {
+			slog.Error("ride correction audit write failed", "action", "correct", "entity_id", rideID.String(), "error", err)
+		}
 	}
 
 	return nil
@@ -604,23 +669,53 @@ func (s *RideService) ManualReportRide(
 		return nil, fmt.Errorf("無效的服務日期格式：%s", req.ServiceDate)
 	}
 
-	// 車輛未指定時由排班回退取得預設車輛
+	// 人工補登只能落在有效排班已定義的趟次；即使請求自行指定車輛，也不能
+	// 藉此建立不存在於排班的任意 leg。
+	if s.caseRepo == nil {
+		return nil, ErrInvalidManualRideLeg
+	}
+	sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, req.CaseID, serviceDate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load active schedule: %w", err)
+	}
+	if sched == nil {
+		return nil, ErrInvalidManualRideLeg
+	}
+	if len(sched.Weekdays) > 0 {
+		weekday := int16(serviceDate.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		weekdayScheduled := false
+		for _, scheduledWeekday := range sched.Weekdays {
+			if scheduledWeekday == weekday {
+				weekdayScheduled = true
+				break
+			}
+		}
+		if !weekdayScheduled {
+			return nil, ErrInvalidManualRideLeg
+		}
+	}
+	var scheduledLeg *ScheduleLeg
+	for i := range sched.Legs {
+		if sched.Legs[i].LegSeq == req.LegSeq {
+			scheduledLeg = &sched.Legs[i]
+			break
+		}
+	}
+	if scheduledLeg == nil {
+		return nil, ErrInvalidManualRideLeg
+	}
+
 	var vehicleID uuid.UUID
 	if req.VehicleID != nil && *req.VehicleID != uuid.Nil {
 		vehicleID = *req.VehicleID
-	} else if s.caseRepo != nil {
-		sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, req.CaseID, serviceDate)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load active schedule: %w", err)
-		}
-		if sched != nil {
-			for _, l := range sched.Legs {
-				if l.LegSeq == req.LegSeq && l.VehicleID != nil {
-					vehicleID = *l.VehicleID
-					break
-				}
-			}
-		}
+	} else if scheduledLeg.VehicleID != nil {
+		vehicleID = *scheduledLeg.VehicleID
+	}
+	if vehicleID == uuid.Nil {
+		return nil, ErrManualRideVehicleRequired
 	}
 
 	existingRec, err := s.formRepo.GetRideRecordForSlot(ctx, req.CaseID, serviceDate, req.LegSeq)
@@ -660,16 +755,19 @@ func (s *RideService) ManualReportRide(
 
 	if s.auditRepo != nil {
 		entityIDStr := rec.ID.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "manual_report",
 			EntityType: "ride_records",
 			EntityID:   &entityIDStr,
-			AfterData:  req,
+			BeforeData: newRideAuditSnapshot(existingRec),
+			AfterData:  newRideAuditSnapshot(&rec),
 			IPAddress:  &ip,
 			UserAgent:  &ua,
-		})
+		}); err != nil {
+			slog.Error("manual ride audit write failed", "action", "manual_report", "entity_id", rec.ID.String(), "error", err)
+		}
 	}
 
 	return &rec, nil
@@ -695,7 +793,7 @@ type ResolveConflictInput struct {
 }
 
 // ResolveConflict 人工裁決同車衝突回報，把裁決結果寫回搭乘紀錄並留存稽核。
-func (s *RideService) ResolveConflict(ctx context.Context, rideID uuid.UUID, req ResolveConflictInput, actorID uuid.UUID, actorRole string) error {
+func (s *RideService) ResolveConflict(ctx context.Context, rideID uuid.UUID, req ResolveConflictInput, actorID uuid.UUID, actorRole string, requestMetadata ...string) error {
 	before, err := s.formRepo.GetRideRecordByID(ctx, rideID)
 	if err != nil {
 		return fmt.Errorf("failed to load ride record: %w", err)
@@ -714,15 +812,31 @@ func (s *RideService) ResolveConflict(ctx context.Context, rideID uuid.UUID, req
 
 	if s.auditRepo != nil {
 		entityIDStr := rideID.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		ip, ua := "", ""
+		if len(requestMetadata) > 0 {
+			ip = requestMetadata[0]
+		}
+		if len(requestMetadata) > 1 {
+			ua = requestMetadata[1]
+		}
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "resolve_conflict",
 			EntityType: "ride_records",
 			EntityID:   &entityIDStr,
 			BeforeData: newRideAuditSnapshot(before),
-			AfterData:  req,
-		})
+			AfterData: rideConflictResolutionAuditSnapshot{
+				ID:          rideID,
+				VehicleID:   req.VehicleID,
+				DriverID:    req.DriverID,
+				HasConflict: false,
+			},
+			IPAddress: &ip,
+			UserAgent: &ua,
+		}); err != nil {
+			slog.Error("ride conflict audit write failed", "action", "resolve_conflict", "entity_id", rideID.String(), "error", err)
+		}
 	}
 
 	return nil
