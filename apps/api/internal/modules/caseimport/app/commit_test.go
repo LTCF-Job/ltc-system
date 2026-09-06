@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -17,6 +18,9 @@ type fakeCaseRegistrar struct {
 
 func (f *fakeCaseRegistrar) CreateCase(ctx context.Context, in NewCase, actor Actor) (uuid.UUID, error) {
 	f.created = append(f.created, in)
+	if in.ID != uuid.Nil {
+		return in.ID, nil
+	}
 	return uuid.New(), nil
 }
 
@@ -48,7 +52,7 @@ type fakeSiteLookup struct{ byName map[string]uuid.UUID }
 func (f fakeSiteLookup) GetByName(ctx context.Context, name string) (*SiteRef, error) {
 	id, ok := f.byName[name]
 	if !ok {
-		return nil, assertNotFoundErr
+		return nil, ErrLookupNotFound
 	}
 	return &SiteRef{ID: id, Name: name}, nil
 }
@@ -63,7 +67,7 @@ type fakeVehicleLookup struct{ byName map[string]uuid.UUID }
 func (f fakeVehicleLookup) GetByDisplayName(ctx context.Context, displayName string) (*VehicleRef, error) {
 	id, ok := f.byName[displayName]
 	if !ok {
-		return nil, assertNotFoundErr
+		return nil, ErrLookupNotFound
 	}
 	return &VehicleRef{ID: id}, nil
 }
@@ -75,12 +79,6 @@ type fakeTxRunner struct{}
 func (fakeTxRunner) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	return fn(ctx)
 }
-
-var assertNotFoundErr = errCommitTestNotFound{}
-
-type errCommitTestNotFound struct{}
-
-func (errCommitTestNotFound) Error() string { return "not found" }
 
 func TestCommitCases_SkipsUnflaggedDuplicateAndImportsFlaggedOne(t *testing.T) {
 	registrar := &fakeCaseRegistrar{}
@@ -187,4 +185,73 @@ func TestCommitCases_ResolvesSiteAndVehicleWhenNamesMatch(t *testing.T) {
 	assert.Equal(t, outboundID, *call.outboundVehicleID)
 	assert.Nil(t, call.inboundVehicleID)
 	assert.Equal(t, "查無此車回", call.inboundNameRaw)
+}
+
+type errorSiteLookup struct{ err error }
+
+func (f errorSiteLookup) GetByName(context.Context, string) (*SiteRef, error) {
+	return nil, f.err
+}
+
+func (errorSiteLookup) List(context.Context, string, int, int) ([]SiteRef, error) {
+	return nil, nil
+}
+
+type fakeCaseImportIdempotency struct {
+	claimed map[string]bool
+}
+
+func (f *fakeCaseImportIdempotency) ClaimCaseImportRow(_ context.Context, fileHash, rowKey string, _ uuid.UUID) (bool, error) {
+	if f.claimed == nil {
+		f.claimed = map[string]bool{}
+	}
+	key := fileHash + ":" + rowKey
+	if f.claimed[key] {
+		return false, nil
+	}
+	f.claimed[key] = true
+	return true, nil
+}
+
+func TestCommitCases_LookupDatabaseErrorFailsOnlyThatRow(t *testing.T) {
+	registrar := &fakeCaseRegistrar{}
+	svc := &ImportService{
+		cases:    registrar,
+		siteRepo: errorSiteLookup{err: errors.New("database unavailable")},
+		txRunner: fakeTxRunner{},
+	}
+	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
+		{RowIndex: 1, Name: "單位查詢失敗", SiteName: "資料庫錯誤"},
+		{RowIndex: 2, Name: "仍可匯入的個案"},
+	}}
+
+	result, err := svc.CommitCases(context.Background(), preview, nil, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ImportedCount)
+	assert.Equal(t, 1, result.FailedCount)
+	require.Len(t, result.FailedRows, 1)
+	assert.Equal(t, 1, result.FailedRows[0].RowIndex)
+	assert.Len(t, registrar.created, 1)
+	assert.Equal(t, "仍可匯入的個案", registrar.created[0].Name)
+}
+
+func TestCommitCases_IdempotencySkipsRepeatedFileRow(t *testing.T) {
+	registrar := &fakeCaseRegistrar{}
+	idempotency := &fakeCaseImportIdempotency{}
+	svc := &ImportService{cases: registrar, txRunner: fakeTxRunner{}, idempotency: idempotency}
+	preview := &CaseImportPreviewResult{
+		FileHash: "sha256:file",
+		Rows:     []CaseImportRowResult{{RowID: "Sheet-A:2", RowIndex: 2, Name: "同一列"}},
+	}
+
+	first, err := svc.CommitCases(context.Background(), preview, nil, Actor{ActorID: uuid.New()})
+	require.NoError(t, err)
+	second, err := svc.CommitCases(context.Background(), preview, nil, Actor{ActorID: uuid.New()})
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, first.ImportedCount)
+	assert.Equal(t, 0, second.ImportedCount)
+	assert.Equal(t, 1, second.AlreadyImportedCount)
+	assert.Len(t, second.SkippedRows, 1)
 }

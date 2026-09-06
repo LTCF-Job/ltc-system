@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"ltc-system/apps/api/internal/domain/merge"
 	"ltc-system/apps/api/internal/domain/namenorm"
 	"ltc-system/apps/api/internal/domain/rocdate"
+	"ltc-system/apps/api/internal/platform/clock"
 
 	"github.com/google/uuid"
 )
@@ -27,6 +29,7 @@ type DriverReportService struct {
 	attendanceRegistrar AttendanceRegistrar
 	auditRepo           AuditWriter
 	txRunner            TxRunner
+	businessClock       clock.Clock
 }
 
 // NewDriverReportService 建立 DriverReportService 實例。
@@ -40,8 +43,9 @@ func NewDriverReportService(
 	attendanceRegistrar AttendanceRegistrar,
 	auditRepo AuditWriter,
 	txRunner TxRunner,
+	options ...DriverReportOption,
 ) *DriverReportService {
-	return &DriverReportService{
+	service := &DriverReportService{
 		repo:                repo,
 		excel:               excel,
 		template:            template,
@@ -52,6 +56,22 @@ func NewDriverReportService(
 		auditRepo:           auditRepo,
 		txRunner:            txRunner,
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
+}
+
+// WithDriverReportClock 注入臺灣業務時間，避免匯入時間在 UTC 跨日時產生不一致。
+func WithDriverReportClock(c clock.Clock) DriverReportOption {
+	return func(s *DriverReportService) { s.businessClock = c }
+}
+
+func (s *DriverReportService) now() time.Time {
+	if s.businessClock != nil {
+		return s.businessClock.Now()
+	}
+	return clock.Now()
 }
 
 // ListForms 查詢所有車輛的匯報表與其對應進度。

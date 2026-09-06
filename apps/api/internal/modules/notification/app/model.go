@@ -21,6 +21,41 @@ type Recipient struct {
 	CreatedAt     time.Time
 }
 
+// RecipientAuditSnapshot 是通知收件人設定的明確稽核快照，不直接序列化 Recipient
+// 或保存未遮罩的電子郵件。
+type RecipientAuditSnapshot struct {
+	ID            int64      `json:"id"`
+	Topic         string     `json:"topic"`
+	RecipientType string     `json:"recipientType"`
+	Email         string     `json:"email"`
+	TargetRole    *string    `json:"targetRole,omitempty"`
+	UserID        *uuid.UUID `json:"userId,omitempty"`
+	Active        bool       `json:"active"`
+}
+
+// RecipientBatchAuditSnapshot 是批次收件人異動的明確稽核 DTO。
+type RecipientBatchAuditSnapshot struct {
+	Recipients []RecipientAuditSnapshot `json:"recipients"`
+}
+
+// RecipientBatchAuditSummary 是批次刪除完成後的結果摘要。
+type RecipientBatchAuditSummary struct {
+	Count int64 `json:"count"`
+}
+
+// AuditSnapshot 產生通知收件人設定的明確稽核快照。
+func (r Recipient) AuditSnapshot() RecipientAuditSnapshot {
+	return RecipientAuditSnapshot{
+		ID:            r.ID,
+		Topic:         r.Topic,
+		RecipientType: r.RecipientType,
+		Email:         maskEmail(r.Email),
+		TargetRole:    r.TargetRole,
+		UserID:        r.UserID,
+		Active:        r.Active,
+	}
+}
+
 // Log 代表一筆通知發送留痕。
 type Log struct {
 	ID              int64

@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+var ErrCaseImportAlreadyCommitted = errors.New("case import row already committed")
 
 // stringPointer 將空字串轉為 nil，供選填欄位寫入時使用。
 func stringPointer(value string) *string {
@@ -18,19 +21,7 @@ func stringPointer(value string) *string {
 	return &value
 }
 
-// CommitCases 將通過檢核的個案資料正式寫入資料庫。
-//
-// 交易語意：每一列（個案主檔＋接送車輛偏好＋稽核紀錄）在單一事務中全有或全無
-// 提交；列與列之間彼此獨立——某列寫入失敗只回滾該列自身的變更並記為略過列
-// （附原因與原始欄位供人工補正），不影響已提交的前列，也不會中止整批匯入其餘
-// 待處理的列。
-//
-// 選擇「逐列獨立事務」而非「整批單一事務＋逐列 savepoint」：匯入列彼此沒有
-// 跨列一致性需求，逐列事務讓已成功的列立即落地可見、避免整批因單一長交易
-// 持有鎖與可見性延遲，且與 CaseRepository 既有逐方法自管事務的慣例一致。
-//
-// includeDuplicateRows 是使用者於預覽階段勾選「仍要匯入」的 rowId 集合；dry-run
-// 標記為 IsDuplicate 的列若未在此集合中，直接記為略過，不寫入資料庫。
+// CommitCases 將通過檢核的個案資料以逐列獨立事務正式寫入資料庫，單列失敗僅回滾該列並記為略過，不影響其餘列。
 func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPreviewResult, includeDuplicateRows map[string]bool, actor Actor) (*CaseImportCommitResult, error) {
 	if preview == nil || len(preview.Rows) == 0 {
 		return &CaseImportCommitResult{}, nil
@@ -39,27 +30,38 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 		return nil, errors.New("import service: transaction runner not configured")
 	}
 
-	result := &CaseImportCommitResult{}
+	result := &CaseImportCommitResult{
+		SkippedRows: []CaseImportSkippedRow{},
+		FailedRows:  []CaseImportSkippedRow{},
+	}
+	recordSkipped := func(row CaseImportSkippedRow) {
+		result.SkippedRows = append(result.SkippedRows, row)
+		if s.cases != nil {
+			s.cases.RecordSkipped(ctx, row, actor)
+		}
+	}
+	recordFailed := func(row CaseImportSkippedRow) {
+		result.FailedCount++
+		result.FailedRows = append(result.FailedRows, row)
+		if s.cases != nil {
+			s.cases.RecordSkipped(ctx, row, actor)
+		}
+	}
 	for _, row := range preview.Rows {
 		if row.ErrorMessage != "" {
-			item := skippedRow(row)
-			result.SkippedRows = append(result.SkippedRows, item)
-			if s.cases != nil {
-				s.cases.RecordSkipped(ctx, item, actor)
-			}
+			recordSkipped(skippedRow(row))
 			continue
 		}
 
+		// 重複列僅在使用者於預覽階段勾選「仍要匯入」（列於 includeDuplicateRows）時才寫入
 		if row.IsDuplicate && !includeDuplicateRows[importRowKey(row.RowID, row.RowIndex)] {
 			item := CaseImportSkippedRow{RowID: row.RowID, RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{"偵測為重複個案，未勾選匯入"}, RawValues: row.RawValues}
-			result.SkippedRows = append(result.SkippedRows, item)
-			if s.cases != nil {
-				s.cases.RecordSkipped(ctx, item, actor)
-			}
+			recordSkipped(item)
 			continue
 		}
 
 		caseReq := NewCase{
+			ID:                uuid.New(),
 			Name:              row.Name,
 			NationalID:        row.NationalID,
 			HouseholdType:     stringPointer(row.HouseholdType),
@@ -83,15 +85,21 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 		// 原始名稱待人工關聯，兩種情況都不影響個案主檔本身的建立。
 		siteID, siteNameRaw, siteWarning, err := s.resolveSite(ctx, row.SiteName)
 		if err != nil {
-			return nil, fmt.Errorf("解析單位失敗：%w", err)
+			slog.Error("case import site lookup failed", "row_index", row.RowIndex, "error", err)
+			recordFailed(caseImportFailureRow(row, "單位查詢失敗，請稍後重試"))
+			continue
 		}
 		outboundID, outboundNameRaw, outboundWarning, err := s.resolveVehicle(ctx, row.OutboundVehicle, "接送車輛(去)")
 		if err != nil {
-			return nil, fmt.Errorf("解析去程車輛失敗：%w", err)
+			slog.Error("case import outbound vehicle lookup failed", "row_index", row.RowIndex, "error", err)
+			recordFailed(caseImportFailureRow(row, "去程車輛查詢失敗，請稍後重試"))
+			continue
 		}
 		inboundID, inboundNameRaw, inboundWarning, err := s.resolveVehicle(ctx, row.InboundVehicle, "接送車輛(回)")
 		if err != nil {
-			return nil, fmt.Errorf("解析回程車輛失敗：%w", err)
+			slog.Error("case import inbound vehicle lookup failed", "row_index", row.RowIndex, "error", err)
+			recordFailed(caseImportFailureRow(row, "回程車輛查詢失敗，請稍後重試"))
+			continue
 		}
 		for _, w := range []string{siteWarning, outboundWarning, inboundWarning} {
 			if w != "" {
@@ -100,12 +108,27 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 		}
 
 		txErr := s.txRunner.WithTx(ctx, func(txCtx context.Context) error {
+			if s.idempotency != nil && preview.FileHash != "" {
+				claimed, err := s.idempotency.ClaimCaseImportRow(txCtx, preview.FileHash, importRowKey(row.RowID, row.RowIndex), caseReq.ID)
+				if err != nil {
+					return fmt.Errorf("記錄匯入冪等鍵失敗：%w", err)
+				}
+				if !claimed {
+					return ErrCaseImportAlreadyCommitted
+				}
+			}
+			if s.cases == nil {
+				return errors.New("case registrar not configured")
+			}
 			caseID, err := s.cases.CreateCase(txCtx, caseReq, actor)
 			if err != nil {
 				return fmt.Errorf("個案建立失敗：%w", err)
 			}
 
 			if siteID != nil || outboundID != nil || inboundID != nil || siteNameRaw != "" || outboundNameRaw != "" || inboundNameRaw != "" {
+				if s.prefRepo == nil {
+					return errors.New("transport preference writer not configured")
+				}
 				if err := s.prefRepo.UpsertTransportPreference(txCtx, caseID, siteID, outboundID, inboundID, siteNameRaw, outboundNameRaw, inboundNameRaw); err != nil {
 					return fmt.Errorf("儲存接送車輛偏好失敗：%w", err)
 				}
@@ -115,10 +138,13 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 		})
 
 		if txErr != nil {
-			item := CaseImportSkippedRow{RowID: row.RowID, RowIndex: row.RowIndex, CaseName: row.Name, Reasons: []string{txErr.Error()}, RawValues: row.RawValues}
-			result.SkippedRows = append(result.SkippedRows, item)
-			if s.cases != nil {
-				s.cases.RecordSkipped(ctx, item, actor)
+			if errors.Is(txErr, ErrCaseImportAlreadyCommitted) {
+				result.AlreadyImportedCount++
+				item := caseImportFailureRow(row, "此檔案的此列已完成匯入，略過重試")
+				recordSkipped(item)
+			} else {
+				slog.Error("case import row transaction failed", "row_index", row.RowIndex, "error", txErr)
+				recordFailed(caseImportFailureRow(row, "資料列匯入失敗，請檢查資料或稍後重試"))
 			}
 			continue
 		}
@@ -135,11 +161,14 @@ func (s *ImportService) resolveSite(ctx context.Context, name string) (id *uuid.
 		return nil, "", "", nil
 	}
 	site, err := s.siteRepo.GetByName(ctx, name)
-	if errors.Is(err, ErrLookupNotFound) || site == nil {
-		return nil, name, fmt.Sprintf("單位「%s」未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", name), nil
-	}
 	if err != nil {
+		if errors.Is(err, ErrLookupNotFound) {
+			return nil, name, fmt.Sprintf("單位「%s」未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", name), nil
+		}
 		return nil, "", "", err
+	}
+	if site == nil {
+		return nil, name, fmt.Sprintf("單位「%s」未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", name), nil
 	}
 	return &site.ID, "", "", nil
 }
@@ -150,11 +179,14 @@ func (s *ImportService) resolveVehicle(ctx context.Context, name, fieldLabel str
 		return nil, "", "", nil
 	}
 	vehicle, err := s.vehicleRepo.GetByDisplayName(ctx, name)
-	if errors.Is(err, ErrLookupNotFound) || vehicle == nil {
-		return nil, name, fmt.Sprintf("%s『%s』未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name), nil
-	}
 	if err != nil {
+		if errors.Is(err, ErrLookupNotFound) {
+			return nil, name, fmt.Sprintf("%s『%s』未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name), nil
+		}
 		return nil, "", "", err
+	}
+	if vehicle == nil {
+		return nil, name, fmt.Sprintf("%s『%s』未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name), nil
 	}
 	return &vehicle.ID, "", "", nil
 }
@@ -162,6 +194,16 @@ func (s *ImportService) resolveVehicle(ctx context.Context, name, fieldLabel str
 func skippedRow(row CaseImportRowResult) CaseImportSkippedRow {
 	reasons := strings.Split(row.ErrorMessage, "；")
 	return CaseImportSkippedRow{RowID: row.RowID, RowIndex: row.RowIndex, CaseName: row.Name, Reasons: reasons, RawValues: row.RawValues}
+}
+
+func caseImportFailureRow(row CaseImportRowResult, reason string) CaseImportSkippedRow {
+	return CaseImportSkippedRow{
+		RowID:     row.RowID,
+		RowIndex:  row.RowIndex,
+		CaseName:  row.Name,
+		Reasons:   []string{reason},
+		RawValues: row.RawValues,
+	}
 }
 
 func importRowKey(rowID string, rowIndex int) string {

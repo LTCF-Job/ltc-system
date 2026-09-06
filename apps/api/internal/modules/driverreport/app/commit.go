@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -12,17 +13,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// CommitDriverReport 正式寫入匯報表：先把使用者確認的欄位對應存回 form_columns，
-// 清掉這份匯報表在本次涵蓋日期的既有匯入資料，再逐列交給 ride 模組重新展開。
-//
-// 匯入語意是覆蓋而非疊加，重匯同一個月的結果與只匯一次相同。清除與重寫落在同一個
-// 交易內；任何資料庫層級的失敗都整份回滾，避免留下只刪不寫的空月份。
-//
-// 未宣告月份時，解析層級的失敗仍逐列略過；宣告整月覆蓋時，日期無法解析屬於阻斷性錯誤，
-// 整份不清除也不寫入。
-//
-// yearMonth 為選填的宣告匯入月份（YYYY-MM）。有宣告時清除整個月，未宣告時只清除
-// 檔案實際涵蓋的日期；檔案沒有任何有效列時不執行清除，避免傳錯空檔清空整月資料。
+// CommitDriverReport 正式寫入匯報表：確認欄位對應後覆蓋本次涵蓋日期的既有匯入資料，
+// 整份寫入落在同一交易內、失敗即回滾。
 func (s *DriverReportService) CommitDriverReport(
 	ctx context.Context,
 	formID uuid.UUID,
@@ -49,6 +41,7 @@ func (s *DriverReportService) CommitDriverReport(
 	if err != nil {
 		return nil, err
 	}
+	// 宣告整月覆蓋時，日期無法解析屬於阻斷性錯誤，整份不清除也不寫入
 	if monthDeclared && !preview.CanCommit {
 		return nil, ErrImportHasBlockingErrors
 	}
@@ -65,15 +58,36 @@ func (s *DriverReportService) CommitDriverReport(
 	if err != nil {
 		return nil, err
 	}
+	if len(tables) == 0 || len(tables[0]) == 0 {
+		return nil, errors.New("匯入檔案沒有可解析的工作表")
+	}
 	rows := tables[0]
 
 	result := &CommitResult{
 		SkippedRows: []SkippedRow{},
 		Warnings:    []ImportWarningItem{},
+		Status:      "pending",
+		FileHash:    fmt.Sprintf("sha256:%x", sha256.Sum256(data)),
 	}
 	importable := collectImportableRows(preview.PreviewRows, result)
 
 	txErr := s.txRunner.WithTx(ctx, func(txCtx context.Context) error {
+		if locker, ok := s.repo.(DriverReportImportLocker); ok {
+			if err := locker.LockDriverReportImport(txCtx, formID, yearMonth); err != nil {
+				return fmt.Errorf("鎖定匯入月份失敗：%w", err)
+			}
+		}
+		if idempotency, ok := s.repo.(DriverReportImportIdempotencyStore); ok && len(importable) > 0 {
+			claimed, err := idempotency.ClaimDriverReportImport(txCtx, formID, yearMonth, result.FileHash)
+			if err != nil {
+				return fmt.Errorf("記錄匯入冪等鍵失敗：%w", err)
+			}
+			if !claimed {
+				result.AlreadyImported = true
+				result.Status = "already_imported"
+				return nil
+			}
+		}
 		if err := s.persistColumnDecisions(txCtx, formID, preview, decisions); err != nil {
 			return err
 		}
@@ -98,7 +112,7 @@ func (s *DriverReportService) CommitDriverReport(
 			return err
 		}
 
-		submittedAt := time.Now().UTC()
+		submittedAt := s.now()
 		for _, row := range importable {
 			// 保留這一列所有欄位的原始值，含尚未對應個案的欄位：日後在待維護頁面完成
 			// 綁定時，直接用這裡存的 form_submissions 回填搭乘紀錄，不必重新上傳檔案。
@@ -145,8 +159,13 @@ func (s *DriverReportService) CommitDriverReport(
 	if txErr != nil {
 		return nil, txErr
 	}
+	if result.AlreadyImported {
+		s.writeImportAudit(ctx, formID, yearMonth, result, actor)
+		return result, nil
+	}
+	result.Status = "succeeded"
 
-	s.writeImportAudit(ctx, formID, result, actor)
+	s.writeImportAudit(ctx, formID, yearMonth, result, actor)
 
 	return result, nil
 }
@@ -186,8 +205,6 @@ func collectImportableRows(previewRows []RowPreview, result *CommitResult) []imp
 }
 
 // clearPreviousImport 清掉本次要覆蓋的既有匯入資料。
-//
-// 沒有任何可寫入的列時不清除：那通常是傳錯檔案，清空整月的代價遠高於少覆蓋一次。
 func (s *DriverReportService) clearPreviousImport(
 	ctx context.Context,
 	formID uuid.UUID,
@@ -195,6 +212,7 @@ func (s *DriverReportService) clearPreviousImport(
 	monthStart time.Time,
 	monthDeclared bool,
 ) error {
+	// 沒有可寫入的列通常代表傳錯檔案，清空整月的代價遠高於少覆蓋一次
 	if len(importable) == 0 {
 		return nil
 	}
@@ -221,7 +239,7 @@ func (s *DriverReportService) clearPreviousImport(
 }
 
 // writeImportAudit 留下匯入留痕。稽核寫入失敗不推翻已完成的匯入，只記錄於伺服器日誌。
-func (s *DriverReportService) writeImportAudit(ctx context.Context, formID uuid.UUID, result *CommitResult, actor Actor) {
+func (s *DriverReportService) writeImportAudit(ctx context.Context, formID uuid.UUID, yearMonth string, result *CommitResult, actor Actor) {
 	if s.auditRepo == nil {
 		return
 	}
@@ -232,7 +250,7 @@ func (s *DriverReportService) writeImportAudit(ctx context.Context, formID uuid.
 		Action:     "import",
 		EntityType: "driver_report_forms",
 		EntityID:   &entityID,
-		AfterData:  result,
+		AfterData:  result.AuditSnapshot(formID, yearMonth),
 		IPAddress:  &actor.IPAddress,
 		UserAgent:  &actor.UserAgent,
 	}); err != nil {

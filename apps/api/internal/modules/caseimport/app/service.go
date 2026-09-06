@@ -10,6 +10,7 @@ type ImportService struct {
 	spreadsheet SpreadsheetReader
 	template    TemplateRenderer
 	txRunner    TxRunner
+	idempotency CaseImportIdempotencyStore
 }
 
 // NewImportService 建立 ImportService 實例。
@@ -33,6 +34,11 @@ func NewImportService(
 		template:    template,
 		txRunner:    txRunner,
 	}
+}
+
+// SetIdempotencyStore 設定正式資料庫使用的匯入列冪等儲存；離線測試可省略。
+func (s *ImportService) SetIdempotencyStore(store CaseImportIdempotencyStore) {
+	s.idempotency = store
 }
 
 // CaseImportTemplateExcel 產生批次匯入的 Excel 範本位元組。

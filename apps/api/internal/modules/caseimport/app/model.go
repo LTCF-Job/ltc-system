@@ -64,13 +64,17 @@ type CaseImportSkippedRow struct {
 // CaseImportCommitResult 回傳正式匯入成功與略過的列，供操作人員補正來源資料。
 // Warnings 承載已建立個案但仍需人工處理的提示（如單位/車輛未比對到）。
 type CaseImportCommitResult struct {
-	ImportedCount int                     `json:"importedCount"`
-	SkippedRows   []CaseImportSkippedRow  `json:"skippedRows"`
-	Warnings      []CaseImportWarningItem `json:"warnings,omitempty"`
+	ImportedCount        int                     `json:"importedCount"`
+	AlreadyImportedCount int                     `json:"alreadyImportedCount"`
+	FailedCount          int                     `json:"failedCount"`
+	SkippedRows          []CaseImportSkippedRow  `json:"skippedRows"`
+	FailedRows           []CaseImportSkippedRow  `json:"failedRows"`
+	Warnings             []CaseImportWarningItem `json:"warnings,omitempty"`
 }
 
 // CaseImportPreviewResult 批次匯入預覽與統計結構體。
 type CaseImportPreviewResult struct {
+	FileHash    string                   `json:"fileHash,omitempty"`
 	TotalRows   int                      `json:"totalRows"`
 	ValidRows   int                      `json:"validRows"`
 	ErrorRows   int                      `json:"errorRows"`

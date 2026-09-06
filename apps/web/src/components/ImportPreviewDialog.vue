@@ -137,9 +137,19 @@
       </div>
 
       <div v-if="commitResult" class="result-list" role="status">
-        <h4>匯入結果：成功 {{ commitResult.importedCount }} 筆，略過 {{ commitResult.skippedRows.length }} 筆</h4>
+        <h4>
+          匯入結果：成功 {{ commitResult.importedCount }} 筆，
+          已完成 {{ commitResult.alreadyImportedCount ?? 0 }} 筆，
+          略過 {{ skippedCount }} 筆，
+          失敗 {{ commitResult.failedCount ?? 0 }} 筆
+        </h4>
         <ul v-if="commitResult.skippedRows.length">
           <li v-for="row in commitResult.skippedRows" :key="`${row.rowIndex}-${row.caseName}`">
+            第 {{ row.rowIndex }} 列（{{ row.caseName }}）：{{ row.reasons.join('；') }}
+          </li>
+        </ul>
+        <ul v-if="commitResult.failedRows && commitResult.failedRows.length" class="failed-row-list">
+          <li v-for="row in commitResult.failedRows" :key="`failed-${row.rowIndex}-${row.caseName}`">
             第 {{ row.rowIndex }} 列（{{ row.caseName }}）：{{ row.reasons.join('；') }}
           </li>
         </ul>
@@ -154,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { UploadFilled, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -162,7 +172,10 @@ import type { DryRunImportResultDTO } from '@/types/api'
 
 interface ImportCommitResult {
   importedCount: number
+  alreadyImportedCount?: number
+  failedCount?: number
   skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
+  failedRows?: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
   warnings?: Array<{ rowIndex: number; caseName?: string; field?: string; message: string }>
 }
 
@@ -184,6 +197,10 @@ const submitting = ref(false)
 const downloadingTemplate = ref(false)
 const dryRunResult = ref<DryRunImportResultDTO | null>(null)
 const commitResult = ref<ImportCommitResult | null>(null)
+const skippedCount = computed(() => {
+  if (!commitResult.value) return 0
+  return Math.max(0, commitResult.value.skippedRows.length - (commitResult.value.alreadyImportedCount ?? 0))
+})
 // 疑似重複列預設不勾選（略過），使用者需主動勾選才會一併匯入
 const checkedDuplicateRows = ref<Set<string>>(new Set())
 
@@ -260,7 +277,11 @@ async function confirmImport() {
   try {
     const result = await props.onCommit(selectedFile.value, Array.from(checkedDuplicateRows.value))
     commitResult.value = result
-    ElMessage.success(`已匯入 ${result.importedCount} 筆有效資料`)
+    if ((result.failedCount ?? 0) > 0) {
+      ElMessage.warning(`已匯入 ${result.importedCount} 筆，另有 ${result.failedCount} 筆失敗，請查看結果明細`)
+    } else {
+      ElMessage.success(`已匯入 ${result.importedCount} 筆有效資料`)
+    }
     emit('success')
   } finally {
     submitting.value = false

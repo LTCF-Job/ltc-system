@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -277,6 +278,27 @@ func TestParseCases_FlagsDuplicateByNameWhenNationalIDBlank(t *testing.T) {
 	assert.Equal(t, "王小明", preview.Rows[0].DuplicateCaseName)
 }
 
+func TestParseCases_DuplicateLookupFailureMarksRowAsError(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	sheetName := "進系統個案個資"
+	f.SetSheetName("Sheet1", sheetName)
+	require.NoError(t, f.SetCellValue(sheetName, "A1", "姓名"))
+	require.NoError(t, f.SetCellValue(sheetName, "A2", "王小明"))
+	buf, err := f.WriteToBuffer()
+	require.NoError(t, err)
+
+	svc := NewImportService(nil, failingDuplicateFinder{}, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	require.NoError(t, err)
+	require.Len(t, preview.Rows, 1)
+
+	assert.Equal(t, 1, preview.ErrorRows)
+	assert.Equal(t, 0, preview.ValidRows)
+	assert.Contains(t, preview.Rows[0].ErrorMessage, "重複個案查詢失敗")
+	assert.Len(t, preview.Errors, 1)
+}
+
 func TestParseCases_EmptyAndCorruptedFiles(t *testing.T) {
 	svc := NewImportService(nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 
@@ -313,6 +335,12 @@ func TestParseCasesFromExcel_RealFile(t *testing.T) {
 type fakeDuplicateFinder struct {
 	byNationalID map[string]*DuplicateRef
 	byName       map[string]*DuplicateRef
+}
+
+type failingDuplicateFinder struct{}
+
+func (failingDuplicateFinder) FindDuplicate(context.Context, string, string) (*DuplicateRef, error) {
+	return nil, errors.New("database unavailable")
 }
 
 func (f fakeDuplicateFinder) FindDuplicate(_ context.Context, nationalID, name string) (*DuplicateRef, error) {

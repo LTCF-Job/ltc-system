@@ -22,6 +22,17 @@ type FormStore interface {
 	MarkImported(ctx context.Context, formID uuid.UUID, importedAt time.Time) error
 }
 
+// DriverReportImportIdempotencyStore 以表單、宣告月份與檔案雜湊抑制重試造成的重複覆蓋。
+// claim 必須在同一筆匯入交易內執行；交易回滾時 claim 也必須一併回滾。
+type DriverReportImportIdempotencyStore interface {
+	ClaimDriverReportImport(ctx context.Context, formID uuid.UUID, yearMonth, fileHash string) (bool, error)
+}
+
+// DriverReportImportLocker 以共享資料庫交易鎖序列化同一表單月份的覆蓋匯入。
+type DriverReportImportLocker interface {
+	LockDriverReportImport(ctx context.Context, formID uuid.UUID, yearMonth string) error
+}
+
 // SpreadsheetReader 將上傳的 .xlsx 位元組解碼為逐工作表的儲存格文字。
 type SpreadsheetReader interface {
 	ReadTables(data []byte) ([][][]string, []string, error)
@@ -153,6 +164,9 @@ type TxRunner interface {
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
+// DriverReportOption 調整司機匯報匯入的業務時間來源。
+type DriverReportOption func(*DriverReportService)
+
 // Actor 代表發動匯入的操作者與來源資訊，供稽核留痕使用。
 type Actor struct {
 	ActorID   uuid.UUID
@@ -168,6 +182,7 @@ type AuditEntry struct {
 	Action     string
 	EntityType string
 	EntityID   *string
+	BeforeData interface{}
 	AfterData  interface{}
 	IPAddress  *string
 	UserAgent  *string

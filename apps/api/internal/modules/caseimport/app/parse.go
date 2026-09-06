@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -29,12 +30,18 @@ func (s *ImportService) ParseCases(ctx context.Context, r io.Reader, fileName st
 	if !isExcel || !strings.HasSuffix(strings.ToLower(fileName), ".xlsx") {
 		return nil, errors.New("僅支援 .xlsx 匯入格式")
 	}
+	fileHash := fmt.Sprintf("sha256:%x", sha256.Sum256(data))
 
 	tables, sheetNames, err := s.spreadsheet.ReadTables(data)
 	if err != nil {
 		return nil, err
 	}
-	return s.processRawTables(ctx, tables, sheetNames)
+	preview, err := s.processRawTables(ctx, tables, sheetNames)
+	if err != nil {
+		return nil, err
+	}
+	preview.FileHash = fileHash
+	return preview, nil
 }
 
 // headerColumn 是表頭欄位在來源列中的原始名稱與欄位索引。
@@ -43,9 +50,7 @@ type headerColumn struct {
 	idx  int
 }
 
-// findHeader 在工作表前 3 列尋找標題列，並解析出個案姓名欄與個管/照專姓名欄的位置。
-// 來源表頭「姓名」出現兩次（個案姓名在前、個管/照專姓名在「個管or照專」欄之後），
-// 依欄位出現順序區分，不可用 map 覆寫造成後者蓋掉前者。
+// findHeader 在工作表前 3 列尋找標題列，解析出個案姓名欄與個管/照專姓名欄的位置。
 func findHeader(rows [][]string) (headerRowIdx int, colMap map[string]int, caseNameIdx, careContactNameIdx int) {
 	colMap = make(map[string]int)
 	caseNameIdx, careContactNameIdx = -1, -1
@@ -221,7 +226,13 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 
 			// 重複個案不擋匯入，僅提示；使用者需於預覽勾選才會在正式匯入時寫入。
 			if !hasError && s.duplicates != nil {
-				if dup, _ := s.duplicates.FindDuplicate(ctx, normalizedNationalID, name); dup != nil {
+				dup, err := s.duplicates.FindDuplicate(ctx, normalizedNationalID, name)
+				if err != nil {
+					message := "重複個案查詢失敗，請稍後重試"
+					rowRes.ErrorMessage = appendMessage(rowRes.ErrorMessage, message)
+					errorsList = append(errorsList, CaseImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "重複個案", Message: message})
+					hasError = true
+				} else if dup != nil {
 					rowRes.IsDuplicate = true
 					rowRes.DuplicateCaseName = dup.CaseName
 					rowRes.DuplicateCaseID = &dup.CaseID

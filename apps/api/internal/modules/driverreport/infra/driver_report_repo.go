@@ -267,3 +267,35 @@ func (r *DriverReportRepository) MarkImported(ctx context.Context, formID uuid.U
 	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `UPDATE driver_report_forms SET last_imported_at = $2, updated_at = now() WHERE id = $1`, formID, importedAt)
 	return err
 }
+
+// LockDriverReportImport 以同一表單與月份為鎖定範圍，避免兩個 API replica 同時
+// 執行「清除舊資料再寫入新資料」而互相覆蓋。
+func (r *DriverReportRepository) LockDriverReportImport(ctx context.Context, formID uuid.UUID, yearMonth string) error {
+	if r.db == nil {
+		return ErrNoDatabase
+	}
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, formID.String()+":"+yearMonth)
+	return err
+}
+
+// ClaimDriverReportImport 記錄同一表單／月份／檔案雜湊只成功提交一次。
+func (r *DriverReportRepository) ClaimDriverReportImport(ctx context.Context, formID uuid.UUID, yearMonth, fileHash string) (bool, error) {
+	if r.db == nil {
+		return false, ErrNoDatabase
+	}
+	var claimed bool
+	err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, `
+		INSERT INTO driver_report_imports (form_id, year_month, file_hash, imported_at)
+		VALUES ($1, $2, $3, now())
+		ON CONFLICT (form_id, year_month, file_hash) DO NOTHING
+		RETURNING true
+	`, formID, yearMonth, fileHash).Scan(&claimed)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	return claimed, nil
+}

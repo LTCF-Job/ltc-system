@@ -31,14 +31,8 @@ var ErrInvalidYearMonth = errors.New("匯入月份格式錯誤，請使用 YYYY-
 // ErrImportHasBlockingErrors 代表宣告整月覆蓋時，檔案含有不能安全略過的錯誤列。
 var ErrImportHasBlockingErrors = errors.New("匯入檔案包含阻斷性錯誤，未寫入任何資料")
 
-// ParseDriverReport 解析上傳的匯報表 .xlsx，產生欄位對應與每日匯報列的預覽。
-//
-// 解析階段不寫入任何資料：未對應的欄位會附上推薦個案與趟次，交由使用者在預覽畫面
-// 就地確認後，才於 CommitDriverReport 一併寫回 form_columns 與搭乘紀錄。
-//
-// yearMonth 為選填的宣告匯入月份（YYYY-MM）。有宣告時，落在該月之外的列僅標記為
-// 錯誤列、不計入可匯入範圍，其餘列照常產生預覽；是否要調整月份或忽略這些列交由
-// 使用者在預覽畫面決定，實際覆蓋範圍仍以 CommitDriverReport 只寫入無錯誤列為準。
+// ParseDriverReport 解析上傳的匯報表 .xlsx，產生欄位對應與每日匯報列的預覽；
+// 此階段不寫入任何資料，需經 CommitDriverReport 才會真正寫回。
 func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, yearMonth string) (*PreviewResult, error) {
 	monthStart, monthDeclared, err := parseYearMonth(yearMonth)
 	if err != nil {
@@ -62,6 +56,9 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 	tables, _, err := s.excel.ReadTables(data)
 	if err != nil {
 		return nil, err
+	}
+	if len(tables) == 0 || len(tables[0]) == 0 {
+		return nil, errors.New("匯入檔案沒有可解析的工作表")
 	}
 
 	rows := tables[0]
@@ -137,6 +134,7 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 		}
 		row.ServiceDate = serviceDate.Format("2006-01-02")
 
+		// 有宣告月份時，落在該月之外的列僅標記為錯誤、不計入可匯入範圍
 		if monthDeclared && !strings.HasPrefix(row.ServiceDate, monthPrefix) {
 			row.ErrorMessage = fmt.Sprintf("日期 %s 不屬於本次宣告匯入的 %s，將於所屬月份另行匯入", row.ServiceDate, monthPrefix)
 			result.Errors = append(result.Errors, ImportErrorItem{RowIndex: rowNum, Field: headerReportDate, Message: row.ErrorMessage})
@@ -148,11 +146,17 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 		row.DriverRaw = strings.TrimSpace(cellAt(rows[i], driverIdx))
 		if row.DriverRaw == "" {
 			row.WarningMessage = appendMessage(row.WarningMessage, "未填寫駕駛人，該日搭乘紀錄將沒有司機")
-		} else if driver, _ := s.driverRepo.GetByNameNormalized(ctx, namenorm.Normalize(row.DriverRaw)); driver != nil {
-			row.DriverID = driver.ID.String()
-			row.DriverName = driver.Name
 		} else {
-			row.WarningMessage = appendMessage(row.WarningMessage, fmt.Sprintf("駕駛人「%s」未比對到司機主檔", row.DriverRaw))
+			driver, lookupErr := s.driverRepo.GetByNameNormalized(ctx, namenorm.Normalize(row.DriverRaw))
+			if lookupErr != nil {
+				return nil, fmt.Errorf("查詢駕駛人「%s」失敗：%w", row.DriverRaw, lookupErr)
+			}
+			if driver != nil {
+				row.DriverID = driver.ID.String()
+				row.DriverName = driver.Name
+			} else {
+				row.WarningMessage = appendMessage(row.WarningMessage, fmt.Sprintf("駕駛人「%s」未比對到司機主檔", row.DriverRaw))
+			}
 		}
 
 		row.Remark = strings.TrimSpace(cellAt(rows[i], remarkIdx))
@@ -307,14 +311,11 @@ func legSeqForDirection(direction string) *int16 {
 }
 
 // findReportHeader 找出表頭列，回傳日期欄與備註欄的 0-based 位置（駕駛人固定緊接在日期欄後）。
-//
-// 日期欄以「含『日期』字樣、右鄰欄含『駕駛』字樣」定位，而非固定在第 0 欄，
-// 讓 Google 表單原始匯出檔（開頭多一欄「時間戳記」）也能正確辨識；備註欄同樣以
-// 內容搜尋定位，不要求它是整列最後一格，備註欄之後不論還有多少殘留欄位一律略過不匯入。
 func findReportHeader(rows [][]string) (headerRowIdx, dateIdx, remarkIdx int, err error) {
 	for idx, row := range rows {
 		header := trimTrailingEmpty(row)
 		dateIdx = -1
+		// 以「含『日期』字樣、右鄰欄含『駕駛』字樣」定位，而非固定在第 0 欄，讓開頭多一欄的表單匯出檔也能正確辨識
 		for i := 0; i+1 < len(header); i++ {
 			if strings.Contains(header[i], "日期") && strings.Contains(header[i+1], "駕駛") {
 				dateIdx = i
@@ -325,6 +326,7 @@ func findReportHeader(rows [][]string) (headerRowIdx, dateIdx, remarkIdx int, er
 			continue
 		}
 		remarkIdx = -1
+		// 以內容搜尋定位，不要求整列最後一格；備註欄之後不論還有多少殘留欄位一律略過不匯入
 		for i := dateIdx + 2; i < len(header); i++ {
 			cell := strings.TrimSpace(header[i])
 			if cell == headerRemark || strings.Contains(cell, "問題回報") {

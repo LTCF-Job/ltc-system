@@ -175,7 +175,10 @@ func (r *NotificationRepository) ClaimNotificationEvent(ctx context.Context, ded
 	err := db.QueryRow(ctx, `
 		INSERT INTO notification_event_dedup (dedup_key, topic, status, claimed_at)
 		VALUES ($1, $2, 'processing', now())
-		ON CONFLICT (dedup_key) DO NOTHING
+		ON CONFLICT (dedup_key) DO UPDATE
+		SET status = 'processing', claimed_at = now(), sent_at = NULL
+		WHERE notification_event_dedup.status = 'processing'
+		  AND notification_event_dedup.claimed_at < now() - interval '5 minutes'
 		RETURNING true
 	`, dedupKey, topic).Scan(&claimed)
 	if err != nil {
@@ -204,6 +207,77 @@ func (r *NotificationRepository) ReleaseNotificationEvent(ctx context.Context, d
 	}
 	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `DELETE FROM notification_event_dedup WHERE dedup_key = $1`, dedupKey)
 	return err
+}
+
+// ClaimNotificationDelivery 以事件與收件人為唯一鍵取得一次寄送工作。
+// 已 sent 的收件人永不重新派送；逾時的 processing 或 failed 才能被 retry 取回。
+func (r *NotificationRepository) ClaimNotificationDelivery(ctx context.Context, eventID, recipientKey string) (bool, error) {
+	if r.db == nil {
+		return false, fmt.Errorf("notification database is not configured")
+	}
+	db := pgxdb.FromContext(ctx, r.db)
+	var claimed bool
+	err := db.QueryRow(ctx, `
+		INSERT INTO notification_deliveries (event_id, recipient_key, status, attempt_count, claimed_at, updated_at)
+		VALUES ($1, $2, 'processing', 1, now(), now())
+		ON CONFLICT (event_id, recipient_key) DO UPDATE
+		SET status = 'processing',
+			attempt_count = notification_deliveries.attempt_count + 1,
+			claimed_at = now(),
+			last_error = NULL,
+			updated_at = now()
+		WHERE notification_deliveries.status <> 'sent'
+		  AND (
+			notification_deliveries.status <> 'processing'
+			OR notification_deliveries.claimed_at < now() - interval '5 minutes'
+		  )
+		RETURNING true
+	`, eventID, recipientKey).Scan(&claimed)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to claim notification delivery: %w", err)
+	}
+	return claimed, nil
+}
+
+// CompleteNotificationDelivery 將 provider 已接受的寄送標為 sent。
+func (r *NotificationRepository) CompleteNotificationDelivery(ctx context.Context, eventID, recipientKey, providerMessageID string) error {
+	if r.db == nil {
+		return fmt.Errorf("notification database is not configured")
+	}
+	tag, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `
+		UPDATE notification_deliveries
+		SET status = 'sent', provider_message_id = NULLIF($3, ''), sent_at = now(), updated_at = now(), last_error = NULL
+		WHERE event_id = $1 AND recipient_key = $2
+	`, eventID, recipientKey, providerMessageID)
+	if err != nil {
+		return fmt.Errorf("failed to complete notification delivery: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("notification delivery not found")
+	}
+	return nil
+}
+
+// FailNotificationDelivery 記錄 provider 失敗，供後續 retry 重新取得。
+func (r *NotificationRepository) FailNotificationDelivery(ctx context.Context, eventID, recipientKey, lastError string) error {
+	if r.db == nil {
+		return fmt.Errorf("notification database is not configured")
+	}
+	tag, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `
+		UPDATE notification_deliveries
+		SET status = 'failed', last_error = $3, updated_at = now()
+		WHERE event_id = $1 AND recipient_key = $2 AND status <> 'sent'
+	`, eventID, recipientKey, lastError)
+	if err != nil {
+		return fmt.Errorf("failed to record notification delivery failure: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("notification delivery not found or already sent")
+	}
+	return nil
 }
 
 // ListLogs 取得通知日誌清單（支援主題篩選與分頁）。

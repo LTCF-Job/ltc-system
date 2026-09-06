@@ -164,9 +164,37 @@ type MonthDetail struct {
 
 // CommitResult 回傳正式匯入寫入與略過的結果。
 type CommitResult struct {
-	ImportedRows   int                 `json:"importedRows"`
-	RideRecordRows int                 `json:"rideRecordRows"`
-	MappedColumns  int                 `json:"mappedColumns"`
-	SkippedRows    []SkippedRow        `json:"skippedRows"`
-	Warnings       []ImportWarningItem `json:"warnings,omitempty"`
+	Status          string              `json:"status"`
+	FileHash        string              `json:"fileHash,omitempty"`
+	AlreadyImported bool                `json:"alreadyImported"`
+	ImportedRows    int                 `json:"importedRows"`
+	RideRecordRows  int                 `json:"rideRecordRows"`
+	MappedColumns   int                 `json:"mappedColumns"`
+	SkippedRows     []SkippedRow        `json:"skippedRows"`
+	Warnings        []ImportWarningItem `json:"warnings,omitempty"`
+}
+
+// DriverReportImportAuditSnapshot 是匯報表匯入結果的明確稽核摘要，不直接保存 CommitResult
+// 的可變 slice 或來源列內容。
+type DriverReportImportAuditSnapshot struct {
+	FormID          uuid.UUID `json:"formId"`
+	YearMonth       string    `json:"yearMonth,omitempty"`
+	Status          string    `json:"status"`
+	FileHash        string    `json:"fileHash,omitempty"`
+	AlreadyImported bool      `json:"alreadyImported"`
+	ImportedRows    int       `json:"importedRows"`
+	RideRecordRows  int       `json:"rideRecordRows"`
+	MappedColumns   int       `json:"mappedColumns"`
+	SkippedRows     int       `json:"skippedRows"`
+	WarningRows     int       `json:"warningRows"`
+}
+
+// AuditSnapshot 產生匯入完成狀態的明確稽核摘要。
+func (r CommitResult) AuditSnapshot(formID uuid.UUID, yearMonth string) DriverReportImportAuditSnapshot {
+	return DriverReportImportAuditSnapshot{
+		FormID: formID, YearMonth: yearMonth, Status: r.Status, FileHash: r.FileHash,
+		AlreadyImported: r.AlreadyImported, ImportedRows: r.ImportedRows,
+		RideRecordRows: r.RideRecordRows, MappedColumns: r.MappedColumns,
+		SkippedRows: len(r.SkippedRows), WarningRows: len(r.Warnings),
+	}
 }

@@ -32,14 +32,14 @@ type VehicleLookup interface {
 	GetByDisplayName(ctx context.Context, displayName string) (*VehicleRef, error)
 }
 
-// TransportPreferenceWriter 寫入個案的單位與去回程車輛偏好。nil 的 ID 表示該欄位
-// 維持現況，raw name 於對應 ID 為 nil 時保留原始名稱待人工關聯。
+// TransportPreferenceWriter 以 PUT 完整替換個案的單位與去回程車輛偏好。
 type TransportPreferenceWriter interface {
 	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 }
 
 // NewCase 是建立個案所需的輸入，僅 Name 為必要欄位。
 type NewCase struct {
+	ID                uuid.UUID
 	Name              string
 	NationalID        string
 	HouseholdType     *string
@@ -94,4 +94,10 @@ type TemplateRenderer interface {
 // TxRunner 讓單列匯入的多次寫入落在同一個資料庫交易內。
 type TxRunner interface {
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// CaseImportIdempotencyStore 以檔案雜湊與來源列識別碼抑制重試造成的重複建立。
+// 實作必須在目前列的 transaction 內以唯一鍵 claim，避免併發匯入穿透。
+type CaseImportIdempotencyStore interface {
+	ClaimCaseImportRow(ctx context.Context, fileHash, rowKey string, caseID uuid.UUID) (bool, error)
 }

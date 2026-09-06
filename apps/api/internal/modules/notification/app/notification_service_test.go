@@ -42,7 +42,7 @@ func TestNotificationService_EmptyRecipients_WritesFailureLog(t *testing.T) {
 
 	ctx := context.Background()
 	err := svc.SendNotification(ctx, "missing_report", "測試告警", "未回報筆數: 3")
-	assert.NoError(t, err)
+	assert.ErrorIs(t, err, ErrNoNotificationRecipients)
 	assert.Empty(t, sender.SentList, "無收件人時不應呼叫 SendEmail")
 }
 
@@ -174,4 +174,115 @@ func TestNotificationService_SendNotification_ReturnsErrorWhenProviderFails(t *t
 	err := svc.SendNotification(context.Background(), "missing_report", "測試", "內容")
 
 	assert.Error(t, err)
+}
+
+type scriptedEmailSender struct {
+	calls    []string
+	failNext map[string]bool
+}
+
+func (s *scriptedEmailSender) SendEmail(_ context.Context, to, _, _ string) error {
+	s.calls = append(s.calls, to)
+	if s.failNext[to] {
+		delete(s.failNext, to)
+		return errors.New("provider unavailable")
+	}
+	return nil
+}
+
+type deliveryStoreFake struct {
+	fakeRecipientStore
+	events     map[string]string
+	deliveries map[string]string
+}
+
+func (f *deliveryStoreFake) ClaimNotificationEvent(_ context.Context, eventID, _ string) (bool, error) {
+	if f.events == nil {
+		f.events = map[string]string{}
+	}
+	if _, exists := f.events[eventID]; exists {
+		return false, nil
+	}
+	f.events[eventID] = "processing"
+	return true, nil
+}
+
+func (f *deliveryStoreFake) CompleteNotificationEvent(_ context.Context, eventID string) error {
+	f.events[eventID] = "sent"
+	return nil
+}
+
+func (f *deliveryStoreFake) ReleaseNotificationEvent(_ context.Context, eventID string) error {
+	delete(f.events, eventID)
+	return nil
+}
+
+func (f *deliveryStoreFake) ClaimNotificationDelivery(_ context.Context, eventID, recipientKey string) (bool, error) {
+	if f.deliveries == nil {
+		f.deliveries = map[string]string{}
+	}
+	key := eventID + "\x00" + recipientKey
+	if f.deliveries[key] == "sent" {
+		return false, nil
+	}
+	f.deliveries[key] = "processing"
+	return true, nil
+}
+
+func (f *deliveryStoreFake) CompleteNotificationDelivery(_ context.Context, eventID, recipientKey, _ string) error {
+	if f.deliveries == nil {
+		f.deliveries = map[string]string{}
+	}
+	f.deliveries[eventID+"\x00"+recipientKey] = "sent"
+	return nil
+}
+
+func (f *deliveryStoreFake) FailNotificationDelivery(_ context.Context, eventID, recipientKey, _ string) error {
+	if f.deliveries == nil {
+		f.deliveries = map[string]string{}
+	}
+	f.deliveries[eventID+"\x00"+recipientKey] = "failed"
+	return nil
+}
+
+func TestNotificationService_DedupRetriesOnlyFailedRecipients(t *testing.T) {
+	store := &deliveryStoreFake{fakeRecipientStore: fakeRecipientStore{listRecipients: []Recipient{
+		{ID: 1, RecipientType: "email", Email: "a@example.com"},
+		{ID: 2, RecipientType: "email", Email: "b@example.com"},
+	}}}
+	sender := &scriptedEmailSender{failNext: map[string]bool{"b@example.com": true}}
+	svc := NewNotificationService(store, nil, sender)
+
+	firstErr := svc.SendNotificationDedup(context.Background(), "missing_report", "測試", "內容", "event-1")
+	secondErr := svc.SendNotificationDedup(context.Background(), "missing_report", "測試", "內容", "event-1")
+
+	assert.Error(t, firstErr)
+	assert.NoError(t, secondErr)
+	assert.Equal(t, []string{"a@example.com", "b@example.com", "b@example.com"}, sender.calls)
+}
+
+type logFailDeliveryStore struct {
+	*deliveryStoreFake
+	failNextLog bool
+}
+
+func (f *logFailDeliveryStore) InsertLog(ctx context.Context, log *Log) error {
+	if f.failNextLog {
+		f.failNextLog = false
+		return errors.New("notification log unavailable")
+	}
+	return f.deliveryStoreFake.InsertLog(ctx, log)
+}
+
+func TestNotificationService_DoesNotResendWhenLogFailsAfterProviderSuccess(t *testing.T) {
+	base := &deliveryStoreFake{fakeRecipientStore: fakeRecipientStore{listRecipients: []Recipient{{
+		ID: 1, RecipientType: "email", Email: "a@example.com",
+	}}}}
+	store := &logFailDeliveryStore{deliveryStoreFake: base, failNextLog: true}
+	sender := &scriptedEmailSender{}
+	svc := NewNotificationService(store, nil, sender)
+
+	assert.Error(t, svc.SendNotificationDedup(context.Background(), "missing_report", "測試", "內容", "event-2"))
+	assert.NoError(t, svc.SendNotificationDedup(context.Background(), "missing_report", "測試", "內容", "event-2"))
+	assert.Equal(t, []string{"a@example.com"}, sender.calls)
 }
