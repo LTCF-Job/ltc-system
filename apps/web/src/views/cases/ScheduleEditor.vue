@@ -594,7 +594,6 @@ const rules = {
   serviceDurationMin: [{ required: true, message: '請輸入服務時長', trigger: 'blur' }]
 }
 
-// 計算選取月份的天數
 const daysInSelectedMonth = computed(() => {
   if (!selectedMonth.value) return 31
   const [y, m] = selectedMonth.value.split('-').map(Number)
@@ -638,7 +637,8 @@ function buildMonthDaysList() {
     const dateStr = `${selectedMonth.value}-${dayPad}`
     const d = new Date(year, month - 1, day)
     let goWeekday = d.getDay()
-    if (goWeekday === 0) goWeekday = 7 // 1..7 (週一..週日)
+    // getDay() 回傳 0 代表週日，這裡轉換成 1..7 (週一..週日) 對齊業務排班的星期代碼
+    if (goWeekday === 0) goWeekday = 7
     const isWeekend = goWeekday >= 6
     const holiday = holidayMap.value[dateStr]
     // 只有在 holiday 存在且 holiday.isDayOff !== false (非補班日) 才是國定休假日
@@ -721,7 +721,7 @@ async function loadHolidays() {
     endDate: `${selectedMonth.value}-${String(daysInSelectedMonth.value).padStart(2, '0')}`,
     region: props.region
   })
-  holidayMap.value = Object.fromEntries((response.data || []).map((item) => [item.holidayDate, item]))
+  holidayMap.value = Object.fromEntries(response.map((item) => [item.holidayDate, item]))
   buildMonthDaysList()
 }
 
@@ -812,6 +812,7 @@ function handlePatternChange(pattern: any) {
   }
 }
 
+// 依 API 回傳的既有排班資料還原編輯畫面的三種模式設定
 watch(
   () => props.schedule,
   (s) => {
@@ -836,7 +837,6 @@ watch(
         }))
       }
 
-      // 同步 weekdayConfigs
       if (s.weeklyConfigs && s.weeklyConfigs.length > 0) {
         s.weeklyConfigs.forEach((wc) => {
           const match = weekdayConfigs.find((c) => c.weekday === wc.weekday)
@@ -862,7 +862,6 @@ watch(
         })
       }
 
-      // 同步 monthlyConfigs
       if (s.monthlyConfigs) {
         Object.assign(monthlyConfigs, s.monthlyConfigs)
       }
@@ -905,7 +904,7 @@ async function handleSave() {
     return
   }
 
-  // 1. 組裝各模式的相容性 weekdays 與 legs
+  // by_weekday／monthly 模式送出前需回填 weekdays 與 legs 欄位，以相容後端既有排班格式
   if (scheduleMode.value === 'by_weekday') {
     const activeDays = weekdayConfigs.filter((cfg) => cfg.tripCount > 0)
     if (activeDays.length === 0) {

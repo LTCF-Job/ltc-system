@@ -271,7 +271,6 @@ import PageHeader from '@/components/PageHeader.vue'
 import CaseSelectDialog from '@/components/CaseSelectDialog.vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import PrecheckResult from '@/components/PrecheckResult.vue'
 import { formatDateTime, currentLocalMonth } from '@/utils/formatters'
 import {
@@ -411,8 +410,8 @@ async function handleStartExport() {
     currentJob.value = await createExportJob(jobReq)
     ElMessage.success(`已產生 ${currentJob.value.totalCases ?? 0} 份申報檔案`)
     await fetchHistory()
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '產生申報檔失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     exporting.value = false
   }
@@ -425,8 +424,8 @@ async function handleDownloadCaseFile(file: ExportJobFileDTO) {
     const blob = await downloadExportCaseFile(currentJob.value.id, file.caseId)
     downloadBlob(blob, file.fileName)
     ElMessage.success(`${file.fileName} 下載成功`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載檔案失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     downloadingCaseId.value = ''
   }
@@ -439,8 +438,8 @@ async function handleDownloadZip() {
     const blob = await downloadExportZip(currentJob.value.id)
     downloadBlob(blob, currentJob.value.zipFileName || 'gov-claim.zip')
     ElMessage.success('壓縮檔下載成功')
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載壓縮檔失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     downloadingZip.value = false
   }
@@ -452,8 +451,8 @@ async function openHistoryDetail(row: ExportJobDTO) {
   loadingHistoryDetail.value = true
   try {
     historyDetail.value = await getExportJob(row.id)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入匯出明細失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     loadingHistoryDetail.value = false
   }

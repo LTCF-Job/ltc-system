@@ -141,7 +141,7 @@
       </template>
     </DataTablePage>
 
-    <!-- 新增 / 編輯保養紀錄 Dialog -->
+    <!-- 新增 / 編輯保養紀錄對話框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯保養紀錄' : '新增保養紀錄'"
@@ -232,7 +232,6 @@ import DataTablePage from '@/components/DataTablePage.vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import {
   listMaintenance,
   createMaintenance,
@@ -288,8 +287,8 @@ const rules = {
 async function fetchFilterOptions() {
   try {
     vehicles.value = await listAllVehicles({ status: 'active' })
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入車輛清單失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -306,8 +305,8 @@ async function fetchList() {
     })
     records.value = res.data
     total.value = res.meta.total
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢維修保養紀錄失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     loading.value = false
   }
@@ -362,8 +361,8 @@ async function handleSave() {
       }
       dialogVisible.value = false
       fetchList()
-    } catch (err: any) {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存保養紀錄失敗'))
+    } catch {
+      // 全域攔截器負責顯示 API 錯誤。
     } finally {
       saving.value = false
     }
@@ -380,10 +379,8 @@ async function handleDelete(row: any) {
     await deleteMaintenance(row.id)
     ElMessage.success('保養紀錄已刪除')
     fetchList()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除失敗'))
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 
@@ -393,8 +390,8 @@ async function handleDownloadBlank() {
     const blob = await downloadBlankMaintenanceExcel()
     downloadBlob(blob, '車輛定期保養檢查表_空白範本.xlsx')
     ElMessage.success('空白保養表下載成功')
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載空白保養表失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     downloadingBlank.value = false
   }

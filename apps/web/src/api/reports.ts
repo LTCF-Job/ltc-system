@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, unwrapData } from './client'
 import type { TripSummaryReportDTO, HsinchuScheduleReportDTO } from '@/types/api'
 
 export async function getTripSummaryReport(params: {
@@ -8,7 +8,7 @@ export async function getTripSummaryReport(params: {
   q?: string
 }): Promise<TripSummaryReportDTO> {
   const res = await apiClient.get('/reports/trip-summary', { params })
-  return (res as any).data ?? (res as any)
+  return unwrapData<TripSummaryReportDTO>(res)
 }
 
 export async function exportTripSummaryExcel(params: {
@@ -28,7 +28,7 @@ export async function getHsinchuSchedule(params?: {
   q?: string
 }): Promise<HsinchuScheduleReportDTO> {
   const res = await apiClient.get('/reports/hsinchu-schedule', { params })
-  return (res as any).data ?? (res as any)
+  return unwrapData<HsinchuScheduleReportDTO>(res)
 }
 
 export async function exportHsinchuScheduleExcel(params?: {

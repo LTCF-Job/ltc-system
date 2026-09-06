@@ -227,6 +227,7 @@ import { listAllVehicles, listAllDrivers } from "@/api/masters";
 import { useAuthStore } from "@/stores/auth";
 import { formatDateTime } from "@/utils/formatters";
 import { CORRECTION_REASONS } from "@/types/domain";
+import type { EffectiveRideStatus } from "@/types/domain";
 import type {
   RideRecordDTO,
   VehicleDTO,
@@ -253,8 +254,8 @@ async function loadMasterData() {
       listAllVehicles({ status: "active" }),
       listAllDrivers({ status: "active" }),
     ]);
-    vehicles.value = (vRes as any)?.data || vRes || [];
-    drivers.value = (dRes as any)?.data || dRes || [];
+    vehicles.value = vRes;
+    drivers.value = dRes;
   } catch {
     // 全域攔截器已彈出錯誤訊息；這裡另外標記狀態，讓下拉選單旁能顯示可重試的空清單原因
     masterDataError.value = true;
@@ -266,7 +267,18 @@ const canEdit = computed(() => {
   return authStore.hasPermission("rides_issues", "edit");
 });
 
-const form = reactive<PatchRideRequest>({
+interface CorrectionFormState {
+  effectiveStatus: EffectiveRideStatus;
+  vehicleId: string;
+  driverId: string;
+  departTimeOverride: string | null;
+  durationMinOverride: number | null;
+  notClaimedAa09: boolean;
+  reason: string;
+  basedOnFingerprint: string;
+}
+
+const form = reactive<CorrectionFormState>({
   effectiveStatus: "boarded",
   vehicleId: "",
   driverId: "",
@@ -362,15 +374,13 @@ async function open(rideRecord: RideRecordDTO) {
 
   visible.value = true;
 
-  if (vehicles.value.length === 0) {
-    await loadMasterData();
-  }
+  await loadMasterData();
 }
 
 async function handleSubmitCorrection() {
   if (!record.value) return;
 
-  // 二次確認
+  // 更正將寫入稽核紀錄，動作前需使用者再次確認
   try {
     await ElMessageBox.confirm(
       `確定更正 ${record.value.serviceDate} 第 ${record.value.legSeq} 趟搭乘紀錄？此操作將記錄於稽核紀錄。`,
@@ -389,8 +399,8 @@ async function handleSubmitCorrection() {
   try {
     const payload: PatchRideRequest = {
       effectiveStatus: form.effectiveStatus,
-      vehicleId: isAbsent.value ? undefined : form.vehicleId || undefined,
-      driverId: isAbsent.value ? undefined : form.driverId || undefined,
+      vehicleId: form.vehicleId || record.value.vehicleId || null,
+      driverId: form.driverId || null,
       departTimeOverride: isAbsent.value
         ? null
         : form.departTimeOverride || null,
@@ -398,15 +408,15 @@ async function handleSubmitCorrection() {
         ? null
         : form.durationMinOverride || null,
       notClaimedAa09: isAbsent.value ? false : form.notClaimedAa09 || false,
-      reason: form.reason || undefined,
+      reason: form.reason || null,
       basedOnFingerprint: record.value.basedOnFingerprint,
     };
     await patchRideRecord(record.value.id, payload);
     ElMessage.success("搭乘紀錄已成功更正");
     visible.value = false;
     emit("updated");
-  } catch (err: any) {
-    ElMessage.error(err?.message || "更正搭乘紀錄失敗");
+  } catch {
+    // 全域攔截器已處理 API 錯誤提示，這裡只負責保留表單狀態。
   } finally {
     submitting.value = false;
   }

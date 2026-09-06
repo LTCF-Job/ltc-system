@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import router from '@/router'
 import type { ApiError } from '@/types/api'
 import { resolveErrorMessage } from './errorCodes'
+export { createPaginationMeta, unwrapData, unwrapPaged } from './envelope'
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -40,7 +41,7 @@ apiClient.interceptors.response.use(
     const status = error.response?.status
     let apiError = error.response?.data?.error
 
-    // 當 responseType 為 'blob' 時，後端返回的 JSON 錯誤會被包在 Blob 內，需讀取轉回物件
+    // 當 responseType 為 'blob' 時，後端回傳的 JSON 錯誤會被包在 Blob 內，需讀取轉回物件
     if (!apiError && error.response?.data instanceof Blob) {
       try {
         const text = await error.response.data.text()

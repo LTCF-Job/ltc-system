@@ -7,7 +7,7 @@ export function setupRouterGuards(router: Router) {
     const authStore = useAuthStore()
     const isPublic = to.meta.public === true
 
-    // 1. 未登入驗證
+    // 保留原始路徑，登入後可導回目標頁面
     if (!isPublic && !authStore.isAuthenticated) {
       next({
         path: '/login',
@@ -16,7 +16,7 @@ export function setupRouterGuards(router: Router) {
       return
     }
 
-    // 2. 已登入者進入登入頁自動導向首頁
+    // 避免已登入使用者停留在登入頁
     if (to.path === '/login' && authStore.isAuthenticated) {
       next('/')
       return
@@ -28,7 +28,6 @@ export function setupRouterGuards(router: Router) {
     }
 
     if (authStore.isAuthenticated && authStore.permissionState === 'error') {
-      ElMessage.error('權限資料載入失敗，請稍後重試')
       next(false)
       return
     }

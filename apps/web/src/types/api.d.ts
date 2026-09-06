@@ -180,6 +180,7 @@ export interface CaseDTO {
   name: string;
   nameNormalized?: string;
   nationalId?: string;
+  nationalIdMasked?: string;
   homeAddress?: string;
   region?: Region;
   ltcLevel?: string;
@@ -537,11 +538,13 @@ export interface DriverReportColumnDecision {
 }
 
 export interface DriverReportCommitResultDTO {
+  status: "pending" | "already_imported" | "succeeded";
+  fileHash?: string;
+  alreadyImported: boolean;
   importedRows: number;
   rideRecordRows: number;
   mappedColumns: number;
   skippedRows: Array<{
-    rowId: string;
     rowIndex: number;
     reportDate: string;
     reasons: string[];
@@ -675,14 +678,15 @@ export interface RideCalendarMatrixDTO {
 }
 
 export interface PatchRideRequest {
-  effectiveStatus?: EffectiveRideStatus;
-  vehicleId?: string;
-  driverId?: string;
+  // PATCH 三態：省略=保留、null=清除、值=設定；vehicleId 因資料庫 NOT NULL 不可清除。
+  effectiveStatus?: EffectiveRideStatus | null;
+  vehicleId?: string | null;
+  driverId?: string | null;
   departTimeOverride?: string | null;
   durationMinOverride?: number | null;
   legSeq?: number;
-  notClaimedAa09?: boolean;
-  reason?: string;
+  notClaimedAa09?: boolean | null;
+  reason?: string | null;
   basedOnFingerprint: string;
 }
 
@@ -783,7 +787,7 @@ export interface ExportJobDTO {
   totalCases?: number;
   totalRows?: number;
   files?: ExportJobFileDTO[];
-  // skipped 只在建立當下回傳；跳過統計不落地，歷史查詢不會重現
+  // skipped 只在建立當下回傳；跳過統計不寫入儲存，歷史查詢不會重現
   skipped?: ExportJobSkipDTO[];
   zipFileName?: string;
   // 僅壓縮檔模式有值；逐案下載的連結掛在 files 上
@@ -847,7 +851,15 @@ export interface CaseImportPreviewRowDTO extends Record<string, any> {
 
 export interface CaseImportCommitResult {
   importedCount: number;
+  alreadyImportedCount: number;
+  failedCount: number;
   skippedRows: Array<{
+    rowId?: string;
+    rowIndex: number;
+    caseName: string;
+    reasons: string[];
+  }>;
+  failedRows: Array<{
     rowId?: string;
     rowIndex: number;
     caseName: string;
@@ -1071,6 +1083,15 @@ export interface DriverDayAttendanceDTO {
   date: string;
   status: "work" | "leave" | "sick" | "off" | "absent";
   note?: string;
+}
+
+export interface AttendanceRecordDTO {
+  id: string;
+  driverId: string;
+  recordDate: string;
+  status: "work" | "leave" | "sick" | "off";
+  note?: string;
+  source?: string;
 }
 
 export interface DriverMonthAttendanceDTO {

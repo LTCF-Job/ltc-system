@@ -151,7 +151,6 @@ import {
   getDriverReportMonthDetail
 } from '@/api/driverReports'
 import { formatDateTime } from '@/utils/formatters'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import { LEG_SEQ_OPTIONS } from './legOptions'
 import type {
   DriverReportFormDTO,
@@ -225,9 +224,8 @@ async function openMonthDetail(form: DriverReportFormDTO, yearMonth: string) {
     const detail = await getDriverReportMonthDetail(form.id, yearMonth)
     monthSubmissions.value = detail.submissions
     monthRideEntries.value = detail.rideEntries
-  } catch (error) {
-    const code = (error as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code
-    ElMessage.error(resolveErrorMessage(code, '載入該月匯入資料失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
     monthDialogVisible.value = false
   } finally {
     monthDetailLoading.value = false

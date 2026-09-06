@@ -8,7 +8,7 @@
       </el-button>
     </div>
 
-    <!-- 分頁導覽：基本資料 / 排班設定 / 搭乘月曆 -->
+    <!-- 分頁導覽：基本資料 / 排班設定 -->
     <el-tabs v-model="activeTab" type="border-card" class="detail-tabs">
       <!-- 分頁 1：基本資料 -->
       <el-tab-pane label="基本資料" name="basic">
@@ -243,7 +243,6 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import ScheduleEditor from './ScheduleEditor.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { getCase, updateCase, deleteCase, getCaseSchedule, updateCaseTransportPreference } from '@/api/cases'
@@ -329,8 +328,8 @@ async function fetchDetail() {
     transportForm.siteId = res.siteId || ''
     transportForm.outboundVehicleId = res.outboundVehicleId || ''
     transportForm.inboundVehicleId = res.inboundVehicleId || ''
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入個案明細失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     loading.value = false
   }
@@ -391,10 +390,8 @@ async function handleDeleteCase() {
     await deleteCase(caseId.value)
     ElMessage.success(`個案「${caseData.value?.name}」已成功刪除`)
     router.push('/cases')
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除個案失敗'))
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 

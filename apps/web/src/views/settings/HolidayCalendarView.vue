@@ -176,7 +176,7 @@ function sourceLabel(source: string) {
 async function load() {
   loading.value = true
   try {
-    holidays.value = (await listHolidays(range.value)).data || []
+    holidays.value = await listHolidays(range.value)
   } finally {
     loading.value = false
   }
@@ -186,7 +186,7 @@ async function syncYear() {
   syncing.value = true
   try {
     const result = await importGovHolidays(Number(year.value))
-    ElMessage.success(`已匯入 ${result.data?.importedCount || 0} 筆行事曆資料`)
+    ElMessage.success(`已匯入 ${result.importedCount || 0} 筆行事曆資料`)
     await load()
   } finally {
     syncing.value = false

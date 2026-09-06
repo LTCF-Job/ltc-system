@@ -266,7 +266,6 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
@@ -380,8 +379,8 @@ async function handleSaveDrivers() {
     ElMessage.success(`車輛「${driverDialogVehicle.value.displayName}」司機已更新`)
     driverDialogVisible.value = false
     await Promise.all([executeFetch(), loadDrivers()])
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新車輛司機失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     savingDrivers.value = false
   }
@@ -435,10 +434,8 @@ async function handleSubmit() {
       }
       dialogVisible.value = false
       executeFetch()
-    } catch (err: any) {
-      if (!err.response?.data?.error?.details?.length) {
-        ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存車輛資料失敗'))
-      }
+    } catch {
+      // 全域攔截器負責顯示 API 錯誤。
     } finally {
       submitting.value = false
     }
@@ -465,8 +462,8 @@ async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
     })
     row.status = newStatus
     ElMessage.success(`已將車輛「${row.displayName}」狀態切換為 ${newActive ? '啟用' : '停用'}`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '切換狀態失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -485,10 +482,8 @@ async function handleDeleteVehicle(row: VehicleDTO) {
     await deleteVehicle(row.id)
     ElMessage.success(`車輛「${row.displayName}」已成功刪除`)
     executeFetch()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除車輛失敗'))
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 

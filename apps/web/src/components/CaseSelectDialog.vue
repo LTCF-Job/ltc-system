@@ -55,11 +55,9 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
 import type { TableInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { listAllCases } from '@/api/cases'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import { REGION_LABELS, CASE_STATUS_LABELS } from '@/types/domain'
 import type { Region, CaseStatus } from '@/types/domain'
 import type { CaseDTO } from '@/types/api'
@@ -110,8 +108,8 @@ async function loadCandidates() {
     candidates.value = await listAllCases({ region: props.region || undefined })
     await nextTick()
     restoreInitialSelection()
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入個案清單失敗'))
+  } catch {
+    // API 錯誤由全域 interceptor 統一提示；此處只負責結束載入狀態。
   } finally {
     loading.value = false
   }

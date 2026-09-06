@@ -224,7 +224,6 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Plus, Rank, InfoFilled, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
@@ -243,7 +242,6 @@ const submitting = ref(false)
 
 const regions = ref<RegionDTO[]>([])
 
-// 拖曳排序狀態
 const draggingIndex = ref<number | null>(null)
 const dropTargetIndex = ref<number | null>(null)
 const isSavingSort = ref(false)
@@ -332,7 +330,7 @@ async function onDrop(event: DragEvent, targetIndex: number) {
   const dstIdx = targetIndex
   onDragEnd()
 
-  // 本地陣列移動
+  // 先在畫面上即時反映拖曳結果，sortOrder 更新透過下方 API 非同步送出
   const movedItem = regions.value.splice(srcIdx, 1)[0]
   regions.value.splice(dstIdx, 0, movedItem)
 
@@ -353,8 +351,7 @@ async function onDrop(event: DragEvent, targetIndex: number) {
         changedUpdates.map((u) => updateRegion(u.id, { sortOrder: u.sortOrder }))
       )
       ElMessage.success(`已將「${movedItem.name}」排序更新`)
-    } catch (err: any) {
-      ElMessage.error('更新排序順序失敗，正在重新整理清單')
+    } catch {
       fetchRegions()
     } finally {
       isSavingSort.value = false
@@ -378,8 +375,8 @@ async function fetchRegions() {
     })
     regions.value = res.data || []
     total.value = res.meta?.total ?? regions.value.length
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢區域清單失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     loading.value = false
   }
@@ -432,8 +429,8 @@ async function handleToggleStatus(row: RegionDTO, newActive: boolean) {
     await updateRegion(row.id, { status: newStatus })
     row.status = newStatus
     ElMessage.success(`已將「${row.name}」切換為 ${newActive ? '啟用' : '停用'}`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -464,8 +461,8 @@ async function handleSubmit() {
       }
       dialogVisible.value = false
       fetchRegions()
-    } catch (err: any) {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
     } finally {
       submitting.value = false
     }

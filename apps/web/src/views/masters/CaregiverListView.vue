@@ -308,7 +308,6 @@
 import { ref, reactive } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
@@ -367,14 +366,13 @@ async function loadSites() {
   availableSites.value = await listAllSites({ status: 'active' })
 }
 
-// 下載匯入範本
 async function handleDownloadTemplate() {
   try {
     const blob = await downloadCaregiverTemplate()
     downloadBlob(blob, '照護人員批次匯入範本.xlsx')
     ElMessage.success('照護人員匯入範本下載成功')
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載範本失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -481,8 +479,8 @@ async function handleToggleStatus(row: CaregiverDTO, newActive: boolean) {
     await updateCaregiver(row.id, { status: newStatus })
     row.status = newStatus
     ElMessage.success(`已將照護人員「${row.name}」切換為 ${newActive ? '啟用' : '停用'}`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -518,8 +516,8 @@ async function handleSave() {
       if (activeTab.value === 'pending') {
         await fetchPending()
       }
-    } catch (err: any) {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存照護人員資料失敗'))
+    } catch {
+      // 全域攔截器負責顯示 API 錯誤。
     } finally {
       saving.value = false
     }
@@ -537,10 +535,8 @@ async function handleDelete(row: any) {
     await deleteCaregiver(row.id)
     ElMessage.success(`照護人員「${row.name}」已成功刪除`)
     executeFetch()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除照護人員失敗'))
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 
@@ -560,8 +556,8 @@ async function fetchPending() {
       merged.set(row.id, row)
     }
     pendingCaregivers.value = Array.from(merged.values())
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入待維護清單失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     pendingLoading.value = false
   }
@@ -576,8 +572,8 @@ async function handleLinkSite(row: CaregiverDTO, siteId: string) {
     if (activeTab.value === 'pending') {
       await fetchPending()
     }
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新單位關聯失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -604,8 +600,8 @@ async function handleQuickCreateSiteAndLink() {
     availableSites.value.push(site)
     await handleLinkSite(quickCreateTarget.value, site.id)
     quickCreateSiteVisible.value = false
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '新增並關聯單位失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     quickCreateSiteSaving.value = false
   }
@@ -620,7 +616,6 @@ async function handleTabChange(name: string | number) {
   }
 }
 
-// 初始載入
 loadSites()
 executeFetch()
 </script>

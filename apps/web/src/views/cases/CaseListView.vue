@@ -349,7 +349,6 @@
 import { ref, reactive, computed } from 'vue'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type TableInstance } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
@@ -437,8 +436,8 @@ async function handleQuickUpdateRegion(row: CaseDTO, newRegion: Region) {
     await updateCase(row.id, { region: newRegion })
     row.region = newRegion
     ElMessage.success(`已將個案「${row.name}」申報區域修改為 ${REGION_LABELS[newRegion]}`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新區域失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -449,8 +448,8 @@ async function handleQuickUpdateStatus(row: CaseDTO, newStatus: CaseStatus) {
     await updateCase(row.id, { status: newStatus })
     row.status = newStatus
     ElMessage.success(`已將個案「${row.name}」狀態變更為 ${CASE_STATUS_LABELS[newStatus]}`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -470,10 +469,8 @@ async function handleDeleteCase(row: CaseDTO) {
     await deleteCase(row.id)
     ElMessage.success(`個案「${row.name}」已成功刪除`)
     executeFetch()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除個案失敗'))
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 
@@ -483,8 +480,8 @@ async function handleDownloadTemplate() {
     const blob = await downloadCaseImportTemplate()
     downloadBlob(blob, '個案批次匯入範本.xlsx')
     ElMessage.success('個案匯入範本 (.xlsx) 下載成功')
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載範本失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -503,8 +500,8 @@ async function handleConfirmExport(cases: CaseDTO[]) {
     downloadBlob(blob, '個案資料彙整.xlsx')
     ElMessage.success(`已匯出 ${cases.length} 筆個案資料`)
     exportDialogVisible.value = false
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '匯出個案資料失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     exporting.value = false
   }
@@ -560,8 +557,8 @@ async function fetchUnresolvedCases() {
   unresolvedLoading.value = true
   try {
     unresolvedCases.value = await listAllCases({ unresolvedLink: true })
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入待維護清單失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     unresolvedLoading.value = false
   }
@@ -605,8 +602,8 @@ async function handleLinkSlot(row: CaseDTO, slot: UnresolvedSlot, entityId: stri
       unresolvedCases.value = unresolvedCases.value.filter((c) => c.id !== row.id)
     }
     ElMessage.success(`個案「${row.name}」已完成關聯`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新關聯失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -650,10 +647,8 @@ async function handleQuickCreateAndLink() {
       await handleLinkSlot(quickCreateTargetCase.value, quickCreateSlot.value, vehicle.id)
     }
     quickCreateVisible.value = false
-  } catch (err: any) {
-    if (!err.response?.data?.error?.details?.length) {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '新增並關聯失敗'))
-    }
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     quickCreateSaving.value = false
   }

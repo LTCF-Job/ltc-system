@@ -267,7 +267,6 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
@@ -362,8 +361,8 @@ async function handleQuickToggleActive(row: DriverDTO, newActive: boolean) {
     await updateDriver(row.id, { status: newStatus })
     row.status = newStatus
     ElMessage.success(`已將司機「${row.name}」狀態更新為 ${newActive ? '啟用' : '停用'}`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新司機狀態失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -470,10 +469,8 @@ async function handleDeleteDriver(row: DriverDTO) {
     await deleteDriver(row.id)
     ElMessage.success(`司機「${row.name}」已成功刪除`)
     executeFetch()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除司機失敗'))
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 
@@ -485,8 +482,6 @@ executeFetch()
 </script>
 
 <style scoped>
-/* 狀態互動切換按鈕 / 膠囊標籤 */
-/* 對話框內狀態單選群組 */
 .assigned-vehicle-info {
   display: inline-flex;
   align-items: center;
