@@ -543,6 +543,10 @@ export interface DriverReportCommitResultDTO {
   alreadyImported: boolean;
   importedRows: number;
   rideRecordRows: number;
+  // reaffirmedRows 是值與既有資料相同的重複回報；pendingConflictRows 是與既有資料不同、
+  // 已進入待維護等待使用者選擇的筆數。兩者與 rideRecordRows 分開計算。
+  reaffirmedRows: number;
+  pendingConflictRows: number;
   mappedColumns: number;
   skippedRows: Array<{
     rowIndex: number;
@@ -572,7 +576,8 @@ export interface BatchMappingRequest {
   }>;
 }
 
-// 待維護資料頁籤：以匯報表列（一天一列）為單位，一列可能同時有個案欄位與駕駛人兩種問題
+// 待維護資料頁籤：以匯報表列（一天一列）為單位，一列可能同時有個案欄位、駕駛人、
+// 或同車同個案資料衝突三種問題
 export interface SubmissionReviewDTO {
   submissionId: string;
   formTitle: string;
@@ -580,11 +585,29 @@ export interface SubmissionReviewDTO {
   serviceDate: string;
   caseIssues: DriverReportColumnDTO[];
   driverIssue?: { driverNameRaw: string };
+  rowConflicts?: RowConflictDTO[];
+}
+
+// 一筆「同車同個案」的資料與既有資料衝突，需要使用者選擇要保留哪一筆
+export interface RowConflictDTO {
+  id: string;
+  caseId: string;
+  caseName: string;
+  legSeq: number;
+  previousReported: "boarded" | "absent";
+  previousDriverName: string;
+  newReported: "boarded" | "absent";
+  newDriverName: string;
+  detectedAt: string;
 }
 
 export interface BindDriverRequest {
   driverNameRaw: string;
   driverId: string;
+}
+
+export interface ResolveRowConflictRequest {
+  useNew: boolean;
 }
 
 // 總覽頁鑽取單一匯報表、單一月份時的完整內容：逐日回報明細與展開後的個案搭乘紀錄

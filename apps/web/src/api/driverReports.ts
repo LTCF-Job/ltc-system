@@ -11,6 +11,7 @@ import type {
   BatchMappingRequest,
   SubmissionReviewDTO,
   BindDriverRequest,
+  ResolveRowConflictRequest,
   DriverReportMonthDetailDTO
 } from '@/types/api'
 
@@ -119,6 +120,16 @@ export async function listSubmissionReview(): Promise<SubmissionReviewDTO[]> {
 export async function bindPendingDriver(data: BindDriverRequest): Promise<{ affectedCount: number }> {
   const res = await apiClient.post('/driver-reports/drivers/bind', data)
   return unwrapData<{ affectedCount: number }>(res)
+}
+
+// resolveRowConflict 裁決一筆「同車同個案」衝突：useNew 採用這次上傳的新值並重算搭乘
+// 紀錄，否則保留既有資料不動，兩者都只標記這筆衝突已解決。
+export async function resolveRowConflict(
+  conflictId: string,
+  data: ResolveRowConflictRequest
+): Promise<{ success: boolean }> {
+  const res = await apiClient.post(`/driver-reports/row-conflicts/${conflictId}/resolve`, data)
+  return unwrapData<{ success: boolean }>(res)
 }
 
 // getDriverReportMonthDetail 取回某份匯報表指定月份（YYYY-MM）已匯入的完整內容，

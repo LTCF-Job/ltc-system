@@ -48,7 +48,7 @@
             type="warning"
             show-icon
             :closable="false"
-            title="以下車輛涵蓋的月份已有資料，這次會整月覆蓋"
+            title="以下車輛涵蓋的月份已有資料，這次上傳會逐筆比對"
             class="overlap-alert"
           >
             <template #default>
@@ -57,7 +57,9 @@
                   {{ row.vehicleName }}：{{ row.overlapMonths.join('、') }}
                 </li>
               </ul>
-              <el-checkbox v-model="overlapAcknowledged">我已確認風險，仍要覆蓋以上月份的既有資料</el-checkbox>
+              <el-checkbox v-model="overlapAcknowledged">
+                我已確認，沒問題的資料會直接匯入，與既有資料不同的會進入待維護等待選擇
+              </el-checkbox>
             </template>
           </el-alert>
 
@@ -131,8 +133,8 @@
                         </span>
                         <span v-else class="text-muted">沒有可寫入的搭乘資料</span>
                       </template>
-                      <span v-else-if="row.overlapMonths.length" class="text-warning truncate-text" :title="`將整月覆蓋 ${row.overlapMonths.join('、')} 既有資料`">
-                        將整月覆蓋 {{ row.overlapMonths.join('、') }} 既有資料
+                      <span v-else-if="row.overlapMonths.length" class="text-warning truncate-text" :title="`${row.overlapMonths.join('、')} 已有資料，將逐筆比對`">
+                        {{ row.overlapMonths.join('、') }} 已有資料，將逐筆比對
                       </span>
                       <span v-else-if="row.status === 'analyzing'" class="text-muted">解析中…</span>
                       <span v-else-if="row.status === 'needsVehicle'" class="text-warning">請先選擇對應代稱</span>
@@ -246,6 +248,29 @@
                       </el-button>
                       <el-button link type="primary" size="small" @click="openQuickCreateDriver(row as SubmissionReviewRow)">
                         新增司機並綁定
+                      </el-button>
+                    </TableRowActions>
+                  </div>
+                </div>
+
+                <div v-for="conflict in row.rowConflicts" :key="conflict.id" class="review-issue-row">
+                  <div class="review-issue-desc">
+                    <el-tag size="small" type="danger">與既有資料衝突</el-tag>
+                    <span class="raw-name">{{ conflict.caseName }}（第 {{ conflict.legSeq }} 趟）</span>
+                    <span class="text-secondary small">
+                      既有：{{ conflict.previousReported === 'boarded' ? '有坐' : '沒坐' }}
+                      / {{ conflict.previousDriverName || '無司機' }}
+                      　新上傳：{{ conflict.newReported === 'boarded' ? '有坐' : '沒坐' }}
+                      / {{ conflict.newDriverName || '無司機' }}
+                    </span>
+                  </div>
+                  <div class="target-binding-box">
+                    <TableRowActions>
+                      <el-button link type="primary" size="small" @click="handleResolveRowConflict(conflict, true)">
+                        採用新資料
+                      </el-button>
+                      <el-button link size="small" @click="handleResolveRowConflict(conflict, false)">
+                        保留原資料
                       </el-button>
                     </TableRowActions>
                   </div>
@@ -388,10 +413,10 @@
           class="dialog-alert"
         />
 
-        <!-- 重複覆蓋提示 -->
+        <!-- 重複上傳提示 -->
         <el-alert
           v-if="selectedRowForDetail.overlapMonths.length"
-          :title="`匯入時將整月覆蓋 ${selectedRowForDetail.overlapMonths.join('、')} 之既有搭乘紀錄`"
+          :title="`${selectedRowForDetail.overlapMonths.join('、')} 已有資料，匯入時將逐筆比對，與既有資料不同的會進入待維護`"
           type="warning"
           show-icon
           :closable="false"
@@ -453,7 +478,8 @@ import {
   listSubmissionReview,
   matchPendingColumnsByName,
   updateColumnMapping,
-  bindPendingDriver
+  bindPendingDriver,
+  resolveRowConflict
 } from '@/api/driverReports'
 import { listAttendanceConflicts, resolveAttendanceConflict } from '@/api/attendance'
 import { listAllCases } from '@/api/cases'
@@ -476,6 +502,7 @@ import type {
   DriverReportImportedMonthDTO,
   DriverReportPreviewDTO,
   DriverReportCommitResultDTO,
+  RowConflictDTO,
   SubmissionReviewDTO,
   VehicleDTO
 } from '@/types/api'
@@ -653,7 +680,7 @@ function removeRow(row: BatchFileRow) {
 const formCreationByVehicle = new Map<string, Promise<string>>()
 // 同一個表單、月份與檔案若因重複觸發同時送出，只保留一個前端請求；後端冪等鍵仍是最終防線。
 const activeMonthImports = new Map<string, Promise<DriverReportCommitResultDTO>>()
-// 不同檔案寫入同一表單月份時也要在前端排隊，避免覆蓋提示與結果互相競速。
+// 不同檔案寫入同一表單月份時也要在前端排隊，避免重複上傳提示與結果互相競速。
 const monthImportLocks = new Map<string, Promise<void>>()
 
 async function ensureForm(row: BatchFileRow): Promise<string> {
@@ -814,7 +841,7 @@ function pumpAnalyzeQueue() {
   }
 }
 
-// analyzeRow 只做「解析出涵蓋月份與是否覆蓋既有資料」的預覽，不寫入任何資料；
+// analyzeRow 只做「解析出涵蓋月份與是否已有既有資料」的預覽，不寫入任何資料；
 // 真正的欄位對應與 commit 交給 processRow，兩者都各自 dry-run 一次，換取程式碼單純。
 async function analyzeRow(row: BatchFileRow) {
   if (row.status === 'needsVehicle') return
@@ -874,7 +901,7 @@ async function processRow(row: BatchFileRow) {
     row.overlapMonths = months.filter((month) => importedByKey.value.has(`${formId}::${month}`))
     if (row.overlapMonths.length > 0 && !overlapAcknowledged.value) {
       row.status = 'queued'
-      row.message = '請確認整月覆蓋提示後再匯入'
+      row.message = '請確認重複上傳提示後再匯入'
       return
     }
 
@@ -895,7 +922,10 @@ async function processRow(row: BatchFileRow) {
               message: `第 ${item.rowIndex} 列${item.reportDate ? `（${item.reportDate}）` : ''}：${reason}`
             }))
           ),
-          ...(result.warnings ?? []).map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) }))
+          ...(result.warnings ?? []).map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) })),
+          ...(result.pendingConflictRows > 0
+            ? [{ level: 'warning' as const, message: `${month}：${result.pendingConflictRows} 筆與既有資料不同，已進入待維護等待選擇` }]
+            : [])
         )
       } catch (error) {
         row.monthStates[month] = 'failed'
@@ -1043,7 +1073,7 @@ function attendanceStatusLabel(status: string): string {
 }
 
 function issueCount(row: SubmissionReviewRow): number {
-  return row.caseIssues.length + (row.driverIssue ? 1 : 0)
+  return row.caseIssues.length + (row.driverIssue ? 1 : 0) + (row.rowConflicts?.length ?? 0)
 }
 
 // pendingTabCount 是頁籤上顯示的總數字，個案／駕駛人待維護列與出勤衝突是兩個獨立區塊，
@@ -1142,6 +1172,16 @@ async function handleResolveAttendanceConflict(conflict: AttendanceConflictDTO, 
         : `已將「${conflict.driverName}」${conflict.recordDate} 改採匯入判斷的出勤結果`
     )
     attendanceConflicts.value = attendanceConflicts.value.filter((c) => c.id !== conflict.id)
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  }
+}
+
+async function handleResolveRowConflict(conflict: RowConflictDTO, useNew: boolean) {
+  try {
+    await resolveRowConflict(conflict.id, { useNew })
+    ElMessage.success(useNew ? `已採用「${conflict.caseName}」最新上傳的資料` : `已保留「${conflict.caseName}」原有的資料`)
+    await fetchSubmissionReview()
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
   }
