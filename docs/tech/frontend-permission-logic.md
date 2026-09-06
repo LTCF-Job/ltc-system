@@ -4,12 +4,14 @@
 
 ## 權限的取得與生效時機（`stores/auth.ts`）
 
-`loadPermissions()` 呼叫 `GET /api/v1/auth/me`，把回傳的 `permissions` 存入 store，並標記 `permissionsLoaded = true`。觸發時機：
+`loadPermissions()` 呼叫 `GET /api/v1/auth/me`，把回傳的 `permissions` 存入 store，並在成功時標記 `permissionsLoaded = true`。函式回傳 `true` 表示權限已載入，回傳 `false` 表示請求失敗並將狀態標為 `error`。觸發時機：
 
-1. 登入成功後（`setSession()` 內部呼叫），涵蓋三條登入路徑：正常 Supabase 登入、`ltcf-admin` email 代稱登入（實際仍走 Supabase）、local 環境的 mock JWT 登入（Supabase 未設定時，表單送出後端直接發一張 `mock_jwt_<role>` token）。
-2. 分頁重新整理時：store 建構階段若偵測到 localStorage 已有 `token`／`user`（沿用既有 session），立即補打一次 `loadPermissions()`。**Permissions 本身不寫入 localStorage**，每次還原 session 都是向後端要最新的一份，避免權限異動後舊分頁還讀到過期快取。
+1. 登入成功後：local mock 登入由 `setSession()` 建立 token 後呼叫；Supabase 登入由 `syncSession()` 同步 session 後呼叫，涵蓋 `ltcf-admin` email 代稱（實際仍走 Supabase）。只有權限載入成功才會導向目標頁面。
+2. 分頁重新整理時：store 建構階段若偵測到 localStorage 已有本機 mock `token`／`user`（沿用既有 session），立即補打一次 `loadPermissions()`。**Permissions 本身不寫入 localStorage**，每次還原 session 都是向後端要最新的一份，避免權限異動後舊分頁還讀到過期快取。
 
 `loadPermissions()` 內部用一個閉包變數快取進行中的 promise，避免 router guard 與 store 初始化同時觸發造成重複請求。
+
+權限請求失敗時，登入流程會清除 session，不會同時顯示「系統發生錯誤」與「登入成功」。路由守衛遇到既有的 `error` 狀態也會清除 session；受保護路由導回 `/login`，公開路由則繼續放行。
 
 `hasPermission(module, action)`：`permissionsLoaded === false` 時一律回傳 `false`（安全預設，不放行），其餘情況單純查 `permissions[module][action]`。**沒有任何角色字串的短路判斷**——包含 `admin` 在內，都是後端矩陣給 `true` 才會是 `true`，前端不額外開後門。這是刻意的設計：自訂角色與內建角色使用同一套判斷路徑，不會有「前端多信任 admin 一點」的分歧。
 
@@ -19,10 +21,11 @@
 
 `beforeEach` 依序檢查：
 
-1. 路由不是 `meta.public` 且使用者未登入 → 導去 `/login`。
-2. 已登入卻要進 `/login` → 導去首頁。
-3. 已登入但權限尚未載入完成（`!permissionsLoaded`，例如剛按 F5）→ `await authStore.loadPermissions()` 待其完成後才繼續判斷，不會因為請求還沒回來就誤判為無權限而把使用者踢出當前頁。
-4. `meta.module` 有設定值 → 呼叫 `authStore.hasPermission(module, 'view')`，沒權限就導回首頁並跳警告訊息。
+1. 已登入但權限尚未載入完成（`!permissionsLoaded`，例如剛按 F5）→ `await authStore.loadPermissions()` 待其完成。
+2. 權限載入失敗 → 清除 session；受保護路由導去 `/login`，公開路由繼續放行。
+3. 路由不是 `meta.public` 且使用者未登入 → 導去 `/login`。
+4. 已登入卻要進 `/login` → 導去首頁。
+5. `meta.module` 有設定值 → 呼叫 `authStore.hasPermission(module, 'view')`，沒權限就導回首頁並跳警告訊息。
 
 **沒有 `meta.roles` 這回事了**——`router/index.ts` 的每個路由只保留 `meta.module`，不再有平行存在、且早已跟真實判斷脫鉤的角色字串陣列。過去 `meta.roles` 只是文件性質的標註、不影響實際放行，這個誤導來源已經整個拿掉。
 

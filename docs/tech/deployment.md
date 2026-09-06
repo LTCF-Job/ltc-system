@@ -66,6 +66,7 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 |---|---|---|---|
 | `PORT` | `8080` | Cloud Run 自動注入，不用設 | HTTP 監聽埠 |
 | `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL`、`SUPABASE_URL`（或 `SUPABASE_PROJECT_REF`）、`SUPABASE_SERVICE_ROLE_KEY`、`ALLOWED_ORIGINS`、`RESEND_API_KEY` 與 `NOTIFY_FROM`，否則直接拒絕啟動 |
+| `ALLOW_INSECURE_MOCK_AUTH` | `true`（僅本機） | `false` | 本機 API 接受 `mock_jwt_`；production 禁止開啟 |
 | `DATABASE_URL` | Supabase 連線池網址 | 同左，存在 Secret Manager | 見上方 pgbouncer 說明 |
 | `DB_MAX_CONNS` / `DB_MIN_CONNS` | `5` / `2` | 同左 | 對應 `pgxpool` 的 `MaxConns`／`MinConns`；另可設定 `DB_MAX_CONN_LIFETIME`、`DB_MAX_CONN_IDLE_TIME` |
 | `ENCRYPTION_KEY` / `HMAC_KEY` | 32 bytes base64 | 同左，存在 Secret Manager | 個案身分證等敏感欄位加密用 |
@@ -90,7 +91,7 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key（公開金鑰，非機密） |
 | `VITE_GOOGLE_CLIENT_ID` / `VITE_GOOGLE_API_KEY` / `VITE_GOOGLE_APP_ID` | Google Picker／Identity Services，選填 |
 
-`VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY` 沒設定時，[`apps/web/src/lib/supabase.ts`](../../apps/web/src/lib/supabase.ts) 會讓 `supabase` client 維持 `null`；登入頁看到 `!supabase` 就會直接顯示「帳號密碼錯誤或無此使用者」，不會真的呼叫 Supabase Auth，容易誤判成帳密問題。
+local build 會忽略 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY`，固定使用本機 mock 登入；非 local build 必須同時設定這兩個值，`apps/web/src/lib/supabase.ts` 才會建立 Supabase client。local API 則必須同步設定 `ALLOW_INSECURE_MOCK_AUTH=true`，否則登入後的 `/auth/me` 會拒絕 mock token。
 
 ### 已知坑：Vercel Preview 環境變數要另外設
 

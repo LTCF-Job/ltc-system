@@ -15,8 +15,8 @@ npm run dev
 ```
 VITE_API_BASE_URL=/api/v1        # API base path，本機開發搭配 vite proxy 用相對路徑就好
 VITE_API_TARGET=http://localhost:8080   # vite dev server 把 /api 轉發到這裡（見 vite.config.ts）
-VITE_SUPABASE_URL=                # Supabase 專案網址，登入頁 signInWithPassword 用；正式環境必填
-VITE_SUPABASE_ANON_KEY=           # Supabase anon public key；正式環境必填
+VITE_SUPABASE_URL=                # Supabase 專案網址；local 會忽略，非 local 環境必填
+VITE_SUPABASE_ANON_KEY=           # Supabase anon public key；local 會忽略，非 local 環境必填
 ```
 
 其他指令：

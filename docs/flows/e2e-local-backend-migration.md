@@ -27,7 +27,7 @@ MSW 已在本輪移除（`apps/web/src/mocks/` 整目錄、`demoMode.ts` 相關�
   1. `playwright.config.ts` / `playwright.config.local.ts` 把 `VITE_SUPABASE_URL` 指向 `http://mock.supabase.local`，靠 MSW 的 `handlers/supabaseAuth.ts` 攔截 `/auth/v1/token` 回傳假 session——這個攔截機制已經不存在。
   2. `tests/e2e/helpers/auth.ts` 的 `loginAs()` 原本點快速登入按鈕（已在 `LoginView.vue` 移除）或寫入 `demo_token_<role>` 到 localStorage（格式跟後端現在只認的 `mock_jwt_` 前綴對不上）。
   3. 12 支 spec 的斷言大量寫死 MSW 假資料的具體內容（例如個案姓名「1.張詹竹妹 [去程]」、故意用「王小明」當查無資料案例、斷言匯出前置檢核**一定**跳警告框——因為假資料故意留了瑕疵）。這些斷言的前提資料來源已經不存在。
-- **local 登入流程已改好**：`LoginView.vue` 的表單在所有環境長得一樣，使用者照常輸入帳號密碼、按登入；local 環境（Supabase 未設定時）不驗證密碼，直接發一張 `mock_jwt_<role>` token 建立 session（角色推斷：email 含 `viewer` → viewer，否則 admin）。後端 `auth.go` 現在只接受這一條 local 分支，且會正確跑 `enforceDataPlane`。E2E 的登入 helper 應該改用「填表單、按登入」這個真實流程，而不是繼續走已被拿掉的捷徑。
+- **local 登入流程已改好**：`LoginView.vue` 的表單在所有環境長得一樣，使用者照常輸入帳號密碼、按登入；local 環境一律不呼叫 Supabase，不驗證密碼，直接發一張 `mock_jwt_<role>` token 建立 session（角色推斷：email 含 `viewer` → viewer，否則 admin）。後端 `auth.go` 需同時設定 `APP_ENV=local` 與 `ALLOW_INSECURE_MOCK_AUTH=true` 才接受這條 local 分支，且會正確跑 `enforceDataPlane`。E2E 的登入 helper 應該改用「填表單、按登入」這個真實流程，而不是繼續走已被拿掉的捷徑。
 - **權限矩陣已統一**（見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)）：後端所有路由都走 `RequirePermission(module, action)`，前端依 `/auth/me` 回傳的權限決定畫面。這代表新版 E2E 的斷言基礎應該是「權限矩陣的行為」而不是「角色字串」——例如驗證某個權限受限的使用者看不到編輯按鈕、或操作被 API 擋下（403），而不是假設「這個角色永遠能做這件事」。
 - **原本設想借用的 demo 種子機制已經整套不存在**：`apps/api/seed/demo/0001_baseline.up.sql`（約 8 筆 cases 的種子資料）與 `POST /demo/reset` 端點已於 demo 資料平面移除時一併刪除，`DATA_PLANE` 這個環境變數本身也不存在了（`APP_ENV` 現在只接受 `local`／`production`，見 `internal/platform/config/config.go`）。下一輪不能再假設能借用這套機制，需要另立一套 local 測試專用的種子腳本（不掛 HTTP 端點，直接在 Playwright `globalSetup` 或獨立 CLI 執行 truncate + 重跑種子）。
 

@@ -7,6 +7,24 @@ export function setupRouterGuards(router: Router) {
     const authStore = useAuthStore()
     const isPublic = to.meta.public === true
 
+    // F5 重整時 /auth/me 可能還沒回來；guard 在此等待既有請求，避免誤判無權限把使用者踢出當前頁面
+    if (authStore.isAuthenticated && authStore.permissionState !== 'loaded') {
+      await authStore.loadPermissions()
+    }
+
+    if (authStore.isAuthenticated && authStore.permissionState === 'error') {
+      await authStore.logout()
+      if (isPublic) {
+        next()
+      } else {
+        next({
+          path: '/login',
+          query: { redirect: to.fullPath }
+        })
+      }
+      return
+    }
+
     // 保留原始路徑，登入後可導回目標頁面
     if (!isPublic && !authStore.isAuthenticated) {
       next({
@@ -19,16 +37,6 @@ export function setupRouterGuards(router: Router) {
     // 避免已登入使用者停留在登入頁
     if (to.path === '/login' && authStore.isAuthenticated) {
       next('/')
-      return
-    }
-
-    // F5 重整時 /auth/me 可能還沒回來；guard 在此等待既有請求，避免誤判無權限把使用者踢出當前頁面
-    if (authStore.isAuthenticated && authStore.permissionState !== 'loaded') {
-      await authStore.loadPermissions()
-    }
-
-    if (authStore.isAuthenticated && authStore.permissionState === 'error') {
-      next(false)
       return
     }
 

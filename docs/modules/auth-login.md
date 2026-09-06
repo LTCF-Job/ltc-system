@@ -29,8 +29,10 @@ covers:
 
 ## Invariants and gotchas
 
-- 本機環境（local）未設定 Supabase 時不強制驗證，可直接以本機開發身分或快速切換登入，避免阻礙本機開發與測試。
-- 正式環境必須透過真實 Supabase Auth 驗證。
+- 本機環境（local）一律不呼叫 Supabase，使用 `mock_jwt_<role>` 建立本機開發 session；即使 `.env.local` 殘留 Supabase 設定也不會切換登入模式。
+- 本機 API 必須明確設定 `ALLOW_INSECURE_MOCK_AUTH=true` 才接受 mock token；正式環境不得開啟此設定。
+- 非本機環境必須透過真實 Supabase Auth 驗證。
+- `/auth/me` 權限載入失敗時不得顯示登入成功，前端會清除 session 並回到登入頁。
 - 登入頁品牌名稱固定為「好安心關懷協會-後臺系統」。
 
 ## Unverified

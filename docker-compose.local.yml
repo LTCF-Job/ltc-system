@@ -29,6 +29,7 @@ services:
     environment:
       PORT: 8080
       APP_ENV: local
+      ALLOW_INSECURE_MOCK_AUTH: "true"
       DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/ltc_system?sslmode=disable
       ENCRYPTION_KEY: MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=
       HMAC_KEY: OTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=

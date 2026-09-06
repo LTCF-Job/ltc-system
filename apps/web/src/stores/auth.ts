@@ -45,7 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
   const permissions = ref<SystemPermissions>({})
   const permissionState = ref<PermissionState>('idle')
   const permissionsLoaded = computed(() => permissionState.value === 'loaded')
-  let permissionsRequest: Promise<void> | null = null
+  let permissionsRequest: Promise<boolean> | null = null
   let initialized = false
 
   const isAuthenticated = computed(() => !!token.value && !!user.value)
@@ -83,11 +83,11 @@ export const useAuthStore = defineStore('auth', () => {
     if (changed) resetPermissions()
   }
 
-  function loadPermissions(): Promise<void> {
+  function loadPermissions(): Promise<boolean> {
     if (!token.value || !user.value) {
       permissions.value = {}
       permissionState.value = 'loaded'
-      return Promise.resolve()
+      return Promise.resolve(true)
     }
     if (permissionsRequest) return permissionsRequest
 
@@ -96,10 +96,12 @@ export const useAuthStore = defineStore('auth', () => {
       .then((me) => {
         permissions.value = me.permissions || {}
         permissionState.value = 'loaded'
+        return true
       })
       .catch(() => {
         permissions.value = {}
         permissionState.value = token.value ? 'error' : 'idle'
+        return false
       })
       .finally(() => {
         permissionsRequest = null
@@ -112,7 +114,9 @@ export const useAuthStore = defineStore('auth', () => {
     initialized = true
 
     if (!supabase) {
-      if (token.value && user.value) await loadPermissions()
+      if (token.value && user.value && !(await loadPermissions())) {
+        await logout()
+      }
       return
     }
 
@@ -129,17 +133,19 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     syncSession(data.session)
-    if (data.session) await loadPermissions()
+    if (data.session && !(await loadPermissions())) {
+      await logout()
+    }
   }
 
-  async function setSession(newToken: string, newUser: UserDTO) {
+  async function setSession(newToken: string, newUser: UserDTO): Promise<boolean> {
     // 只提供給本機 mock 登入與測試；正式 Supabase session 必須透過 syncSession 建立。
     token.value = newToken
     user.value = newUser
     localStorage.setItem(TOKEN_KEY, newToken)
     localStorage.setItem(USER_KEY, JSON.stringify(newUser))
     resetPermissions()
-    await loadPermissions()
+    return loadPermissions()
   }
 
   async function logout() {
