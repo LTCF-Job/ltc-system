@@ -179,7 +179,7 @@ func main() {
 	fuelSvc := opsapp.NewFuelService(fuelRepo, opsAudit)
 	dashboardSvc := reportapp.NewDashboardService(dashboardRepo, exportJobRepo)
 	caregiverExcelAdapter := caregiverinfra.NewExcelAdapter()
-	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverSiteLookup{repo: mdSiteRepo}, caregiverExcelAdapter, caregiverExcelAdapter)
+	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverSiteLookup{repo: mdSiteRepo}, caregiverExcelAdapter, caregiverExcelAdapter, caregiverAuditWriter{svc: auditSvc})
 
 	roleRepo := identityinfra.NewRoleRepository(pool)
 	securityStateRepo := identityinfra.NewUserSecurityStateRepository(pool)

@@ -271,7 +271,7 @@ func (a caregiverSiteLookup) GetByName(ctx context.Context, name string) (*careg
 	s, err := a.repo.GetByName(ctx, name)
 	if err != nil {
 		if errors.Is(err, masterapp.ErrSiteNotFound) {
-			return nil, nil
+			return nil, caregiverapp.ErrCaregiverSiteNotFound
 		}
 		return nil, err
 	}
