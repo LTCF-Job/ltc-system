@@ -7,7 +7,7 @@ covers: ["apps/api/cmd/server/routes.go"]
 
 Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/health`（不驗證）跟 `/api/v1/ingest/google-form`（走 `X-Ingest-Token`）。實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
 
-下表「角色」欄列的是**目前系統五個內建角色（viewer/dispatcher/staff/driver/admin）實際能通過的結果**，不是授權機制本身：大多數模組 CRUD 路由已改用 `auth.RequirePermission(module, action)` 查角色的模組權限矩陣（`roles.permissions`，可在「角色身分管理」頁調整，自訂角色的實際存取範圍以矩陣為準，不受下表侷限），只有 `/users`、`/roles`、`/auth/change-password`、`/demo/reset`、`/tasks/*`、`/holidays*` 仍是 `auth.RequireRoles(...)` 寫死的角色字串白名單。機制細節與兩者的邊界見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。
+下表「角色」欄列的是**目前系統五個內建角色（viewer/dispatcher/staff/driver/admin）實際能通過的結果**，不是授權機制本身：所有 API 路由都透過 `auth.RequirePermission(module, action)` 查角色的模組權限矩陣（`roles.permissions`，可在「角色身分管理」頁調整，自訂角色的實際存取範圍以矩陣為準，不受下表侷限）。機制細節見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。
 
 架構背景見 [backend-framework.md](backend-framework.md)，每支端點背後的業務流程見 [backend-flows.md](backend-flows.md)。
 
@@ -219,7 +219,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | PATCH | `/roles/:id` | admin | 系統角色不可修改（`ErrSystemRoleImmutable`） |
 | DELETE | `/roles/:id` | admin | 系統角色或仍有使用者的角色不可刪除（`ErrSystemRoleImmutable`／`ErrRoleInUse`） |
 
-⚠️ `auth.RequireRoles` 只認得 `viewer`/`staff`/`admin` 三個字串，自訂角色的 `base_role` 只是把 API 存取層級對映到其中之一——建出權限矩陣全開但 `base_role=viewer` 的角色，實際仍會被大多數寫入端點擋在 403。
+所有路由（包含 `/users`、`/roles`、`/auth/change-password`、`/tasks/*` 與 `/holidays*`）都使用同一套 effective permission resolver；`auth.RequireRoles` 已移除，自訂角色不再被寫死的角色字串額外擋下。
 
 ## 使用者帳號管理 `identityH`
 
@@ -227,7 +227,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/users` | admin | 使用者清單（裸陣列），支援 `keyword`／`role` 篩選（app 層過濾） |
+| GET | `/users` | admin | 使用者清單（`{data,meta}`），支援 `q`／`role`／`page`／`pageSize`，由本地 PostgreSQL projection 執行搜尋與分頁 |
 | GET | `/users/:id` | admin | |
 | POST | `/users` | admin | 建立使用者，`role` 須存在於 `roles` 表 |
 | PATCH | `/users/:id` | admin | |

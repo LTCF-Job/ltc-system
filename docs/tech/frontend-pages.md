@@ -29,8 +29,8 @@ covers: ["apps/web/src/router/index.ts"]
 | `/vehicles/maintenance` | `views/vehicles/MaintenanceView.vue` | 全部 | `vehicles/maintenance*` |
 | `/attendance` | `views/attendance/AttendanceFuelView.vue` | 全部 | `attendance`、`fuel-logs` |
 | `/audit` | `views/audit/AuditLogView.vue` | admin only | `audit` |
-| `/settings/users` | `views/settings/UserManagementView.vue` | admin only | `users/*`（⚠️ 後端未實作，見 [backend-api-reference.md](backend-api-reference.md)） |
-| `/settings/roles` | `views/settings/RoleManagementView.vue` | admin only | `roles/*`（⚠️ 後端未實作，見 [backend-api-reference.md](backend-api-reference.md)） |
+| `/settings/users` | `views/settings/UserManagementView.vue` | admin only | `users/*`（使用本地 PostgreSQL projection 搜尋與分頁） |
+| `/settings/roles` | `views/settings/RoleManagementView.vue` | admin only | `roles/*`（角色 CRUD、權限矩陣與使用者數統計） |
 | `/settings/notifications` | `views/settings/NotificationSettingsView.vue` | admin/staff/dispatcher/viewer | `settings/notification-recipients*`、`notifications/logs` |
 | `/settings/holidays` | `views/settings/HolidayCalendarView.vue` | admin/staff/dispatcher/viewer | `holidays*` |
 | `/exports` | `views/exports/ExportView.vue` | admin/staff/dispatcher | `exports/precheck`、`exports/*` |

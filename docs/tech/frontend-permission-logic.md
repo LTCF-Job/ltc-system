@@ -6,7 +6,7 @@
 
 `loadPermissions()` 呼叫 `GET /api/v1/auth/me`，把回傳的 `permissions` 存入 store，並標記 `permissionsLoaded = true`。觸發時機：
 
-1. 登入成功後（`setSession()` 內部呼叫），涵蓋三條登入路徑：正常 Supabase 登入、demo／`ltcf-admin` email 代稱登入（實際仍走 Supabase）、local 環境的 mock JWT 登入（Supabase 未設定時，表單送出後端直接發一張 `mock_jwt_<role>` token）。
+1. 登入成功後（`setSession()` 內部呼叫），涵蓋三條登入路徑：正常 Supabase 登入、`ltcf-admin` email 代稱登入（實際仍走 Supabase）、local 環境的 mock JWT 登入（Supabase 未設定時，表單送出後端直接發一張 `mock_jwt_<role>` token）。
 2. 分頁重新整理時：store 建構階段若偵測到 localStorage 已有 `token`／`user`（沿用既有 session），立即補打一次 `loadPermissions()`。**Permissions 本身不寫入 localStorage**，每次還原 session 都是向後端要最新的一份，避免權限異動後舊分頁還讀到過期快取。
 
 `loadPermissions()` 內部用一個閉包變數快取進行中的 promise，避免 router guard 與 store 初始化同時觸發造成重複請求。
@@ -38,8 +38,8 @@
 
 ## 跟後端授權的對應關係
 
-前端 `hasPermission(module, action)` 與後端 `auth.RequirePermission(module, action)` 現在是同一套資料的兩個消費端，兩者共用 `auth.ResolveEffectivePermissions`：`RequirePermission` 直接拿它的結果判斷放不放行，`/auth/me` 拿同一個結果回給前端顯示。所有路由（含過去維持 `RequireRoles` 白名單的 `/users`、`/roles`、`/auth/change-password`、`/demo/reset`、`/tasks/*`、`/holidays*`）現在都走這一套，`auth.RequireRoles` 已刪除，詳見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md) 的 2026-09 修訂。
+前端 `hasPermission(module, action)` 與後端 `auth.RequirePermission(module, action)` 現在是同一套資料的兩個消費端，兩者共用 `auth.ResolveEffectivePermissions`：`RequirePermission` 直接拿它的結果判斷放不放行，`/auth/me` 拿同一個結果回給前端顯示。所有路由（含過去維持 `RequireRoles` 白名單的 `/users`、`/roles`、`/auth/change-password`、`/tasks/*`、`/holidays*`）現在都走這一套，`auth.RequireRoles` 已刪除，詳見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md) 的 2026-09 修訂（`/demo/reset` 本身已隨 demo 資料平面移除，系統現在只有 local／production 兩個環境）。
 
 ## 已知限制
 
-`SUPABASE_SERVICE_ROLE_KEY` 在 production 環境未設定時，服務會直接拒絕啟動（見 `internal/platform/config/config.go`），不會再有「個人覆蓋悄悄失效」的情況；這條限制只在 local／demo 環境仍成立（fail-open 為「沒有個人覆蓋」），詳見 [custom-permission-admin-api-enforcement.md](../decisions/custom-permission-admin-api-enforcement.md) 的追記。
+`SUPABASE_SERVICE_ROLE_KEY` 在 production 環境未設定時，服務會直接拒絕啟動（見 `internal/platform/config/config.go`），不會再有「個人覆蓋悄悄失效」的情況；這條限制只在 local 環境仍成立（fail-open 為「沒有個人覆蓋」），詳見 [custom-permission-admin-api-enforcement.md](../decisions/custom-permission-admin-api-enforcement.md) 的追記。

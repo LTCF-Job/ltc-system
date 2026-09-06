@@ -49,7 +49,7 @@ src/
 meta: { title: '個案管理', module: 'masters_cases', roles: ['admin', 'staff', 'dispatcher', 'viewer'] }
 ```
 
-`roles` 只是給人看的標註，實際放不放行看 `module` 對應的模組權限表（角色預設值 ＋ 個人自訂覆蓋），判斷順序跟細節寫在獨立的 [frontend-permission-logic.md](frontend-permission-logic.md)，改權限規則前務必先讀那份，不要以為改 `meta.roles` 就會生效。加新頁面記得同步確認後端對應 API 的 `RequireRoles` 白名單有沒有涵蓋一致的角色（見 [backend-api-reference.md](backend-api-reference.md)），前後端角色定義要對得上，不然會出現「頁面看得到但每支 API 都 403」的狀況；也要注意前端的細粒度權限後端目前接不到，見 [frontend-permission-logic.md](frontend-permission-logic.md) 的落差說明。
+`roles` 只是給人看的標註，實際放不放行看 `module` 對應的模組權限表（角色預設值 ＋ 個人自訂覆蓋），判斷順序跟細節寫在獨立的 [frontend-permission-logic.md](frontend-permission-logic.md)，改權限規則前務必先讀那份，不要以為改 `meta.roles` 就會生效。加新頁面記得同步確認後端對應 API 使用相同的 `RequirePermission` module/action（見 [backend-api-reference.md](backend-api-reference.md)），避免出現「頁面看得到但 API 403」的契約落差。
 
 ## 環境模型（local／production）
 

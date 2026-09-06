@@ -218,7 +218,7 @@ gcloud run jobs describe ltc-api-migrate --region=asia-east1 --format="value(spe
 
 ## GitHub Actions 自動部署（`main`）
 
-`deploy-api.yml` 與 `deploy-web.yml` 各自直接由 `push` 到 `main` 觸發（也可以用 `workflow_dispatch` 手動觸發），每個檔案內都有一個 `test` job（vet／test／build 或 type-check／build）跑完才會進 `deploy` job；`ci.yml` 只在 PR 上跑，不重複跑 push 的測試。其餘分支的 push 不會觸發任何部署。
+`deploy-api.yml` 與 `deploy-web.yml` 各自直接由 `push` 到 `main` 觸發（也可以用 `workflow_dispatch` 手動觸發），每個檔案內都有一個 `test` job（vet／test／build 或 type-check／build）跑完才會進 `deploy` job；`ci.yml` 會在 PR 目標為 `develop`／`main`，以及 push 到 `develop`／`main` 時執行共用品質檢查。其餘分支的 push 不會觸發任何部署或這份 CI。
 
 `deploy-api.yml` 的 `deploy` job 依序：`gcloud builds submit` 建 image → 更新 `ltc-api-migrate` job 的 image → `gcloud run jobs execute` 跑 migration（`--wait`，失敗會擋住下一步）→ `gcloud run deploy` 部署 API service。
 

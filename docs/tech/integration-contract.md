@@ -47,5 +47,5 @@ view 元件呼叫 src/api/*.ts
 
 ## Unverified
 
-- `error.details` 的欄位名稱／巢狀規則沒有共用的型別定義或 schema 驗證，目前只能靠前後端各自的實作互相對齊，未找到自動化契約測試。
+- `error.details` 的欄位名稱／巢狀規則沒有共用的型別定義或 schema 驗證；前端已有 envelope helper 的單元測試，但仍未建立完整的前後端 error schema 契約測試。
 - **Supabase Admin API 的實際回應形狀**：本輪開發時 `SUPABASE_SERVICE_ROLE_KEY` 留空，`identity` 模組（`/users`、密碼變更）的請求／回應欄位（`app_metadata` vs `raw_app_meta_data`、`ban_duration` 停用語義、`grant_type=password` 的錯誤 payload）皆依官方文件推測，未經真實環境驗證。金鑰就位後第一件事應是打真實環境對照 `identity/infra/supabase_admin_client.go` 的假設。
