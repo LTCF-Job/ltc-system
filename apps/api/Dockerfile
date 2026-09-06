@@ -19,7 +19,6 @@ ENV TZ=Asia/Taipei
 COPY --from=builder /app/bin/server /app/server
 COPY --from=builder /app/bin/migrate /app/migrate
 COPY --from=builder /app/migrations /app/migrations
-COPY --from=builder /app/seed /app/seed
 
 EXPOSE 8080
 CMD ["/app/server"]
