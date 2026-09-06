@@ -141,6 +141,7 @@ func main() {
 		excelAdapter,
 		txRunner,
 	)
+	importSvc.SetIdempotencyStore(caseRepo)
 	var emailSender notifyapp.EmailSender
 	if cfg.AppEnv == "production" || cfg.ResendAPIKey != "" {
 		emailSender = notifyinfra.NewResendEmailSender(cfg.ResendAPIKey, cfg.NotifyFrom, &http.Client{Timeout: 10 * time.Second})

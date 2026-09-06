@@ -235,6 +235,7 @@ type caseRegistrar struct{ svc *caseapp.CaseService }
 
 func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, actor importapp.Actor) (uuid.UUID, error) {
 	entity, err := a.svc.CreateCase(ctx, caseapp.CreateCaseRequest{
+		ID:   in.ID,
 		Name: in.Name, NationalID: in.NationalID,
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
