@@ -13,8 +13,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// CommitDriverReport 正式寫入匯報表：確認欄位對應後覆蓋本次涵蓋日期的既有匯入資料，
-// 整份寫入落在同一交易內、失敗即回滾。
+// CommitDriverReport 正式寫入匯報表：確認欄位對應後逐列比對既有資料，沒問題的直接
+// 寫入、值不同的進待維護等待使用者選擇，整份寫入落在同一交易內、失敗即回滾（每次
+// 上傳是獨立事件，不整段覆蓋既有資料，見 docs/decisions/driver-report-import-overwrite.md）。
 func (s *DriverReportService) CommitDriverReport(
 	ctx context.Context,
 	formID uuid.UUID,
@@ -27,7 +28,7 @@ func (s *DriverReportService) CommitDriverReport(
 		return nil, errors.New("driver report service: transaction runner not configured")
 	}
 
-	monthStart, monthDeclared, err := parseYearMonth(yearMonth)
+	_, monthDeclared, err := parseYearMonth(yearMonth)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +42,7 @@ func (s *DriverReportService) CommitDriverReport(
 	if err != nil {
 		return nil, err
 	}
-	// 宣告整月覆蓋時，日期無法解析屬於阻斷性錯誤，整份不清除也不寫入
+	// 宣告整月時，日期無法解析屬於阻斷性錯誤，整份不寫入
 	if monthDeclared && !preview.CanCommit {
 		return nil, ErrImportHasBlockingErrors
 	}
@@ -108,10 +109,10 @@ func (s *DriverReportService) CommitDriverReport(
 		}
 		result.MappedColumns = mappedCount
 
-		if err := s.clearPreviousImport(txCtx, formID, importable, monthStart, monthDeclared); err != nil {
-			return err
-		}
-
+		// 不再先清除本次涵蓋日期的既有資料：每次上傳是獨立事件，逐列比對交由
+		// RideIngestor.IngestSubmission 內部處理——沒問題的直接寫入，值不同的進待維護，
+		// 這台車其他未出現在本次檔案的資料完全不受影響（見
+		// docs/decisions/driver-report-import-overwrite.md）。
 		submittedAt := s.now()
 		for _, row := range importable {
 			// 保留這一列所有欄位的原始值，含尚未對應個案的欄位：日後在待維護頁面完成
@@ -122,7 +123,7 @@ func (s *DriverReportService) CommitDriverReport(
 			}
 
 			driverID := parseOptionalUUID(row.preview.DriverID)
-			written, err := s.rideIngestor.IngestSubmission(txCtx, formID, form.VehicleID, Submission{
+			outcome, err := s.rideIngestor.IngestSubmission(txCtx, formID, form.VehicleID, Submission{
 				ServiceDate: row.serviceDate,
 				SubmittedAt: submittedAt,
 				DriverRaw:   row.preview.DriverRaw,
@@ -143,7 +144,9 @@ func (s *DriverReportService) CommitDriverReport(
 			}
 
 			result.ImportedRows++
-			result.RideRecordRows += written
+			result.RideRecordRows += outcome.Written
+			result.ReaffirmedRows += outcome.Reaffirmed
+			result.PendingConflictRows += outcome.Staged
 			if row.preview.WarningMessage != "" {
 				result.Warnings = append(result.Warnings, ImportWarningItem{RowIndex: row.preview.RowIndex, Message: row.preview.WarningMessage})
 			}
@@ -202,40 +205,6 @@ func collectImportableRows(previewRows []RowPreview, result *CommitResult) []imp
 		out = append(out, importableRow{preview: row, serviceDate: serviceDate})
 	}
 	return out
-}
-
-// clearPreviousImport 清掉本次要覆蓋的既有匯入資料。
-func (s *DriverReportService) clearPreviousImport(
-	ctx context.Context,
-	formID uuid.UUID,
-	importable []importableRow,
-	monthStart time.Time,
-	monthDeclared bool,
-) error {
-	// 沒有可寫入的列通常代表傳錯檔案，清空整月的代價遠高於少覆蓋一次
-	if len(importable) == 0 {
-		return nil
-	}
-
-	var dates []time.Time
-	if monthDeclared {
-		dates = daysInMonth(monthStart)
-	} else {
-		seen := map[string]bool{}
-		for _, row := range importable {
-			key := row.preview.ServiceDate
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			dates = append(dates, row.serviceDate)
-		}
-	}
-
-	if _, err := s.rideIngestor.ClearImportedDates(ctx, formID, dates); err != nil {
-		return err
-	}
-	return nil
 }
 
 // writeImportAudit 留下匯入留痕。稽核寫入失敗不推翻已完成的匯入，只記錄於伺服器日誌。

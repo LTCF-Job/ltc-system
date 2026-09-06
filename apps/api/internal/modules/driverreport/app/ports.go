@@ -127,12 +127,41 @@ type MonthRideEntry struct {
 	VehicleID   uuid.UUID
 }
 
+// IngestOutcome 彙整一次逐欄寫入的結果，把新增、無變化的重複回報、進待維護三種情況
+// 分開計算，供匯入結果訊息區分「這次真的新增了什麼」與「進了待維護、需要使用者選擇」。
+type IngestOutcome struct {
+	Written    int
+	Reaffirmed int
+	Staged     int
+}
+
+// RowConflictView 是一筆待維護的「同車同個案」衝突：這台車在同一 slot 已有生效資料，
+// 這次上傳的值與既有值不同，需要使用者選擇要保留哪一筆。SubmissionID 對應到新值所屬
+// 的提交紀錄，供 ListSubmissionReview 併入同一筆匯報表列彙整顯示。
+type RowConflictView struct {
+	ID                 string
+	SubmissionID       string
+	FormTitle          string
+	VehicleName        string
+	ServiceDate        string
+	CaseID             string
+	CaseName           string
+	LegSeq             int16
+	PreviousReported   string
+	PreviousDriverName string
+	NewReported        string
+	NewDriverName      string
+	DetectedAt         string
+}
+
 // RideIngestor 是本模組與搭乘紀錄模組之間的匯報資料邊界，由擁有搭乘紀錄的模組實作。
-// IngestSubmission 回傳實際寫入的搭乘紀錄筆數；ClearImportedDates 回傳清除的提交筆數。
 type RideIngestor interface {
-	IngestSubmission(ctx context.Context, formID, vehicleID uuid.UUID, s Submission) (int, error)
-	ClearImportedDates(ctx context.Context, formID uuid.UUID, dates []time.Time) (int, error)
+	IngestSubmission(ctx context.Context, formID, vehicleID uuid.UUID, s Submission) (IngestOutcome, error)
 	ListImportedMonths(ctx context.Context) ([]ImportedMonth, error)
+	// ListRowConflicts 取出目前所有尚未解決的「同車同個案」衝突。
+	ListRowConflicts(ctx context.Context) ([]RowConflictView, error)
+	// ResolveRowConflict 裁決一筆同車同個案衝突；useNew 選擇採用新資料。
+	ResolveRowConflict(ctx context.Context, conflictID uuid.UUID, useNew bool, operatorID uuid.UUID) (appliedDriverID *uuid.UUID, appliedServiceDate *time.Time, err error)
 	// BackfillColumn 用某欄位既有回報中已存的原始儲存格文字補寫搭乘紀錄，回傳補寫筆數。
 	// 用於欄位從待維護變成已對應時，不需要使用者重新上傳原始檔案。
 	BackfillColumn(ctx context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16) (int, error)

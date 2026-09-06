@@ -342,8 +342,8 @@ func (a driverReportAttendanceRegistrar) SyncFromImport(ctx context.Context, dri
 // driverReportRideIngestor 讓 driverreport 把每日匯報交給 ride 展開為搭乘紀錄。
 type driverReportRideIngestor struct{ svc *rideapp.RideService }
 
-func (a driverReportRideIngestor) IngestSubmission(ctx context.Context, formID, vehicleID uuid.UUID, s drapp.Submission) (int, error) {
-	return a.svc.IngestSubmission(ctx, formID, vehicleID, rideapp.ProcessSubmissionRequest{
+func (a driverReportRideIngestor) IngestSubmission(ctx context.Context, formID, vehicleID uuid.UUID, s drapp.Submission) (drapp.IngestOutcome, error) {
+	result, err := a.svc.IngestSubmission(ctx, formID, vehicleID, rideapp.ProcessSubmissionRequest{
 		ServiceDate: s.ServiceDate,
 		SubmittedAt: s.SubmittedAt,
 		DriverRaw:   s.DriverRaw,
@@ -351,10 +351,40 @@ func (a driverReportRideIngestor) IngestSubmission(ctx context.Context, formID, 
 		Remark:      s.Remark,
 		Answers:     s.Answers,
 	})
+	if err != nil {
+		return drapp.IngestOutcome{}, err
+	}
+	return drapp.IngestOutcome{Written: result.Written, Reaffirmed: result.Reaffirmed, Staged: result.Staged}, nil
 }
 
-func (a driverReportRideIngestor) ClearImportedDates(ctx context.Context, formID uuid.UUID, dates []time.Time) (int, error) {
-	return a.svc.ClearImportedDates(ctx, formID, dates)
+func (a driverReportRideIngestor) ListRowConflicts(ctx context.Context) ([]drapp.RowConflictView, error) {
+	items, err := a.svc.ListRowConflicts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]drapp.RowConflictView, 0, len(items))
+	for _, c := range items {
+		out = append(out, drapp.RowConflictView{
+			ID:                 c.ID.String(),
+			SubmissionID:       c.NewSubmissionID.String(),
+			FormTitle:          c.FormTitle,
+			VehicleName:        c.VehicleName,
+			ServiceDate:        c.ServiceDate.Format("2006-01-02"),
+			CaseID:             c.CaseID.String(),
+			CaseName:           c.CaseName,
+			LegSeq:             c.LegSeq,
+			PreviousReported:   c.PreviousReported,
+			PreviousDriverName: c.PreviousDriverName,
+			NewReported:        c.NewReported,
+			NewDriverName:      c.NewDriverName,
+			DetectedAt:         c.DetectedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+	return out, nil
+}
+
+func (a driverReportRideIngestor) ResolveRowConflict(ctx context.Context, conflictID uuid.UUID, useNew bool, operatorID uuid.UUID) (*uuid.UUID, *time.Time, error) {
+	return a.svc.ResolveRowConflict(ctx, conflictID, useNew, operatorID)
 }
 
 func (a driverReportRideIngestor) BackfillColumn(ctx context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16) (int, error) {

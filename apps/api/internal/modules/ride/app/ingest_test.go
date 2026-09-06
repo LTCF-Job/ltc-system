@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -14,6 +15,23 @@ type slotKey struct {
 	caseID uuid.UUID
 	date   string
 	legSeq int16
+}
+
+// rowConflictSlotKey 是「同車同個案」衝突的識別鍵，只計入未解決的衝突，
+// 重現真實資料庫 partial unique index 的語意。
+type rowConflictSlotKey struct {
+	vehicleID uuid.UUID
+	caseID    uuid.UUID
+	date      string
+	legSeq    int16
+}
+
+// fakeRowConflict 保留一筆暫存衝突及其解決狀態，供測試斷言。
+type fakeRowConflict struct {
+	id         uuid.UUID
+	input      RowConflictInput
+	resolvedAt *time.Time
+	resolution string
 }
 
 // fakeRecordStore 記下寫入的來源列，並在重算時把它們回讀，重現正式流程中
@@ -37,21 +55,21 @@ type fakeRecordStore struct {
 	getByIDResult    *RideRecord
 	getByIDErr       error
 
-	submissionsForForms         []SubmissionFull
-	submissionsForFormsErr      error
-	unmatchedDrivers            []UnmatchedDriverSubmission
-	unmatchedDriversErr         error
-	updateSubmissionDriverErr   error
-	updatedSubmissionDrivers    []submissionDriverUpdate
-	rideSourcesForSubmission    map[uuid.UUID][]RideSourceForSubmission
-	rideSourcesForSubmissionErr error
-	updateRideSourceDriverErr   error
-	updatedRideSourceDrivers    []sourceDriverUpdate
+	submissionsForForms    []SubmissionFull
+	submissionsForFormsErr error
+	unmatchedDrivers       []UnmatchedDriverSubmission
+	unmatchedDriversErr    error
+
+	updateSubmissionDriverErr error
+	updatedSubmissionDrivers  []submissionDriverUpdate
 
 	monthSubmissions    []MonthSubmissionDetail
 	monthSubmissionsErr error
 	monthRideEntries    []MonthRideEntry
 	monthRideEntriesErr error
+
+	rowConflicts     map[uuid.UUID]*fakeRowConflict
+	openRowConflicts map[rowConflictSlotKey]uuid.UUID
 }
 
 // submissionDriverUpdate 保留一次提交紀錄司機回填的參數，供測試斷言。
@@ -60,19 +78,16 @@ type submissionDriverUpdate struct {
 	driverID     uuid.UUID
 }
 
-// sourceDriverUpdate 保留一次搭乘來源司機回填的參數，供測試斷言。
-type sourceDriverUpdate struct {
-	sourceID uuid.UUID
-	driverID uuid.UUID
-}
-
-// submissionKey 讓 fake 能像資料庫一樣依 form 與服務日期刪除提交紀錄。
+// submissionKey 讓 fake 能像資料庫一樣依 form 與服務日期查詢提交紀錄，並保留司機與
+// 上傳時間，供 ListSubmissionAnswersForColumn 重現真實查詢會回傳的欄位。
 type submissionKey struct {
-	formID uuid.UUID
-	date   string
+	formID      uuid.UUID
+	date        string
+	driverID    *uuid.UUID
+	submittedAt time.Time
 }
 
-// fakeSource 保留來源列與其所屬提交，重現 ON DELETE CASCADE 的連帶清除。
+// fakeSource 保留來源列與其所屬提交。
 type fakeSource struct {
 	submissionID uuid.UUID
 	row          RideSourceRow
@@ -80,11 +95,13 @@ type fakeSource struct {
 
 func newFakeRecordStore(columns []FormColumn) *fakeRecordStore {
 	return &fakeRecordStore{
-		columns:     columns,
-		sources:     map[slotKey][]fakeSource{},
-		records:     map[slotKey]*RideRecord{},
-		submissions: map[uuid.UUID]submissionKey{},
-		payloads:    map[uuid.UUID]map[string]interface{}{},
+		columns:          columns,
+		sources:          map[slotKey][]fakeSource{},
+		records:          map[slotKey]*RideRecord{},
+		submissions:      map[uuid.UUID]submissionKey{},
+		payloads:         map[uuid.UUID]map[string]interface{}{},
+		rowConflicts:     map[uuid.UUID]*fakeRowConflict{},
+		openRowConflicts: map[rowConflictSlotKey]uuid.UUID{},
 	}
 }
 
@@ -92,6 +109,8 @@ func (f *fakeRecordStore) GetFormColumns(context.Context, uuid.UUID) ([]FormColu
 	return f.columns, nil
 }
 
+// ListRideSourcesForSlot 依 SubmittedAt 由新到舊排序，重現真實 SQL 的 ORDER BY，
+// 讓 reconcileRideSource 依「這台車最新的一筆」比對的邏輯在測試裡也成立。
 func (f *fakeRecordStore) ListRideSourcesForSlot(_ context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) ([]RideSourceRow, error) {
 	stored := f.sources[slotKey{caseID, serviceDate.Format("2006-01-02"), legSeq}]
 	if len(stored) == 0 {
@@ -101,6 +120,7 @@ func (f *fakeRecordStore) ListRideSourcesForSlot(_ context.Context, caseID uuid.
 	for _, src := range stored {
 		out = append(out, src.row)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SubmittedAt.After(out[j].SubmittedAt) })
 	return out, nil
 }
 
@@ -112,11 +132,11 @@ func (f *fakeRecordStore) ListRideRecordsInRange(context.Context, time.Time, tim
 	return nil, nil
 }
 
-func (f *fakeRecordStore) SaveFormSubmission(_ context.Context, formID uuid.UUID, serviceDate, _ time.Time, _ string, driverID *uuid.UUID, source string, payload map[string]interface{}, _ string, anomalyFlags []string) (uuid.UUID, error) {
+func (f *fakeRecordStore) SaveFormSubmission(_ context.Context, formID uuid.UUID, serviceDate, submittedAt time.Time, _ string, driverID *uuid.UUID, source string, payload map[string]interface{}, _ string, anomalyFlags []string) (uuid.UUID, error) {
 	f.submission = uuid.New()
 	f.lastSource = source
 	f.lastAnomalyFlags = anomalyFlags
-	f.submissions[f.submission] = submissionKey{formID: formID, date: serviceDate.Format("2006-01-02")}
+	f.submissions[f.submission] = submissionKey{formID: formID, date: serviceDate.Format("2006-01-02"), driverID: driverID, submittedAt: submittedAt}
 	f.payloads[f.submission] = payload
 	return f.submission, nil
 }
@@ -138,44 +158,24 @@ func (f *fakeRecordStore) ListSubmissionAnswersForColumn(_ context.Context, form
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, SubmissionAnswer{SubmissionID: id, ServiceDate: date, Value: value})
+		out = append(out, SubmissionAnswer{SubmissionID: id, ServiceDate: date, SubmittedAt: sub.submittedAt, DriverID: sub.driverID, Value: value})
 	}
 	return out, nil
 }
 
-func (f *fakeRecordStore) InsertRideSource(_ context.Context, submissionID, caseID uuid.UUID, serviceDate time.Time, legSeq int16, vehicleID uuid.UUID, driverID *uuid.UUID, reported string, _ int) error {
+func (f *fakeRecordStore) InsertRideSource(_ context.Context, submissionID, caseID uuid.UUID, serviceDate time.Time, legSeq int16, vehicleID uuid.UUID, driverID *uuid.UUID, reported string, _ int, submittedAt time.Time) error {
 	key := slotKey{caseID, serviceDate.Format("2006-01-02"), legSeq}
 	f.sources[key] = append(f.sources[key], fakeSource{
 		submissionID: submissionID,
 		row: RideSourceRow{
-			VehicleID:   vehicleID,
-			DriverID:    driverID,
-			Reported:    reported,
-			SubmittedAt: time.Now().UTC(),
+			SubmissionID: submissionID,
+			VehicleID:    vehicleID,
+			DriverID:     driverID,
+			Reported:     reported,
+			SubmittedAt:  submittedAt,
 		},
 	})
 	return nil
-}
-
-func (f *fakeRecordStore) ListRideSourceSlotsForForm(_ context.Context, formID uuid.UUID, dates []time.Time) ([]RideSlot, error) {
-	wanted := map[string]bool{}
-	for _, d := range dates {
-		wanted[d.Format("2006-01-02")] = true
-	}
-
-	var slots []RideSlot
-	for key, stored := range f.sources {
-		for _, src := range stored {
-			sub := f.submissions[src.submissionID]
-			if sub.formID != formID || !wanted[sub.date] {
-				continue
-			}
-			parsed, _ := time.Parse("2006-01-02", key.date)
-			slots = append(slots, RideSlot{CaseID: key.caseID, ServiceDate: parsed, LegSeq: key.legSeq})
-			break
-		}
-	}
-	return slots, nil
 }
 
 func (f *fakeRecordStore) ListImportedMonths(context.Context) ([]ImportedMonth, error) {
@@ -195,51 +195,12 @@ func (f *fakeRecordStore) UpdateSubmissionDriverID(_ context.Context, submission
 	return f.updateSubmissionDriverErr
 }
 
-func (f *fakeRecordStore) ListRideSourcesForSubmission(_ context.Context, submissionID uuid.UUID) ([]RideSourceForSubmission, error) {
-	return f.rideSourcesForSubmission[submissionID], f.rideSourcesForSubmissionErr
-}
-
-func (f *fakeRecordStore) UpdateRideSourceDriverID(_ context.Context, sourceID, driverID uuid.UUID) error {
-	f.updatedRideSourceDrivers = append(f.updatedRideSourceDrivers, sourceDriverUpdate{sourceID: sourceID, driverID: driverID})
-	return f.updateRideSourceDriverErr
-}
-
 func (f *fakeRecordStore) ListSubmissionsForFormMonth(context.Context, uuid.UUID, time.Time, time.Time) ([]MonthSubmissionDetail, error) {
 	return f.monthSubmissions, f.monthSubmissionsErr
 }
 
 func (f *fakeRecordStore) ListRideEntriesForFormMonth(context.Context, uuid.UUID, time.Time, time.Time) ([]MonthRideEntry, error) {
 	return f.monthRideEntries, f.monthRideEntriesErr
-}
-
-func (f *fakeRecordStore) DeleteFormSubmissions(_ context.Context, formID uuid.UUID, dates []time.Time) (int, error) {
-	wanted := map[string]bool{}
-	for _, d := range dates {
-		wanted[d.Format("2006-01-02")] = true
-	}
-
-	removed := map[uuid.UUID]bool{}
-	for id, sub := range f.submissions {
-		if sub.formID == formID && wanted[sub.date] {
-			removed[id] = true
-			delete(f.submissions, id)
-		}
-	}
-
-	for key, stored := range f.sources {
-		kept := stored[:0]
-		for _, src := range stored {
-			if !removed[src.submissionID] {
-				kept = append(kept, src)
-			}
-		}
-		if len(kept) == 0 {
-			delete(f.sources, key)
-			continue
-		}
-		f.sources[key] = kept
-	}
-	return len(removed), nil
 }
 
 func (f *fakeRecordStore) DeleteDerivedRideRecord(_ context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) error {
@@ -289,6 +250,69 @@ func (f *fakeRecordStore) ListImportErrorSubmissions(context.Context, time.Time,
 	return f.importErrors, int64(len(f.importErrors)), nil
 }
 
+// UpsertRideSourceRowConflict 重現 migration 000035 的 partial unique index：同一 slot
+// （vehicle+case+date+leg）同時只有一筆未解決的衝突，第二次呼叫直接更新其新值。
+func (f *fakeRecordStore) UpsertRideSourceRowConflict(_ context.Context, in RowConflictInput) (uuid.UUID, error) {
+	key := rowConflictSlotKey{in.VehicleID, in.CaseID, in.ServiceDate.Format("2006-01-02"), in.LegSeq}
+	if id, ok := f.openRowConflicts[key]; ok {
+		c := f.rowConflicts[id]
+		c.input.NewSubmissionID = in.NewSubmissionID
+		c.input.NewReported = in.NewReported
+		c.input.NewDriverID = in.NewDriverID
+		c.input.NewSubmittedAt = in.NewSubmittedAt
+		return id, nil
+	}
+	id := uuid.New()
+	f.rowConflicts[id] = &fakeRowConflict{id: id, input: in}
+	f.openRowConflicts[key] = id
+	return id, nil
+}
+
+func (f *fakeRecordStore) ListPendingRowConflicts(context.Context) ([]RowConflict, error) {
+	var out []RowConflict
+	for _, c := range f.rowConflicts {
+		if c.resolvedAt != nil {
+			continue
+		}
+		in := c.input
+		out = append(out, RowConflict{
+			ID: c.id, FormID: in.FormID, VehicleID: in.VehicleID, CaseID: in.CaseID,
+			ServiceDate: in.ServiceDate, LegSeq: in.LegSeq, SourceColumnIndex: in.SourceColumnIndex,
+			PreviousSubmissionID: in.PreviousSubmissionID, PreviousReported: in.PreviousReported,
+			PreviousDriverID: in.PreviousDriverID, PreviousSubmittedAt: in.PreviousSubmittedAt,
+			NewSubmissionID: in.NewSubmissionID, NewReported: in.NewReported,
+			NewDriverID: in.NewDriverID, NewSubmittedAt: in.NewSubmittedAt,
+		})
+	}
+	return out, nil
+}
+
+func (f *fakeRecordStore) ResolveRowConflict(_ context.Context, conflictID uuid.UUID, useNew bool, _ uuid.UUID) (*AppliedRowConflict, bool, error) {
+	c, ok := f.rowConflicts[conflictID]
+	if !ok || c.resolvedAt != nil {
+		return nil, false, nil
+	}
+	now := time.Now().UTC()
+	c.resolvedAt = &now
+	if useNew {
+		c.resolution = "used_new"
+	} else {
+		c.resolution = "kept_previous"
+	}
+	key := rowConflictSlotKey{c.input.VehicleID, c.input.CaseID, c.input.ServiceDate.Format("2006-01-02"), c.input.LegSeq}
+	delete(f.openRowConflicts, key)
+	if !useNew {
+		return nil, true, nil
+	}
+	in := c.input
+	return &AppliedRowConflict{
+		CaseID: in.CaseID, ServiceDate: in.ServiceDate, LegSeq: in.LegSeq,
+		VehicleID: in.VehicleID, SourceColumnIndex: in.SourceColumnIndex,
+		NewSubmissionID: in.NewSubmissionID, NewReported: in.NewReported,
+		NewDriverID: in.NewDriverID, NewSubmittedAt: in.NewSubmittedAt,
+	}, true, nil
+}
+
 type fakeScheduleReader struct{ tripPattern int16 }
 
 func (f fakeScheduleReader) GetActiveScheduleForCaseOnDate(_ context.Context, caseID uuid.UUID, _ time.Time) (*CaseSchedule, error) {
@@ -322,6 +346,7 @@ func mappedColumn(caseID uuid.UUID, header string, legSeq int16, colIdx int) For
 func TestIngestSubmission_WritesReportedStatusVerbatim(t *testing.T) {
 	caseID := uuid.New()
 	vehicleID := uuid.New()
+	driverID := uuid.New()
 	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
 
 	store := newFakeRecordStore([]FormColumn{
@@ -330,16 +355,18 @@ func TestIngestSubmission_WritesReportedStatusVerbatim(t *testing.T) {
 	})
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
-	written, err := svc.IngestSubmission(context.Background(), uuid.New(), vehicleID, ProcessSubmissionRequest{
+	result, err := svc.IngestSubmission(context.Background(), uuid.New(), vehicleID, ProcessSubmissionRequest{
 		ServiceDate: serviceDate,
-		DriverRaw:   "林彥衡",
+		DriverID:    &driverID,
 		Answers: map[string]string{
 			"1.吳桂 [去程]": "有坐",
 			"1.吳桂 [回程]": "沒坐",
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 2, written)
+	assert.Equal(t, 2, result.Written)
+	assert.Zero(t, result.Reaffirmed)
+	assert.Zero(t, result.Staged)
 	assert.Equal(t, "import", store.lastSource)
 
 	outbound := store.records[slotKey{caseID, "2026-03-02", 1}]
@@ -355,35 +382,39 @@ func TestIngestSubmission_WritesReportedStatusVerbatim(t *testing.T) {
 
 func TestIngestSubmission_SkipsUnmappedAndNonReportValues(t *testing.T) {
 	caseID := uuid.New()
+	driverID := uuid.New()
 	store := newFakeRecordStore([]FormColumn{
 		mappedColumn(caseID, "1.吳桂 [去程]", 1, 3),
 		{ID: uuid.New(), ColumnIndex: 4, ColumnHeader: "2.李四 [去程]", MappingStatus: "pending"},
 	})
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
-	written, err := svc.IngestSubmission(context.Background(), uuid.New(), uuid.New(), ProcessSubmissionRequest{
+	result, err := svc.IngestSubmission(context.Background(), uuid.New(), uuid.New(), ProcessSubmissionRequest{
 		ServiceDate: time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC),
+		DriverID:    &driverID,
 		Answers: map[string]string{
 			"1.吳桂 [去程]": "",
 			"2.李四 [去程]": "有坐",
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 0, written, "空白值不建立來源紀錄，未對應欄位不處理")
+	assert.Zero(t, result.Written, "空白值不建立來源紀錄，未對應欄位不處理")
 	assert.Empty(t, store.records)
 }
 
 func TestIngestSubmission_ExpandsFourTripPattern(t *testing.T) {
 	caseID := uuid.New()
+	driverID := uuid.New()
 	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "1.吳桂 [去程]", 1, 3)})
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{tripPattern: 4}, nil, nil)
 
-	written, err := svc.IngestSubmission(context.Background(), uuid.New(), uuid.New(), ProcessSubmissionRequest{
+	result, err := svc.IngestSubmission(context.Background(), uuid.New(), uuid.New(), ProcessSubmissionRequest{
 		ServiceDate: time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC),
+		DriverID:    &driverID,
 		Answers:     map[string]string{"1.吳桂 [去程]": "有坐"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 2, written, "四趟制的表單第 1 趟展開為第 1、3 趟")
+	assert.Equal(t, 2, result.Written, "四趟制的表單第 1 趟展開為第 1、3 趟")
 	assert.NotNil(t, store.records[slotKey{caseID, "2026-03-02", 1}])
 	assert.NotNil(t, store.records[slotKey{caseID, "2026-03-02", 3}])
 }
@@ -395,17 +426,238 @@ func TestIngestSubmission_RequiresServiceDate(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestIngestSubmission_UnresolvedDriverDoesNotWriteRideSource(t *testing.T) {
+	caseID := uuid.New()
+	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "1.吳桂 [去程]", 1, 3)})
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	result, err := svc.IngestSubmission(context.Background(), uuid.New(), uuid.New(), ProcessSubmissionRequest{
+		ServiceDate: time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC),
+		DriverRaw:   "查無此人",
+		Answers:     map[string]string{"1.吳桂 [去程]": "有坐"},
+	})
+	require.NoError(t, err)
+	assert.Zero(t, result.Written, "駕駛人比對不到司機主檔時，這一列完全不展開成搭乘來源")
+	assert.Empty(t, store.records, "資料不完整時不得出現在司機日曆等其他頁面")
+	assert.Empty(t, store.sources)
+}
+
+func TestIngestSubmission_SecondUploadSameValueIsReaffirmedNotStaged(t *testing.T) {
+	caseID := uuid.New()
+	vehicleID := uuid.New()
+	driverID := uuid.New()
+	formID := uuid.New()
+	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "1.吳桂 [去程]", 1, 3)})
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	req := ProcessSubmissionRequest{ServiceDate: serviceDate, DriverID: &driverID, Answers: map[string]string{"1.吳桂 [去程]": "有坐"}}
+	first, err := svc.IngestSubmission(context.Background(), formID, vehicleID, req)
+	require.NoError(t, err)
+	assert.Equal(t, 1, first.Written)
+
+	second, err := svc.IngestSubmission(context.Background(), formID, vehicleID, req)
+	require.NoError(t, err)
+	assert.Zero(t, second.Written, "重複回報不應再新增一筆來源")
+	assert.Equal(t, 1, second.Reaffirmed)
+	assert.Zero(t, second.Staged)
+	assert.Len(t, store.sources[slotKey{caseID, "2026-03-02", 1}], 1, "無變化的重複回報不應疊加出第二筆來源")
+	assert.Empty(t, store.rowConflicts, "值沒有變化不應進待維護")
+}
+
+func TestIngestSubmission_SecondUploadDifferentValueStagesConflictWithoutOverwriting(t *testing.T) {
+	caseID := uuid.New()
+	otherCaseID := uuid.New()
+	vehicleID := uuid.New()
+	driverID := uuid.New()
+	formID := uuid.New()
+	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+	store := newFakeRecordStore([]FormColumn{
+		mappedColumn(caseID, "1.吳桂 [去程]", 1, 3),
+		mappedColumn(otherCaseID, "2.李四 [去程]", 1, 4),
+	})
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	first, err := svc.IngestSubmission(context.Background(), formID, vehicleID, ProcessSubmissionRequest{
+		ServiceDate: serviceDate, DriverID: &driverID,
+		Answers: map[string]string{"1.吳桂 [去程]": "有坐", "2.李四 [去程]": "有坐"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, first.Written)
+
+	second, err := svc.IngestSubmission(context.Background(), formID, vehicleID, ProcessSubmissionRequest{
+		ServiceDate: serviceDate, DriverID: &driverID,
+		Answers: map[string]string{"1.吳桂 [去程]": "沒坐", "2.李四 [去程]": "有坐"},
+	})
+	require.NoError(t, err)
+	assert.Zero(t, second.Written)
+	assert.Equal(t, 1, second.Reaffirmed, "沒被改動的個案（李四）仍是重複回報")
+	assert.Equal(t, 1, second.Staged, "有坐/沒坐不同的個案（吳桂）要進待維護，不能直接覆蓋")
+
+	// 既有來源必須原封不動：新值只暫存在衝突表，不寫入 ride_sources
+	sources := store.sources[slotKey{caseID, "2026-03-02", 1}]
+	require.Len(t, sources, 1)
+	assert.Equal(t, "boarded", sources[0].row.Reported, "衝突解決前既有來源不得被覆蓋")
+
+	conflicts, err := store.ListPendingRowConflicts(context.Background())
+	require.NoError(t, err)
+	require.Len(t, conflicts, 1)
+	assert.Equal(t, caseID, conflicts[0].CaseID)
+	assert.Equal(t, "boarded", conflicts[0].PreviousReported)
+	assert.Equal(t, "absent", conflicts[0].NewReported)
+
+	// 未被本次上傳觸及的個案（李四）沒有任何變化
+	assert.NotNil(t, store.records[slotKey{otherCaseID, "2026-03-02", 1}])
+}
+
+func TestIngestSubmission_ThirdUploadUpdatesOpenConflictButKeepsPreviousValue(t *testing.T) {
+	caseID := uuid.New()
+	vehicleID := uuid.New()
+	driverA := uuid.New()
+	driverB := uuid.New()
+	formID := uuid.New()
+	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+	t0 := time.Date(2026, 3, 2, 8, 0, 0, 0, time.UTC)
+	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "1.吳桂 [去程]", 1, 3)})
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	// 既有來源固定是「有坐／driverA」，第二、三次上傳都回報「沒坐」、只是司機不同，
+	// 兩次都與既有來源不同、持續待維護；重點是第三次要更新同一筆未解決衝突的新值，
+	// 不是又新增一筆。
+	first := ProcessSubmissionRequest{ServiceDate: serviceDate, SubmittedAt: t0, DriverID: &driverA, Answers: map[string]string{"1.吳桂 [去程]": "有坐"}}
+	_, err := svc.IngestSubmission(context.Background(), formID, vehicleID, first)
+	require.NoError(t, err)
+
+	second := ProcessSubmissionRequest{ServiceDate: serviceDate, SubmittedAt: t0.Add(time.Hour), DriverID: &driverA, Answers: map[string]string{"1.吳桂 [去程]": "沒坐"}}
+	_, err = svc.IngestSubmission(context.Background(), formID, vehicleID, second)
+	require.NoError(t, err)
+
+	third := ProcessSubmissionRequest{ServiceDate: serviceDate, SubmittedAt: t0.Add(2 * time.Hour), DriverID: &driverB, Answers: map[string]string{"1.吳桂 [去程]": "沒坐"}}
+	result, err := svc.IngestSubmission(context.Background(), formID, vehicleID, third)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Staged, "第三次上傳仍與既有資料不同，繼續待維護")
+
+	conflicts, err := store.ListPendingRowConflicts(context.Background())
+	require.NoError(t, err)
+	require.Len(t, conflicts, 1, "同一 slot 同時只保留一筆未解決的衝突，不疊加")
+	assert.Equal(t, "boarded", conflicts[0].PreviousReported, "既有值仍是第一次上傳的資料，不受後續衝突影響")
+	require.NotNil(t, conflicts[0].PreviousDriverID)
+	assert.Equal(t, driverA, *conflicts[0].PreviousDriverID)
+	require.NotNil(t, conflicts[0].NewDriverID)
+	assert.Equal(t, driverB, *conflicts[0].NewDriverID, "衝突的新值更新為最新一次上傳，不是第二次的司機")
+}
+
+func TestResolveRowConflict_UseNewAppliesValueAndRecalculates(t *testing.T) {
+	caseID := uuid.New()
+	vehicleID := uuid.New()
+	driverID := uuid.New()
+	formID := uuid.New()
+	operatorID := uuid.New()
+	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+	t0 := time.Date(2026, 3, 2, 8, 0, 0, 0, time.UTC)
+	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "1.吳桂 [去程]", 1, 3)})
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	first := ProcessSubmissionRequest{ServiceDate: serviceDate, SubmittedAt: t0, DriverID: &driverID, Answers: map[string]string{"1.吳桂 [去程]": "有坐"}}
+	_, err := svc.IngestSubmission(context.Background(), formID, vehicleID, first)
+	require.NoError(t, err)
+	second := ProcessSubmissionRequest{ServiceDate: serviceDate, SubmittedAt: t0.Add(time.Hour), DriverID: &driverID, Answers: map[string]string{"1.吳桂 [去程]": "沒坐"}}
+	_, err = svc.IngestSubmission(context.Background(), formID, vehicleID, second)
+	require.NoError(t, err)
+
+	conflicts, err := store.ListPendingRowConflicts(context.Background())
+	require.NoError(t, err)
+	require.Len(t, conflicts, 1)
+
+	appliedDriverID, appliedDate, err := svc.ResolveRowConflict(context.Background(), conflicts[0].ID, true, operatorID)
+	require.NoError(t, err)
+	require.NotNil(t, appliedDriverID)
+	assert.Equal(t, driverID, *appliedDriverID)
+	require.NotNil(t, appliedDate)
+
+	sources := store.sources[slotKey{caseID, "2026-03-02", 1}]
+	require.Len(t, sources, 2, "採用新資料會重放寫入一筆新的來源，既有那筆仍保留")
+	assert.Equal(t, "absent", store.records[slotKey{caseID, "2026-03-02", 1}].EffectiveStatus,
+		"重算後要反映新值：新值的上傳時間較晚，混車合併同車取最新來源的規則會選中它")
+
+	remaining, err := store.ListPendingRowConflicts(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, remaining, "裁決後不再出現在待維護清單")
+}
+
+func TestResolveRowConflict_KeepPreviousLeavesExistingRecordUnchanged(t *testing.T) {
+	caseID := uuid.New()
+	vehicleID := uuid.New()
+	driverID := uuid.New()
+	formID := uuid.New()
+	operatorID := uuid.New()
+	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+	t0 := time.Date(2026, 3, 2, 8, 0, 0, 0, time.UTC)
+	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "1.吳桂 [去程]", 1, 3)})
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	first := ProcessSubmissionRequest{ServiceDate: serviceDate, SubmittedAt: t0, DriverID: &driverID, Answers: map[string]string{"1.吳桂 [去程]": "有坐"}}
+	_, err := svc.IngestSubmission(context.Background(), formID, vehicleID, first)
+	require.NoError(t, err)
+	second := ProcessSubmissionRequest{ServiceDate: serviceDate, SubmittedAt: t0.Add(time.Hour), DriverID: &driverID, Answers: map[string]string{"1.吳桂 [去程]": "沒坐"}}
+	_, err = svc.IngestSubmission(context.Background(), formID, vehicleID, second)
+	require.NoError(t, err)
+
+	conflicts, err := store.ListPendingRowConflicts(context.Background())
+	require.NoError(t, err)
+	require.Len(t, conflicts, 1)
+
+	appliedDriverID, appliedDate, err := svc.ResolveRowConflict(context.Background(), conflicts[0].ID, false, operatorID)
+	require.NoError(t, err)
+	assert.Nil(t, appliedDriverID, "保留原資料不需要同步出勤")
+	assert.Nil(t, appliedDate)
+
+	sources := store.sources[slotKey{caseID, "2026-03-02", 1}]
+	require.Len(t, sources, 1, "保留原資料不寫入新來源")
+	assert.Equal(t, "boarded", store.records[slotKey{caseID, "2026-03-02", 1}].EffectiveStatus, "既有搭乘紀錄維持不變")
+}
+
+func TestResolveRowConflict_AlreadyResolvedReturnsSentinelError(t *testing.T) {
+	caseID := uuid.New()
+	vehicleID := uuid.New()
+	driverID := uuid.New()
+	formID := uuid.New()
+	operatorID := uuid.New()
+	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+	t0 := time.Date(2026, 3, 2, 8, 0, 0, 0, time.UTC)
+	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "1.吳桂 [去程]", 1, 3)})
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	first := ProcessSubmissionRequest{ServiceDate: serviceDate, SubmittedAt: t0, DriverID: &driverID, Answers: map[string]string{"1.吳桂 [去程]": "有坐"}}
+	_, err := svc.IngestSubmission(context.Background(), formID, vehicleID, first)
+	require.NoError(t, err)
+	second := ProcessSubmissionRequest{ServiceDate: serviceDate, SubmittedAt: t0.Add(time.Hour), DriverID: &driverID, Answers: map[string]string{"1.吳桂 [去程]": "沒坐"}}
+	_, err = svc.IngestSubmission(context.Background(), formID, vehicleID, second)
+	require.NoError(t, err)
+
+	conflicts, err := store.ListPendingRowConflicts(context.Background())
+	require.NoError(t, err)
+	require.Len(t, conflicts, 1)
+
+	_, _, err = svc.ResolveRowConflict(context.Background(), conflicts[0].ID, true, operatorID)
+	require.NoError(t, err)
+
+	_, _, err = svc.ResolveRowConflict(context.Background(), conflicts[0].ID, true, operatorID)
+	require.ErrorIs(t, err, ErrRowConflictAlreadyResolved)
+}
+
 func TestBackfillColumn_WritesFromStoredAnswersWithoutOriginalFile(t *testing.T) {
 	caseID := uuid.New()
 	vehicleID := uuid.New()
 	formID := uuid.New()
+	driverID := uuid.New()
 	store := newFakeRecordStore(nil)
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	// 模擬上一次上傳時這一欄還在待維護，payload 已存但完全沒有寫入搭乘來源。
 	_, err := store.SaveFormSubmission(
 		context.Background(), formID, time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), time.Now().UTC(),
-		"林彥衡", nil, "import",
+		"林彥衡", &driverID, "import",
 		map[string]interface{}{"answers": map[string]string{"1.吳桂 [去程]": "有坐"}}, "", nil,
 	)
 	require.NoError(t, err)
@@ -421,12 +673,13 @@ func TestBackfillColumn_WritesFromStoredAnswersWithoutOriginalFile(t *testing.T)
 
 func TestBackfillColumn_SkipsSubmissionsWithoutThisColumn(t *testing.T) {
 	formID := uuid.New()
+	driverID := uuid.New()
 	store := newFakeRecordStore(nil)
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
 	_, err := store.SaveFormSubmission(
 		context.Background(), formID, time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), time.Now().UTC(),
-		"林彥衡", nil, "import",
+		"林彥衡", &driverID, "import",
 		map[string]interface{}{"answers": map[string]string{"1.吳桂 [去程]": "有坐"}}, "", nil,
 	)
 	require.NoError(t, err)
@@ -434,6 +687,26 @@ func TestBackfillColumn_SkipsSubmissionsWithoutThisColumn(t *testing.T) {
 	written, err := svc.BackfillColumn(context.Background(), formID, uuid.New(), "2.李四 [去程]", 4, uuid.New(), 1)
 	require.NoError(t, err)
 	assert.Zero(t, written)
+	assert.Empty(t, store.records)
+}
+
+func TestBackfillColumn_SkipsAnswersWithUnresolvedDriver(t *testing.T) {
+	caseID := uuid.New()
+	formID := uuid.New()
+	store := newFakeRecordStore(nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	// 司機仍待維護：payload 已存，但這一列還不該展開成搭乘來源。
+	_, err := store.SaveFormSubmission(
+		context.Background(), formID, time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC), time.Now().UTC(),
+		"查無此人", nil, "import",
+		map[string]interface{}{"answers": map[string]string{"1.吳桂 [去程]": "有坐"}}, "", nil,
+	)
+	require.NoError(t, err)
+
+	written, err := svc.BackfillColumn(context.Background(), formID, uuid.New(), "1.吳桂 [去程]", 3, caseID, 1)
+	require.NoError(t, err)
+	assert.Zero(t, written, "司機仍待維護時，個案對應完成也不該展開成搭乘來源")
 	assert.Empty(t, store.records)
 }
 
@@ -446,18 +719,20 @@ func TestBackfillDriver_BackfillsOnlySubmissionsWithMatchingNormalizedName(t *te
 	otherSubmission := uuid.New()
 	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
 
-	store := newFakeRecordStore(nil)
+	store := newFakeRecordStore([]FormColumn{mappedColumn(caseID, "1.吳桂 [去程]", 1, 3)})
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
-	// 模擬這筆回報當初匯入時已展開成搭乘來源，但駕駛人比對不到司機主檔。
-	require.NoError(t, store.InsertRideSource(context.Background(), matchingSubmission, caseID, serviceDate, 1, vehicleID, nil, "有坐", 1))
-
+	// 司機比對不到時原本就沒有展開成搭乘來源，回填要從表單已存的原始答案重新比對寫入，
+	// 不是更新既有來源。
 	store.unmatchedDrivers = []UnmatchedDriverSubmission{
-		{SubmissionID: matchingSubmission, FormID: formID, ServiceDate: serviceDate, DriverNameRaw: "林彥衡"},
-		{SubmissionID: otherSubmission, FormID: formID, ServiceDate: serviceDate, DriverNameRaw: "陳大明"},
-	}
-	store.rideSourcesForSubmission = map[uuid.UUID][]RideSourceForSubmission{
-		matchingSubmission: {{ID: uuid.New(), CaseID: caseID, ServiceDate: serviceDate, LegSeq: 1, VehicleID: vehicleID}},
+		{
+			SubmissionID: matchingSubmission, FormID: formID, VehicleID: vehicleID, ServiceDate: serviceDate,
+			DriverNameRaw: "林彥衡", Answers: map[string]string{"1.吳桂 [去程]": "有坐"},
+		},
+		{
+			SubmissionID: otherSubmission, FormID: formID, VehicleID: vehicleID, ServiceDate: serviceDate,
+			DriverNameRaw: "陳大明", Answers: map[string]string{"1.吳桂 [去程]": "有坐"},
+		},
 	}
 
 	affected, dates, err := svc.BackfillDriver(context.Background(), "林彥衡", driverID)
@@ -470,11 +745,14 @@ func TestBackfillDriver_BackfillsOnlySubmissionsWithMatchingNormalizedName(t *te
 	assert.Equal(t, matchingSubmission, store.updatedSubmissionDrivers[0].submissionID)
 	assert.Equal(t, driverID, store.updatedSubmissionDrivers[0].driverID)
 
-	require.Len(t, store.updatedRideSourceDrivers, 1)
-	assert.Equal(t, driverID, store.updatedRideSourceDrivers[0].driverID)
-
 	rec := store.records[slotKey{caseID, "2026-03-02", 1}]
-	assert.NotNil(t, rec, "回填後要重算搭乘紀錄，不需要重新上傳檔案")
+	require.NotNil(t, rec, "回填後要重算搭乘紀錄，不需要重新上傳檔案")
+	assert.Equal(t, "boarded", rec.EffectiveStatus)
+
+	sources := store.sources[slotKey{caseID, "2026-03-02", 1}]
+	require.Len(t, sources, 1)
+	require.NotNil(t, sources[0].row.DriverID)
+	assert.Equal(t, driverID, *sources[0].row.DriverID, "補綁定後寫入的來源要帶司機")
 }
 
 func TestExpandLegSeqs(t *testing.T) {

@@ -22,21 +22,22 @@ covers:
 
 - `POST /api/v1/driver-reports/:id/import`，角色限 `staff`、`admin`。
 - `dryRun=true`（預設）回傳預覽不寫入；`dryRun=false` 正式寫入。
-- `yearMonth`（`YYYY-MM`）選填，宣告這次要覆蓋哪一個月。
+- `yearMonth`（`YYYY-MM`）選填，宣告這次上傳屬於哪一個月；檔案內落在該月以外的日期會標成錯誤列。
 - 前端上傳入口為 `DriverReportImportView.vue`（`/driver-reports/import`，`/driver-reports/batch-import`
   與舊路徑 `/driver-reports/mappings` 皆重導向於此），用頁籤分成「批次上傳」與「待維護資料」：
   - 上傳頁籤採上下堆疊版面（不用彈窗），整塊限寬 1100px 靠左不撐滿頁面：上方是拖放區，下方是
-    主色「選擇檔案」按鈕，再往下是覆蓋警示與每個檔案一列的表格。拖曳或選取多個 `.xlsx` 檔案，
+    主色「選擇檔案」按鈕，再往下是重複上傳提示與每個檔案一列的表格。拖曳或選取多個 `.xlsx` 檔案，
     每個檔案是表格中的一列，不需先選月份，也沒有送出按鈕——整批解析完就自動匯入。
   - 每個檔案一加入就自動 dry run（不帶 `yearMonth`）取得預覽，前端由預覽列的 `serviceDate` 推導
     該檔案涵蓋的月份（可能不只一個月），顯示在該列的「涵蓋月份」欄；若涵蓋月份已有資料，表格上方
-    跳出覆蓋警示（比照舊版 Google 表單同步「此月份已同步過」的提醒），自動匯入停在這裡等使用者
-    勾選「我已確認風險」，勾完才續跑，而不是匯入後才用彈出視窗攔截。
+    跳出提示（比照舊版 Google 表單同步「此月份已同步過」的提醒寫法，但說明的是逐筆比對而非覆蓋），
+    自動匯入停在這裡等使用者勾選確認，勾完才續跑，而不是匯入後才用彈出視窗攔截。
   - 欄位對應不再要求使用者逐欄確認才能匯入：有系統推薦個案的欄位自動視為已對應，完全比對不到
     個案的欄位維持 `pending`，兩者都直接跟著這次 commit 一起送出。
-  - commit 時針對推導出的每個月份各自呼叫一次、各帶對應的 `yearMonth`，沿用整月覆蓋語意。
-  - 匯入完成後若有欄位進入待維護，跳出確認視窗詢問是否立即前往待維護頁籤（同樣比照個案管理
-    匯入完成後的提示模式），選「稍後再說」則留在上傳頁籤查看結果。
+  - commit 時針對推導出的每個月份各自呼叫一次、各帶對應的 `yearMonth`；後端逐列比對既有資料，
+    不再整月覆蓋。
+  - 匯入完成後若有欄位進入待維護、或有資料與既有資料衝突，跳出確認視窗詢問是否立即前往待維護
+    頁籤（同樣比照個案管理匯入完成後的提示模式），選「稍後再說」則留在上傳頁籤查看結果。
   - 待維護頁籤：`GET /driver-reports/submissions/review` 以「匯報表列」（一筆 `form_submissions`）為
     單位彙整目前尚待處理的問題——同一列可能同時有個案欄位比對不到（`caseIssues`）與駕駛人比對不到
     （`driverIssue`）。主表格每列只顯示問題總數，展開才看到每一項具體問題與操作：
@@ -69,14 +70,14 @@ covers:
   > ParseDriverReport（認表頭、欄位對照、逐列解析民國日期與司機）
   > 宣告月份時檢查所有有效列都落在該月，不符即整份拒絕
   > [dryRun] 回傳預覽，使用者就地確認未對應欄位
-  > CommitDriverReport（宣告整月覆蓋時先確認預覽 `CanCommit`；以下寫入全部在同一個 pgxdb.TxRunner 交易內）
+  > CommitDriverReport（宣告月份時先確認預覽 `CanCommit`；以下寫入全部在同一個 pgxdb.TxRunner 交易內）
       > persistColumnDecisions 寫回 form_columns（以表頭文字為鍵）
       > collectImportableRows 挑出可寫入的列，其餘記入 SkippedRows
-      > clearPreviousImport > ride.ClearImportedDates
-          > 先收集受影響 slot（刪除後就查不到）
-          > 刪 form_submissions，ride_sources 由 CASCADE 連帶清除
-          > 每個 slot 還有來源就重算，全空就 DeleteDerivedRideRecord
-      > 逐列 ride.IngestSubmission > InsertRideSource > recalculateRideRecord
+      > 逐列 ride.IngestSubmission（不再先清除既有資料，每次上傳是獨立事件）
+          > SaveFormSubmission：一車一天一筆，同一天原地更新 payload／submitted_at，
+            driver_id 用 COALESCE 保留既有值，不被這次沒解析出的司機蓋成 NULL
+          > 司機比對不到司機主檔時，這一列完全不展開成搭乘來源（留在 payload 待補綁定）
+          > 逐欄呼叫 reconcileRideSource（見下方「同車同個案逐列比對」）
       > MarkImported
   > writeImportAudit（交易外，失敗只記錄不推翻匯入）
 ```
@@ -84,7 +85,23 @@ covers:
 模組交界在 `RideIngestor` port，由 `cmd/server/module_adapters.go` 的
 `driverReportRideIngestor` 銜接 driverreport 與 ride。
 
-待維護欄位補綁定的回填走另一條較短的路徑：
+### 同車同個案逐列比對（reconcileRideSource）
+
+`IngestSubmission`、`BackfillColumn`、`BackfillDriver` 三個進入點都透過同一個
+`RideService.reconcileRideSource` 決定每一格要直接寫入、視為無變化的重複回報，還是進待維護；
+設計理由見 [driver-report-import-overwrite.md](../decisions/driver-report-import-overwrite.md)。
+
+```
+reconcileRideSource(vehicleId, caseId, serviceDate, legSeq, reported, driverId, ...)
+  > ListRideSourcesForSlot 取這個 slot 全部來源，找這台車目前最新的一筆
+  > 沒有 > InsertRideSource + recalculateRideRecord（直接寫入）
+  > 有，且 reported 與 driver_id 都相同 > 不動作（重複回報）
+  > 有，且任一不同 > UpsertRideSourceRowConflict 暫存衝突，既有來源不動
+      > 同一 slot 同時只保留一筆未解決的衝突（partial unique index），
+        再次衝突只更新新值，previous_* 保持不變
+```
+
+待維護欄位補綁定的回填走另一條較短的路徑，一樣經過 `reconcileRideSource`：
 
 ```
 PATCH /driver-reports/columns/:id/mapping（status=mapped）
@@ -92,8 +109,9 @@ PATCH /driver-reports/columns/:id/mapping（status=mapped）
       > FormStore.UpdateColumnMappingByID（RETURNING 更新前狀態、form_id、column_header、column_index）
       > 只有「更新前不是 mapped」才繼續；重複對已是 mapped 的欄位送出不會再回填
       > RideIngestor.BackfillColumn
-          > ListSubmissionAnswersForColumn 讀 form_submissions.payload->'answers'->>header
-          > 逐筆 InsertRideSource > recalculateRideRecord
+          > ListSubmissionAnswersForColumn 讀 form_submissions.payload->'answers'->>header，
+            含 driver_id：司機仍待維護的答案跳過，等司機也綁定後才由 BackfillDriver 補寫
+          > 逐筆 reconcileRideSource
   > 回應帶回 backfilledRows
 ```
 
@@ -109,7 +127,10 @@ GET /driver-reports/submissions/review
       > RideIngestor.ListUnmatchedDriverSubmissions()
           > 讀 form_submissions WHERE driver_id IS NULL AND driver_name_raw <> ''，
             合併進同一個 submissionId 的 driverIssue
-      > 兩者皆空的列不列入清單
+      > RideIngestor.ListRowConflicts()
+          > 讀 ride_source_row_conflicts WHERE resolved_at IS NULL，
+            合併進 new_submission_id 對應的同一筆匯報表列
+      > 三者皆空的列不列入清單
 ```
 
 司機回填跟欄位回填分屬不同模組（`form_submissions.driver_id` 由 `ride` 模組持有），比對邏輯
@@ -121,11 +142,27 @@ POST /driver-reports/drivers/bind { driverNameRaw, driverId }
       > RideIngestor.BackfillDriver
           > namenorm.Normalize(driverNameRaw) 取正規化姓名
           > ListUnmatchedDriverSubmissions() 撈出所有 driver_id IS NULL 的既有回報，
-            在應用層過濾出正規化姓名相符的（天然涵蓋「其他待維護列同一人」的狀況，
-            不需要額外的模糊比對或使用者確認）
-          > 逐筆 UpdateSubmissionDriverID + 對該 submission 底下既有的 ride_sources
-            逐筆 UpdateRideSourceDriverID > recalculateRideRecord
+            含 vehicle_id、submitted_at 與完整原始答案，在應用層過濾出正規化姓名相符的
+            （天然涵蓋「其他待維護列同一人」的狀況，不需要額外的模糊比對或使用者確認）
+          > UpdateSubmissionDriverID 回填提交紀錄的司機
+          > 讀該表單已對應的欄位，逐欄從這筆提交的原始答案呼叫 reconcileRideSource——
+            司機比對不到時原本就沒有展開成搭乘來源，回填是從頭比對寫入，不是更新既有來源
   > 回應帶回 affectedCount（實際回填的提交筆數）
+```
+
+同車同個案衝突的裁決：
+
+```
+POST /driver-reports/row-conflicts/:id/resolve { useNew }
+  > DriverReportService.ResolveRowConflict（同一個 pgxdb.TxRunner 交易內）
+      > RideIngestor.ResolveRowConflict
+          > 條件式 UPDATE 標記已解決（resolved_at IS NULL 才會成功，避免覆寫他人已做的裁決）
+          > useNew=true > 重放 InsertRideSource + recalculateRideRecord 寫入新值；
+            useNew=false > 只標記已解決，既有來源與搭乘紀錄不動
+      > useNew 套用的新值有司機時，同一交易內呼叫 AttendanceRegistrar.SyncFromImport
+        同步出勤，比照初次匯入與司機補綁定的既有流程
+  > writeRowConflictResolutionAudit（交易外，失敗只記錄不推翻裁決結果）
+  > 回應 { success: true }
 ```
 
 匯入時比對到司機的列，`CommitDriverReport` 逐列在寫入搭乘紀錄後接著同步該司機當天的出勤：
@@ -158,32 +195,31 @@ POST /attendance/conflicts/:id/resolve { choice }
 
 ## Failure modes
 
-- **重複匯入**：覆蓋而非疊加，重匯同一份檔案的結果與只匯一次相同。決策與替代方案見
+- **重複匯入**：每次上傳是獨立事件，逐列比對既有資料——值相同視為重複回報，不重新寫入；值不同
+  暫存衝突讓使用者選擇；未被本次上傳觸及的既有資料完全不受影響。決策與替代方案見
   [driver-report-import-overwrite.md](../decisions/driver-report-import-overwrite.md)。
-- **解析層級失敗**：未宣告月份時，日期打錯的列逐列略過並記入 `SkippedRows`；宣告整月覆蓋時，日期無法解析是
-  blocking error，整份拒絕且不清除既有月份資料。
-- **資料庫層級失敗**：整份回滾，`last_imported_at` 不更新。先刪後寫若不回滾，該月資料會消失。
+- **解析層級失敗**：未宣告月份時，日期打錯的列逐列略過並記入 `SkippedRows`；宣告整月時，日期無法解析是
+  blocking error，整份拒絕不寫入任何資料。
+- **資料庫層級失敗**：整份回滾，`last_imported_at` 不更新。
 - **月份不符**：宣告 `yearMonth` 後，檔案內落在該月以外的有效日期僅該列標記為錯誤、記入
-  `SkippedRows`，不中斷整份解析，其餘列照常產生預覽並可正常寫入；commit 時這些列一併略過，
-  不會被計入清除範圍。上傳頁針對每個自動推導出的月份各自宣告一次 `yearMonth`，因此「同一份
-  檔案橫跨多個月份」是預期情境，不屬於此列表示的月份不符——這些列會在其所屬月份的那一輪
-  commit 正常匯入，提示訊息只說明「這一輪略過、另行處理」，不是要求使用者重新確認上傳檔案。
-- **空檔**：沒有任何可寫入的列時不執行清除，避免傳錯空檔清空整月資料。
+  `SkippedRows`，不中斷整份解析，其餘列照常產生預覽並可正常寫入；commit 時這些列一併略過。
+  上傳頁針對每個自動推導出的月份各自宣告一次 `yearMonth`，因此「同一份檔案橫跨多個月份」是預期
+  情境，不屬於此列表示的月份不符——這些列會在其所屬月份的那一輪 commit 正常匯入，提示訊息只說明
+  「這一輪略過、另行處理」，不是要求使用者重新確認上傳檔案。
+- **空檔**：沒有任何可寫入的列時整份 commit 直接視為未匯入，不更新 `last_imported_at`。
 - **檔案格式與規模**：API 只接受 `.xlsx`；共用 reader 會先檢查 XLSX ZIP 項目數、解壓後總量、worksheet XML 大小與壓縮倍率，超過限制時在 parser 前拒絕。
-- **混車**：只刪本匯報表的 `form_submissions`，其他車輛對同一 slot 的來源保留並參與重算。
+- **混車**：跨車衝突（同一 slot 有 ≥2 台不同車輛都回報「有坐」）由 `merge.MergeRideSources` 判斷，
+  走既有的 `ride_records.has_conflict`／`RideIssuesView.vue`「混車衝突待裁決」流程，與這次新增的
+  同車同個案衝突是兩個獨立機制，互不影響彼此的判斷。
+- **同車同個案衝突**：值不同時不寫入 `ride_sources`，暫存進 `ride_source_row_conflicts` 待使用者
+  裁決；裁決前既有搭乘紀錄與月曆顯示維持既有值不動。同一 slot 同時只有一筆未解決的衝突，再次上傳
+  到同一個未解決的衝突只更新其新值。
 - **人工成果**：帶 `corrected_at`、`conflict_resolved_at` 或 `not_claimed_aa09` 的 `ride_records`
-  不會被覆蓋式重匯刪除。
-- **稽核寫入失敗**：只記 server log，不推翻已完成的匯入。
-- **出勤同步失敗**：`AttendanceRegistrar.SyncFromImport` 回傳錯誤會讓整筆匯入回滾（跟
-  `IngestSubmission` 失敗同一等級），不會出現「搭乘紀錄寫成功、出勤沒同步」的半套結果。
-
-### 未宣告月份時的殘留行為
-
-dry run 階段不帶 `yearMonth`，清除範圍只涵蓋檔案實際有的日期，因此會有一種殘留：某列的
-日期從 `1150302` 改成 `1150402` 後重傳，`2026-03-02` 不在本次涵蓋日期內，舊資料留著不會被
-清掉。上傳頁的 commit 階段會針對前端自動推導出的每個月份各自宣告 `yearMonth`，因此
-「同一份檔案內、同一個月份」的重傳仍是整月覆蓋，不會有這個殘留；殘留只會發生在使用者把某天
-的日期改到檔案完全沒涵蓋到的另一個月份時。
+  只會被人工更正／裁決／不申報標記改變，不會被匯入或補綁定流程覆蓋。
+- **稽核寫入失敗**：只記 server log，不推翻已完成的匯入或裁決。
+- **出勤同步失敗**：`AttendanceRegistrar.SyncFromImport` 回傳錯誤會讓整筆匯入或裁決回滾（跟
+  `IngestSubmission`／`ResolveRowConflict` 失敗同一等級），不會出現「搭乘紀錄寫成功、出勤沒同步」
+  的半套結果。
 
 ### 上傳頁的逐檔失敗
 
@@ -204,8 +240,10 @@ dry run 階段不帶 `yearMonth`，清除範圍只涵蓋檔案實際有的日期
 commit 前不再要求使用者逐欄確認：有系統推薦個案（`suggestedCaseId`/`suggestedLegSeq`）的欄位
 直接視為 `mapped` 送出；完全沒有推薦的欄位維持 `pending`，寫入 `form_columns` 供待維護頁籤查詢。
 `form_submissions.payload.answers` 一律保存這一列「所有」欄位的原始儲存格文字，不論該欄當時
-是否已對應個案；只有 `mapped` 的欄位會在當次 commit 展開成 `ride_sources`／`ride_records`。
-匯入只會使用本次檔案出現的 mapped 欄位，不能沿用舊檔已對應、但本次未出現的欄位。
+是否已對應個案；只有「欄位已 `mapped` 且司機已比對到司機主檔」兩個條件同時成立，才會在當次
+commit 展開成 `ride_sources`／`ride_records`——任一條件不成立時，這一列只出現在待維護頁籤，
+不會出現在司機日曆等其他頁面，直到使用者完成對應或綁定。匯入只會使用本次檔案出現的 mapped 欄位，
+不能沿用舊檔已對應、但本次未出現的欄位。
 
 尚未對應個案的欄位不會因此卡住：待維護頁籤把某欄從 `pending` 改成 `mapped`
 （`PATCH /driver-reports/columns/:id/mapping`）時，`DriverReportService.UpdateColumnMapping`
@@ -245,6 +283,24 @@ mapped 的欄位送出同樣的更新不會再次回填，避免疊加出重複�
   區塊只驗證了 `type-check`／`build`，以及對空清單（無司機、無出勤資料）情境下呼叫真實
   `GET /attendance/conflicts` 成功回應、無主控台錯誤，未實際造出一筆衝突並在瀏覽器完成
   「保留人工登記」／「改採匯入結果」兩種解決路徑的操作。
+- 同車同個案逐列比對（`reconcileRideSource`、`ride_source_row_conflicts` 的
+  `ON CONFLICT (vehicle_id, case_id, service_date, leg_seq) WHERE resolved_at IS NULL`
+  partial unique index upsert、`ResolveRowConflict` 的條件式 `UPDATE ... WHERE resolved_at
+  IS NULL`）只以 app 層 fake 覆蓋，未在真實 PostgreSQL 上驗證 partial unique index 的
+  upsert 語意與併發裁決時的鎖行為。
+- `form_submissions` 唯一鍵從 `(form_id, service_date, submitted_at)` 改成
+  `(form_id, service_date)`（migration `000034`）的既有重複資料清理，只在 SQL 本身做了
+  window function 去重，未在代表既有資料規模的 staging／production 資料庫上實際跑過這支
+  migration 並驗證清理結果與效能。
+- `ride_sources` 新增的 `submitted_at` 欄位（migration `000034`）從既有
+  `form_submissions.submitted_at` 回填，只驗證了 SQL 語法本身，未在真實資料上確認回填後的
+  混車合併排序結果與遷移前一致。
+- 同一台車同一 slot 的併發上傳／裁決競爭（例如兩個瀏覽器分頁同時對同一天送出不同的值、或
+  裁決同一筆衝突的同時又有新的上傳進來）未經真實資料庫的鎖與交易隔離層級驗證，現行的 fake
+  也覆蓋不到。
+- 前端待維護頁籤新增的「同車同個案衝突」子區塊（`DriverReportImportView.vue` 的
+  `handleResolveRowConflict`）只驗證了 `type-check`／`build`，未在瀏覽器對真實後端資料造出
+  一筆衝突並完成「採用新資料」／「保留原資料」兩種解決路徑的操作。
 
 ## 資料一致性防護規則
 

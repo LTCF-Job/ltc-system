@@ -29,17 +29,11 @@ func (s *recordingStore) UpsertColumns(_ context.Context, _ uuid.UUID, drafts []
 	return nil
 }
 
-// clearCall 保留一次覆蓋清除的參數，供斷言清除範圍是否正確。
-type clearCall struct {
-	formID uuid.UUID
-	dates  []time.Time
-}
-
-// fakeIngestor 依序記錄清除與寫入的呼叫，讓測試能斷言「先清後寫」的實際順序。
+// fakeIngestor 記錄每次寫入的呼叫，讓測試能斷言傳入值與彙整結果。
 type fakeIngestor struct {
 	events         []string
-	clears         []clearCall
 	submissions    []Submission
+	ingestOutcome  IngestOutcome
 	ingestErr      error
 	importedMonths []ImportedMonth
 	importedErr    error
@@ -53,6 +47,14 @@ type fakeIngestor struct {
 	backfillDriverResult int
 	backfillDriverDates  []time.Time
 	backfillDriverErr    error
+
+	rowConflicts         []RowConflictView
+	rowConflictsErr      error
+	resolveRowConflictID uuid.UUID
+	resolveUseNew        bool
+	resolveAppliedDriver *uuid.UUID
+	resolveAppliedDate   *time.Time
+	resolveErr           error
 
 	monthSubmissions []MonthSubmissionDetail
 	monthRideEntries []MonthRideEntry
@@ -79,19 +81,29 @@ func (f *fakeIngestor) ListImportedMonths(context.Context) ([]ImportedMonth, err
 	return f.importedMonths, f.importedErr
 }
 
-func (f *fakeIngestor) ClearImportedDates(_ context.Context, formID uuid.UUID, dates []time.Time) (int, error) {
-	f.events = append(f.events, "clear")
-	f.clears = append(f.clears, clearCall{formID: formID, dates: dates})
-	return len(dates), nil
-}
-
-func (f *fakeIngestor) IngestSubmission(_ context.Context, _, _ uuid.UUID, s Submission) (int, error) {
+func (f *fakeIngestor) IngestSubmission(_ context.Context, _, _ uuid.UUID, s Submission) (IngestOutcome, error) {
 	if f.ingestErr != nil {
-		return 0, f.ingestErr
+		return IngestOutcome{}, f.ingestErr
 	}
 	f.events = append(f.events, "ingest")
 	f.submissions = append(f.submissions, s)
-	return 1, nil
+	if f.ingestOutcome == (IngestOutcome{}) {
+		return IngestOutcome{Written: 1}, nil
+	}
+	return f.ingestOutcome, nil
+}
+
+func (f *fakeIngestor) ListRowConflicts(context.Context) ([]RowConflictView, error) {
+	return f.rowConflicts, f.rowConflictsErr
+}
+
+func (f *fakeIngestor) ResolveRowConflict(_ context.Context, conflictID uuid.UUID, useNew bool, operatorID uuid.UUID) (*uuid.UUID, *time.Time, error) {
+	f.resolveRowConflictID = conflictID
+	f.resolveUseNew = useNew
+	if f.resolveErr != nil {
+		return nil, nil, f.resolveErr
+	}
+	return f.resolveAppliedDriver, f.resolveAppliedDate, nil
 }
 
 func (f *fakeIngestor) BackfillColumn(_ context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16) (int, error) {
@@ -213,7 +225,7 @@ func validSampleTable() [][]string {
 	return append([][]string(nil), table[:len(table)-1]...)
 }
 
-func TestCommitDriverReport_ClearsCoveredDatesBeforeWriting(t *testing.T) {
+func TestCommitDriverReport_WritesEachImportableRow(t *testing.T) {
 	ingestor := &fakeIngestor{}
 	svc, _ := newCommitService(sampleTable(), ingestor)
 
@@ -221,30 +233,7 @@ func TestCommitDriverReport_ClearsCoveredDatesBeforeWriting(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.ImportedRows)
-	require.Len(t, ingestor.clears, 1)
-	assert.Equal(t, uuid.MustParse(testFormID), ingestor.clears[0].formID)
-	assert.Equal(t, []string{"clear", "ingest", "ingest"}, ingestor.events,
-		"清除必須發生在任何寫入之前，否則新資料會連同舊資料一起被刪掉")
-
-	var cleared []string
-	for _, d := range ingestor.clears[0].dates {
-		cleared = append(cleared, d.Format("2006-01-02"))
-	}
-	assert.ElementsMatch(t, []string{"2026-03-02", "2026-03-03"}, cleared,
-		"未宣告月份時只清除檔案實際涵蓋的日期")
-}
-
-func TestCommitDriverReport_DeclaredMonthClearsWholeMonth(t *testing.T) {
-	ingestor := &fakeIngestor{}
-	svc, _ := newCommitService(validSampleTable(), ingestor)
-
-	_, err := commit(svc, "2026-03")
-
-	require.NoError(t, err)
-	require.Len(t, ingestor.clears, 1)
-	assert.Len(t, ingestor.clears[0].dates, 31, "三月有 31 天，宣告月份時整個月都要被覆蓋")
-	assert.Equal(t, "2026-03-01", ingestor.clears[0].dates[0].Format("2006-01-02"))
-	assert.Equal(t, "2026-03-31", ingestor.clears[0].dates[30].Format("2006-01-02"))
+	assert.Equal(t, []string{"ingest", "ingest"}, ingestor.events)
 }
 
 func TestCommitDriverReport_DeclaredMonthBlocksOnMalformedRow(t *testing.T) {
@@ -255,26 +244,21 @@ func TestCommitDriverReport_DeclaredMonthBlocksOnMalformedRow(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrImportHasBlockingErrors)
 	assert.Nil(t, result)
-	assert.Empty(t, ingestor.clears, "阻斷性錯誤時不得先清除整月資料")
 	assert.Empty(t, ingestor.submissions, "阻斷性錯誤時不得寫入有效列")
 	assert.False(t, store.markedImported, "阻斷性錯誤時不得更新最後匯入時間")
 }
 
-func TestCommitDriverReport_RepeatedImportProducesSameWrites(t *testing.T) {
-	first := &fakeIngestor{}
-	svcFirst, _ := newCommitService(validSampleTable(), first)
-	firstResult, err := commit(svcFirst, "2026-03")
-	require.NoError(t, err)
+func TestCommitDriverReport_AggregatesReaffirmedAndPendingConflictCounts(t *testing.T) {
+	ingestor := &fakeIngestor{ingestOutcome: IngestOutcome{Written: 0, Reaffirmed: 1, Staged: 1}}
+	svc, _ := newCommitService(sampleTable(), ingestor)
 
-	second := &fakeIngestor{}
-	svcSecond, _ := newCommitService(validSampleTable(), second)
-	secondResult, err := commit(svcSecond, "2026-03")
-	require.NoError(t, err)
+	result, err := commit(svc, "")
 
-	assert.Equal(t, firstResult.ImportedRows, secondResult.ImportedRows)
-	assert.Equal(t, firstResult.RideRecordRows, secondResult.RideRecordRows)
-	assert.Len(t, second.clears, 1, "每次匯入都必須先清除，否則重匯會疊加")
-	assert.Len(t, second.submissions, len(first.submissions))
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.ImportedRows, "逐日提交紀錄本身仍算已處理，即使沒有新增任何搭乘來源")
+	assert.Zero(t, result.RideRecordRows)
+	assert.Equal(t, 2, result.ReaffirmedRows, "彙整每一列的無變化重複回報筆數")
+	assert.Equal(t, 2, result.PendingConflictRows, "彙整每一列的待維護衝突筆數")
 }
 
 func TestCommitDriverReport_SkipsRowsOutsideDeclaredMonth(t *testing.T) {
@@ -292,12 +276,10 @@ func TestCommitDriverReport_SkipsRowsOutsideDeclaredMonth(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.ImportedRows)
-	// 兩列落在三月，這一輪只略過；四月的有效列仍可完整覆蓋四月。
+	// 兩列落在三月，這一輪只略過；四月的有效列仍可正常匯入。
 	require.Len(t, result.SkippedRows, 2)
 	assert.Contains(t, result.SkippedRows[0].Reasons[0], "不屬於本次宣告匯入的 2026-04")
 	assert.Contains(t, result.SkippedRows[1].Reasons[0], "不屬於本次宣告匯入的 2026-04")
-	require.Len(t, ingestor.clears, 1)
-	assert.Len(t, ingestor.clears[0].dates, 30)
 	assert.Len(t, ingestor.submissions, 1)
 	assert.True(t, store.markedImported)
 }
@@ -309,7 +291,7 @@ func TestCommitDriverReport_RejectsMalformedYearMonth(t *testing.T) {
 	_, err := commit(svc, "2026/03")
 
 	require.ErrorIs(t, err, ErrInvalidYearMonth)
-	assert.Empty(t, ingestor.clears)
+	assert.Empty(t, ingestor.submissions)
 }
 
 func TestCommitDriverReport_IngestFailureAbortsWholeImport(t *testing.T) {
@@ -323,7 +305,7 @@ func TestCommitDriverReport_IngestFailureAbortsWholeImport(t *testing.T) {
 	assert.False(t, store.markedImported, "交易中止時不得更新最後匯入時間")
 }
 
-func TestCommitDriverReport_BlockingErrorDoesNotClearAnything(t *testing.T) {
+func TestCommitDriverReport_BlockingErrorWritesNothing(t *testing.T) {
 	// 只有表頭與一列壞掉的日期：沒有任何可寫入的列，代表多半是傳錯檔案
 	table := [][]string{
 		{"民國日期", "駕駛人", "1.吳桂(去程竹3) [去程]", "備註"},
@@ -336,7 +318,7 @@ func TestCommitDriverReport_BlockingErrorDoesNotClearAnything(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrImportHasBlockingErrors)
 	assert.Nil(t, result)
-	assert.Empty(t, ingestor.clears, "阻斷性錯誤時不得清空整個月")
+	assert.Empty(t, ingestor.submissions, "阻斷性錯誤時不得寫入任何資料")
 	assert.False(t, store.markedImported)
 }
 

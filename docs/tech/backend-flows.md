@@ -11,20 +11,26 @@
    沒對應過的欄位附上以姓名相似度算出的推薦個案與由 `[去程]／[回程]` 推得的推薦趟次。
 2. 使用者在預覽畫面就地確認欄位對應後，改打 `?dryRun=false`，並以 form field `columnDecisions`
    帶回確認結果。`CommitDriverReport` 先把欄位對應寫回 `form_columns`（以表頭文字為鍵，
-   個案增減造成的欄號位移不會錯配），清掉本次要覆蓋的既有匯入資料，再逐列交給 ride 模組。
-3. `RideService.IngestSubmission` 把該列原封不動存一筆 `form_submissions`（`source = 'import'`，
-   raw payload 方便日後追查），並用 `domain/namenorm.Normalize` 正規化司機姓名比對司機主檔抓
-   `driver_id`（配不到就先留空，並在預覽階段以警告提示）。
+   個案增減造成的欄號位移不會錯配），再逐列交給 ride 模組——不再先清除既有資料，每次上傳是
+   獨立事件，見下方「逐列比對與交易邊界」。
+3. `RideService.IngestSubmission` 把該列存一筆 `form_submissions`（`source = 'import'`，raw
+   payload 方便日後追查；一車一天只有一筆，同一天重傳原地更新），並用
+   `domain/namenorm.Normalize` 正規化司機姓名比對司機主檔抓 `driver_id`（配不到就先留空，並在
+   預覽階段以警告提示；配不到時這一列完全不會展開成搭乘來源，見下方閘門說明）。
 4. 逐一走過已設定對應（`mapping_status = mapped`）的欄位，用 `domain/merge.ParseReportedValue`
    依明確白名單判斷「有坐／有搭乘」或「沒坐／沒有坐／未搭乘／沒有搭乘」；其他文字（含空白）視為未回報直接跳過。
 5. 若個案排班是四趟制，匯報表上的「第 1 趟」「第 2 趟」要展開成資料庫的四趟（1→1,3；2→2,4），
    這是四趟展開規則的實作位置（`expandLegSeqs`）。
-6. 每個展開後的趟次都會 `InsertRideSource` 存一筆來源紀錄，然後呼叫 `recalculateRideRecord`
-   讀回該 slot 的全部來源列跑 `domain/merge` 演算法，用「同車取最新、跨車 OR」規則重算
-   `ride_records` 的最終狀態——已經被人工更正過的紀錄不會被自動覆蓋。
+6. 每個展開後的趟次呼叫 `reconcileRideSource`：比對這台車在這個 slot 目前最新的一筆來源，
+   沒有就 `InsertRideSource` 直接寫入；回報值與司機都相同視為重複回報不動作；任一不同則暫存
+   進 `ride_source_row_conflicts` 待使用者裁決，既有來源不動。實際寫入後呼叫
+   `recalculateRideRecord` 讀回該 slot 的全部來源列跑 `domain/merge` 演算法，用「同車取最新、
+   跨車 OR」規則重算 `ride_records` 的最終狀態——已經被人工更正過的紀錄不會被自動覆蓋。
 
 未指定 `yearMonth` 時，單列日期無法解析只略過該列並回報原因，其餘日期照常寫入；指定
-`yearMonth` 代表整月覆蓋，任何阻斷性解析錯誤都會在清除前拒絕整份匯入，避免舊資料被清掉。
+`yearMonth` 時，任何阻斷性解析錯誤都會拒絕整份匯入，不寫入任何資料。`yearMonth` 只用來判斷
+檔案內落在該月以外的日期要標成錯誤列，不再代表「整月覆蓋」——詳見
+[driver-report-import-overwrite.md](../decisions/driver-report-import-overwrite.md)。
 
 `CommitDriverReport` 逐列呼叫 `RideService.IngestSubmission` 之後，若這一列比對到司機
 （`driver_id` 有值），會在同一個交易內接著呼叫 `AttendanceService.SyncFromImport`（透過
@@ -45,25 +51,23 @@
 - 出勤月報只讀取資料庫中所有未刪除且啟用的司機；司機清單或假日資料查詢失敗時直接回傳錯誤，
   不使用假資料，也不以固定筆數上限截斷結果。
 
-### 覆蓋語意與交易邊界
+### 逐列比對與交易邊界
 
-匯入是覆蓋不是疊加：重匯同一份檔案的結果與只匯一次相同。`clearPreviousImport` 在寫入前呼叫
-`RideService.ClearImportedDates` 刪掉這份匯報表在本次涵蓋日期的 `form_submissions`，`ride_sources`
-由 `submission_id` 的 `ON DELETE CASCADE` 連帶清除；只刪本匯報表的提交，其他車輛對同一 slot
-的混車來源不受影響。
+每次上傳是獨立事件，不整段覆蓋既有資料：`RideService.reconcileRideSource` 逐格比對這台車在
+這個 slot（`case_id`, `service_date`, `leg_seq`, `vehicle_id`）目前最新的一筆來源，決定直接
+寫入、視為無變化的重複回報，還是暫存進 `ride_source_row_conflicts` 待使用者裁決。設計決策與
+取捨見 [driver-report-import-overwrite.md](../decisions/driver-report-import-overwrite.md)。
 
-清除範圍由選填的 `yearMonth`（`YYYY-MM`）query param 決定：
+司機比對不到司機主檔時，這一列完全不會展開成搭乘來源（只留在 `form_submissions.payload`），
+避免一筆缺司機的資料先出現在司機日曆等其他頁面；司機補綁定後才由 `BackfillDriver` 讀取表單
+既有欄位對應與這筆提交的原始答案，逐欄重新跑一次 `reconcileRideSource`。
 
-- 有帶：整個月都被這份檔案覆蓋，且檔案內任一有效列落在該月之外就整份拒絕（dry run 階段就擋）。
-- 未帶：只覆蓋檔案實際涵蓋的日期。
-- 檔案沒有任何可寫入的列時不執行清除，避免傳錯空檔清空整月資料。
+帶有 `corrected_at`、`conflict_resolved_at` 或 `not_claimed_aa09` 的紀錄一律保留，人工成果
+不會被匯入或補綁定流程覆蓋。
 
-來源被清空的 slot 不能靠重算修正，會由 `DeleteDerivedRideRecord` 刪除；帶有 `corrected_at`、
-`conflict_resolved_at` 或 `not_claimed_aa09` 的紀錄一律保留，人工成果不被覆蓋式重匯抹掉。
-
-清除與重寫落在同一個 `pgxdb.TxRunner` 交易內。解析層級的失敗仍逐列略過，但資料庫層級的失敗
-會整份回滾，`last_imported_at` 不更新——先刪後寫若中途失敗而不回滾，該月資料會直接消失。
-`RideRepository` 與 `DriverReportRepository` 因此都改用 `pgxdb.FromContext` 取用外層交易。
+寫入落在同一個 `pgxdb.TxRunner` 交易內。解析層級的失敗仍逐列略過，但資料庫層級的失敗會整份
+回滾，`last_imported_at` 不更新。`RideRepository` 與 `DriverReportRepository` 都改用
+`pgxdb.FromContext` 取用外層交易。
 
 ```
 使用者上傳匯報表 .xlsx
@@ -78,19 +82,18 @@ POST /driver-reports/:id/import?dryRun=false + columnDecisions
 寫回 form_columns（以表頭文字為鍵）
    │
    ▼
-ClearImportedDates（刪本表本月 form_submissions，cascade 清 ride_sources）
+存／更新 form_submissions（一車一天一筆，原始 payload，source = import）
    │
    ▼
-存 form_submissions（原始 payload，source = import）
-   │
-   ▼
-namenorm.Normalize(driverRaw) → 配對司機主檔
+namenorm.Normalize(driverRaw) → 配對司機主檔（配不到就不往下展開，留在待維護）
    │
    ▼
 逐欄位判斷「有坐/沒坐」 → 四趟展開（若排班為四趟制）
    │
    ▼
-InsertRideSource（來源紀錄）
+reconcileRideSource：沒有既有來源 → InsertRideSource
+                      值相同        → 不動作（重複回報）
+                      值不同        → 暫存 ride_source_row_conflicts（待裁決）
    │
    ▼
 merge.MergeRideSources（同車取最新、跨車 OR）

@@ -207,16 +207,6 @@ func parseYearMonth(raw string) (time.Time, bool, error) {
 	return start, true, nil
 }
 
-// daysInMonth 列出該月的每一天，作為覆蓋式重匯的清除範圍。
-func daysInMonth(monthStart time.Time) []time.Time {
-	next := monthStart.AddDate(0, 1, 0)
-	days := make([]time.Time, 0, 31)
-	for d := monthStart; d.Before(next); d = d.AddDate(0, 0, 1) {
-		days = append(days, d)
-	}
-	return days
-}
-
 // buildColumnPreviews 把檔案表頭與既有 form_columns 對照起來；沒對應過的欄位
 // 以姓名相似度推薦個案，並由 [去程]／[回程] 標記推薦趟次。
 // colOffset 是 caseHeaders[0] 在原始列中的 0-based 位置，用來還原每欄實際的 ColumnIndex。

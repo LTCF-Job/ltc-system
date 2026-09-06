@@ -164,6 +164,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.POST("/driver-reports/columns/batch-mapping", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.BatchMapping)
 		apiV1.GET("/driver-reports/submissions/review", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "view"), h.driverReport.ListSubmissionReview)
 		apiV1.POST("/driver-reports/drivers/bind", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.BindDriver)
+		apiV1.POST("/driver-reports/row-conflicts/:id/resolve", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.ResolveRowConflict)
 		apiV1.DELETE("/driver-reports/:id", auth.RequirePermission(perm, customPerm, "driver_reports", "delete"), h.driverReport.DeleteForm)
 		apiV1.GET("/driver-reports/:id/template", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.DownloadTemplate)
 		apiV1.POST("/driver-reports/:id/import", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.ImportExcel)

@@ -10,6 +10,10 @@ import (
 )
 
 // ListRideSourcesForSlot 取得單一 slot 已寫入的全部回報來源，供混車合併運算。
+//
+// 排序依 ride_sources 自己的 submitted_at，不聯到 form_submissions：後者現在一車一天
+// 只有一筆、重傳會原地更新，借用它的時間戳排序會讓同一天較早寫入、本次未變動的來源
+// 被誤判成剛剛才寫入（見 migration 000034_form_submission_single_per_day 的說明）。
 func (r *RideRepository) ListRideSourcesForSlot(
 	ctx context.Context,
 	caseID uuid.UUID,
@@ -17,12 +21,12 @@ func (r *RideRepository) ListRideSourcesForSlot(
 	legSeq int16,
 ) ([]app.RideSourceRow, error) {
 	query := `
-		SELECT rs.id, CASE fs.source WHEN 'manual' THEN 2 WHEN 'import' THEN 1 ELSE 0 END,
-		       rs.vehicle_id, rs.driver_id, rs.reported, fs.submitted_at
+		SELECT rs.id, rs.submission_id, CASE fs.source WHEN 'manual' THEN 2 WHEN 'import' THEN 1 ELSE 0 END,
+		       rs.vehicle_id, rs.driver_id, rs.reported, rs.submitted_at
 		FROM ride_sources rs
 		JOIN form_submissions fs ON rs.submission_id = fs.id
 		WHERE rs.case_id = $1 AND rs.service_date = $2 AND rs.leg_seq = $3
-		ORDER BY fs.submitted_at DESC,
+		ORDER BY rs.submitted_at DESC,
 		         CASE fs.source WHEN 'manual' THEN 2 WHEN 'import' THEN 1 ELSE 0 END DESC,
 		         rs.id DESC
 	`
@@ -36,7 +40,7 @@ func (r *RideRepository) ListRideSourcesForSlot(
 	var sources []app.RideSourceRow
 	for rows.Next() {
 		var s app.RideSourceRow
-		if err := rows.Scan(&s.SourceID, &s.SourcePriority, &s.VehicleID, &s.DriverID, &s.Reported, &s.SubmittedAt); err != nil {
+		if err := rows.Scan(&s.SourceID, &s.SubmissionID, &s.SourcePriority, &s.VehicleID, &s.DriverID, &s.Reported, &s.SubmittedAt); err != nil {
 			return nil, err
 		}
 		sources = append(sources, s)

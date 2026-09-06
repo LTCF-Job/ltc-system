@@ -80,7 +80,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/driver-reports` | staff, admin | 為一台車建立匯報表；該車已有匯報表時只更新名稱並回傳既有那一份 |
 | DELETE | `/driver-reports/:id` | staff, admin | 刪除匯報表（欄位對應與匯報紀錄一併移除） |
 | GET | `/driver-reports/:id/template` | staff, admin | 下載該車空白匯報範本（`.xlsx`，只有表頭） |
-| POST | `/driver-reports/:id/import?dryRun=&yearMonth=` | staff, admin | 上傳匯報檔；`dryRun=true`（預設）回傳預覽，`dryRun=false` 正式寫入。`yearMonth`（`YYYY-MM`）選填，宣告後整月覆蓋並拒收該月以外的日期 |
+| POST | `/driver-reports/:id/import?dryRun=&yearMonth=` | staff, admin | 上傳匯報檔；`dryRun=true`（預設）回傳預覽，`dryRun=false` 正式寫入，逐列比對既有資料（沒問題直接寫入、值不同進待維護）。`yearMonth`（`YYYY-MM`）選填，宣告後拒收該月以外的日期 |
 | GET | `/driver-reports/imported-months` | viewer, staff, admin | 每份匯報表各月份已匯入的筆數與最後匯入時間 |
 | GET | `/driver-reports/columns` | viewer, staff, admin | 欄位清單與對應狀態（可帶 `formId`、`mappingStatus`） |
 | GET | `/driver-reports/columns/name-matches?name=` | viewer, staff, admin | 找出目前待維護欄位中姓名與傳入姓名相符（含近似）的欄位 |
@@ -88,6 +88,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/driver-reports/columns/batch-mapping` | staff, admin | 批次設定欄位對應 |
 | GET | `/driver-reports/submissions/review` | viewer, staff, admin | 以匯報表列（一天一筆提交）為單位列出待維護資料，一列可能同時有個案欄位與駕駛人兩種問題 |
 | POST | `/driver-reports/drivers/bind` | staff, admin | 把某個比對不到司機主檔的原始姓名綁定到指定司機，立即回填所有正規化姓名相符的既有回報 |
+| POST | `/driver-reports/row-conflicts/:id/resolve` | staff, admin | 裁決一筆「同車同個案」衝突；body `{useNew}`，`true` 採用這次上傳的新值並重算搭乘紀錄，`false` 保留既有資料 |
 
 匯入檔的欄位順序固定為：民國日期、駕駛人、各個案趟次欄、備註。個案趟次欄只接受
 「有坐」「沒坐」，其餘（含空白）視為未回報不建立紀錄。`dryRun=false` 時可另外以

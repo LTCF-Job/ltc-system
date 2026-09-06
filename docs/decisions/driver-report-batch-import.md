@@ -26,8 +26,10 @@ covers:
   避免猜錯車輛而覆蓋到別台車的資料。
 - 月份由試算結果自動推導：dry run 呼叫 `ParseDriverReport` 時不帶 `yearMonth`，讓後端依內容逐日
   解析；前端再從預覽列的 `serviceDate` 取出所有出現過的 `YYYY-MM`，顯示成月份標籤。
-- commit 時針對推導出的每個月份各自呼叫一次、各帶對應的 `yearMonth`，沿用既有的整月覆蓋語意；
-  絕大多數檔案只涵蓋一個月，只有橫跨月份的補傳檔案才會送出多次請求。
+- commit 時針對推導出的每個月份各自呼叫一次、各帶對應的 `yearMonth`；絕大多數檔案只涵蓋一個月，
+  只有橫跨月份的補傳檔案才會送出多次請求。後端不再整月覆蓋，`yearMonth` 只用來判斷檔案內落在
+  該月以外的日期要標成錯誤列，寫入語意見
+  [driver-report-import-overwrite.md](driver-report-import-overwrite.md)。
 - 上傳與「哪些車哪些月份已有資料」的檢視拆成兩個頁面：`DriverReportImportView.vue`
   （`/driver-reports/import`）用頁籤分「批次上傳」與「待維護資料」，`DriverReportStatusView.vue`
   （`/driver-reports/status`）是純唯讀總覽，只列出各車已有資料的月份與天數，不放任何上傳或編輯動作。
@@ -37,9 +39,9 @@ covers:
   `table-layout="auto"`，每欄各自鎖 `white-space: nowrap` 與 `min-width`，內容不換行；超寬時由
   `.file-panel` 的 `overflow-x: auto` 接手水平捲動。檔案一加入即自動
   dry run 顯示涵蓋月份。頁面沒有送出按鈕：同一批拖入的檔案全部解析完（`analyzePending` 歸零）就
-  自動匯入，避免使用者選完檔還要多按一次。命中已有資料的月份會在表格上方跳出覆蓋警示（沿用舊版
-  Google 表單同步「此月份已同步過」的提醒寫法），自動匯入停在這裡等使用者勾選確認風險的核取方塊，
-  勾完才續跑，取代原本送出後才彈出 `ElMessageBox` 攔截的做法。
+  自動匯入，避免使用者選完檔還要多按一次。命中已有資料的月份會在表格上方跳出提示（沿用舊版
+  Google 表單同步「此月份已同步過」的提醒寫法，但文案已改為說明逐筆比對而非覆蓋），自動匯入停在
+  這裡等使用者勾選確認的核取方塊，勾完才續跑，取代原本送出後才彈出 `ElMessageBox` 攔截的做法。
 - 沒有匯報表的車輛在第一次上傳時，由前端先呼叫既有的 `POST /driver-reports` 建表再匯入。
 - 已匯入月份由唯讀端點 `GET /driver-reports/imported-months` 提供，以
   `form_submissions.service_date` 分組統計，不新增資料表或欄位。
@@ -48,7 +50,8 @@ covers:
   可連結既有個案，或建立新個案並直接綁定（帶入欄位解析出的姓名）。原本獨立的
   `FieldMappingView.vue`（`/driver-reports/mappings`）已併入這個頁籤，該路徑改為重導向。
 
-後端的匯入邏輯、覆蓋語意與交易邊界完全沒有改動；`yearMonth` 只是由前端自動推導取代手動輸入。
+`yearMonth` 由前端自動推導取代手動輸入；後端寫入邏輯後續改為逐列比對，不再整月覆蓋，見
+[driver-report-import-overwrite.md](driver-report-import-overwrite.md)。
 
 ## Alternatives
 
@@ -71,10 +74,11 @@ covers:
 - 一個檔案涵蓋 N 個月就會送出 N 次 commit 請求；試算與匯入各自維護並發上限 3，逐檔顯示進度與結果。
 - 新車第一次匯入會多一次建表請求；同一台車的多個檔案共用同一次建表，各自建會撞唯一索引。
   該次建表失敗只讓該檔標記失敗。
-- 覆蓋確認依據的是前端的已匯入統計快照。快照在建表後與每次匯入後重讀，但兩位管理員同時操作
-  同一台車同一個月時，仍可能有一方看不到對方剛寫入的資料。後端沒有樂觀鎖，這個窗口關不掉。
-- `imported-months` 只統計 `source = 'import'`，與 `DeleteFormSubmissions` 的覆蓋範圍一致；
-  兩邊的篩選條件必須永遠相同，否則畫面會顯示一個重匯其實不會覆蓋的月份。
+- 重複上傳提示依據的是前端的已匯入統計快照。快照在建表後與每次匯入後重讀，但兩位管理員同時操作
+  同一台車同一個月時，仍可能有一方看不到對方剛寫入的資料；後端沒有樂觀鎖，這個窗口關不掉——不過
+  逐列比對本身仍會攔下真正衝突的資料進待維護，快照只影響「要不要先跳提示」，不影響資料正確性。
+- `imported-months` 只統計 `source = 'import'`；畫面顯示的「已有資料」純粹是統計用途，不代表
+  後端會用任何方式覆蓋這些既有資料。
 - 全數未對應的檔案會保存 pending 欄位供待維護流程處理，但不清除或寫入任何搭乘紀錄；完成對應後須重新匯入。
 - 檔名比對不到車輛（或比對到多輛）時，該檔案停在「待選車輛」狀態，不會用猜測值送出請求。
 - 月份不再寫進 route query（已無月份選擇器可分享），改由總覽頁 `/driver-reports/status`

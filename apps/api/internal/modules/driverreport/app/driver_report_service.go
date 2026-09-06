@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -240,8 +241,67 @@ func (s *DriverReportService) BindPendingDriver(ctx context.Context, driverNameR
 	return affected, nil
 }
 
+// ResolveRowConflict 裁決一筆「同車同個案」衝突：useNew 時採用這次上傳的新值並重算
+// 搭乘紀錄，否則保留既有資料不動；兩者都只標記這筆衝突已解決，不影響其他未涉及的
+// slot。裁決與寫入搭乘來源、同步出勤落在同一交易內，任一步驟失敗全部回滾，避免衝突
+// 被標記成已解決但實際資料沒有跟著套用的半套結果。
+func (s *DriverReportService) ResolveRowConflict(ctx context.Context, conflictID string, useNew bool, actor Actor) error {
+	if s.txRunner == nil {
+		return errors.New("driver report service: transaction runner not configured")
+	}
+	parsedID, err := uuid.Parse(conflictID)
+	if err != nil {
+		return fmt.Errorf("衝突編號格式錯誤: %w", err)
+	}
+
+	txErr := s.txRunner.WithTx(ctx, func(txCtx context.Context) error {
+		appliedDriverID, appliedDate, err := s.rideIngestor.ResolveRowConflict(txCtx, parsedID, useNew, actor.ActorID)
+		if err != nil {
+			return err
+		}
+		if appliedDriverID != nil && appliedDate != nil {
+			if err := s.attendanceRegistrar.SyncFromImport(txCtx, *appliedDriverID, *appliedDate); err != nil {
+				return fmt.Errorf("同步司機出勤失敗: %w", err)
+			}
+		}
+		return nil
+	})
+	if txErr != nil {
+		return txErr
+	}
+
+	entityID := conflictID
+	if s.auditRepo != nil {
+		resolution := "kept_previous"
+		if useNew {
+			resolution = "used_new"
+		}
+		if err := s.auditRepo.Write(ctx, AuditEntry{
+			ActorID:    &actor.ActorID,
+			ActorRole:  &actor.ActorRole,
+			Action:     "conflict_resolve",
+			EntityType: "ride_source_row_conflicts",
+			EntityID:   &entityID,
+			AfterData:  rowConflictResolutionAuditSnapshot{Resolution: resolution},
+			IPAddress:  &actor.IPAddress,
+			UserAgent:  &actor.UserAgent,
+		}); err != nil {
+			slog.Warn("Failed to write row conflict resolution audit",
+				slog.String("conflictId", entityID),
+				slog.String("error", err.Error()))
+		}
+	}
+	return nil
+}
+
+// rowConflictResolutionAuditSnapshot 是同車同個案衝突裁決後的非敏感固定快照。
+type rowConflictResolutionAuditSnapshot struct {
+	Resolution string `json:"resolution"`
+}
+
 // ListSubmissionReview 以匯報提交紀錄（一天一列）為單位彙整目前尚待處理的問題：該列
-// 有欄位比對不到個案，或駕駛人比對不到司機主檔，兩者可能同時發生在同一列。
+// 有欄位比對不到個案、駕駛人比對不到司機主檔，或這台車這個個案的資料與既有資料衝突，
+// 三者可能同時發生在同一列。
 func (s *DriverReportService) ListSubmissionReview(ctx context.Context) ([]SubmissionReview, error) {
 	pendingCols, err := s.repo.ListColumnsWithMapping(ctx, "", "pending")
 	if err != nil {
@@ -273,7 +333,12 @@ func (s *DriverReportService) ListSubmissionReview(ctx context.Context) ([]Submi
 		return nil, err
 	}
 
-	order := make([]uuid.UUID, 0, len(answerRows)+len(driverIssues))
+	rowConflicts, err := s.rideIngestor.ListRowConflicts(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	order := make([]uuid.UUID, 0, len(answerRows)+len(driverIssues)+len(rowConflicts))
 	reviews := map[uuid.UUID]*SubmissionReview{}
 	ensure := func(id uuid.UUID, formTitle, vehicleName, serviceDate string) *SubmissionReview {
 		r, ok := reviews[id]
@@ -306,6 +371,15 @@ func (s *DriverReportService) ListSubmissionReview(ctx context.Context) ([]Submi
 	for _, d := range driverIssues {
 		r := ensure(d.SubmissionID, d.FormTitle, d.VehicleName, d.ServiceDate.Format("2006-01-02"))
 		r.DriverIssue = &DriverIssue{DriverNameRaw: d.DriverNameRaw}
+	}
+
+	for _, c := range rowConflicts {
+		subID, err := uuid.Parse(c.SubmissionID)
+		if err != nil {
+			continue
+		}
+		r := ensure(subID, c.FormTitle, c.VehicleName, c.ServiceDate)
+		r.RowConflicts = append(r.RowConflicts, c)
 	}
 
 	out := make([]SubmissionReview, 0, len(order))
