@@ -207,6 +207,12 @@
             </div>
           </template>
         </el-table-column>
+        <template #empty>
+          <div class="calendar-empty-state" role="status">
+            <strong>此月份沒有排班或搭乘紀錄</strong>
+            <span>請切換月份，或先建立個案排班。</span>
+          </div>
+        </template>
       </el-table>
     </el-card>
 
@@ -242,9 +248,12 @@ import { getRideCalendarMatrix } from '@/api/rides'
 import { listHolidays } from '@/api/holidays'
 import { formatDateTime, currentLocalMonth } from '@/utils/formatters'
 import { useRocMonth } from '@/composables/useRocMonth'
+import { getTripPatternDisplay as formatTripPatternDisplay } from '@/lib/rideCalendarDisplay'
 import type { RideCalendarMatrixDTO, CaseRideCalendarRowDTO, RideRecordDTO } from '@/types/api'
 
-type CalendarRow = Partial<CaseRideCalendarRowDTO>
+type CalendarRow = Omit<Partial<CaseRideCalendarRowDTO>, 'tripPattern'> & {
+  tripPattern?: CaseRideCalendarRowDTO['tripPattern'] | 0
+}
 
 const { toRocMonth } = useRocMonth()
 
@@ -323,34 +332,7 @@ function getCell(row: CalendarRow, day: number) {
 
 // 計算個案在月曆表格「趟數」欄位應顯示的文字
 function getTripPatternDisplay(row: CalendarRow): string {
-  if (row.tripPattern === 'custom' || row.tripPatternText === '自訂') {
-    return '自訂'
-  }
-
-  if (row.days) {
-    const scheduledTripCounts = new Set<number>()
-    for (const dateKey in row.days) {
-      const cell = row.days[dateKey]
-      if (cell && cell.isExpected) {
-        const count = cell.expectedTripCount ?? cell.records?.length ?? 0
-        if (count > 0) {
-          scheduledTripCounts.add(count)
-        }
-      }
-    }
-    // 應搭趟次逐日不一致時無法用單一數字代表，顯示自訂避免誤導班表
-    if (scheduledTripCounts.size > 1) {
-      return '自訂'
-    } else if (scheduledTripCounts.size === 1) {
-      const count = Array.from(scheduledTripCounts)[0]
-      return `${count} 趟`
-    }
-  }
-
-  if (typeof row.tripPattern === 'number') {
-    return `${row.tripPattern} 趟`
-  }
-  return '未提供排班趟次'
+  return formatTripPatternDisplay(row)
 }
 
 // 計算該個案在指定日期的搭乘槽位列表（依該日預期趟數與實際紀錄動態展開）
@@ -508,6 +490,21 @@ onMounted(() => {
 
 .matrix-card {
   padding: 0;
+}
+
+.calendar-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 16px;
+  color: var(--app-text-secondary);
+  font-size: 14px;
+}
+
+.calendar-empty-state strong {
+  color: var(--app-text-primary);
+  font-weight: 600;
 }
 
 .calendar-table :deep(.day-col.el-table__cell),
