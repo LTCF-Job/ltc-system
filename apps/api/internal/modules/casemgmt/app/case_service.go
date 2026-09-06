@@ -23,7 +23,7 @@ var (
 	ErrInvalidScheduleDirection = errors.New("schedule leg direction must be outbound or inbound")
 	ErrInvalidScheduleTime      = errors.New("schedule leg departure time must use HH:MM format")
 	ErrInvalidSchedulePrice     = errors.New("schedule unit price must be greater than zero")
-	ErrInvalidScheduleDistance  = errors.New("schedule distance must not be negative")
+	ErrInvalidScheduleDistance  = errors.New("schedule distance must be greater than zero")
 	ErrInvalidScheduleDuration  = errors.New("schedule service duration must be between 1 and 240 minutes")
 	ErrInvalidScheduleDateRange = errors.New("schedule effective end date must not be before start date")
 	ErrCaseNotFound             = errors.New("case not found")
@@ -89,6 +89,10 @@ type CreateCaseRequest struct {
 // CreateCase 建立個案主檔；僅姓名為必要輸入，身分證字號提供時仍需通過格式檢查與加密雜湊產生，
 // 不再檢查唯一性（個案身分證字號與姓名皆允許重複）。
 func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, actorID uuid.UUID, actorRole, ip, ua string) (*Case, error) {
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return nil, ErrCaseNameRequired
+	}
 	req.NationalID = strings.TrimSpace(strings.ToUpper(req.NationalID))
 
 	var cipherText, hmacIdx []byte
@@ -542,7 +546,7 @@ func validateScheduleRequest(req CreateScheduleRequest) error {
 	if req.UnitPrice <= 0 {
 		return ErrInvalidSchedulePrice
 	}
-	if req.DistanceKM < 0 {
+	if req.DistanceKM <= 0 {
 		return ErrInvalidScheduleDistance
 	}
 	if req.ServiceDurationMin < 1 || req.ServiceDurationMin > 240 {
