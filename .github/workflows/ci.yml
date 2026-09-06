@@ -1,9 +1,10 @@
 name: CI
 
-# 只在 PR 上跑：push 到 main 的測試與 build 由 deploy-api.yml／deploy-web.yml
-# 各自的 test job 負責（部署前的必要關卡），避免同一次 push 重複跑兩次測試。
+# PR 與 develop/main 的 push 都跑共用品質關卡；部署 workflow 仍可在 push 時執行自己的部署前檢查。
 on:
   pull_request:
+    branches: [develop, main]
+  push:
     branches: [develop, main]
 
 permissions:
