@@ -75,7 +75,14 @@ func (a rideScheduleReader) GetActiveScheduleForCaseOnDate(ctx context.Context, 
 	for _, l := range s.Legs {
 		legs = append(legs, rideapp.ScheduleLeg{LegSeq: l.LegSeq, Direction: l.Direction, DepartTime: l.DepartTime, VehicleID: l.VehicleID})
 	}
-	return &rideapp.CaseSchedule{ID: s.ID, CaseID: s.CaseID, SiteID: s.SiteID, TripPattern: s.TripPattern, Legs: legs}, nil
+	return &rideapp.CaseSchedule{
+		ID:          s.ID,
+		CaseID:      s.CaseID,
+		SiteID:      s.SiteID,
+		Weekdays:    s.Weekdays,
+		TripPattern: s.TripPattern,
+		Legs:        legs,
+	}, nil
 }
 
 // rideMissingReportProvider 讓 ride 的異常集中清單取得整月未回報趟次，不觸發告警通知。
@@ -143,6 +150,18 @@ func (a opsDriverLister) List(ctx context.Context, region, q string, page, pageS
 
 func (a opsDriverLister) ListAllActive(ctx context.Context) ([]opsapp.DriverRef, error) {
 	list, err := a.repo.ListAllActive(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]opsapp.DriverRef, 0, len(list))
+	for _, d := range list {
+		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name, Region: d.Region})
+	}
+	return out, nil
+}
+
+func (a opsDriverLister) ListAllActiveByQuery(ctx context.Context, q string) ([]opsapp.DriverRef, error) {
+	list, err := a.repo.ListAllActiveByQuery(ctx, q)
 	if err != nil {
 		return nil, err
 	}

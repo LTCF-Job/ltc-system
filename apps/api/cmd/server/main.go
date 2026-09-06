@@ -51,6 +51,7 @@ import (
 	taskinfra "ltc-system/apps/api/internal/modules/task/infra"
 	tasktransport "ltc-system/apps/api/internal/modules/task/transport"
 	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/config"
 	"ltc-system/apps/api/internal/platform/pgxdb"
 
@@ -126,7 +127,7 @@ func main() {
 	mdAudit := masterdataAuditWriter{svc: auditSvc}
 	txRunner := pgxdb.NewTxRunner(pool)
 	regionSvc := masterapp.NewRegionService(mdRegionRepo, mdAudit)
-	siteSvc := masterapp.NewSiteService(mdSiteRepo)
+	siteSvc := masterapp.NewSiteService(mdSiteRepo, mdAudit)
 	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo, mdAudit, txRunner)
 	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg, mdAudit, txRunner)
 	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer(), txRunner)
@@ -149,11 +150,23 @@ func main() {
 		// LogEmailSender 僅限 local；production 的設定驗證已要求真正的 provider 金鑰。
 		emailSender = &notifyapp.LogEmailSender{}
 	}
-	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, emailSender)
+	notificationSvc := notifyapp.NewNotificationService(
+		notificationRepo,
+		notificationAuditWriter{svc: auditSvc},
+		emailSender,
+		notifyapp.WithNotificationClock(clock.NewAsiaTaipei()),
+	)
 	taskSvc := taskapp.NewTaskService(taskRepo, taskScheduleReader{repo: caseRepo}, holidayRepo, notificationSvc)
 	rideSvc := rideapp.NewRideService(rideRepo, rideDriverResolver{repo: mdDriverRepo}, rideScheduleReader{repo: caseRepo}, rideAuditWriter{svc: auditSvc}, rideMissingReportProvider{svc: taskSvc})
 	opsAudit := opsAuditWriter{svc: auditSvc}
-	attendanceSvc := opsapp.NewAttendanceService(attendanceRepo, opsDriverLister{repo: mdDriverRepo}, opsAudit, holidayRepo)
+	attendanceSvc := opsapp.NewAttendanceService(
+		attendanceRepo,
+		opsDriverLister{repo: mdDriverRepo},
+		opsAudit,
+		holidayRepo,
+		opsapp.WithAttendanceTxRunner(txRunner),
+		opsapp.WithAttendanceClock(clock.NewAsiaTaipei()),
+	)
 	driverReportExcel := drinfra.NewExcelAdapter()
 	driverReportSvc := drapp.NewDriverReportService(
 		drinfra.NewDriverReportRepository(pool),
@@ -165,6 +178,7 @@ func main() {
 		driverReportAttendanceRegistrar{svc: attendanceSvc},
 		driverReportAuditWriter{svc: auditSvc},
 		txRunner,
+		drapp.WithDriverReportClock(clock.NewAsiaTaipei()),
 	)
 	excelRenderer := reportinfra.NewExcelRenderer()
 	precheckSvc := reportapp.NewPrecheckService(precheckRepo)
@@ -228,10 +242,6 @@ func main() {
 		identity:     identitytransport.NewIdentityHandler(userSvc),
 	}
 
-	var userState auth.UserStateResolver
-	if cfg.AppEnv == "production" && adminClient.Configured() {
-		userState = authUserStateChecker{admin: adminClient}
-	}
 	r := newRouter(cfg, pool, h, permResolver, customPermResolver, userState)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
@@ -270,14 +280,13 @@ func main() {
 
 // connectDatabase 建立連線池並確認可連通；任何一步失敗都回傳 error，交由呼叫端依環境決定是否啟動。
 func connectDatabase(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
-	// Supabase 的連線池網址走 pgbouncer transaction pooling，同一個 pgxpool 連線
-	// 在不同請求間可能被路由到不同後端連線；pgx 預設會快取 prepared statement 名稱，
-	// 在這種環境下會不定期撞名回傳 "prepared statement already exists"，需改用
-	// simple protocol（見 cmd/migrate/main.go 同樣的修法）。
 	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse database config: %w", err)
 	}
+	// Supabase 的連線池網址走 pgbouncer transaction pooling，同一個 pgxpool 連線在不同請求間可能被路由到
+	// 不同後端連線；pgx 預設會快取 prepared statement 名稱，在這種環境下會不定期撞名回傳
+	// "prepared statement already exists"，需改用 simple protocol（見 cmd/migrate/main.go 同樣的修法）。
 	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 	poolCfg.MaxConns = int32(cfg.DBMaxConns)
 	poolCfg.MinConns = int32(cfg.DBMinConns)
