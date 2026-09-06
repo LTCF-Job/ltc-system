@@ -124,7 +124,7 @@ func LoadFromEnv() (*Config, error) {
 		return nil, errors.New("SUPABASE_JWT_ISSUER (or SUPABASE_PROJECT_REF to derive it) is required when APP_ENV=production")
 	}
 
-	// 缺金鑰時 userCustomPermissionResolver 會 fail-open，使用者個人層級的權限覆蓋靜默失效，被降權者回復為角色矩陣的完整權限
+	// 缺金鑰時無法建立 shared security-state projection，使用者個人層級的權限覆蓋會靜默失效，被降權者回復為角色矩陣的完整權限
 	if cfg.AppEnv == "production" && cfg.SupabaseServiceRoleKey == "" {
 		return nil, errors.New("SUPABASE_SERVICE_ROLE_KEY is required when APP_ENV=production; without it user-level custom permissions silently stop applying and down-scoped users fall back to full role-matrix permissions")
 	}

@@ -181,13 +181,24 @@ func main() {
 	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverSiteLookup{repo: mdSiteRepo}, caregiverExcelAdapter, caregiverExcelAdapter)
 
 	roleRepo := identityinfra.NewRoleRepository(pool)
+	securityStateRepo := identityinfra.NewUserSecurityStateRepository(pool)
+	userDirectoryRepo := identityinfra.NewUserDirectoryRepository(pool)
 	permResolver := auth.NewCachedPermissionResolver(rolePermissionResolver{store: roleRepo})
 	identityAudit := identityAuditWriter{svc: auditSvc}
 	adminClient := identityinfra.NewSupabaseAdminClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, &http.Client{Timeout: cfg.SupabaseAdminTimeout})
-	customPermResolver := auth.NewCachedCustomPermissionResolver(userCustomPermissionResolver{admin: adminClient})
+	securityStateResolver := userSecurityStateResolver{store: securityStateRepo, admin: adminClient}
+	customPermResolver := auth.NewCachedCustomPermissionResolver(securityStateResolver)
 	roleSvc := identityapp.NewRoleService(roleRepo, adminClient, identityAudit, txRunner)
 	userSvc := identityapp.NewUserService(adminClient, roleRepo, identityAudit)
-	permissionCaches := permissionCacheInvalidator{roles: permResolver, users: customPermResolver}
+	userSvc.SetUserSecurityStateStore(securityStateRepo)
+	userSvc.SetUserDirectoryStore(userDirectoryRepo)
+	var userState auth.UserStateResolver
+	var userStateCache *auth.CachedUserStateResolver
+	if cfg.AppEnv == "production" && adminClient.Configured() {
+		userStateCache = auth.NewCachedUserStateResolver(securityStateResolver, 5*time.Second)
+		userState = userStateCache
+	}
+	permissionCaches := permissionCacheInvalidator{roles: permResolver, users: customPermResolver, state: userStateCache}
 	roleSvc.SetPermissionCacheInvalidator(permissionCaches)
 	userSvc.SetPermissionCacheInvalidator(permissionCaches)
 
