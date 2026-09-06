@@ -9,6 +9,7 @@ import (
 type permissionCacheInvalidator struct {
 	roles *auth.CachedPermissionResolver
 	users *auth.CachedCustomPermissionResolver
+	state *auth.CachedUserStateResolver
 }
 
 func (i permissionCacheInvalidator) InvalidateRole(roleKey string) {
@@ -20,5 +21,8 @@ func (i permissionCacheInvalidator) InvalidateRole(roleKey string) {
 func (i permissionCacheInvalidator) InvalidateUser(userID uuid.UUID) {
 	if i.users != nil {
 		i.users.InvalidateUser(userID)
+	}
+	if i.state != nil {
+		i.state.InvalidateUser(userID)
 	}
 }

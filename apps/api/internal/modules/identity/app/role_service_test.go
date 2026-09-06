@@ -75,11 +75,12 @@ func (f *fakeUserCounter) CountUsersByRoleKey(ctx context.Context, key string) (
 
 type fakeIdentityAuditWriter struct {
 	entries []AuditEntry
+	err     error
 }
 
 func (f *fakeIdentityAuditWriter) Write(_ context.Context, e AuditEntry) error {
 	f.entries = append(f.entries, e)
-	return nil
+	return f.err
 }
 
 func TestRoleService_Update_SystemRoleImmutable(t *testing.T) {

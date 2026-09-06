@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/platform/config"
 	"ltc-system/apps/api/internal/platform/httpx"
+	"ltc-system/apps/api/internal/platform/requestmeta"
 )
 
 const (
@@ -24,6 +25,11 @@ const (
 // UserStateResolver 讓高風險 API 在 JWT 尚未過期時仍能即時拒絕已停用帳號。
 type UserStateResolver interface {
 	Validate(ctx context.Context, actorID uuid.UUID, role string) (bool, error)
+}
+
+// VersionedUserStateResolver 以共享資料來源版本標記帳號狀態，讓停用／角色異動可跨 replica 立即失效。
+type VersionedUserStateResolver interface {
+	ValidateVersioned(ctx context.Context, actorID uuid.UUID, role string) (bool, string, error)
 }
 
 // newSupabaseJWKS 建立向 Supabase JWKS 端點取金鑰並自動輪替的 Keyfunc；未設定 URL 時回傳 nil。
@@ -95,6 +101,7 @@ func MiddlewareWithUserState(cfg *config.Config, userState UserStateResolver) gi
 	}
 
 	return func(c *gin.Context) {
+		c.Request = c.Request.WithContext(requestmeta.With(c.Request.Context(), c.ClientIP(), c.Request.UserAgent()))
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "未提供認證憑證", nil)

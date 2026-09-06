@@ -16,4 +16,5 @@ var (
 	ErrCannotDeleteSelf       = errors.New("cannot delete your own account")
 	ErrInvalidCredentials     = errors.New("invalid credentials")
 	ErrCannotResetOwnPassword = errors.New("cannot reset your own password through this endpoint")
+	ErrInvalidUserStatus      = errors.New("invalid user status")
 )

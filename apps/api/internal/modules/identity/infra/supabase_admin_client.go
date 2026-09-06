@@ -85,6 +85,7 @@ type supabaseUserResponse struct {
 	Email        string         `json:"email"`
 	Phone        string         `json:"phone"`
 	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 	LastSignInAt *time.Time     `json:"last_sign_in_at"`
 	BannedUntil  string         `json:"banned_until"`
 	AppMetadata  map[string]any `json:"app_metadata"`
@@ -122,6 +123,7 @@ func toAuthUser(u supabaseUserResponse) app.AuthUser {
 		CustomPermissions: perms,
 		Status:            status,
 		CreatedAt:         u.CreatedAt,
+		UpdatedAt:         u.UpdatedAt,
 		LastSignInAt:      u.LastSignInAt,
 	}
 }
@@ -158,18 +160,32 @@ func (c *SupabaseAdminClient) GetUser(ctx context.Context, id uuid.UUID) (*app.A
 // CreateUser 建立新使用者；角色一律寫入 app_metadata，user_metadata 只放非授權的顯示資訊。
 func (c *SupabaseAdminClient) CreateUser(ctx context.Context, in app.CreateAuthUserInput) (*app.AuthUser, error) {
 	baseRole := in.RoleKey
+	status := in.Status
+	if status == "" {
+		status = "active"
+	}
+	if status != "active" && status != "inactive" {
+		return nil, app.ErrInvalidUserStatus
+	}
+	appMetadata := map[string]any{
+		"role":     baseRole,
+		"role_key": in.RoleKey,
+	}
+	if in.CustomPermissions != nil {
+		appMetadata["custom_permissions"] = in.CustomPermissions
+	}
 	body := map[string]any{
 		"email":         in.Email,
 		"password":      in.Password,
 		"email_confirm": true,
-		"app_metadata": map[string]any{
-			"role":     baseRole,
-			"role_key": in.RoleKey,
-		},
+		"app_metadata":  appMetadata,
 		"user_metadata": map[string]any{
 			"display_name": in.DisplayName,
 			"phone":        in.Phone,
 		},
+	}
+	if status == "inactive" {
+		body["ban_duration"] = "876000h"
 	}
 	var resp supabaseUserResponse
 	if err := c.do(ctx, http.MethodPost, "/auth/v1/admin/users", body, &resp); err != nil {
@@ -196,9 +212,12 @@ func (c *SupabaseAdminClient) UpdateUser(ctx context.Context, id uuid.UUID, in a
 		body["app_metadata"] = map[string]any{"role": *in.RoleKey, "role_key": *in.RoleKey}
 	}
 	if in.Status != nil {
+		if *in.Status != "active" && *in.Status != "inactive" {
+			return nil, app.ErrInvalidUserStatus
+		}
 		if *in.Status == "inactive" {
 			body["ban_duration"] = "876000h"
-		} else {
+		} else if *in.Status == "active" {
 			body["ban_duration"] = "none"
 		}
 	}

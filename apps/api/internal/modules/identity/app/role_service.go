@@ -18,6 +18,33 @@ type RoleService struct {
 	permissionCache PermissionCacheInvalidator
 }
 
+// roleAuditSnapshot 是角色設定的明確稽核 DTO，不直接序列化 Role domain entity。
+type roleAuditSnapshot struct {
+	ID          uuid.UUID                   `json:"id"`
+	Key         string                      `json:"key"`
+	Name        string                      `json:"name"`
+	Description string                      `json:"description"`
+	TagType     string                      `json:"tagType"`
+	IsSystem    bool                        `json:"isSystem"`
+	BaseRole    string                      `json:"baseRole"`
+	Permissions map[string]ModulePermission `json:"permissions"`
+}
+
+func newRoleAuditSnapshot(role *Role) *roleAuditSnapshot {
+	if role == nil {
+		return nil
+	}
+	permissions := make(map[string]ModulePermission, len(role.Permissions))
+	for key, permission := range role.Permissions {
+		permissions[key] = permission
+	}
+	return &roleAuditSnapshot{
+		ID: role.ID, Key: role.Key, Name: role.Name, Description: role.Description,
+		TagType: role.TagType, IsSystem: role.IsSystem, BaseRole: role.BaseRole,
+		Permissions: permissions,
+	}
+}
+
 // SetPermissionCacheInvalidator 設定角色異動後的即時權限快取失效器。
 func (s *RoleService) SetPermissionCacheInvalidator(invalidator PermissionCacheInvalidator) {
 	s.permissionCache = invalidator
@@ -45,6 +72,24 @@ func (s *RoleService) List(ctx context.Context) ([]Role, error) {
 }
 
 func (s *RoleService) fillUserCounts(ctx context.Context, roles []Role) ([]Role, error) {
+	if lister, ok := s.userCounter.(UserLister); ok {
+		users, err := lister.ListUsers(ctx)
+		if err != nil {
+			return nil, err
+		}
+		counts := make(map[string]int, len(roles))
+		for _, user := range users {
+			key := user.RoleKey
+			if key == "" {
+				key = user.Role
+			}
+			counts[key]++
+		}
+		for i := range roles {
+			roles[i].UserCount = counts[roles[i].Key]
+		}
+		return roles, nil
+	}
 	for i := range roles {
 		count, err := s.countUsers(ctx, roles[i].Key)
 		if err != nil {
@@ -119,7 +164,7 @@ func (s *RoleService) Create(ctx context.Context, in CreateRoleInput, actorID uu
 		if err := s.store.Create(ctx, role); err != nil {
 			return err
 		}
-		return s.writeAudit(ctx, "create", role.ID, actorID, actorRole, nil, role)
+		return s.writeAudit(ctx, "create", role.ID, actorID, actorRole, nil, newRoleAuditSnapshot(role))
 	})
 	if err != nil {
 		return nil, err
@@ -177,7 +222,7 @@ func (s *RoleService) Update(ctx context.Context, id uuid.UUID, in UpdateRoleInp
 		if err := s.store.Update(ctx, &after); err != nil {
 			return err
 		}
-		return s.writeAudit(ctx, "update", id, actorID, actorRole, before, &after)
+		return s.writeAudit(ctx, "update", id, actorID, actorRole, newRoleAuditSnapshot(before), newRoleAuditSnapshot(&after))
 	})
 	if err != nil {
 		return nil, err
@@ -216,7 +261,7 @@ func (s *RoleService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRo
 		if err := s.store.Delete(ctx, id); err != nil {
 			return err
 		}
-		return s.writeAudit(ctx, "delete", id, actorID, actorRole, before, nil)
+		return s.writeAudit(ctx, "delete", id, actorID, actorRole, newRoleAuditSnapshot(before), nil)
 	})
 	if err == nil && s.permissionCache != nil {
 		s.permissionCache.InvalidateRole(before.Key)

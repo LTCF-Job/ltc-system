@@ -25,10 +25,21 @@ type PermissionResolver interface {
 	Resolve(ctx context.Context, roleKey string) (map[string]ModulePermission, error)
 }
 
+// VersionedPermissionResolver 讓快取在跨執行個體部署時以共享資料來源的版本判斷
+// 權限是否仍可沿用；版本通常來自 roles.updated_at 或其他單調遞增的共享版本欄位。
+type VersionedPermissionResolver interface {
+	ResolveVersioned(ctx context.Context, roleKey string) (map[string]ModulePermission, string, error)
+}
+
 // CustomPermissionResolver 依使用者 ID 解析其個人層級的模組權限覆蓋；沒有設定覆蓋時
 // 回傳 (nil, nil)，RequirePermission 會視為「維持角色矩陣原值」而非拒絕存取。
 type CustomPermissionResolver interface {
 	Resolve(ctx context.Context, actorID uuid.UUID) (map[string]ModulePermission, error)
+}
+
+// VersionedCustomPermissionResolver 以共享資料來源版本標記個人權限覆蓋，讓快取不依賴單一 replica 的 TTL。
+type VersionedCustomPermissionResolver interface {
+	ResolveVersioned(ctx context.Context, actorID uuid.UUID) (map[string]ModulePermission, string, error)
 }
 
 // permissionCacheTTL 讓「角色身分管理」頁改權限後，API 授權在這個時間內就會反映新設定，
@@ -39,6 +50,7 @@ const permissionCacheMaxEntries = 1024
 
 type permissionCacheEntry struct {
 	perms   map[string]ModulePermission
+	version string
 	expires time.Time
 }
 
@@ -56,6 +68,21 @@ func NewCachedPermissionResolver(source PermissionResolver) *CachedPermissionRes
 
 // Resolve 命中未過期快取就直接回傳，否則回源查詢並刷新快取。
 func (c *CachedPermissionResolver) Resolve(ctx context.Context, roleKey string) (map[string]ModulePermission, error) {
+	if source, ok := c.source.(VersionedPermissionResolver); ok {
+		perms, version, err := source.ResolveVersioned(ctx, roleKey)
+		if err != nil {
+			return nil, err
+		}
+		c.mu.RLock()
+		entry, cached := c.cache[roleKey]
+		c.mu.RUnlock()
+		if cached && entry.version == version && time.Now().Before(entry.expires) {
+			return entry.perms, nil
+		}
+		c.store(roleKey, perms, version)
+		return perms, nil
+	}
+
 	c.mu.RLock()
 	entry, ok := c.cache[roleKey]
 	c.mu.RUnlock()
@@ -67,14 +94,19 @@ func (c *CachedPermissionResolver) Resolve(ctx context.Context, roleKey string) 
 	if err != nil {
 		return nil, err
 	}
+	c.store(roleKey, perms, "")
+	return perms, nil
+}
+
+func (c *CachedPermissionResolver) store(roleKey string, perms map[string]ModulePermission, version string) {
+	now := time.Now()
 	c.mu.Lock()
-	c.pruneExpiredLocked(time.Now())
-	c.cache[roleKey] = permissionCacheEntry{perms: perms, expires: time.Now().Add(permissionCacheTTL)}
+	c.pruneExpiredLocked(now)
+	c.cache[roleKey] = permissionCacheEntry{perms: perms, version: version, expires: now.Add(permissionCacheTTL)}
 	if len(c.cache) > permissionCacheMaxEntries {
 		c.evictOneLocked()
 	}
 	c.mu.Unlock()
-	return perms, nil
 }
 
 // InvalidateRole 讓角色或角色權限異動立即失效，不等待 TTL。
@@ -114,6 +146,21 @@ func NewCachedCustomPermissionResolver(source CustomPermissionResolver) *CachedC
 
 // Resolve 命中未過期快取就直接回傳，否則回源查詢並刷新快取。
 func (c *CachedCustomPermissionResolver) Resolve(ctx context.Context, actorID uuid.UUID) (map[string]ModulePermission, error) {
+	if source, ok := c.source.(VersionedCustomPermissionResolver); ok {
+		perms, version, err := source.ResolveVersioned(ctx, actorID)
+		if err != nil {
+			return nil, err
+		}
+		c.mu.RLock()
+		entry, cached := c.cache[actorID]
+		c.mu.RUnlock()
+		if cached && entry.version == version && time.Now().Before(entry.expires) {
+			return entry.perms, nil
+		}
+		c.store(actorID, perms, version)
+		return perms, nil
+	}
+
 	c.mu.RLock()
 	entry, ok := c.cache[actorID]
 	c.mu.RUnlock()
@@ -127,12 +174,23 @@ func (c *CachedCustomPermissionResolver) Resolve(ctx context.Context, actorID uu
 	}
 	c.mu.Lock()
 	c.pruneExpiredLocked(time.Now())
-	c.cache[actorID] = permissionCacheEntry{perms: perms, expires: time.Now().Add(permissionCacheTTL)}
+	c.cache[actorID] = permissionCacheEntry{perms: perms, version: "", expires: time.Now().Add(permissionCacheTTL)}
 	if len(c.cache) > permissionCacheMaxEntries {
 		c.evictOneLocked()
 	}
 	c.mu.Unlock()
 	return perms, nil
+}
+
+func (c *CachedCustomPermissionResolver) store(actorID uuid.UUID, perms map[string]ModulePermission, version string) {
+	now := time.Now()
+	c.mu.Lock()
+	c.pruneExpiredLocked(now)
+	c.cache[actorID] = permissionCacheEntry{perms: perms, version: version, expires: now.Add(permissionCacheTTL)}
+	if len(c.cache) > permissionCacheMaxEntries {
+		c.evictOneLocked()
+	}
+	c.mu.Unlock()
 }
 
 // InvalidateUser 讓個人權限或使用者停用立即失效，不等待 TTL。

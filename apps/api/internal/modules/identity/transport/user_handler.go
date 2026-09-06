@@ -22,7 +22,12 @@ func NewIdentityHandler(svc *app.UserService) *IdentityHandler {
 
 // ListUsers 取得使用者清單。
 func (h *IdentityHandler) ListUsers(c *gin.Context) {
-	users, err := h.svc.List(c.Request.Context(), c.Query("keyword"), c.Query("role"))
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	users, total, err := h.svc.List(c.Request.Context(), c.Query("q"), c.Query("role"), page, pageSize)
 	if err != nil {
 		respondIdentityError(c, err)
 		return
@@ -31,7 +36,11 @@ func (h *IdentityHandler) ListUsers(c *gin.Context) {
 	for _, u := range users {
 		list = append(list, toUserResponse(u))
 	}
-	httpx.RespondSuccess(c, http.StatusOK, list, nil)
+	totalPages := int(total) / pageSize
+	if int(total)%pageSize != 0 {
+		totalPages++
+	}
+	httpx.RespondSuccess(c, http.StatusOK, list, httpx.PaginationMeta{Page: page, PageSize: pageSize, Total: int64(total), TotalPages: totalPages})
 }
 
 // GetUser 取得單一使用者。
@@ -58,11 +67,13 @@ func (h *IdentityHandler) CreateUser(c *gin.Context) {
 	}
 
 	u, err := h.svc.Create(c.Request.Context(), app.CreateAuthUserInput{
-		Email:       req.Email,
-		Password:    req.Password,
-		DisplayName: req.DisplayName,
-		Phone:       req.Phone,
-		RoleKey:     req.Role,
+		Email:             req.Email,
+		Password:          req.Password,
+		DisplayName:       req.DisplayName,
+		Phone:             req.Phone,
+		RoleKey:           req.Role,
+		Status:            req.Status,
+		CustomPermissions: toPermissionsModel(req.CustomPermissions),
 	}, auth.GetActorID(c), auth.GetActorRole(c))
 	if err != nil {
 		respondIdentityError(c, err)
@@ -145,7 +156,7 @@ func (h *IdentityHandler) ChangeSelfPassword(c *gin.Context) {
 	actorID := auth.GetActorID(c)
 	email := auth.GetActorEmail(c)
 
-	if err := h.svc.ChangeSelfPassword(c.Request.Context(), actorID, email, req.OldPassword, req.NewPassword); err != nil {
+	if err := h.svc.ChangeSelfPassword(c.Request.Context(), actorID, email, req.OldPassword, req.NewPassword, auth.GetActorRole(c)); err != nil {
 		respondIdentityError(c, err)
 		return
 	}
