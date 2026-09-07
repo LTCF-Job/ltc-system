@@ -2,13 +2,18 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/casemgmt/app"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
@@ -23,14 +28,15 @@ func NewCaseRepository(db *pgxpool.Pool) *CaseRepository {
 }
 
 // List 取得個案清單（預設回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳單位／去回程車輛
-// 任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案；excludePending 為 true 時排除
-// 這類待維護個案，供主列表與「待補建關聯」分頁互斥呈現。
+// 比對不到主檔、生日格式錯誤或身分證字號格式錯誤任一成立的個案；excludePending 為 true 時
+// 排除這類待維護個案，供主列表與「待維護」分頁互斥呈現。
 func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
-		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
-		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       p.site_id, COALESCE(st.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.inbound_vehicle_id, COALESCE(vi.display_name, ''),
+		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
+		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
+		       p.site_id, COALESCE(st.name, ''), p.site_name_raw, p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
+		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
 		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
 		FROM cases c
@@ -45,12 +51,16 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		  AND ($6 = false OR (
 		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
 		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
-		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
+		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL) OR
+		        c.birth_date_raw IS NOT NULL OR
+		        c.national_id_invalid = true
 		      ))
 		  AND ($7 = false OR NOT (
 		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
 		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
-		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
+		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL) OR
+		        c.birth_date_raw IS NOT NULL OR
+		        c.national_id_invalid = true
 		      ))
 		ORDER BY c.created_at DESC, c.name ASC
 		LIMIT $4 OFFSET $5
@@ -65,15 +75,19 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 	for rows.Next() {
 		var c app.Case
 		if err := rows.Scan(
-			&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
-			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
-			&c.SiteID, &c.SiteName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.InboundVehicleID, &c.InboundVehicle,
+			&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked, &c.NationalIDInvalid,
+			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.BirthDateRaw, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
+			&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
+			&c.InboundVehicleID, &c.InboundVehicle, &c.InboundVehicleNameRaw,
 			&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
 			&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}
 		list = append(list, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate cases: %w", err)
 	}
 
 	var total int64
@@ -87,36 +101,104 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		  AND ($4 = false OR (
 		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
 		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
-		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
+		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL) OR
+		        c.birth_date_raw IS NOT NULL OR
+		        c.national_id_invalid = true
 		      ))
 		  AND ($5 = false OR NOT (
 		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
 		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
-		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL)
+		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL) OR
+		        c.birth_date_raw IS NOT NULL OR
+		        c.national_id_invalid = true
 		      ))
 	`
-	_ = r.db.QueryRow(ctx, countQuery, region, status, q, unresolvedLink, excludePending).Scan(&total)
+	if err := r.db.QueryRow(ctx, countQuery, region, status, q, unresolvedLink, excludePending).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count cases: %w", err)
+	}
 
 	return list, total, nil
 }
 
-// UpsertTransportPreference 寫入個案的單位與去回程車輛偏好。nil 的 ID 以 COALESCE 保留
-// 既有值（避免部分更新把未提供的欄位覆寫為 null）；raw name 隨對應 ID 一併寫入或清空。
+// ListAll 取得完整的未刪除個案資料集，供個案主檔匯出使用，不受 UI 分頁上限影響。
+func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
+	query := `
+		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
+		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
+		       p.site_id, COALESCE(st.name, ''), p.site_name_raw, p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
+		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
+		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
+		       c.status, c.remarks, c.created_at, c.updated_at
+		FROM cases c
+		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
+		LEFT JOIN sites st ON st.id = p.site_id
+		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
+		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
+		WHERE c.deleted_at IS NULL
+		ORDER BY c.created_at DESC, c.name ASC
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all cases: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]app.Case, 0)
+	for rows.Next() {
+		var c app.Case
+		if err := rows.Scan(
+			&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked, &c.NationalIDInvalid,
+			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.BirthDateRaw, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
+			&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
+			&c.InboundVehicleID, &c.InboundVehicle, &c.InboundVehicleNameRaw,
+			&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
+			&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan all cases: %w", err)
+		}
+		list = append(list, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate all cases: %w", err)
+	}
+	return list, nil
+}
+
+// UpsertTransportPreference 以完整替換語意寫入個案的交通偏好；nil 的 ID 代表清除欄位。
 func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
 	db := pgxdb.FromContext(ctx, r.db)
 	_, err := db.Exec(ctx, `INSERT INTO case_transport_preferences (case_id, site_id, outbound_vehicle_id, inbound_vehicle_id, site_name_raw, outbound_vehicle_name_raw, inbound_vehicle_name_raw)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (case_id) DO UPDATE SET
-			site_id = COALESCE(EXCLUDED.site_id, case_transport_preferences.site_id),
-			outbound_vehicle_id = COALESCE(EXCLUDED.outbound_vehicle_id, case_transport_preferences.outbound_vehicle_id),
-			inbound_vehicle_id = COALESCE(EXCLUDED.inbound_vehicle_id, case_transport_preferences.inbound_vehicle_id),
-			site_name_raw = CASE WHEN EXCLUDED.site_id IS NOT NULL THEN NULL WHEN EXCLUDED.site_name_raw IS NOT NULL THEN EXCLUDED.site_name_raw ELSE case_transport_preferences.site_name_raw END,
-			outbound_vehicle_name_raw = CASE WHEN EXCLUDED.outbound_vehicle_id IS NOT NULL THEN NULL WHEN EXCLUDED.outbound_vehicle_name_raw IS NOT NULL THEN EXCLUDED.outbound_vehicle_name_raw ELSE case_transport_preferences.outbound_vehicle_name_raw END,
-			inbound_vehicle_name_raw = CASE WHEN EXCLUDED.inbound_vehicle_id IS NOT NULL THEN NULL WHEN EXCLUDED.inbound_vehicle_name_raw IS NOT NULL THEN EXCLUDED.inbound_vehicle_name_raw ELSE case_transport_preferences.inbound_vehicle_name_raw END,
+			site_id = EXCLUDED.site_id,
+			outbound_vehicle_id = EXCLUDED.outbound_vehicle_id,
+			inbound_vehicle_id = EXCLUDED.inbound_vehicle_id,
+			site_name_raw = EXCLUDED.site_name_raw,
+			outbound_vehicle_name_raw = EXCLUDED.outbound_vehicle_name_raw,
+			inbound_vehicle_name_raw = EXCLUDED.inbound_vehicle_name_raw,
 			updated_at = now()`,
 		caseID, siteID, outboundVehicleID, inboundVehicleID,
 		nullIfEmpty(siteNameRaw), nullIfEmpty(outboundVehicleNameRaw), nullIfEmpty(inboundVehicleNameRaw))
 	return err
+}
+
+// ClaimCaseImportRow 以檔案雜湊與來源列鍵保護個案匯入重試；呼叫端應在列交易內執行。
+func (r *CaseRepository) ClaimCaseImportRow(ctx context.Context, fileHash, rowKey string, caseID uuid.UUID) (bool, error) {
+	db := pgxdb.FromContext(ctx, r.db)
+	var claimedID uuid.UUID
+	err := db.QueryRow(ctx, `
+		INSERT INTO case_import_idempotency (file_hash, row_key, case_id)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (file_hash, row_key) DO NOTHING
+		RETURNING id
+	`, fileHash, rowKey, caseID).Scan(&claimedID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	return claimedID != uuid.Nil, nil
 }
 
 // nullIfEmpty 將空字串轉為 nil，讓 SQL 端可用 IS NOT NULL 判斷是否有提供 raw name。
@@ -130,9 +212,10 @@ func nullIfEmpty(v string) *string {
 // GetByID 依 UUID 取得個案。
 func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, error) {
 	query := `
-		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked,
-		       c.household_type, c.gender, c.birth_date, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       p.site_id, COALESCE(st.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.inbound_vehicle_id, COALESCE(vi.display_name, ''),
+		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
+		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
+		       p.site_id, COALESCE(st.name, ''), p.site_name_raw, p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
+		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
 		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
 		FROM cases c
@@ -145,9 +228,10 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 	var c app.Case
 	db := pgxdb.FromContext(ctx, r.db)
 	err := db.QueryRow(ctx, query, id).Scan(
-		&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked,
-		&c.HouseholdType, &c.Gender, &c.BirthDate, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
-		&c.SiteID, &c.SiteName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.InboundVehicleID, &c.InboundVehicle,
+		&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked, &c.NationalIDInvalid,
+		&c.HouseholdType, &c.Gender, &c.BirthDate, &c.BirthDateRaw, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
+		&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
+		&c.InboundVehicleID, &c.InboundVehicle, &c.InboundVehicleNameRaw,
 		&c.HomeAddress, &c.Region, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
 		&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
 	)
@@ -176,6 +260,9 @@ func (r *CaseRepository) GetByHMAC(ctx context.Context, hmac []byte) (*app.Case,
 		&c.Status, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, app.ErrCaseNotFound
+		}
 		return nil, err
 	}
 	return &c, nil
@@ -207,6 +294,9 @@ func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm strin
 		}
 		list = append(list, c)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate case name matches: %w", err)
+	}
 	return list, nil
 }
 
@@ -214,39 +304,59 @@ func (r *CaseRepository) GetByNameNormalized(ctx context.Context, nameNorm strin
 func (r *CaseRepository) Create(ctx context.Context, c *app.Case) error {
 	query := `
 		INSERT INTO cases (
-			id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-			household_type, gender, birth_date, care_contact_role, care_contact_name, registered_address,
+			id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked, national_id_invalid,
+			household_type, gender, birth_date, birth_date_raw, care_contact_role, care_contact_name, registered_address,
 			home_address, region, ltc_level, service_category, service_usage_type, claim_end_date, status, remarks
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		RETURNING created_at, updated_at
 	`
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
 	}
 	db := pgxdb.FromContext(ctx, r.db)
-	return db.QueryRow(ctx, query,
-		c.ID, c.Name, c.NameNormalized, c.NationalIDCipher, c.NationalIDHMAC, c.NationalIDMasked,
-		c.HouseholdType, c.Gender, c.BirthDate, c.CareContactRole, c.CareContactName, c.RegisteredAddress,
+	err := db.QueryRow(ctx, query,
+		c.ID, c.Name, c.NameNormalized, c.NationalIDCipher, c.NationalIDHMAC, c.NationalIDMasked, c.NationalIDInvalid,
+		c.HouseholdType, c.Gender, c.BirthDate, c.BirthDateRaw, c.CareContactRole, c.CareContactName, c.RegisteredAddress,
 		c.HomeAddress, c.Region, c.LTCLevel, c.ServiceCategory, c.ServiceUsageType, c.ClaimEndDate, c.Status, c.Remarks,
 	).Scan(&c.CreatedAt, &c.UpdatedAt)
+	return handleCaseDBError(err)
 }
 
-// Update 修改個案資料。
+// Update 修改個案資料；走 pgxdb.FromContext 以支援外層交易（裁決疑似重複個案的
+// merged_existing 分支需要在同一交易內呼叫）。
 func (r *CaseRepository) Update(ctx context.Context, c *app.Case) error {
 	query := `
 		UPDATE cases
 		SET name = $2, name_normalized = $3, home_address = $4, region = $5, ltc_level = $6,
 		    service_category = $7, service_usage_type = $8, claim_end_date = $9,
-		    status = $10, household_type = $11, gender = $12, birth_date = $13,
-		    care_contact_role = $14, care_contact_name = $15, registered_address = $16, remarks = $17, updated_at = now()
+		    status = $10, household_type = $11, gender = $12, birth_date = $13, birth_date_raw = $14,
+		    care_contact_role = $15, care_contact_name = $16, registered_address = $17, remarks = $18,
+		    national_id_cipher = $19, national_id_hmac = $20, national_id_masked = $21, national_id_invalid = $22,
+		    updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING updated_at
 	`
-	return r.db.QueryRow(ctx, query,
+	db := pgxdb.FromContext(ctx, r.db)
+	err := db.QueryRow(ctx, query,
 		c.ID, c.Name, c.NameNormalized, c.HomeAddress, c.Region, c.LTCLevel,
 		c.ServiceCategory, c.ServiceUsageType, c.ClaimEndDate, c.Status,
-		c.HouseholdType, c.Gender, c.BirthDate, c.CareContactRole, c.CareContactName, c.RegisteredAddress, c.Remarks,
+		c.HouseholdType, c.Gender, c.BirthDate, c.BirthDateRaw, c.CareContactRole, c.CareContactName, c.RegisteredAddress, c.Remarks,
+		c.NationalIDCipher, c.NationalIDHMAC, c.NationalIDMasked, c.NationalIDInvalid,
 	).Scan(&c.UpdatedAt)
+	return handleCaseDBError(err)
+}
+
+// handleCaseDBError 將 national_id_hmac 唯一索引衝突轉譯為可辨識的 domain error，
+// 供 handler 回應 409 而非未分類的 500。
+func handleCaseDBError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "national_id_hmac") {
+		return app.ErrDuplicateNationalID
+	}
+	return err
 }
 
 // CreateSchedule 建立排班設定與對應的 legs（包在同一個事務中）。
@@ -278,12 +388,13 @@ func (r *CaseRepository) insertSchedule(ctx context.Context, tx pgxdb.Querier, s
 		INSERT INTO case_schedules (
 			id, case_id, site_id, effective_range, weekdays, trip_pattern, unit_price, distance_km,
 			service_duration_min, service_code, note
-		) VALUES ($1, $2, $3, daterange($4, $5, '[]'), $6, $7, $8, $9, $10, $11, $12)
+		) VALUES ($1, $2, $3, daterange($4, $5, '[)'), $6, $7, $8, $9, $10, $11, $12)
 		RETURNING created_at, updated_at
 	`
 	var toVal *time.Time
 	if s.EffectiveTo != nil {
-		toVal = s.EffectiveTo
+		exclusiveEnd := s.EffectiveTo.AddDate(0, 0, 1)
+		toVal = &exclusiveEnd
 	}
 	err := tx.QueryRow(ctx, querySchedule,
 		s.ID, s.CaseID, s.SiteID, s.EffectiveFrom, toVal, s.Weekdays, s.TripPattern,
@@ -373,6 +484,9 @@ func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, cas
 		}
 		s.Legs = append(s.Legs, leg)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate schedule legs: %w", err)
+	}
 
 	return &s, nil
 }
@@ -380,24 +494,24 @@ func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, cas
 // GetActiveSchedulesForMonth 查詢特定月份所有在案個案的有效排班與 Legs。
 func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]app.ActiveCaseScheduleInfo, error) {
 	if r.db == nil {
-		return []app.ActiveCaseScheduleInfo{}, nil
+		return nil, fmt.Errorf("case database is not configured")
 	}
 
 	firstDay := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-	lastDay := firstDay.AddDate(0, 1, -1)
+	lastDay := firstDay.AddDate(0, 1, 0)
 
 	query := `
 		SELECT c.id, c.name, COALESCE(c.region, ''), c.claim_end_date,
 		       s.id as schedule_id, s.site_id, st.open_days,
 		       lower(s.effective_range) as eff_from,
-		       CASE WHEN upper_inf(s.effective_range) THEN NULL ELSE to_char(upper(s.effective_range), 'YYYY-MM-DD') END as eff_to_str,
+		       CASE WHEN upper_inf(s.effective_range) THEN NULL ELSE to_char(upper(s.effective_range) - 1, 'YYYY-MM-DD') END as eff_to_str,
 		       s.weekdays, s.trip_pattern
 		FROM cases c
 		JOIN case_schedules s ON c.id = s.case_id
 		JOIN sites st ON s.site_id = st.id
 		WHERE c.status = 'active' AND c.deleted_at IS NULL
 		  AND ($1 = '' OR c.region = $1)
-		  AND s.effective_range && daterange($2, $3, '[]')
+		  AND s.effective_range && daterange($2, $3, '[)')
 		ORDER BY c.created_at DESC, c.name ASC
 	`
 	rows, err := r.db.Query(ctx, query, region, firstDay, lastDay)
@@ -425,11 +539,16 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 			return nil, err
 		}
 		if effToStr != nil && *effToStr != "" {
-			if t, err := time.Parse("2006-01-02", *effToStr); err == nil {
-				sr.info.EffectiveTo = &t
+			t, err := rocdate.ParseDate(*effToStr)
+			if err != nil {
+				return nil, fmt.Errorf("parse schedule effective end date: %w", err)
 			}
+			sr.info.EffectiveTo = &t
 		}
 		list = append(list, sr)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate monthly active schedules: %w", err)
 	}
 
 	var results []app.ActiveCaseScheduleInfo
@@ -458,6 +577,10 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 			}
 			item.info.Legs = append(item.info.Legs, leg)
 		}
+		if err := lRows.Err(); err != nil {
+			lRows.Close()
+			return nil, fmt.Errorf("failed to iterate monthly schedule legs: %w", err)
+		}
 		lRows.Close()
 		results = append(results, item.info)
 	}
@@ -469,7 +592,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 // 匯報欄位對應而把整份含密文的個案主檔載進記憶體。
 func (r *CaseRepository) ListNameIndex(ctx context.Context) ([]app.CaseNameRef, error) {
 	if r.db == nil {
-		return nil, nil
+		return nil, fmt.Errorf("case database is not configured")
 	}
 
 	rows, err := r.db.Query(ctx, `
@@ -509,8 +632,8 @@ func (r *CaseRepository) CloseOpenSchedules(ctx context.Context, caseID uuid.UUI
 	db := pgxdb.FromContext(ctx, r.db)
 	_, err := db.Exec(ctx, `
 		UPDATE case_schedules
-		SET effective_range = daterange(lower(effective_range), CURRENT_DATE, '[)'), updated_at = now()
+		SET effective_range = daterange(lower(effective_range), $2::date, '[)'), updated_at = now()
 		WHERE case_id = $1 AND upper_inf(effective_range)
-	`, caseID)
+	`, caseID, clock.Today())
 	return err
 }

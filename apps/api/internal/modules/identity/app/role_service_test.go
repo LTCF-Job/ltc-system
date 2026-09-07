@@ -75,11 +75,12 @@ func (f *fakeUserCounter) CountUsersByRoleKey(ctx context.Context, key string) (
 
 type fakeIdentityAuditWriter struct {
 	entries []AuditEntry
+	err     error
 }
 
 func (f *fakeIdentityAuditWriter) Write(_ context.Context, e AuditEntry) error {
 	f.entries = append(f.entries, e)
-	return nil
+	return f.err
 }
 
 func TestRoleService_Update_SystemRoleImmutable(t *testing.T) {
@@ -133,7 +134,7 @@ func TestRoleService_Delete_Success(t *testing.T) {
 func TestRoleService_Create_SlugConflictAppendsSuffix(t *testing.T) {
 	store := newFakeRoleStore()
 	store.byKey["dispatcher"] = &Role{Key: "dispatcher"}
-	svc := NewRoleService(store, nil, nil, nil)
+	svc := NewRoleService(store, nil, &fakeIdentityAuditWriter{}, nil)
 
 	role, err := svc.Create(context.Background(), CreateRoleInput{Name: "dispatcher"}, uuid.New(), "admin")
 	require.NoError(t, err)
@@ -142,7 +143,7 @@ func TestRoleService_Create_SlugConflictAppendsSuffix(t *testing.T) {
 
 func TestRoleService_Create_DefaultsBaseRoleToViewer(t *testing.T) {
 	store := newFakeRoleStore()
-	svc := NewRoleService(store, nil, nil, nil)
+	svc := NewRoleService(store, nil, &fakeIdentityAuditWriter{}, nil)
 
 	role, err := svc.Create(context.Background(), CreateRoleInput{Name: "custom"}, uuid.New(), "admin")
 	require.NoError(t, err)

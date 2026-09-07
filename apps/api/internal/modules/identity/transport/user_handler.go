@@ -22,7 +22,12 @@ func NewIdentityHandler(svc *app.UserService) *IdentityHandler {
 
 // ListUsers 取得使用者清單。
 func (h *IdentityHandler) ListUsers(c *gin.Context) {
-	users, err := h.svc.List(c.Request.Context(), c.Query("keyword"), c.Query("role"))
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	users, total, err := h.svc.List(c.Request.Context(), c.Query("q"), c.Query("role"), page, pageSize)
 	if err != nil {
 		respondIdentityError(c, err)
 		return
@@ -31,7 +36,11 @@ func (h *IdentityHandler) ListUsers(c *gin.Context) {
 	for _, u := range users {
 		list = append(list, toUserResponse(u))
 	}
-	httpx.RespondSuccess(c, http.StatusOK, list, nil)
+	totalPages := int(total) / pageSize
+	if int(total)%pageSize != 0 {
+		totalPages++
+	}
+	httpx.RespondSuccess(c, http.StatusOK, list, httpx.PaginationMeta{Page: page, PageSize: pageSize, Total: int64(total), TotalPages: totalPages})
 }
 
 // GetUser 取得單一使用者。
@@ -52,17 +61,19 @@ func (h *IdentityHandler) GetUser(c *gin.Context) {
 // CreateUser 建立新使用者。
 func (h *IdentityHandler) CreateUser(c *gin.Context) {
 	var req createUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	u, err := h.svc.Create(c.Request.Context(), app.CreateAuthUserInput{
-		Email:       req.Email,
-		Password:    req.Password,
-		DisplayName: req.DisplayName,
-		Phone:       req.Phone,
-		RoleKey:     req.Role,
+		Email:             req.Email,
+		Password:          req.Password,
+		DisplayName:       req.DisplayName,
+		Phone:             req.Phone,
+		RoleKey:           req.Role,
+		Status:            req.Status,
+		CustomPermissions: toPermissionsModel(req.CustomPermissions),
 	}, auth.GetActorID(c), auth.GetActorRole(c))
 	if err != nil {
 		respondIdentityError(c, err)
@@ -80,7 +91,7 @@ func (h *IdentityHandler) UpdateUser(c *gin.Context) {
 	}
 
 	var req updateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -107,7 +118,7 @@ func (h *IdentityHandler) UpdateUserPermissions(c *gin.Context) {
 	}
 
 	var req updateUserPermissionsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -137,7 +148,7 @@ func (h *IdentityHandler) DeleteUser(c *gin.Context) {
 // ChangeSelfPassword 讓已登入使用者變更自己的密碼。
 func (h *IdentityHandler) ChangeSelfPassword(c *gin.Context) {
 	var req changeSelfPasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -145,7 +156,7 @@ func (h *IdentityHandler) ChangeSelfPassword(c *gin.Context) {
 	actorID := auth.GetActorID(c)
 	email := auth.GetActorEmail(c)
 
-	if err := h.svc.ChangeSelfPassword(c.Request.Context(), actorID, email, req.OldPassword, req.NewPassword); err != nil {
+	if err := h.svc.ChangeSelfPassword(c.Request.Context(), actorID, email, req.OldPassword, req.NewPassword, auth.GetActorRole(c)); err != nil {
 		respondIdentityError(c, err)
 		return
 	}
@@ -161,7 +172,7 @@ func (h *IdentityHandler) ResetPassword(c *gin.Context) {
 	}
 
 	var req resetUserPasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}

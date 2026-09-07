@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,17 @@ import (
 type fakeCaseStore struct {
 	cases []app.Case
 	sched *app.CaseSchedule
+}
+
+type fakeSiteFinder struct {
+	site *app.SiteRef
+}
+
+func (f *fakeSiteFinder) GetByID(ctx context.Context, id uuid.UUID) (*app.SiteRef, error) {
+	if f.site != nil && f.site.ID == id {
+		return f.site, nil
+	}
+	return nil, errors.New("not found")
 }
 
 func (f *fakeCaseStore) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
@@ -81,7 +93,7 @@ func (f *fakeCaseStore) CloseOpenSchedules(ctx context.Context, caseID uuid.UUID
 }
 
 func newTestCaseHandler(store *fakeCaseStore) *CaseHandler {
-	svc := app.NewCaseService(&config.Config{}, store, nil, nil, nil)
+	svc := app.NewCaseService(&config.Config{}, store, nil, nil, nil, nil)
 	return NewCaseHandler(svc)
 }
 
@@ -189,4 +201,49 @@ func TestCaseHandler_GetSchedule_LegsAreCamelCase(t *testing.T) {
 	assert.Contains(t, body, `"departTime"`)
 	assert.NotContains(t, body, `"LegSeq"`)
 	assert.NotContains(t, body, `"DepartTime"`)
+}
+
+// TestCaseHandler_GetSchedule_NoActiveSchedule_ReturnsNullNotNotFound 確認個案
+// 尚無現行排班時回傳 200 搭配 data:null，而非 404，因為這是合法的空狀態而非錯誤。
+func TestCaseHandler_GetSchedule_NoActiveSchedule_ReturnsNullNotNotFound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	caseID := uuid.New()
+	store := &fakeCaseStore{}
+	h := newTestCaseHandler(store)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/cases/"+caseID.String()+"/schedule", nil)
+	c.Params = gin.Params{{Key: "id", Value: caseID.String()}}
+
+	h.GetSchedule(c)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var envelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	assert.Equal(t, "null", string(envelope.Data))
+}
+
+func TestCaseHandler_SaveSchedule_UsesPathCaseID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	pathCaseID := uuid.New()
+	siteID := uuid.New()
+	store := &fakeCaseStore{cases: []app.Case{{ID: pathCaseID, Region: strPtr("north")}}}
+	svc := app.NewCaseService(&config.Config{}, store, &fakeSiteFinder{site: &app.SiteRef{ID: siteID, Region: "north"}}, nil, nil, nil)
+	h := NewCaseHandler(svc)
+
+	body := `{"siteId":"` + siteID.String() + `","effectiveFrom":"2026-09-01T00:00:00Z","weekdays":[1,2,3,4,5],"tripPattern":1,"unitPrice":115,"distanceKm":5,"serviceDurationMin":10,"serviceCode":"BD03","legs":[{"legSeq":1,"direction":"outbound","departTime":"09:00"}]}`
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/cases/"+pathCaseID.String()+"/schedule", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = gin.Params{{Key: "id", Value: pathCaseID.String()}}
+
+	h.SaveSchedule(c)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, store.sched)
+	assert.Equal(t, pathCaseID, store.sched.CaseID)
 }

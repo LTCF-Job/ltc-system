@@ -2,11 +2,10 @@ package transport
 
 import (
 	"net/http"
-	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/audit/app"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
@@ -23,10 +22,10 @@ func NewAuditHandler(svc *app.Service) *AuditHandler {
 
 // List 查詢稽核紀錄（admin 專屬權限）。
 func (h *AuditHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	if pageSize > 100 {
-		pageSize = 100
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
 	}
 
 	filter := app.Filter{
@@ -39,22 +38,31 @@ func (h *AuditHandler) List(c *gin.Context) {
 	}
 
 	if actorIDStr := c.Query("actorId"); actorIDStr != "" {
-		if id, err := uuid.Parse(actorIDStr); err == nil {
-			filter.ActorID = &id
+		id, err := uuid.Parse(actorIDStr)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "actorId 必須為有效 UUID", nil)
+			return
 		}
+		filter.ActorID = &id
 	}
 
 	if startStr := c.Query("startDate"); startStr != "" {
-		if t, err := time.Parse("2006-01-02", startStr); err == nil {
-			filter.StartDate = &t
+		t, err := rocdate.ParseDate(startStr)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "startDate 必須為有效日期", nil)
+			return
 		}
+		filter.StartDate = &t
 	}
 
 	if endStr := c.Query("endDate"); endStr != "" {
-		if t, err := time.Parse("2006-01-02", endStr); err == nil {
-			endDay := t.AddDate(0, 0, 1) // 包含該日全天
-			filter.EndDate = &endDay
+		t, err := rocdate.ParseDate(endStr)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "endDate 必須為有效日期", nil)
+			return
 		}
+		endDay := t.AddDate(0, 0, 1) // 包含該日全天
+		filter.EndDate = &endDay
 	}
 
 	logs, total, err := h.svc.List(c.Request.Context(), filter)

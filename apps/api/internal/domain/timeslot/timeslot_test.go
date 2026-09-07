@@ -47,6 +47,20 @@ func TestEndTime(t *testing.T) {
 			errTarget:   ErrSpansAcrossDay,
 		},
 		{
+			name:        "跨年但日期日數相同仍視為跨日",
+			depart:      time.Date(2026, 12, 31, 23, 59, 0, 0, time.UTC),
+			durationMin: 1,
+			wantErr:     true,
+			errTarget:   ErrSpansAcrossDay,
+		},
+		{
+			name:        "超過四小時 -> 報錯",
+			depart:      time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC),
+			durationMin: 241,
+			wantErr:     true,
+			errTarget:   ErrExcessiveDuration,
+		},
+		{
 			name:        "時長 <= 0 -> 報錯",
 			depart:      time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC),
 			durationMin: 0,

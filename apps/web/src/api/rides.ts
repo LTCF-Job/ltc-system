@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, createPaginationMeta, unwrapData, unwrapPaged } from './client'
 import type {
   RideCalendarMatrixDTO,
   RideRecordDTO,
@@ -15,23 +15,28 @@ export async function getRideCalendarMatrix(params: {
   region?: string
   q?: string
 }): Promise<RideCalendarMatrixDTO> {
-  return apiClient.get('/rides/calendar', { params })
+  const res = await apiClient.get('/rides/calendar', { params })
+  return unwrapData<RideCalendarMatrixDTO>(res)
 }
 
 export async function getRideRecord(id: string): Promise<RideRecordDTO> {
-  return apiClient.get(`/rides/${id}`)
+  const res = await apiClient.get(`/rides/${id}`)
+  return unwrapData<RideRecordDTO>(res)
 }
 
 export async function patchRideRecord(id: string, data: PatchRideRequest): Promise<RideRecordDTO> {
-  return apiClient.patch(`/rides/${id}`, data)
+  const res = await apiClient.patch(`/rides/${id}`, data)
+  return unwrapData<RideRecordDTO>(res)
 }
 
 export async function submitManualRideReport(data: ManualReportRideRequest): Promise<RideRecordDTO> {
-  return apiClient.post('/rides/manual-report', data)
+  const res = await apiClient.post('/rides/manual-report', data)
+  return unwrapData<RideRecordDTO>(res)
 }
 
 export async function resolveConflict(rideId: string, data: ResolveConflictRequest): Promise<RideRecordDTO> {
-  return apiClient.post(`/rides/${rideId}/resolve-conflict`, data)
+  const res = await apiClient.post(`/rides/${rideId}/resolve-conflict`, data)
+  return unwrapData<RideRecordDTO>(res)
 }
 
 export async function listIssueRides(params?: {
@@ -39,9 +44,10 @@ export async function listIssueRides(params?: {
   pageSize?: number
   month?: string
   issueType?: 'conflict' | 'unreported' | 'import_error'
-  q?: string
+  keyword?: string
 }): Promise<Paged<IssueRideDTO>> {
-  return apiClient.get('/rides/issues', { params })
+  const res = await apiClient.get('/rides/issues', { params })
+  return unwrapPaged<IssueRideDTO>(res, createPaginationMeta(params?.page, params?.pageSize))
 }
 
 export async function listMissingRides(params?: {
@@ -54,7 +60,8 @@ export async function listMissingRides(params?: {
   caseId?: string
   q?: string
 }): Promise<Paged<MissingRideDTO>> {
-  return apiClient.get('/rides/missing', { params })
+  const res = await apiClient.get('/rides/missing', { params })
+  return unwrapPaged<MissingRideDTO>(res, createPaginationMeta(params?.page, params?.pageSize))
 }
 
 

@@ -72,6 +72,8 @@ func TestSupabaseAdminClient_NonSuccessStatusReturnsError(t *testing.T) {
 	client := NewSupabaseAdminClient(srv.URL, "bad-key", nil)
 	_, err := client.ListUsers(t.Context())
 	assert.Error(t, err)
+	assert.Equal(t, "supabase admin request returned HTTP 401", err.Error())
+	assert.NotContains(t, err.Error(), "invalid api key")
 }
 
 func TestSupabaseAdminClient_VerifyPassword_UsesGrantTypePasswordEndpoint(t *testing.T) {

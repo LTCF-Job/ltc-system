@@ -13,7 +13,7 @@ type userResponse struct {
 	DisplayName       string                         `json:"displayName"`
 	Role              string                         `json:"role"`
 	Phone             string                         `json:"phone,omitempty"`
-	Status            string                         `json:"status"`
+	Status            string                         `json:"status" binding:"omitempty,oneof=active inactive"`
 	CustomPermissions map[string]modulePermissionDTO `json:"customPermissions,omitempty"`
 	LastLoginAt       string                         `json:"lastLoginAt,omitempty"`
 	CreatedAt         string                         `json:"createdAt,omitempty"`
@@ -52,7 +52,7 @@ type updateUserRequest struct {
 	DisplayName *string `json:"displayName"`
 	Role        *string `json:"role"`
 	Phone       *string `json:"phone"`
-	Status      *string `json:"status"`
+	Status      *string `json:"status" binding:"omitempty,oneof=active inactive"`
 }
 
 type updateUserPermissionsRequest struct {

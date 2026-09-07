@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, unwrapData } from './client'
 import type { UserDTO } from '@/types/api'
 import type { SystemPermissions } from '@/types/domain'
 
@@ -9,5 +9,5 @@ export interface AuthMeResponse extends UserDTO {
 
 export async function getAuthMe(): Promise<AuthMeResponse> {
   const res = await apiClient.get('/auth/me')
-  return (res as any).data ?? res
+  return unwrapData<AuthMeResponse>(res)
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
@@ -75,6 +76,9 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 		}
 		sites = append(sites, s.toApp())
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate sites: %w", err)
+	}
 
 	var total int64
 	countQuery := `
@@ -83,7 +87,9 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR address ILIKE '%' || $2 || '%')
 		  AND ($3 = '' OR status = $3)
 	`
-	_ = r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total)
+	if err := r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count sites: %w", err)
+	}
 
 	return sites, total, nil
 }
@@ -103,6 +109,9 @@ func (r *SiteRepository) getOne(ctx context.Context, query string, arg interface
 	err := r.db.QueryRow(ctx, query, arg).
 		Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.OpenDays, &s.Status, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, app.ErrSiteNotFound
+		}
 		return nil, err
 	}
 	site := s.toApp()

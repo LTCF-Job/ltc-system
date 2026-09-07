@@ -194,7 +194,7 @@ import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listIssueRides, resolveConflict } from '@/api/rides'
-import { listVehicles, listDrivers } from '@/api/masters'
+import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import type { IssueRideDTO, VehicleDTO, DriverDTO } from '@/types/api'
 
@@ -226,7 +226,7 @@ async function fetchIssues() {
     const res = await listIssueRides({
       issueType: activeTab.value,
       pageSize: 50,
-      q: issueQuery.value || undefined
+      keyword: issueQuery.value || undefined
     })
     issueList.value = res.data
   } finally {
@@ -241,8 +241,8 @@ function handleReset() {
 
 function openResolveDialog(row: any) {
   selectedIssue.value = row
-  resolveForm.vehicleId = allVehicles.value[0]?.id || ''
-  resolveForm.driverId = allDrivers.value[0]?.id || ''
+  resolveForm.vehicleId = ''
+  resolveForm.driverId = ''
   resolveForm.reason = '混車確認'
   resolveDialogVisible.value = true
 }
@@ -254,6 +254,10 @@ function openErrorDetail(row: IssueRideDTO) {
 
 async function handleResolveSubmit() {
   if (!selectedIssue.value) return
+  if (!resolveForm.vehicleId) {
+    ElMessage.warning('請先指定正確認定的車輛')
+    return
+  }
   await ElMessageBox.confirm(
     `確定將該搭乘紀錄裁決為指定車輛與司機？`,
     '確認裁決',
@@ -277,11 +281,11 @@ async function handleResolveSubmit() {
 
 onMounted(async () => {
   const [vRes, dRes] = await Promise.all([
-    listVehicles({ status: 'active', pageSize: 100 }),
-    listDrivers({ status: 'active', pageSize: 100 })
+    listAllVehicles({ status: 'active' }),
+    listAllDrivers({ status: 'active' })
   ])
-  allVehicles.value = vRes.data
-  allDrivers.value = dRes.data
+  allVehicles.value = vRes
+  allDrivers.value = dRes
 
   fetchIssues()
 })

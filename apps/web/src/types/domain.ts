@@ -197,15 +197,20 @@ export const EXPORT_MODE_LABELS: Record<ExportMode, string> = {
   zip: '壓縮檔'
 }
 
-// 申報列被略過的原因，對應後端 reporting/app 的 SkipReason 常數
-export const EXPORT_SKIP_REASON_LABELS: Record<string, string> = {
+// 申報欄位留白的原因，對應後端 reporting/app 的 GapReason 常數
+export const EXPORT_DATA_GAP_LABELS: Record<string, string> = {
   NO_SCHEDULE_LEG: '找不到對應的排班趟次',
   NO_DEPART_TIME: '缺少出發時間或服務時長',
   NO_DRIVER: '缺少司機或司機身分證',
+  NO_SERVICE_CATEGORY: '服務類別不在 1~2',
   NO_SERVICE_USAGE_TYPE: '服務使用類型不在 1~4',
   NO_UNIT_PRICE: '缺少單價',
   NO_NATIONAL_ID: '缺少個案身分證',
-  BUILD_ROW_FAILED: '申報列組建失敗'
+  NO_ADDRESS: '缺少住家或單位地址',
+  NO_DISTANCE: '缺少里程數',
+  NO_PLATE_NO: '缺少車號',
+  NO_SERVICE_CODE: '缺少服務項目代碼',
+  BUILD_ROW_FAILED: '申報列組建失敗，該列未納入申報'
 }
 
 export type ServiceCategory = 1 | 2

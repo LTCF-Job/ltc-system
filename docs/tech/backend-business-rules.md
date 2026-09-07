@@ -50,7 +50,7 @@
 4. 當天不是國定假日（`holidays` map 命中就跳過）。
 5. 通過以上全部條件的日子，把這筆排班底下**所有 leg**（去程／回程等時段定義）都展開成一筆 `ExpectedRide`。
 
-## 四趟展開規則（在 `RideService.IngestSubmission` 裡）
+## 四趟展開規則（在 `RideService.IngestWebhook` 裡）
 
 個案排班若設定 `TripPattern == 4`（四趟制，例如去程分成「上車」「下車」兩個表單欄位），匯報表上填的「第 1 趟」「第 2 趟」要展開成資料庫實際的四趟紀錄：表單第 1 趟 → 資料庫 leg 1、leg 3；表單第 2 趟 → leg 2、leg 4。非四趟制的排班則表單填第幾趟就對應資料庫第幾趟，不展開。
 
@@ -60,7 +60,7 @@
 
 1. `Normalize(s)`：Unicode NFKC 正規化（全形轉半形）→ 去除所有空白字元 → 依 `variants.go` 的異體字對照表把常見異體字／俗體字換成標準字 → 全部轉小寫。
 2. `ParseColumnHeader(header)`：解析表單欄名（例如「1. 王小明 (去程)[備註]」），依序：去掉重複欄位自動加的 `" 2"`／`" 3"` 後綴 → 抓最後方括號內容判斷「去程／回程」方向 → 去掉開頭數字序號 → 去掉 `*` 之後的備註文字 → 去掉所有括號內容 → 剩下的字串跑 `Normalize` 得到乾淨姓名。
-3. `ScoreCandidate(cleanedName, targetNormalized)`：兩字串完全相同給 1.0 分；Levenshtein 編輯距離 ≤ 1（差一個字或差一個字的順序）給 0.6 分（模糊比對，允許打錯一個字）；其他一律 0 分，不做更寬鬆的模糊比對。這個分數目前用在表單欄位對應建議；現行 frontend 的 commit path 會將具有 suggestion 的欄位轉為 mapped，因此是否需要保留人工確認，應以目前 UI 與產品決策重新確認。
+3. `ScoreCandidate(cleanedName, targetNormalized)`：兩字串完全相同給 1.0 分；Levenshtein 編輯距離 ≤ 1（差一個字或差一個字的順序）給 0.6 分（模糊比對，允許打錯一個字）；其他一律 0 分，不做更寬鬆的模糊比對。這個分數目前用在表單欄位對應建議（人工還是要確認，不是全自動套用）。
 
 ## 身分證驗證與加密（`domain/crypto`）
 
@@ -74,10 +74,10 @@
 | 順序 | Severity | Code | 判斷條件 |
 |---|---|---|---|
 | 1 | `info`（固定出現） | `QUOTA_CHECK_SKIPPED` | 恆常提示：配給額度檢查未執行（規則尚未取得，不影響 `Passed`） |
-| 2 | `error` | `MISSING_CASE_PROFILE` | 該地區有效個案缺身分證、住家地址或服務使用類型任一欄位 |
-| 3 | `warning` | `UNRESOLVED_CONFLICT` | 該地區有 `ride_records` 存在未裁決的混車衝突（`resolve-conflict` 還沒處理） |
+| 2 | `warning` | `MISSING_CASE_PROFILE` | 該地區有效個案缺身分證、住家地址、服務類別或服務使用類型任一欄位 |
+| 3 | `error` | `UNRESOLVED_CONFLICT` | 該地區有 `ride_records` 存在未裁決的混車衝突（`resolve-conflict` 還沒處理） |
 
-`Passed = (errorCount == 0)`——只有 `error` 等級的項目會擋匯出，`warning`／`info` 只是提示不會擋。
+`Passed = (errorCount == 0)`——只有 `error` 等級的項目會擋匯出，`warning`／`info` 只是提示不會擋。**未裁決混車衝突是唯一會擋下匯出的檢核項目**：缺資料只會讓該欄位在申報檔留白，混車卻會讓報出去的資料本身是錯的。
 
 ## 政府申報表排序規則（`domain/govform.SortClaimRows`）
 
@@ -90,7 +90,7 @@
 
 ## 政府申報表目前沒有資料來源的欄位（`domain/govform.BuildClaimRow`）
 
-33 欄申報表裡有 16 欄目前系統沒有任何資料來源，`BuildClaimRow` 一律寫入空字串，不套用任何預設值——缺資料就是留白，不得由程式代填看似合理的內容（見 [`golden_test.go`](../../apps/api/internal/domain/govform/golden_test.go) 的 `TestGovClaim_BlankColumnsMatchGovernmentSample`，鎖定這些欄位必須留白；該測試同時鎖定第 17 欄在條件不成立時也留白，但那是條件式欄位而非資料缺口，不計入這 16 欄）。
+33 欄申報表裡有 16 欄目前系統沒有任何資料來源，`BuildClaimRow` 一律寫入空字串，不套用任何預設值——缺資料就是留白，不得由程式代填看似合理的內容。同一原則也適用於有資料來源但該筆剛好缺漏的欄位（缺司機、缺排班、缺單價等）：`BuildClaimRow` 把該欄留白後仍產出這一列，缺了什麼由 `GovClaimService` 計入 `dataGaps` 回報，不因為單一欄位缺漏就丟掉整列或擋下整批匯出（見 [`golden_test.go`](../../apps/api/internal/domain/govform/golden_test.go) 的 `TestGovClaim_BlankColumnsMatchGovernmentSample`，鎖定這些欄位必須留白；該測試同時鎖定第 17 欄在條件不成立時也留白，但那是條件式欄位而非資料缺口，不計入這 16 欄）。
 
 **結構性不適用（系統只處理交通接送，不處理其他服務類型）**：
 
@@ -118,8 +118,4 @@
 
 ## 統一錯誤碼
 
-見 [backend-framework.md](backend-framework.md) 的「Response 格式」一節。錯誤碼清單與實際觸發點應以 `apps/api/internal/platform/httpx/response.go` 及各 handler 的 `RespondError` 呼叫為準；`ASSIGNMENT_OVERLAP` 目前只有常數定義，程式碼裡沒有任何地方實際觸發它，屬於預留但未串接的錯誤碼。其他錯誤碼對應到哪種業務規則違反，要看實際呼叫端的 handler 程式碼，這裡不重複列。
-
-## 未驗證範圍
-
-以上內容是 source code 與既有測試的靜態整理，尚未證明實際 PostgreSQL migration、Supabase Auth／Storage、外部 API、部署設定或多執行個體環境的行為。需要進行 runtime 驗證時，請先閱讀 [`maintainer-runbook.md`](maintainer-runbook.md) 的檢查邊界，並同步更新審查報告中的未驗證項目。
+見 [backend-framework.md](backend-framework.md) 的「Response 格式」一節；`DUPLICATE_NATIONAL_ID` 是新增個案時身分證 HMAC 索引查到重複觸發（`internal/modules/casemgmt/transport/case_handler.go`）。`ASSIGNMENT_OVERLAP` 目前只有常數定義，程式碼裡沒有任何地方實際觸發它，屬於預留但未串接的錯誤碼。其他錯誤碼對應到哪種業務規則違反，要看實際呼叫端 `RespondError` 的 handler 程式碼，這裡不重複列。

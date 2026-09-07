@@ -93,12 +93,13 @@ type BatchMappingRequest struct {
 
 // SubmissionReviewDTO 是待維護資料頁籤以匯報表列為單位的 API 回應項目。
 type SubmissionReviewDTO struct {
-	SubmissionID string          `json:"submissionId"`
-	FormTitle    string          `json:"formTitle"`
-	VehicleName  string          `json:"vehicleName"`
-	ServiceDate  string          `json:"serviceDate"`
-	CaseIssues   []FormColumnDTO `json:"caseIssues"`
-	DriverIssue  *DriverIssueDTO `json:"driverIssue,omitempty"`
+	SubmissionID string           `json:"submissionId"`
+	FormTitle    string           `json:"formTitle"`
+	VehicleName  string           `json:"vehicleName"`
+	ServiceDate  string           `json:"serviceDate"`
+	CaseIssues   []FormColumnDTO  `json:"caseIssues"`
+	DriverIssue  *DriverIssueDTO  `json:"driverIssue,omitempty"`
+	RowConflicts []RowConflictDTO `json:"rowConflicts,omitempty"`
 }
 
 // DriverIssueDTO 代表這一列的駕駛人姓名比對不到司機主檔。
@@ -106,10 +107,30 @@ type DriverIssueDTO struct {
 	DriverNameRaw string `json:"driverNameRaw"`
 }
 
+// RowConflictDTO 代表這一列有一筆「同車同個案」的資料與既有資料衝突，需要使用者
+// 選擇要保留哪一筆。
+type RowConflictDTO struct {
+	ID                 string `json:"id"`
+	CaseID             string `json:"caseId"`
+	CaseName           string `json:"caseName"`
+	LegSeq             int16  `json:"legSeq"`
+	PreviousReported   string `json:"previousReported"`
+	PreviousDriverName string `json:"previousDriverName"`
+	NewReported        string `json:"newReported"`
+	NewDriverName      string `json:"newDriverName"`
+	DetectedAt         string `json:"detectedAt"`
+}
+
 // BindDriverRequest 是把某個未比對駕駛人姓名綁定到指定司機的請求。
 type BindDriverRequest struct {
 	DriverNameRaw string `json:"driverNameRaw" binding:"required"`
 	DriverID      string `json:"driverId" binding:"required"`
+}
+
+// ResolveRowConflictRequest 是裁決一筆同車同個案衝突的請求；useNew 為 false 時代表
+// 保留既有資料，故意不加 binding:"required"——false 是合法的選擇，不是欄位缺漏。
+type ResolveRowConflictRequest struct {
+	UseNew bool `json:"useNew"`
 }
 
 func toFormListItemDTO(f app.ReportForm) FormListItemDTO {
@@ -151,6 +172,10 @@ func toSubmissionReviewDTO(r app.SubmissionReview) SubmissionReviewDTO {
 	if r.DriverIssue != nil {
 		driverIssue = &DriverIssueDTO{DriverNameRaw: r.DriverIssue.DriverNameRaw}
 	}
+	rowConflicts := make([]RowConflictDTO, 0, len(r.RowConflicts))
+	for _, c := range r.RowConflicts {
+		rowConflicts = append(rowConflicts, toRowConflictDTO(c))
+	}
 	return SubmissionReviewDTO{
 		SubmissionID: r.SubmissionID,
 		FormTitle:    r.FormTitle,
@@ -158,6 +183,21 @@ func toSubmissionReviewDTO(r app.SubmissionReview) SubmissionReviewDTO {
 		ServiceDate:  r.ServiceDate,
 		CaseIssues:   issues,
 		DriverIssue:  driverIssue,
+		RowConflicts: rowConflicts,
+	}
+}
+
+func toRowConflictDTO(c app.RowConflictView) RowConflictDTO {
+	return RowConflictDTO{
+		ID:                 c.ID,
+		CaseID:             c.CaseID,
+		CaseName:           c.CaseName,
+		LegSeq:             c.LegSeq,
+		PreviousReported:   c.PreviousReported,
+		PreviousDriverName: c.PreviousDriverName,
+		NewReported:        c.NewReported,
+		NewDriverName:      c.NewDriverName,
+		DetectedAt:         c.DetectedAt,
 	}
 }
 

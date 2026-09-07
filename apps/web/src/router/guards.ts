@@ -7,7 +7,25 @@ export function setupRouterGuards(router: Router) {
     const authStore = useAuthStore()
     const isPublic = to.meta.public === true
 
-    // 1. 未登入驗證
+    // F5 重整時 /auth/me 可能還沒回來；guard 在此等待既有請求，避免誤判無權限把使用者踢出當前頁面
+    if (authStore.isAuthenticated && authStore.permissionState !== 'loaded') {
+      await authStore.loadPermissions()
+    }
+
+    if (authStore.isAuthenticated && authStore.permissionState === 'error') {
+      await authStore.logout()
+      if (isPublic) {
+        next()
+      } else {
+        next({
+          path: '/login',
+          query: { redirect: to.fullPath }
+        })
+      }
+      return
+    }
+
+    // 保留原始路徑，登入後可導回目標頁面
     if (!isPublic && !authStore.isAuthenticated) {
       next({
         path: '/login',
@@ -16,15 +34,10 @@ export function setupRouterGuards(router: Router) {
       return
     }
 
-    // 2. 已登入者進入登入頁自動導向首頁
+    // 避免已登入使用者停留在登入頁
     if (to.path === '/login' && authStore.isAuthenticated) {
       next('/')
       return
-    }
-
-    // F5 重整時 /auth/me 可能還沒回來；guard 在此等待既有請求，避免誤判無權限把使用者踢出當前頁面
-    if (authStore.isAuthenticated && !authStore.permissionsLoaded) {
-      await authStore.loadPermissions()
     }
 
     // 3. 模組權限比對：畫面顯示與 API 放行一律以後端 /auth/me 回傳的權限矩陣為準

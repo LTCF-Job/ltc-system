@@ -46,6 +46,7 @@ type RideRecord struct {
 	CorrectedBy            *uuid.UUID
 	CorrectedAt            *time.Time
 	CorrectionReason       *string
+	BasedOnFingerprint     string
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 }

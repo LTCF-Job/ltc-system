@@ -59,7 +59,7 @@ DATABASE_URL="剛剛記下的資料庫連線字串" APP_ENV=local go run ./cmd/m
 
 > **不想裝終端機工具的話**：也可以到 Supabase Dashboard 左側「SQL Editor」→「New query」，把 [`../../apps/api/migrations/`](../../apps/api/migrations/) 資料夾裡每一個檔名結尾是 `.up.sql` 的檔案，依檔名開頭數字由小到大（`000001_...`、`000002_...`……）依序貼進去按「Run」，一個成功再貼下一個，完全不用裝任何工具。缺點是之後如果想改回終端機那個指令，要自己確認兩邊資料庫版本有沒有對齊。
 
-**這一步會建立資料表與參考資料（全臺 22 個縣市）；管理員帳號採條件式 bootstrap。** migration runner 在同時提供 `DEFAULT_ADMIN_EMAIL`、`DEFAULT_ADMIN_PASSWORD`、`SUPABASE_URL` 與 `SUPABASE_SERVICE_ROLE_KEY` 時，會嘗試建立／補上 idempotent default admin；若不提供這些設定，才需要到 Supabase Dashboard 的「Authentication → Users」按「Add user」，填一組**只有你知道的 email 與密碼**，建立後把 `app_metadata`（有些版本顯示為 Raw App Meta Data）設成 `{"role":"admin"}`。沒有這個 `role` 欄位的話，登入得進去但 API permission 可能不足。密碼請直接存進你自己的密碼管理工具，**不要寫進程式碼、環境變數或任何文件**。如果登入時卡在「帳號密碼錯誤」，先確認專案的認證方式（Authentication → Providers）有啟用「Email」，這是最常見的漏設原因。
+**這一步只會建立資料表與參考資料（全臺 22 個縣市），不會建立任何登入帳號。**（早期版本的 migration 會塞一組預設管理員，現已全面移除：`000002_seed_reference_data.up.sql` 只剩縣市資料，`000011_backfill_admin_identity.up.sql` 已改成不做事的 no-op。）所以初始化完之後你必須自己建一組管理員帳號才能登入：到 Supabase Dashboard 的「Authentication → Users」按「Add user」，填一組**只有你知道的 email 與密碼**，建立後點進該使用者，把 `app_metadata`（有些版本顯示為 Raw App Meta Data）改成 `{"role":"admin"}` 並儲存——沒有這個 `role` 欄位的話，登入得進去但每一支 API 都會回 403。密碼請直接存進你自己的密碼管理工具，**不要寫進程式碼、環境變數或任何文件**。如果登入時卡在「帳號密碼錯誤」，先確認專案的認證方式（Authentication → Providers）有啟用「Email」，這是最常見的漏設原因。
 
 ## 步驟二：建立 Google Cloud 專案
 
@@ -144,19 +144,21 @@ GitHub 自動化機器人只會「更新」已經存在的服務，第一次要�
 
 系統的後端程式要知道資料庫在哪裡、密碼是什麼、可以接受哪些網站呼叫它，這些都要先設定好。
 
-### 先把三個機密值存起來（Secret Manager）
+### 先把五個機密值存起來（Secret Manager）
 
-Console →「Security」→「Secret Manager」→「建立密鑰」，重複三次，分別建立以下三個名稱，「密鑰值」欄位貼上對應的值：
+Console →「Security」→「Secret Manager」→「建立密鑰」，建立以下五個名稱，「密鑰值」欄位貼上對應的值：
 
 - `DATABASE_URL`：步驟一記下的資料庫連線字串
 - `ENCRYPTION_KEY`：一組隨機產生的密碼，執行 `openssl rand -base64 32`（終端機指令）就能產生一組
 - `HMAC_KEY`：跟上面一樣的方式再產生一組（兩個要不一樣）
+- `RESEND_API_KEY`：Resend 控制台建立的 API key，正式環境用來實際寄送通知信
+- `SUPABASE_SERVICE_ROLE_KEY`：Supabase Project Settings → API 的 service_role secret，供後端管理使用者與存取 private export bucket；不可放進前端或一般環境變數截圖
 
 ### 幫服務跟工作補上其他設定
 
 Console →「Cloud Run」→「服務」→ 點進 `ltc-api` →「編輯並部署新修訂版本」，切到「變數與密鑰」頁籤：
 
-- 「環境變數」區塊，逐一新增以下六筆（等號後面換成你自己的值）：
+- 「環境變數」區塊，逐一新增以下八筆（等號後面換成你自己的值）：
   - `APP_ENV=production`
   - `SUPABASE_PROJECT_REF=<步驟一記下的 Project Reference>`
   - `SUPABASE_JWKS_URL=https://<步驟一記下的 Project Reference>.supabase.co/auth/v1/.well-known/jwks.json`
@@ -164,13 +166,15 @@ Console →「Cloud Run」→「服務」→ 點進 `ltc-api` →「編輯並部
   - `STORAGE_SIGNED_URL_TTL=24h`
   - `LOG_LEVEL=info`
   - `ALLOWED_ORIGINS=https://placeholder.example.com`（先填這個佔位值，步驟五拿到真正的網站網址後記得回來換掉，這欄位是「允許呼叫這個後端的網站清單」）
-- 「密鑰」區塊「參照密鑰」，把 `DATABASE_URL`／`ENCRYPTION_KEY`／`HMAC_KEY` 三個密鑰各自掛成同名環境變數（版本選「最新」）。
+  - `NOTIFY_FROM=noreply@你的正式網域`
+- 「密鑰」區塊「參照密鑰」，把 `DATABASE_URL`／`ENCRYPTION_KEY`／`HMAC_KEY`／`RESEND_API_KEY`／`SUPABASE_SERVICE_ROLE_KEY` 五個密鑰各自掛成同名環境變數（版本選「最新」）。
+- Supabase Dashboard → Storage 建立 `ltc-exports` bucket，Access 必須選 **Private**；API 會以 `exports/{jobId}/{fileName}` 保存歷史申報檔，前端不直接拿 Storage 金鑰。
 - 按「部署」。
 
 再到「Cloud Run」→「工作」→ 點進 `ltc-api-migrate` →「編輯」，一樣在「變數與密鑰」頁籤：
 
-- 「環境變數」加入 `APP_ENV=production`、`SUPABASE_PROJECT_REF=...`、`SUPABASE_JWKS_URL=...`（值跟上面一樣）、`ALLOWED_ORIGINS=https://placeholder.example.com`。
-- 「密鑰」掛上 `DATABASE_URL`。
+- 「環境變數」加入 `APP_ENV=production`、`SUPABASE_PROJECT_REF=...`、`SUPABASE_JWKS_URL=...`（值跟上面一樣）、`ALLOWED_ORIGINS=https://placeholder.example.com`、`NOTIFY_FROM=noreply@你的正式網域`。
+- 「密鑰」掛上 `DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`、`RESEND_API_KEY`、`SUPABASE_SERVICE_ROLE_KEY`。
 - 儲存。
 
 > **為什麼工作（job）也要設一次？** 因為「服務」跟「工作」是兩個獨立的東西，各自有各自的設定，不會互相共用。少設了任何一個，資料庫初始化工作在每次自動部署時都會失敗，錯誤訊息通常是 `Failed to load config`。填錯字也會有一樣的症狀（例如打成 `APP_ENV=produciton`），這種情況錯誤訊息不會明確告訴你是哪裡打錯，遇到問題先把這兩邊的設定值一字一字核對一次。
@@ -210,14 +214,15 @@ Console →「Cloud Run」→「服務」→ 點進 `ltc-api` →「編輯並部
 
 ## 步驟七：實際測試一次
 
-完成設定並確認 workflow／secret 後，請在專案資料夾推送一個已審核、包含實際變更的 `main` commit 觸發部署；不要為了觸發流程建立無內容的空 commit。推送前先確認工作樹與目標 branch：
+打開終端機，在專案資料夾裡執行：
 
 ```bash
-git status
+git checkout main
+git commit --allow-empty -m "chore: 觸發第一次自動部署"
 git push origin main
 ```
 
-部署流程由 `main` push 觸發；本文件不替代 code review、migration 授權或 rollback 準備。
+這行指令只是「上傳一次沒有任何程式改動的紀錄」，用來觸發自動部署，確認整套設定是通的。
 
 推上去之後：
 
@@ -229,9 +234,9 @@ git push origin main
 
 ## 檢查清單
 
-- [ ] 已確認 default admin bootstrap 是否使用；若未提供 bootstrap 設定，至少在 Supabase「Authentication → Users」建立一組管理員帳號，且 `app_metadata` 有 `"role":"admin"`
+- [ ] 已在 Supabase「Authentication → Users」自行建立至少一組管理員帳號，且 `app_metadata` 有 `"role":"admin"`（migration 不會幫你建帳號）
 - [ ] 資料庫初始化跑到最新版本（`schema_migrations` 表對得上 `apps/api/migrations/` 底下最大的檔案編號；若走 SQL Editor 手動貼的方式，自行核對每一支 `.up.sql` 都依序執行成功）
-- [ ] `ltc-api-migrate` 這個工作跟 `ltc-api` 這個服務兩邊都各自設了 `APP_ENV=production`／`SUPABASE_JWKS_URL`／`SUPABASE_JWT_ISSUER` 或 `SUPABASE_PROJECT_REF`／`ALLOWED_ORIGINS`／`SUPABASE_SERVICE_ROLE_KEY`（拼字也要對）
+- [ ] `ltc-api-migrate` 這個工作跟 `ltc-api` 這個服務兩邊都各自設了 `APP_ENV=production`／`SUPABASE_JWKS_URL`／`ALLOWED_ORIGINS`（拼字也要對，打錯字不會有明確的錯誤提示）
 - [ ] `ltc-api-migrate` 工作的「指令」欄位確認是 `/app/migrate`（或 `//app/migrate`），不是一串看起來像 Windows 路徑（`D:/...`）的亂碼
 - [ ] `ltc-api` 服務的 `ALLOWED_ORIGINS` 已經從佔位值換成 Vercel 實際分配的網址
 - [ ] Vercel 的 Production 環境變數已設過一次 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY`／`VITE_API_BASE_URL`
@@ -332,14 +337,16 @@ gcloud run jobs create ltc-api-migrate \
 echo -n '<DATABASE_URL>'   | gcloud secrets create DATABASE_URL   --data-file=-
 echo -n '<ENCRYPTION_KEY>' | gcloud secrets create ENCRYPTION_KEY --data-file=-
 echo -n '<HMAC_KEY>'       | gcloud secrets create HMAC_KEY       --data-file=-
+echo -n '<RESEND_API_KEY>' | gcloud secrets create RESEND_API_KEY --data-file=-
+echo -n '<SUPABASE_SERVICE_ROLE_KEY>' | gcloud secrets create SUPABASE_SERVICE_ROLE_KEY --data-file=-
 
 gcloud run services update ltc-api --region <GCP_REGION> \
-  --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest" \
-  --update-env-vars="APP_ENV=production,SUPABASE_PROJECT_REF=<project-ref>,SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json,STORAGE_BUCKET=ltc-exports,STORAGE_SIGNED_URL_TTL=24h,LOG_LEVEL=info,ALLOWED_ORIGINS=https://placeholder.example.com"
+  --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
+  --update-env-vars="APP_ENV=production,SUPABASE_PROJECT_REF=<project-ref>,SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json,STORAGE_BUCKET=ltc-exports,STORAGE_SIGNED_URL_TTL=24h,LOG_LEVEL=info,ALLOWED_ORIGINS=https://placeholder.example.com,NOTIFY_FROM=noreply@your-domain.example"
 
 gcloud run jobs update ltc-api-migrate --region <GCP_REGION> \
-  --set-secrets="DATABASE_URL=DATABASE_URL:latest" \
-  --update-env-vars="APP_ENV=production,SUPABASE_PROJECT_REF=<project-ref>,SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json,ALLOWED_ORIGINS=https://placeholder.example.com"
+  --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
+  --update-env-vars="APP_ENV=production,SUPABASE_PROJECT_REF=<project-ref>,SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json,ALLOWED_ORIGINS=https://placeholder.example.com,NOTIFY_FROM=noreply@your-domain.example"
 
 # 步驟六：建立 GitHub Environment 並填入設定值
 gh api --method PUT repos/<GITHUB_ORG_OR_USER>/<GITHUB_REPO_NAME>/environments/Production

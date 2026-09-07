@@ -21,6 +21,26 @@ type UserCounter interface {
 	CountUsersByRoleKey(ctx context.Context, key string) (int, error)
 }
 
+// UserLister 讓角色清單可用一次使用者查詢聚合各角色人數，避免每個角色重複掃描。
+type UserLister interface {
+	ListUsers(ctx context.Context) ([]AuthUser, error)
+}
+
+// UserDirectoryFilter 是本地使用者目錄的伺服器端查詢條件。
+type UserDirectoryFilter struct {
+	Keyword  string
+	RoleKey  string
+	Page     int
+	PageSize int
+}
+
+// UserDirectoryStore 保存可供後台清單查詢的使用者投影，避免每次搜尋都完整掃描外部 Admin API。
+type UserDirectoryStore interface {
+	ListDirectoryUsers(ctx context.Context, filter UserDirectoryFilter) ([]AuthUser, int, error)
+	UpsertDirectoryUser(ctx context.Context, user AuthUser) error
+	DeleteDirectoryUser(ctx context.Context, id uuid.UUID) error
+}
+
 // AuditWriter 定義 identity 模組異動留痕的寫入邊界。
 type AuditWriter interface {
 	Write(ctx context.Context, e AuditEntry) error
@@ -29,6 +49,12 @@ type AuditWriter interface {
 // TxRunner 讓角色的建立／更新／刪除與稽核落在同一個資料庫交易內。
 type TxRunner interface {
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// PermissionCacheInvalidator 由 composition root 注入，避免 identity 模組直接依賴 platform/auth。
+type PermissionCacheInvalidator interface {
+	InvalidateRole(roleKey string)
+	InvalidateUser(userID uuid.UUID)
 }
 
 // AdminIdentityProvider 是 Supabase Auth Admin API 的邊界；Configured 回 false 時
@@ -43,4 +69,12 @@ type AdminIdentityProvider interface {
 	SetCustomPermissions(ctx context.Context, id uuid.UUID, perms map[string]ModulePermission) error
 	VerifyPassword(ctx context.Context, email, password string) error
 	SetPassword(ctx context.Context, id uuid.UUID, newPassword string) error
+}
+
+// UserSecurityStateStore 保存授權與停用檢查所需的本地投影；資料庫是跨 replica 共用的版本來源。
+type UserSecurityStateStore interface {
+	GetSecurityState(ctx context.Context, id uuid.UUID) (*UserSecurityState, error)
+	UpsertSecurityState(ctx context.Context, state UserSecurityState) error
+	UpdateCustomPermissions(ctx context.Context, id uuid.UUID, perms map[string]ModulePermission) error
+	DeleteSecurityState(ctx context.Context, id uuid.UUID) error
 }

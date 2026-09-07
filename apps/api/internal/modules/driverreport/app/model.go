@@ -104,6 +104,7 @@ type PreviewResult struct {
 	FormID          string              `json:"formId"`
 	VehicleID       string              `json:"vehicleId"`
 	VehicleName     string              `json:"vehicleName"`
+	CanCommit       bool                `json:"canCommit"`
 	TotalRows       int                 `json:"totalRows"`
 	ValidRows       int                 `json:"validRows"`
 	ErrorRows       int                 `json:"errorRows"`
@@ -132,7 +133,8 @@ type ColumnMappingUpdate struct {
 }
 
 // SubmissionReview 是一筆匯報提交紀錄（一天一列）目前尚待處理的問題彙整，供待維護
-// 資料頁籤以匯報表列為單位顯示：同一列可能同時有個案欄位比對不到、駕駛人也比對不到。
+// 資料頁籤以匯報表列為單位顯示：同一列可能同時有個案欄位比對不到、駕駛人也比對不到、
+// 或這台車這個個案的資料與既有資料衝突。
 type SubmissionReview struct {
 	SubmissionID string
 	FormTitle    string
@@ -140,6 +142,7 @@ type SubmissionReview struct {
 	ServiceDate  string
 	CaseIssues   []ColumnMapping
 	DriverIssue  *DriverIssue
+	RowConflicts []RowConflictView
 }
 
 // DriverIssue 代表這一列的駕駛人姓名比對不到司機主檔。
@@ -161,11 +164,48 @@ type MonthDetail struct {
 	RideEntries []MonthRideEntry
 }
 
-// CommitResult 回傳正式匯入寫入與略過的結果。
+// CommitResult 回傳正式匯入寫入與略過的結果。ImportedRows／RideRecordRows 只算真正
+// 新增的筆數；ReaffirmedRows 是值與既有資料相同的重複回報；PendingConflictRows 是
+// 因為與既有資料不同、已進入待維護等待使用者選擇的筆數；BackfilledRows 是本次有欄位
+// 從待維護變成已對應而順帶補寫的先前月份筆數——這幾個數字分開計算，不能只看單一數字
+// 就以為這次上傳「沒問題」。
 type CommitResult struct {
-	ImportedRows   int                 `json:"importedRows"`
-	RideRecordRows int                 `json:"rideRecordRows"`
-	MappedColumns  int                 `json:"mappedColumns"`
-	SkippedRows    []SkippedRow        `json:"skippedRows"`
-	Warnings       []ImportWarningItem `json:"warnings,omitempty"`
+	Status              string              `json:"status"`
+	ImportedRows        int                 `json:"importedRows"`
+	RideRecordRows      int                 `json:"rideRecordRows"`
+	ReaffirmedRows      int                 `json:"reaffirmedRows"`
+	PendingConflictRows int                 `json:"pendingConflictRows"`
+	BackfilledRows      int                 `json:"backfilledRows"`
+	MappedColumns       int                 `json:"mappedColumns"`
+	SkippedRows         []SkippedRow        `json:"skippedRows"`
+	Warnings            []ImportWarningItem `json:"warnings,omitempty"`
+}
+
+// DriverReportImportAuditSnapshot 是匯報表匯入結果的明確稽核摘要，不直接保存 CommitResult
+// 的可變 slice 或來源列內容。
+type DriverReportImportAuditSnapshot struct {
+	FormID              uuid.UUID `json:"formId"`
+	YearMonth           string    `json:"yearMonth,omitempty"`
+	Status              string    `json:"status"`
+	FileHash            string    `json:"fileHash,omitempty"`
+	ImportedRows        int       `json:"importedRows"`
+	RideRecordRows      int       `json:"rideRecordRows"`
+	ReaffirmedRows      int       `json:"reaffirmedRows"`
+	PendingConflictRows int       `json:"pendingConflictRows"`
+	BackfilledRows      int       `json:"backfilledRows"`
+	MappedColumns       int       `json:"mappedColumns"`
+	SkippedRows         int       `json:"skippedRows"`
+	WarningRows         int       `json:"warningRows"`
+}
+
+// AuditSnapshot 產生匯入完成狀態的明確稽核摘要。fileHash 只用來事後追溯這批資料出自
+// 哪一次上傳，不參與任何重複判斷——重複與否一律由逐列比對決定。
+func (r CommitResult) AuditSnapshot(formID uuid.UUID, yearMonth, fileHash string) DriverReportImportAuditSnapshot {
+	return DriverReportImportAuditSnapshot{
+		FormID: formID, YearMonth: yearMonth, Status: r.Status, FileHash: fileHash,
+		ImportedRows: r.ImportedRows, RideRecordRows: r.RideRecordRows,
+		ReaffirmedRows: r.ReaffirmedRows, PendingConflictRows: r.PendingConflictRows,
+		BackfilledRows: r.BackfilledRows, MappedColumns: r.MappedColumns,
+		SkippedRows: len(r.SkippedRows), WarningRows: len(r.Warnings),
+	}
 }

@@ -8,10 +8,12 @@ import (
 
 // RideSourceInput 代表單筆來自 Google 表單的回報來源紀錄。
 type RideSourceInput struct {
-	VehicleID   uuid.UUID
-	DriverID    *uuid.UUID
-	Reported    string // "boarded" 或 "absent"
-	SubmittedAt time.Time
+	SourceID       uuid.UUID
+	SourcePriority int
+	VehicleID      uuid.UUID
+	DriverID       *uuid.UUID
+	Reported       string // "boarded" 或 "absent"
+	SubmittedAt    time.Time
 }
 
 // ExistingRecordState 代表既有 ride_records 的狀態（用以保護人工裁決與人工更正）。
@@ -21,11 +23,11 @@ type ExistingRecordState struct {
 	ResolvedVehicleID  *uuid.UUID
 	ResolvedDriverID   *uuid.UUID
 
-	CorrectedAt       *time.Time
-	CorrectedBy       *uuid.UUID
-	EffectiveStatus   string // 既有更正後的狀態
-	CorrectedVehicle  *uuid.UUID
-	CorrectedDriver   *uuid.UUID
+	CorrectedAt      *time.Time
+	CorrectedBy      *uuid.UUID
+	EffectiveStatus  string // 既有更正後的狀態
+	CorrectedVehicle *uuid.UUID
+	CorrectedDriver  *uuid.UUID
 }
 
 // MergeResult 代表混車合併後的運算結果。
@@ -49,7 +51,7 @@ func MergeRideSources(
 	latestByVehicle := make(map[uuid.UUID]RideSourceInput)
 	for _, src := range sources {
 		current, exists := latestByVehicle[src.VehicleID]
-		if !exists || src.SubmittedAt.After(current.SubmittedAt) {
+		if !exists || sourcePreferred(src, current) {
 			latestByVehicle[src.VehicleID] = src
 		}
 	}
@@ -91,7 +93,8 @@ func MergeRideSources(
 		// 取最早回報有坐者之車輛與司機
 		earliest := boardedSources[0]
 		for _, b := range boardedSources[1:] {
-			if b.SubmittedAt.Before(earliest.SubmittedAt) {
+			if b.SubmittedAt.Before(earliest.SubmittedAt) ||
+				(b.SubmittedAt.Equal(earliest.SubmittedAt) && sourcePreferred(b, earliest)) {
 				earliest = b
 			}
 		}
@@ -123,4 +126,19 @@ func MergeRideSources(
 		SelectedDriver:  selectedDriver,
 		SourceChanged:   sourceChanged,
 	}
+}
+
+// sourcePreferred 定義相同車輛來源的 deterministic tie-break：較新的提交時間優先，
+// 再比較來源優先級，最後以 UUID 字串作穩定排序，避免 map iteration 影響申報結果。
+func sourcePreferred(candidate, current RideSourceInput) bool {
+	if candidate.SubmittedAt.After(current.SubmittedAt) {
+		return true
+	}
+	if !candidate.SubmittedAt.Equal(current.SubmittedAt) {
+		return false
+	}
+	if candidate.SourcePriority != current.SourcePriority {
+		return candidate.SourcePriority > current.SourcePriority
+	}
+	return candidate.SourceID.String() > current.SourceID.String()
 }

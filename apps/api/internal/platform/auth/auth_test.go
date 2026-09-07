@@ -49,7 +49,7 @@ func TestAuthMiddleware_MalformedHeader(t *testing.T) {
 
 // X-Mock-Role 曾是本機用的身分後門，已移除；帶著它但沒有 Authorization 仍必須被拒絕。
 func TestAuthMiddleware_LocalMockHeaderNoLongerBypassesJWT(t *testing.T) {
-	cfg := &config.Config{AppEnv: "local"}
+	cfg := &config.Config{AppEnv: "local", AllowInsecureMockAuth: true}
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -65,14 +65,14 @@ func TestAuthMiddleware_LocalMockHeaderNoLongerBypassesJWT(t *testing.T) {
 
 // 本機無 JWKS 時的 ParseUnverified 降級不得在解析失敗時放行成 admin。
 func TestAuthMiddleware_LocalUnparsableTokenRejected(t *testing.T) {
-	cfg := &config.Config{AppEnv: "local"}
+	cfg := &config.Config{AppEnv: "local", AllowInsecureMockAuth: true}
 	w, c := performAuthRequest(t, Middleware(cfg), "Bearer not-a-jwt")
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.Empty(t, c.GetString(ContextKeyActorRole))
 }
 
 func TestAuthMiddleware_LocalMockJWTPrefix(t *testing.T) {
-	cfg := &config.Config{AppEnv: "local"}
+	cfg := &config.Config{AppEnv: "local", AllowInsecureMockAuth: true}
 	w, c := performAuthRequest(t, Middleware(cfg), "Bearer mock_jwt_admin_token")
 	assert.False(t, w.Code == http.StatusUnauthorized)
 	assert.Equal(t, "admin", c.GetString(ContextKeyActorRole))

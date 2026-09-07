@@ -53,7 +53,7 @@ type handlers struct {
 }
 
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
-func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.PermissionResolver, customPerm auth.CustomPermissionResolver) *gin.Engine {
+func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.PermissionResolver, customPerm auth.CustomPermissionResolver, userState auth.UserStateResolver) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(logging.Middleware())
@@ -69,13 +69,29 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	r.Use(cors.New(corsConfig))
 
-	// 健康檢查端點 (健康檢查不走 JWT)。避免使用 /healthz：Cloud Run 預設網域的 Google 前端會保留攔截此精確路徑，導致外部請求收不到回應。
+	// liveness 只確認 process 仍能回應，不依賴資料庫。
+	r.GET("/api/livez", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// readiness 檢查必要的資料庫依賴；依賴異常時必須回 503，不能用 200 偽裝健康。
+	r.GET("/api/readyz", func(c *gin.Context) {
+		if pool == nil || pool.Ping(c.Request.Context()) != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "database": "disconnected"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready", "database": "connected"})
+	})
+
+	// 保留既有 /api/health，相容舊監控；其 HTTP 狀態同步反映 readiness。
 	r.GET("/api/health", func(c *gin.Context) {
 		dbStatus := "connected"
+		httpStatus := http.StatusOK
 		if pool == nil || pool.Ping(c.Request.Context()) != nil {
 			dbStatus = "disconnected"
+			httpStatus = http.StatusServiceUnavailable
 		}
-		c.JSON(http.StatusOK, gin.H{
+		c.JSON(httpStatus, gin.H{
 			"status":   "ok",
 			"env":      cfg.AppEnv,
 			"database": dbStatus,
@@ -85,7 +101,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 
 	// 需要 JWT 認證之 API 群組
 	apiV1 := r.Group("/api/v1")
-	apiV1.Use(auth.Middleware(cfg))
+	apiV1.Use(auth.MiddlewareWithUserState(cfg, userState))
 	{
 		// 所有需授權的路由一律走 perm.RequirePermission(module, action) 查角色的模組權限矩陣，
 		// 不再有寫死角色字面值的路由；自訂角色在「角色身分管理」頁調整矩陣後，API 存取範圍會
@@ -115,6 +131,9 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.POST("/cases/schedules", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.CreateSchedule)
 		apiV1.POST("/cases/import", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.caseImport.ImportExcel)
 		apiV1.POST("/masters/import", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.caseImport.ImportExcel)
+		apiV1.GET("/cases/import/duplicates", auth.RequirePermission(perm, customPerm, "masters_cases", "view"), h.kase.ListDuplicateCandidates)
+		apiV1.POST("/cases/import/duplicates/:id/reveal", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.RevealDuplicateCandidateNationalID)
+		apiV1.POST("/cases/import/duplicates/:id/resolve", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.ResolveDuplicateCandidate)
 
 		// 2. 單位主檔
 		apiV1.GET("/sites", auth.RequirePermission(perm, customPerm, "masters_sites", "view"), h.site.List)
@@ -148,6 +167,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.POST("/driver-reports/columns/batch-mapping", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.BatchMapping)
 		apiV1.GET("/driver-reports/submissions/review", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "view"), h.driverReport.ListSubmissionReview)
 		apiV1.POST("/driver-reports/drivers/bind", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.BindDriver)
+		apiV1.POST("/driver-reports/row-conflicts/:id/resolve", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.ResolveRowConflict)
 		apiV1.DELETE("/driver-reports/:id", auth.RequirePermission(perm, customPerm, "driver_reports", "delete"), h.driverReport.DeleteForm)
 		apiV1.GET("/driver-reports/:id/template", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.DownloadTemplate)
 		apiV1.POST("/driver-reports/:id/import", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.ImportExcel)

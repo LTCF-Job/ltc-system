@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, createPaginationMeta, unwrapData, unwrapPaged } from './client'
 import type {
   Paged,
   CaregiverDTO,
@@ -8,7 +8,7 @@ import type {
   DryRunImportResultDTO
 } from '@/types/api'
 
-// 照護人員 Caregivers
+// 依查詢條件取得照護人員分頁清單
 export async function listCaregivers(params?: {
   page?: number
   pageSize?: number
@@ -18,44 +18,66 @@ export async function listCaregivers(params?: {
   incomplete?: boolean
   excludePending?: boolean
 }): Promise<Paged<CaregiverDTO>> {
-  return apiClient.get('/caregivers', { params })
+  const res = await apiClient.get('/caregivers', { params })
+  return unwrapPaged<CaregiverDTO>(res, createPaginationMeta(params?.page, params?.pageSize))
+}
+
+export async function listAllCaregivers(params?: Omit<NonNullable<Parameters<typeof listCaregivers>[0]>, 'page' | 'pageSize'>): Promise<CaregiverDTO[]> {
+  const items: CaregiverDTO[] = []
+  let page = 1
+  const pageSize = 100
+  while (true) {
+    const result = await listCaregivers({ ...params, page, pageSize })
+    const pageItems = result.data || []
+    items.push(...pageItems)
+    if (page >= (result.meta?.totalPages || Math.ceil((result.meta?.total || items.length) / pageSize)) || pageItems.length === 0) break
+    page += 1
+  }
+  return items
 }
 
 export async function createCaregiver(data: CreateCaregiverRequest): Promise<CaregiverDTO> {
-  return apiClient.post('/caregivers', data)
+  const res = await apiClient.post('/caregivers', data)
+  return unwrapData<CaregiverDTO>(res)
 }
 
 export async function updateCaregiver(id: string, data: UpdateCaregiverRequest): Promise<CaregiverDTO> {
-  return apiClient.patch(`/caregivers/${id}`, data)
+  const res = await apiClient.patch(`/caregivers/${id}`, data)
+  return unwrapData<CaregiverDTO>(res)
 }
 
 export async function deleteCaregiver(id: string): Promise<void> {
-  return apiClient.delete(`/caregivers/${id}`)
+	const res = await apiClient.delete(`/caregivers/${id}`)
+	unwrapData<unknown>(res)
 }
 
 export async function linkCaregiverSite(id: string, siteId: string): Promise<CaregiverDTO> {
-  return apiClient.put(`/caregivers/${id}/site`, { siteId })
+  const res = await apiClient.put(`/caregivers/${id}/site`, { siteId })
+  return unwrapData<CaregiverDTO>(res)
 }
 
-// 照護人員批次匯入
+// 上傳照護人員名單試算匯入結果，不寫入資料庫
 export async function dryRunImportCaregivers(file: File): Promise<DryRunImportResultDTO> {
   const formData = new FormData()
   formData.append('file', file)
-  return apiClient.post('/caregivers/import?dryRun=true', formData, {
+  const res = await apiClient.post('/caregivers/import?dryRun=true', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
+  return unwrapData<DryRunImportResultDTO>(res)
 }
 
+// 確認試算結果後正式寫入照護人員匯入資料
 export async function commitImportCaregivers(
-  file: File,
-  includeDuplicateRows: number[] = []
+	file: File,
+	includeDuplicateRows: string[] = []
 ): Promise<CaregiverImportCommitResult> {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('includeDuplicateRows', JSON.stringify(includeDuplicateRows))
-  return apiClient.post('/caregivers/import?dryRun=false', formData, {
+  const res = await apiClient.post('/caregivers/import?dryRun=false', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
+  return unwrapData<CaregiverImportCommitResult>(res)
 }
 
 export async function downloadCaregiverTemplate(): Promise<Blob> {

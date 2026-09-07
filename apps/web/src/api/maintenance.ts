@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, createPaginationMeta, unwrapData, unwrapPaged } from './client'
 import type {
   MaintenanceLogDTO,
   CreateMaintenanceRequest,
@@ -14,25 +14,23 @@ export async function listMaintenance(params?: {
   endDate?: string
   q?: string
 }): Promise<Paged<MaintenanceLogDTO>> {
-  const res = await apiClient.get<MaintenanceLogDTO[]>('/vehicles/maintenance', { params })
-  const data = (res as any).data || (res as any)
-  // 後端未回傳分頁 meta 時，以實際筆數推算，避免顯示與清單內容矛盾的假總數
-  return {
-    data,
-    meta: (res as any).meta || { page: params?.page || 1, pageSize: params?.pageSize || 20, total: data.length, totalPages: 1 }
-  }
+  const res = await apiClient.get('/vehicles/maintenance', { params })
+  return unwrapPaged<MaintenanceLogDTO>(res, createPaginationMeta(params?.page, params?.pageSize))
 }
 
 export async function createMaintenance(data: CreateMaintenanceRequest): Promise<MaintenanceLogDTO> {
-  return apiClient.post('/vehicles/maintenance', data)
+  const res = await apiClient.post('/vehicles/maintenance', data)
+  return unwrapData<MaintenanceLogDTO>(res)
 }
 
 export async function updateMaintenance(id: string, data: UpdateMaintenanceRequest): Promise<MaintenanceLogDTO> {
-  return apiClient.patch(`/vehicles/maintenance/${id}`, data)
+  const res = await apiClient.patch(`/vehicles/maintenance/${id}`, data)
+  return unwrapData<MaintenanceLogDTO>(res)
 }
 
 export async function deleteMaintenance(id: string): Promise<{ success: boolean }> {
-  return apiClient.delete(`/vehicles/maintenance/${id}`)
+  const res = await apiClient.delete(`/vehicles/maintenance/${id}`)
+  return unwrapData<{ success: boolean }>(res)
 }
 
 export async function downloadBlankMaintenanceExcel(): Promise<Blob> {

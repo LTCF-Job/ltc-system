@@ -216,7 +216,6 @@
 import { ref, reactive } from 'vue'
 import { Plus, Edit } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
@@ -254,8 +253,8 @@ async function handleToggleStatus(row: SiteDTO, newActive: boolean) {
     })
     row.status = newStatus
     ElMessage.success(`已將單位「${row.name}」切換為 ${newActive ? '啟用' : '停用'}`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 

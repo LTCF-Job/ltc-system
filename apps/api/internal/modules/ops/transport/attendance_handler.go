@@ -27,13 +27,20 @@ func (h *AttendanceHandler) GetMonthAttendance(c *gin.Context) {
 	periodYm := c.Query("month")
 	var driverID *uuid.UUID
 	if dIDStr := c.Query("driverId"); dIDStr != "" {
-		if id, err := uuid.Parse(dIDStr); err == nil {
-			driverID = &id
+		id, err := uuid.Parse(dIDStr)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的司機 ID", nil)
+			return
 		}
+		driverID = &id
 	}
 
-	report, err := h.attendanceSvc.GetMonthAttendance(c.Request.Context(), periodYm, driverID)
+	report, err := h.attendanceSvc.GetMonthAttendance(c.Request.Context(), periodYm, driverID, c.Query("q"))
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidAttendanceMonth) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
@@ -69,7 +76,7 @@ func (h *AttendanceHandler) ResolveConflict(c *gin.Context) {
 
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
-	resolved, err := h.attendanceSvc.ResolveConflict(c.Request.Context(), id, req.Choice, &actorID, &actorRole)
+	resolved, err := h.attendanceSvc.ResolveConflict(c.Request.Context(), id, req.Choice, &actorID, &actorRole, auditContext(c))
 	if err != nil {
 		if errors.Is(err, app.ErrAttendanceConflictNotFound) {
 			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "", nil)
@@ -103,7 +110,7 @@ func (h *AttendanceHandler) Upsert(c *gin.Context) {
 
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
-	item, err := h.attendanceSvc.Upsert(c.Request.Context(), req.DriverID, recDate, req.Status, req.Note, &actorID, &actorRole)
+	item, err := h.attendanceSvc.Upsert(c.Request.Context(), req.DriverID, recDate, req.Status, req.Note, &actorID, &actorRole, auditContext(c))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return

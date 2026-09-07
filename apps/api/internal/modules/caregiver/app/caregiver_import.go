@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	"ltc-system/apps/api/internal/domain/namenorm"
 )
 
-// ParseCaregivers 僅支援解析 .xlsx／.xls 檔案，對齊「類型／單位／姓名／聯絡方式／備註」欄位格式。
+// ParseCaregivers 僅支援解析 .xlsx 檔案，對齊「類型／單位／姓名／聯絡方式／備註」欄位格式。
 func (s *CaregiverService) ParseCaregivers(ctx context.Context, r io.Reader, fileName string) (*CaregiverImportPreviewResult, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -19,7 +20,7 @@ func (s *CaregiverService) ParseCaregivers(ctx context.Context, r io.Reader, fil
 
 	// 檢查是否為 Excel ZIP 格式 (Magic Number: PK\x03\x04)
 	isExcel := len(data) >= 4 && data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x03 && data[3] == 0x04
-	if !isExcel && !strings.HasSuffix(strings.ToLower(fileName), ".xlsx") && !strings.HasSuffix(strings.ToLower(fileName), ".xls") {
+	if !isExcel || !strings.HasSuffix(strings.ToLower(fileName), ".xlsx") {
 		return nil, errors.New("僅支援 .xlsx 匯入格式")
 	}
 	if s.reader == nil {
@@ -85,7 +86,11 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 	totalRows := 0
 	validRows := 0
 
-	for _, rows := range tables {
+	for tableIdx, rows := range tables {
+		sheetName := "Sheet"
+		if tableIdx < len(sheetNames) && sheetNames[tableIdx] != "" {
+			sheetName = sheetNames[tableIdx]
+		}
 		colMap, ok := findCaregiverHeader(rows)
 		if !ok {
 			continue
@@ -115,14 +120,15 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 
 			totalRows++
 			actualRowIndex := rIdx + 1
+			rowID := fmt.Sprintf("%s:%d", sheetName, actualRowIndex)
 			rawValues := map[string]string{"單位": siteName, "姓名": name, "類型": typeLabel, "聯絡方式": contact, "備註": notes}
 
 			// 姓名與類型為必填欄位，缺漏或類型不是「個管」／「專護」即整列略過，不進入可匯入的預覽列。
 			if name == "" {
 				message := "姓名：未填寫，本列已略過"
-				errorsList = append(errorsList, CaregiverImportErrorItem{RowIndex: actualRowIndex, Field: "姓名", Message: message})
+				errorsList = append(errorsList, CaregiverImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, Field: "姓名", Message: message})
 				previewRows = append(previewRows, map[string]interface{}{
-					"rowIndex": actualRowIndex, "siteName": siteName, "name": name, "type": typeLabel, "contact": contact, "notes": notes,
+					"rowId": rowID, "rowIndex": actualRowIndex, "siteName": siteName, "name": name, "type": typeLabel, "contact": contact, "notes": notes,
 					"__hasError": true, "__hasWarning": false,
 				})
 				continue
@@ -130,22 +136,24 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 			typeCode, validType := caregiverTypeFromLabel(typeLabel)
 			if !validType {
 				message := "類型：未填寫或不是「個管」／「專護」，本列已略過"
-				errorsList = append(errorsList, CaregiverImportErrorItem{RowIndex: actualRowIndex, Name: name, Field: "類型", Message: message})
+				errorsList = append(errorsList, CaregiverImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, Name: name, Field: "類型", Message: message})
 				previewRows = append(previewRows, map[string]interface{}{
-					"rowIndex": actualRowIndex, "siteName": siteName, "name": name, "type": typeLabel, "contact": contact, "notes": notes,
+					"rowId": rowID, "rowIndex": actualRowIndex, "siteName": siteName, "name": name, "type": typeLabel, "contact": contact, "notes": notes,
 					"__hasError": true, "__hasWarning": false,
 				})
 				continue
 			}
 
-			rowRes := CaregiverImportRowResult{RowIndex: actualRowIndex, SiteName: siteName, Name: name, Type: typeCode, Contact: contact, Notes: notes, RawValues: rawValues}
+			rowRes := CaregiverImportRowResult{RowID: rowID, RowIndex: actualRowIndex, SiteName: siteName, Name: name, Type: typeCode, Contact: contact, Notes: notes, RawValues: rawValues}
 
 			// 單位、聯絡方式、備註缺漏或比對不到都不擋匯入，僅提示待後續維護。
 			if siteName != "" {
 				if site, err := s.sites.GetByName(ctx, siteName); err == nil && site != nil {
 					rowRes.SiteID = &site.ID
-				} else {
+				} else if errors.Is(err, ErrCaregiverSiteNotFound) || site == nil {
 					rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, fmt.Sprintf("單位「%s」未於單位管理中找到，已建立資料並保留原始名稱待人工關聯", siteName))
+				} else {
+					return nil, fmt.Errorf("查詢單位「%s」失敗：%w", siteName, err)
 				}
 			}
 			if contact == "" {
@@ -155,7 +163,11 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 				rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, "備註未填寫，已建立資料待後續補齊")
 			}
 			// 重複人員不擋匯入，僅提示；使用者需於預覽勾選才會在正式匯入時寫入。
-			if dup := s.findDuplicateCaregiver(ctx, name); dup != nil {
+			dup, err := s.findDuplicateCaregiver(ctx, name)
+			if err != nil {
+				return nil, err
+			}
+			if dup != nil {
 				rowRes.IsDuplicate = true
 				rowRes.DuplicateCaregiverID = &dup.ID
 				rowRes.DuplicateCaregiverName = dup.Name
@@ -165,7 +177,7 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 			validRows++
 			results = append(results, rowRes)
 			previewRow := map[string]interface{}{
-				"rowIndex": actualRowIndex, "siteName": siteName, "name": name, "type": typeLabel, "contact": contact, "notes": notes,
+				"rowId": rowID, "rowIndex": actualRowIndex, "siteName": siteName, "name": name, "type": typeLabel, "contact": contact, "notes": notes,
 				"isDuplicate": rowRes.IsDuplicate, "__hasError": false, "__hasWarning": rowRes.WarningMessage != "",
 			}
 			if rowRes.IsDuplicate {
@@ -195,19 +207,20 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 	}, nil
 }
 
-// findDuplicateCaregiver 以正規化姓名比對既有照護人員；查詢失敗時視為無重複，不中斷整批解析。
-func (s *CaregiverService) findDuplicateCaregiver(ctx context.Context, name string) *CaregiverDuplicateRef {
+// findDuplicateCaregiver 以正規化姓名比對既有照護人員；資料庫查詢失敗時中止預覽，
+// 避免把「查詢故障」誤判成「沒有重複」而放行匯入。
+func (s *CaregiverService) findDuplicateCaregiver(ctx context.Context, name string) (*CaregiverDuplicateRef, error) {
 	matches, _, err := s.store.List(ctx, name, "", false, false, false, 1, 5)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("查詢照護人員重複資料失敗：%w", err)
 	}
 	normalized := namenorm.Normalize(name)
 	for _, c := range matches {
 		if namenorm.Normalize(c.Name) == normalized {
-			return &CaregiverDuplicateRef{ID: c.ID, Name: c.Name}
+			return &CaregiverDuplicateRef{ID: c.ID, Name: c.Name}, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func appendCaregiverMessage(existing, next string) string {
@@ -221,7 +234,7 @@ func appendCaregiverMessage(existing, next string) string {
 // dry-run 階段排除在 preview.Rows 之外；每一列各自獨立寫入，某列失敗只記為
 // 略過列，不影響其餘列的匯入。includeDuplicateRows 是使用者於預覽階段勾選
 // 「仍要匯入」的列號集合；標記為重複的列若未在此集合中，直接記為略過。
-func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *CaregiverImportPreviewResult, includeDuplicateRows map[int]bool) (*CaregiverImportCommitResult, error) {
+func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *CaregiverImportPreviewResult, includeDuplicateRows map[string]bool, actors ...ActorContext) (*CaregiverImportCommitResult, error) {
 	if preview == nil {
 		return &CaregiverImportCommitResult{}, nil
 	}
@@ -229,14 +242,14 @@ func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *Caregi
 	result := &CaregiverImportCommitResult{}
 	for _, errItem := range preview.Errors {
 		result.SkippedRows = append(result.SkippedRows, CaregiverImportSkippedRow{
-			RowIndex: errItem.RowIndex, Reasons: []string{errItem.Message},
+			RowID: errItem.RowID, RowIndex: errItem.RowIndex, Reasons: []string{errItem.Message},
 		})
 	}
 
 	for _, row := range preview.Rows {
-		if row.IsDuplicate && !includeDuplicateRows[row.RowIndex] {
+		if row.IsDuplicate && !includeDuplicateRows[caregiverRowKey(row.RowID, row.RowIndex)] {
 			result.SkippedRows = append(result.SkippedRows, CaregiverImportSkippedRow{
-				RowIndex: row.RowIndex, Name: row.Name, Reasons: []string{"偵測為重複人員，未勾選匯入"}, RawValues: row.RawValues,
+				RowID: row.RowID, RowIndex: row.RowIndex, Name: row.Name, Reasons: []string{"偵測為重複人員，未勾選匯入"}, RawValues: row.RawValues,
 			})
 			continue
 		}
@@ -247,13 +260,15 @@ func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *Caregi
 		}
 
 		if err := s.store.Create(ctx, &c); err != nil {
+			slog.Error("caregiver import row failed", "row_index", row.RowIndex, "error", err)
 			result.SkippedRows = append(result.SkippedRows, CaregiverImportSkippedRow{
-				RowIndex: row.RowIndex, Name: row.Name, Reasons: []string{err.Error()}, RawValues: row.RawValues,
+				RowID: row.RowID, RowIndex: row.RowIndex, Name: row.Name, Reasons: []string{"資料列匯入失敗，請檢查資料或稍後重試"}, RawValues: row.RawValues,
 			})
 			continue
 		}
 
 		result.ImportedCount++
+		s.writeAudit(ctx, "import", c.ID, actorOrEmpty(actors), nil, c.AuditSnapshot())
 		// 逐一依實際欄位狀態產生警告，而非拆解合併過的訊息字串，避免單列多項缺漏時遺漏分類。
 		if row.SiteID == nil && row.SiteName != "" {
 			result.Warnings = append(result.Warnings, CaregiverImportWarningItem{
@@ -274,6 +289,13 @@ func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *Caregi
 	}
 
 	return result, nil
+}
+
+func caregiverRowKey(rowID string, rowIndex int) string {
+	if rowID != "" {
+		return rowID
+	}
+	return fmt.Sprintf("legacy:%d", rowIndex)
 }
 
 // CaregiverImportTemplateExcel 產生批次匯入標準 Excel 範本位元組。

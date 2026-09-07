@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,7 +22,7 @@ func NewDashboardRepository(db *pgxpool.Pool) *DashboardRepository {
 // GetActiveCasesCount 查詢有效個案總數。
 func (r *DashboardRepository) GetActiveCasesCount(ctx context.Context) (int, error) {
 	if r.db == nil {
-		return 0, nil
+		return 0, fmt.Errorf("dashboard database is not configured")
 	}
 	var count int
 	err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM cases WHERE status = 'active'").Scan(&count)
@@ -31,7 +32,7 @@ func (r *DashboardRepository) GetActiveCasesCount(ctx context.Context) (int, err
 // GetReportedTripsCount 查詢指定區間之已搭乘總趟數。
 func (r *DashboardRepository) GetReportedTripsCount(ctx context.Context, start, end time.Time) (int, error) {
 	if r.db == nil {
-		return 0, nil
+		return 0, fmt.Errorf("dashboard database is not configured")
 	}
 	var count int
 	query := `
@@ -46,7 +47,7 @@ func (r *DashboardRepository) GetReportedTripsCount(ctx context.Context, start, 
 // GetPendingConflictsCount 查詢未裁決之混車衝突數量。
 func (r *DashboardRepository) GetPendingConflictsCount(ctx context.Context) (int, error) {
 	if r.db == nil {
-		return 0, nil
+		return 0, fmt.Errorf("dashboard database is not configured")
 	}
 	var count int
 	query := `
@@ -61,7 +62,7 @@ func (r *DashboardRepository) GetPendingConflictsCount(ctx context.Context) (int
 // GetPendingFormColumnsCount 查詢待對應之表單欄位數量。
 func (r *DashboardRepository) GetPendingFormColumnsCount(ctx context.Context) (int, error) {
 	if r.db == nil {
-		return 0, nil
+		return 0, fmt.Errorf("dashboard database is not configured")
 	}
 	var count int
 	query := `
@@ -76,7 +77,7 @@ func (r *DashboardRepository) GetPendingFormColumnsCount(ctx context.Context) (i
 // GetVehicleTripTrends 查詢各車輛於指定區間之趟數趨勢。
 func (r *DashboardRepository) GetVehicleTripTrends(ctx context.Context, start, end time.Time) ([]app.VehicleTripTrend, error) {
 	if r.db == nil {
-		return []app.VehicleTripTrend{}, nil
+		return nil, fmt.Errorf("dashboard database is not configured")
 	}
 	query := `
 		SELECT v.display_name, v.plate_no, COUNT(r.id) as trips
@@ -96,9 +97,13 @@ func (r *DashboardRepository) GetVehicleTripTrends(ctx context.Context, start, e
 	var trends []app.VehicleTripTrend
 	for rows.Next() {
 		var item app.VehicleTripTrend
-		if err := rows.Scan(&item.VehicleName, &item.PlateNo, &item.TripCount); err == nil {
-			trends = append(trends, item)
+		if err := rows.Scan(&item.VehicleName, &item.PlateNo, &item.TripCount); err != nil {
+			return nil, fmt.Errorf("failed to scan vehicle trip trend: %w", err)
 		}
+		trends = append(trends, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate vehicle trip trends: %w", err)
 	}
 	return trends, nil
 }
@@ -107,7 +112,7 @@ func (r *DashboardRepository) GetVehicleTripTrends(ctx context.Context, start, e
 func (r *DashboardRepository) GetAttendanceDistribution(ctx context.Context, start, end time.Time) (map[string]int, error) {
 	dist := make(map[string]int)
 	if r.db == nil {
-		return dist, nil
+		return nil, fmt.Errorf("dashboard database is not configured")
 	}
 	query := `
 		SELECT status, COUNT(*)
@@ -124,9 +129,13 @@ func (r *DashboardRepository) GetAttendanceDistribution(ctx context.Context, sta
 	for rows.Next() {
 		var status string
 		var count int
-		if err := rows.Scan(&status, &count); err == nil {
-			dist[status] = count
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan attendance distribution: %w", err)
 		}
+		dist[status] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate attendance distribution: %w", err)
 	}
 	return dist, nil
 }

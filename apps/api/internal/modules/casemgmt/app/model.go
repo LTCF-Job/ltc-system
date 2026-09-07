@@ -15,34 +15,83 @@ type CaseNameRef struct {
 
 // Case 代表 cases 資料表實體。
 type Case struct {
-	ID                uuid.UUID
-	Name              string
-	NameNormalized    string
-	NationalIDCipher  []byte
-	NationalIDHMAC    []byte
-	NationalIDMasked  string
-	HouseholdType     *string
-	Gender            *string
-	BirthDate         *time.Time
-	CareContactRole   *string
-	CareContactName   *string
-	RegisteredAddress *string
-	SiteID            *uuid.UUID
-	SiteName          string
-	OutboundVehicleID *uuid.UUID
-	OutboundVehicle   string
-	InboundVehicleID  *uuid.UUID
-	InboundVehicle    string
-	HomeAddress       *string
-	Region            *string
-	LTCLevel          *string
-	ServiceCategory   *int
-	ServiceUsageType  *int
-	ClaimEndDate      *time.Time
-	Status            string
-	Remarks           *string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                     uuid.UUID
+	Name                   string
+	NameNormalized         string
+	NationalIDCipher       []byte
+	NationalIDHMAC         []byte
+	NationalIDMasked       string
+	NationalIDInvalid      bool
+	HouseholdType          *string
+	Gender                 *string
+	BirthDate              *time.Time
+	BirthDateRaw           *string
+	CareContactRole        *string
+	CareContactName        *string
+	RegisteredAddress      *string
+	SiteID                 *uuid.UUID
+	SiteName               string
+	SiteNameRaw            *string
+	OutboundVehicleID      *uuid.UUID
+	OutboundVehicle        string
+	OutboundVehicleNameRaw *string
+	InboundVehicleID       *uuid.UUID
+	InboundVehicle         string
+	InboundVehicleNameRaw  *string
+	HomeAddress            *string
+	Region                 *string
+	LTCLevel               *string
+	ServiceCategory        *int
+	ServiceUsageType       *int
+	ClaimEndDate           *time.Time
+	Status                 string
+	Remarks                *string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+}
+
+// DuplicateCandidate 代表批次匯入偵測到疑似重複個案、尚未裁決的一列暫存資料；
+// 裁決前不會出現在 cases 表，避免半確認的個案流入排班、匯出等下游流程。
+type DuplicateCandidate struct {
+	ID                     uuid.UUID
+	FileHash               string
+	RowKey                 string
+	RowIndex               int
+	SheetName              string
+	Name                   string
+	NameNormalized         string
+	NationalIDCipher       []byte
+	NationalIDHMAC         []byte
+	NationalIDMasked       string
+	HouseholdType          *string
+	Gender                 *string
+	BirthDate              *time.Time
+	BirthDateRaw           *string
+	NationalIDInvalid      bool
+	CareContactRole        *string
+	CareContactName        *string
+	RegisteredAddress      *string
+	HomeAddress            *string
+	Region                 *string
+	ServiceCategory        *int
+	ServiceUsageType       *int
+	SiteID                 *uuid.UUID
+	SiteName               string
+	SiteNameRaw            *string
+	OutboundVehicleID      *uuid.UUID
+	OutboundVehicle        string
+	OutboundVehicleNameRaw *string
+	InboundVehicleID       *uuid.UUID
+	InboundVehicle         string
+	InboundVehicleNameRaw  *string
+	Remarks                *string
+	DuplicateCaseID        uuid.UUID
+	DuplicateCaseName      string
+	Status                 string
+	ResultingCaseID        *uuid.UUID
+	ResolvedAt             *time.Time
+	ResolvedBy             *uuid.UUID
+	CreatedAt              time.Time
 }
 
 // CaseSchedule 代表 case_schedules 與 schedule_legs 之組合排班實體。
@@ -82,17 +131,17 @@ type ScheduleLeg struct {
 
 // ActiveCaseScheduleInfo 代表個案於指定月份之有效排班與關聯基本資訊。
 type ActiveCaseScheduleInfo struct {
-	CaseID         uuid.UUID
-	CaseName       string
-	Region         string
-	ClaimEndDate   *time.Time
-	SiteID         uuid.UUID
-	SiteOpenDays   []int16
-	EffectiveFrom  time.Time
-	EffectiveTo    *time.Time
-	Weekdays       []int16
-	TripPattern    int16
-	Legs           []ScheduleLeg
+	CaseID        uuid.UUID
+	CaseName      string
+	Region        string
+	ClaimEndDate  *time.Time
+	SiteID        uuid.UUID
+	SiteOpenDays  []int16
+	EffectiveFrom time.Time
+	EffectiveTo   *time.Time
+	Weekdays      []int16
+	TripPattern   int16
+	Legs          []ScheduleLeg
 }
 
 // AuditEntry 是本模組寫入稽核日誌的內容。

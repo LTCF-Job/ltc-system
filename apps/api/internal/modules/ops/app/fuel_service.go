@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+var ErrInvalidFuelPagination = errors.New("fuel pagination must be positive")
 
 // FuelService 提供車輛油資登記與管理服務。
 type FuelService struct {
@@ -26,6 +29,9 @@ func NewFuelService(
 
 // List 查詢油資紀錄清單。
 func (s *FuelService) List(ctx context.Context, page, pageSize int, vehicleID, driverID *uuid.UUID, startDate, endDate *time.Time, q string) ([]FuelLog, int, error) {
+	if page < 1 || pageSize < 1 {
+		return nil, 0, ErrInvalidFuelPagination
+	}
 	return s.fuelRepo.List(ctx, page, pageSize, vehicleID, driverID, startDate, endDate, q)
 }
 
@@ -41,7 +47,7 @@ type FuelLogInput struct {
 }
 
 // Create 新增油資紀錄並寫入稽核日誌。
-func (s *FuelService) Create(ctx context.Context, in FuelLogInput, actorID *uuid.UUID, actorRole *string) (*FuelLog, error) {
+func (s *FuelService) Create(ctx context.Context, in FuelLogInput, actorID *uuid.UUID, actorRole *string, auditContexts ...AuditContext) (*FuelLog, error) {
 	item := &FuelLog{
 		VehicleID:  in.VehicleID,
 		DriverID:   in.DriverID,
@@ -55,21 +61,20 @@ func (s *FuelService) Create(ctx context.Context, in FuelLogInput, actorID *uuid
 		return nil, err
 	}
 
-	if s.auditRepo != nil {
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    actorID,
-			ActorRole:  actorRole,
-			Action:     "create",
-			EntityType: "fuel_logs",
-			EntityID:   strPtr(item.ID.String()),
-			AfterData:  item,
-		})
-	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorID, actorRole, auditContextOrEmpty(auditContexts), "create", "fuel_logs", item.ID, nil, item.AuditSnapshot())
 	return item, nil
 }
 
 // Update 修改油資紀錄。
-func (s *FuelService) Update(ctx context.Context, id uuid.UUID, in FuelLogInput, actorID *uuid.UUID, actorRole *string) (*FuelLog, error) {
+func (s *FuelService) Update(ctx context.Context, id uuid.UUID, in FuelLogInput, actorID *uuid.UUID, actorRole *string, auditContexts ...AuditContext) (*FuelLog, error) {
+	var before interface{}
+	if s.auditRepo != nil {
+		var err error
+		before, err = loadFuelAuditSnapshot(ctx, s.fuelRepo, id)
+		if err != nil {
+			return nil, err
+		}
+	}
 	item := &FuelLog{
 		ID:         id,
 		VehicleID:  in.VehicleID,
@@ -83,33 +88,24 @@ func (s *FuelService) Update(ctx context.Context, id uuid.UUID, in FuelLogInput,
 		return nil, err
 	}
 
-	if s.auditRepo != nil {
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    actorID,
-			ActorRole:  actorRole,
-			Action:     "update",
-			EntityType: "fuel_logs",
-			EntityID:   strPtr(item.ID.String()),
-			AfterData:  item,
-		})
-	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorID, actorRole, auditContextOrEmpty(auditContexts), "update", "fuel_logs", item.ID, before, item.AuditSnapshot())
 	return item, nil
 }
 
 // Delete 刪除油資紀錄。
-func (s *FuelService) Delete(ctx context.Context, id uuid.UUID, actorID *uuid.UUID, actorRole *string) error {
+func (s *FuelService) Delete(ctx context.Context, id uuid.UUID, actorID *uuid.UUID, actorRole *string, auditContexts ...AuditContext) error {
+	var before interface{}
+	if s.auditRepo != nil {
+		var err error
+		before, err = loadFuelAuditSnapshot(ctx, s.fuelRepo, id)
+		if err != nil {
+			return err
+		}
+	}
 	if err := s.fuelRepo.Delete(ctx, id); err != nil {
 		return err
 	}
 
-	if s.auditRepo != nil {
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    actorID,
-			ActorRole:  actorRole,
-			Action:     "delete",
-			EntityType: "fuel_logs",
-			EntityID:   strPtr(id.String()),
-		})
-	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorID, actorRole, auditContextOrEmpty(auditContexts), "delete", "fuel_logs", id, before, nil)
 	return nil
 }

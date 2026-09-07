@@ -2,6 +2,7 @@ package transport
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/modules/caregiver/app"
+	"ltc-system/apps/api/internal/platform/auth"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
@@ -23,10 +25,22 @@ func NewCaregiverHandler(svc *app.CaregiverService) *CaregiverHandler {
 	return &CaregiverHandler{svc: svc}
 }
 
+func actorOf(c *gin.Context) app.ActorContext {
+	return app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}
+}
+
 // List 查詢照護人員清單。
 func (h *CaregiverHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
 	unresolvedLink, _ := strconv.ParseBool(c.DefaultQuery("unresolvedLink", "false"))
 	incomplete, _ := strconv.ParseBool(c.DefaultQuery("incomplete", "false"))
 	excludePending, _ := strconv.ParseBool(c.DefaultQuery("excludePending", "false"))
@@ -59,7 +73,7 @@ func (h *CaregiverHandler) Create(c *gin.Context) {
 		Contact: req.Contact,
 		Notes:   req.Notes,
 		Status:  req.Status,
-	})
+	}, actorOf(c))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
@@ -89,7 +103,7 @@ func (h *CaregiverHandler) Update(c *gin.Context) {
 		Contact: req.Contact,
 		Notes:   req.Notes,
 		Status:  req.Status,
-	})
+	}, actorOf(c))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
@@ -106,7 +120,7 @@ func (h *CaregiverHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
+	if err := h.svc.Delete(c.Request.Context(), id, actorOf(c)); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -128,7 +142,7 @@ func (h *CaregiverHandler) LinkSite(c *gin.Context) {
 		return
 	}
 
-	caregiver, err := h.svc.LinkSite(c.Request.Context(), id, req.SiteID)
+	caregiver, err := h.svc.LinkSite(c.Request.Context(), id, req.SiteID, actorOf(c))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
@@ -164,7 +178,7 @@ func (h *CaregiverHandler) ImportExcel(c *gin.Context) {
 			return
 		}
 
-		result, err := h.svc.CommitCaregivers(c.Request.Context(), preview, includeDuplicateRows)
+		result, err := h.svc.CommitCaregivers(c.Request.Context(), preview, includeDuplicateRows, actorOf(c))
 		if err != nil {
 			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "匯入照護人員寫入失敗", nil)
 			return
@@ -178,18 +192,21 @@ func (h *CaregiverHandler) ImportExcel(c *gin.Context) {
 
 // parseIncludeDuplicateRows 解析使用者於預覽階段勾選「仍要匯入」的列號 JSON 陣列
 // （如 "[3,7]"）；空字串視為未勾選任何列。
-func parseIncludeDuplicateRows(raw string) (map[int]bool, error) {
-	set := map[int]bool{}
+func parseIncludeDuplicateRows(raw string) (map[string]bool, error) {
+	set := map[string]bool{}
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return set, nil
 	}
-	var rowIndexes []int
-	if err := json.Unmarshal([]byte(raw), &rowIndexes); err != nil {
+	var rowIDs []string
+	if err := json.Unmarshal([]byte(raw), &rowIDs); err != nil {
 		return nil, err
 	}
-	for _, idx := range rowIndexes {
-		set[idx] = true
+	for _, rowID := range rowIDs {
+		if strings.TrimSpace(rowID) == "" {
+			return nil, fmt.Errorf("rowId 不可為空")
+		}
+		set[rowID] = true
 	}
 	return set, nil
 }

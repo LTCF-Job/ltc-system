@@ -2,14 +2,13 @@ package app
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 // GovClaimSourceReader 查詢指定期間、地區與個案範圍內可申報的趟次原始資料。
 type GovClaimSourceReader interface {
-	QueryGovClaimSources(ctx context.Context, start, end time.Time, region string, caseIDs []uuid.UUID) ([]GovClaimSource, error)
+	QueryGovClaimSources(ctx context.Context, scope ClaimScope) ([]GovClaimSource, error)
 }
 
 // ExportJobStore 保存匯出工作、逐案檔案中繼資料與申報列快照。
@@ -21,6 +20,19 @@ type ExportJobStore interface {
 	ListJobs(ctx context.Context, page, pageSize int) ([]GovClaimJob, int64, error)
 	LoadCaseLines(ctx context.Context, jobID, caseID uuid.UUID) ([]ExportLine, error)
 	LoadNationalIDCiphers(ctx context.Context, caseID uuid.UUID, driverIDs []uuid.UUID) (NationalIDCiphers, error)
+}
+
+// ImmutableExportFileStore 保存並讀取匯出成功當下的完整檔案位元組。
+// 歷史下載優先走此 port，不依賴目前個案或司機主檔重新產檔。
+type ImmutableExportFileStore interface {
+	LoadExportFile(ctx context.Context, jobID, caseID uuid.UUID) ([]byte, error)
+}
+
+// ObjectStorage 保存政府申報原始檔案；bucket 必須是 private，下載權限由 API 授權後代為轉送。
+type ObjectStorage interface {
+	Put(ctx context.Context, path, contentType string, content []byte) error
+	Get(ctx context.Context, path string) ([]byte, error)
+	Delete(ctx context.Context, path string) error
 }
 
 // Archiver 將多個檔案打包成單一壓縮檔位元組。

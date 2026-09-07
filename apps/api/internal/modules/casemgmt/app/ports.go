@@ -18,12 +18,21 @@ type CaseStore interface {
 	CreateSchedule(ctx context.Context, s *CaseSchedule) error
 	GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*CaseSchedule, error)
 	GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]ActiveCaseScheduleInfo, error)
-	// UpsertTransportPreference 寫入個案的單位與去回程車輛偏好。nil 的 ID 表示該欄位
-	// 維持現況，僅有非 nil 的 ID 會覆寫對應欄位；raw name 字串隨對應 ID 是否為 nil
-	// 一併寫入或清空，供比對不到主檔時保留原始名稱待人工關聯。
+	// UpsertTransportPreference 以 PUT 完整替換個案的單位與去回程車輛偏好。nil 的 ID
+	// 代表清除欄位；raw name 僅在沒有對應 ID 時保留來源名稱供人工關聯。
 	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 	SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error)
 	CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error
+}
+
+// DuplicateStagingStore 定義疑似重複個案暫存列的讀寫邊界；裁決前不落地到 cases 表。
+type DuplicateStagingStore interface {
+	// Insert 寫入一筆暫存列；同一 (fileHash, rowKey) 已存在時回傳 alreadyStaged=true 且不重複寫入。
+	Insert(ctx context.Context, cand DuplicateCandidate) (id uuid.UUID, alreadyStaged bool, err error)
+	ListPending(ctx context.Context) ([]DuplicateCandidate, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*DuplicateCandidate, error)
+	// Resolve 將暫存列標記為裁決結果；rowsAffected=0 代表該列已被裁決過（並發保護）。
+	Resolve(ctx context.Context, id uuid.UUID, status string, resolvedBy uuid.UUID, resultingCaseID *uuid.UUID) (rowsAffected int64, err error)
 }
 
 // SiteRef 是驗證個案交通偏好所需的最小單位資訊。
@@ -40,6 +49,19 @@ type SiteFinder interface {
 // AuditWriter 定義個案異動留痕的寫入邊界。
 type AuditWriter interface {
 	Write(ctx context.Context, e AuditEntry) error
+}
+
+// AuditContext 是交通偏好等跨層呼叫所需的操作者與來源資訊。
+type AuditContext struct {
+	ActorID   uuid.UUID
+	ActorRole string
+	IPAddress string
+	UserAgent string
+}
+
+// TransactionRunner 封裝需要跨多筆資料異動的交易邊界。
+type TransactionRunner interface {
+	WithTx(ctx context.Context, fn func(context.Context) error) error
 }
 
 // CaseProfileRow 是個案彙整表的一列，欄位順序即表格欄位順序。

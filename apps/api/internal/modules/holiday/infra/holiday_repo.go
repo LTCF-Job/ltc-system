@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/holiday/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // HolidayRepository 提供 holidays 資料表之存取操作。
@@ -47,6 +49,26 @@ func (r *HolidayRepository) List(ctx context.Context, startDate, endDate time.Ti
 		holidays = append(holidays, h)
 	}
 	return holidays, nil
+}
+
+// GetByDate 取得單一日期的假日，供異動稽核保存 before snapshot。
+func (r *HolidayRepository) GetByDate(ctx context.Context, date time.Time) (*app.Holiday, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("holiday database is not configured")
+	}
+	var h app.Holiday
+	err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, `
+		SELECT holiday_date, name, region, source, is_day_off, created_at
+		FROM holidays
+		WHERE holiday_date = $1
+	`, date).Scan(&h.HolidayDate, &h.Name, &h.Region, &h.Source, &h.IsDayOff, &h.CreatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get holiday %s: %w", date.Format("2006-01-02"), err)
+	}
+	return &h, nil
 }
 
 // GetHolidayMap 取得特定月份之假日集合（格式 YYYY-MM-DD -> true），供日曆計算使用。

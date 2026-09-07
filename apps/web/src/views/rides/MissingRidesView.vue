@@ -398,7 +398,7 @@ import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import { formatDateTime } from '@/utils/formatters'
 import { listMissingRides, submitManualRideReport } from '@/api/rides'
-import { listVehicles, listDrivers } from '@/api/masters'
+import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import { listNotificationLogs, triggerMissingReportsCheck } from '@/api/notifications'
 import { useAuthStore } from '@/stores/auth'
 import type { MissingRideDTO, NotificationLogDTO, VehicleDTO, DriverDTO, ManualReportRideRequest } from '@/types/api'
@@ -498,8 +498,7 @@ function openLogDetail(row: any) {
 
 async function fetchVehicles() {
   try {
-    const res = await listVehicles({ status: 'active', pageSize: 100 })
-    vehicles.value = res.data
+    vehicles.value = await listAllVehicles({ status: 'active' })
   } catch (error) {
     // handled by interceptor
   }
@@ -507,8 +506,7 @@ async function fetchVehicles() {
 
 async function fetchDrivers() {
   try {
-    const res = await listDrivers({ status: 'active', pageSize: 100 })
-    drivers.value = res.data
+    drivers.value = await listAllDrivers({ status: 'active' })
   } catch (error) {
     // handled by interceptor
   }
@@ -637,8 +635,8 @@ async function handleSubmitReport() {
     ElMessage.success('已成功補登回報內容')
     reportDialogVisible.value = false
     await fetchMissingRides()
-  } catch (err: any) {
-    ElMessage.error(err?.message || '儲存回報失敗')
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     savingReport.value = false
   }
@@ -660,17 +658,15 @@ async function handleTriggerNotify() {
     const res = await triggerMissingReportsCheck()
     ElMessage.success(res.message || '未回報催報通知已成功送出！')
     await fetchNotificationLogs()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(err?.message || '發送失敗')
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   } finally {
     triggering.value = false
   }
 }
 
-// 前置檢核報告的「查看未回報」會帶 ?q=個案姓名 進來，預填搜尋條件讓清單直接只剩該個案
 onMounted(() => {
+  // 前置檢核報告的「查看未回報」會帶 ?q=個案姓名 進來，預填搜尋條件讓清單直接只剩該個案
   const q = route.query.q
   if (typeof q === 'string' && q) missingQuery.value = q
 

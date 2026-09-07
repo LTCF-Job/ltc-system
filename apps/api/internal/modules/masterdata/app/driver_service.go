@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -17,11 +19,16 @@ type DriverService struct {
 	store     DriverStore
 	cfg       *config.Config
 	auditRepo AuditWriter
+	txRunner  TransactionRunner
 }
 
 // NewDriverService 建立 DriverService 實例。
-func NewDriverService(store DriverStore, cfg *config.Config, auditRepo AuditWriter) *DriverService {
-	return &DriverService{store: store, cfg: cfg, auditRepo: auditRepo}
+func NewDriverService(store DriverStore, cfg *config.Config, auditRepo AuditWriter, txRunners ...TransactionRunner) *DriverService {
+	var txRunner TransactionRunner
+	if len(txRunners) > 0 {
+		txRunner = txRunners[0]
+	}
+	return &DriverService{store: store, cfg: cfg, auditRepo: auditRepo, txRunner: txRunner}
 }
 
 // List 查詢司機清單。
@@ -62,8 +69,13 @@ type CreateDriverInput struct {
 	LicenseExpiryDate *time.Time
 }
 
-// Create 新增司機：驗證身分證檢查碼，寫入加密密文與 HMAC 索引。
-func (s *DriverService) Create(ctx context.Context, in CreateDriverInput) (*Driver, error) {
+// Create 新增司機：驗證身分證檢查碼，寫入加密密文與 HMAC 索引。actors 是可選的
+// 稽核來源資訊，保留 application 測試與離線呼叫的相容性。
+func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors ...ActorContext) (*Driver, error) {
+	in.Name = strings.TrimSpace(in.Name)
+	if in.Name == "" {
+		return nil, ErrDriverNameRequired
+	}
 	nationalID := strings.ToUpper(strings.TrimSpace(in.NationalID))
 	if !crypto.ValidateNationalID(nationalID) {
 		return nil, ErrInvalidDriverNationalID
@@ -98,6 +110,7 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput) (*Driv
 	if err := s.store.Create(ctx, &d); err != nil {
 		return nil, err
 	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "create", "drivers", d.ID, nil, d.AuditSnapshot())
 	return &d, nil
 }
 
@@ -114,14 +127,22 @@ type UpdateDriverInput struct {
 }
 
 // Update 更新司機基本資料。
-func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDriverInput) (*Driver, error) {
+func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDriverInput, actors ...ActorContext) (*Driver, error) {
 	existing, err := s.store.GetByID(ctx, id)
 	if err != nil {
-		return nil, ErrDriverNotFound
+		if errors.Is(err, ErrDriverNotFound) {
+			return nil, ErrDriverNotFound
+		}
+		return nil, fmt.Errorf("failed to get driver: %w", err)
 	}
+	before := existing.AuditSnapshot()
 
 	if in.Name != nil {
-		existing.Name = *in.Name
+		name := strings.TrimSpace(*in.Name)
+		if name == "" {
+			return nil, ErrDriverNameRequired
+		}
+		existing.Name = name
 		existing.NameNormalized = namenorm.Normalize(*in.Name)
 	}
 	if in.Email != nil {
@@ -130,8 +151,10 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 	if in.Region != nil {
 		existing.Region = *in.Region
 	}
-	// 只接受兩種狀態，非法值一律保留原本的值不變更
-	if in.Status != nil && (*in.Status == "active" || *in.Status == "inactive") {
+	if in.Status != nil {
+		if *in.Status != "active" && *in.Status != "inactive" {
+			return nil, ErrInvalidStatus
+		}
 		existing.Status = *in.Status
 	}
 	if in.LicenseClass != nil {
@@ -150,14 +173,39 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 	if err := s.store.Update(ctx, existing); err != nil {
 		return nil, err
 	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "update", "drivers", id, before, existing.AuditSnapshot())
 	return existing, nil
 }
 
-// Reveal 解密司機身分證明碼。呼叫端負責寫入稽核紀錄。
-func (s *DriverService) Reveal(ctx context.Context, id uuid.UUID) (string, error) {
+// Reveal 解密司機身分證明碼；高風險揭露必須先成功寫入稽核紀錄。
+func (s *DriverService) Reveal(ctx context.Context, id, actorID uuid.UUID, actorRole, ip, ua string) (string, error) {
 	d, err := s.store.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, ErrDriverNotFound) {
+			return "", ErrDriverNotFound
+		}
+		return "", fmt.Errorf("failed to get driver: %w", err)
+	}
+	if d == nil {
 		return "", ErrDriverNotFound
+	}
+	if len(d.NationalIDCipher) == 0 {
+		return "", ErrNationalIDNotConfigured
+	}
+	if s.auditRepo == nil {
+		return "", ErrRevealAuditUnavailable
+	}
+	entityIDStr := id.String()
+	if err := s.auditRepo.Write(ctx, AuditEntry{
+		ActorID:    &actorID,
+		ActorRole:  &actorRole,
+		Action:     "reveal_pii",
+		EntityType: "drivers",
+		EntityID:   &entityIDStr,
+		IPAddress:  &ip,
+		UserAgent:  &ua,
+	}); err != nil {
+		return "", fmt.Errorf("%w: %v", ErrRevealAuditUnavailable, err)
 	}
 	return crypto.Decrypt(d.NationalIDCipher, s.cfg.EncryptionKey)
 }
@@ -170,7 +218,11 @@ type AssignVehicleInput struct {
 }
 
 // AssignVehicle 建立司機與車輛之指派期間。
-func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, in AssignVehicleInput) (*DriverAssignment, error) {
+func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, in AssignVehicleInput, actors ...ActorContext) (*DriverAssignment, error) {
+	if driverID == uuid.Nil || in.VehicleID == uuid.Nil || in.EffectiveFrom.IsZero() ||
+		(in.EffectiveTo != nil && !in.EffectiveTo.After(in.EffectiveFrom)) {
+		return nil, ErrInvalidAssignmentRange
+	}
 	assignment := &DriverAssignment{
 		DriverID:      driverID,
 		VehicleID:     in.VehicleID,
@@ -180,32 +232,65 @@ func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, i
 	if err := s.store.AssignVehicle(ctx, assignment); err != nil {
 		return nil, err
 	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "assign_vehicle", "driver_assignments", assignment.ID, nil, assignment.AuditSnapshot())
 	return assignment, nil
 }
 
 // Delete 軟刪除司機並收斂其生效中車輛指派。
-func (s *DriverService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRole string) error {
-	ok, err := s.store.SoftDelete(ctx, id, actorID)
+func (s *DriverService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRole string, actors ...ActorContext) error {
+	before, err := s.store.GetByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("failed to soft delete driver: %w", err)
+		if errors.Is(err, ErrDriverNotFound) {
+			return ErrDriverNotFound
+		}
+		return fmt.Errorf("failed to get driver: %w", err)
 	}
-	if !ok {
+	if before == nil {
 		return ErrDriverNotFound
 	}
+	beforeSnapshot := before.AuditSnapshot()
 
-	if err := s.store.CloseActiveAssignments(ctx, id); err != nil {
-		return fmt.Errorf("failed to close active assignments: %w", err)
+	actor := actorOrEmpty(actors)
+	if actor.ActorID == uuid.Nil {
+		actor.ActorID = actorID
+	}
+	if actor.ActorRole == "" {
+		actor.ActorRole = actorRole
+	}
+	deleteFn := func(txCtx context.Context) error {
+		ok, err := s.store.SoftDelete(txCtx, id, actorID)
+		if err != nil {
+			return fmt.Errorf("failed to soft delete driver: %w", err)
+		}
+		if !ok {
+			return ErrDriverNotFound
+		}
+
+		if err := s.store.CloseActiveAssignments(txCtx, id); err != nil {
+			return fmt.Errorf("failed to close active assignments: %w", err)
+		}
+
+		if s.auditRepo != nil {
+			entityIDStr := id.String()
+			if err := s.auditRepo.Write(txCtx, AuditEntry{
+				ActorID:    &actor.ActorID,
+				ActorRole:  &actor.ActorRole,
+				Action:     "delete",
+				EntityType: "drivers",
+				EntityID:   &entityIDStr,
+				BeforeData: beforeSnapshot,
+				IPAddress:  &actor.IPAddress,
+				UserAgent:  &actor.UserAgent,
+			}); err != nil {
+				slog.Error("driver delete audit write failed", "entity_id", id.String(), "error", err)
+				return fmt.Errorf("failed to write driver audit: %w", err)
+			}
+		}
+		return nil
 	}
 
-	if s.auditRepo != nil {
-		entityIDStr := id.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
-			ActorID:    &actorID,
-			ActorRole:  &actorRole,
-			Action:     "delete",
-			EntityType: "drivers",
-			EntityID:   &entityIDStr,
-		})
+	if s.txRunner != nil {
+		return s.txRunner.WithTx(ctx, deleteFn)
 	}
-	return nil
+	return deleteFn(ctx)
 }

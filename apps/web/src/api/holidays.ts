@@ -1,5 +1,4 @@
-import { apiClient } from './client'
-import type { ApiResponse } from '@/types/api'
+import { apiClient, unwrapData } from './client'
 
 export interface HolidayItem {
   holidayDate: string
@@ -14,8 +13,9 @@ export async function listHolidays(params?: {
   startDate?: string
   endDate?: string
   region?: string
-}): Promise<ApiResponse<HolidayItem[]>> {
-  return apiClient.get('/holidays', { params })
+}): Promise<HolidayItem[]> {
+  const res = await apiClient.get('/holidays', { params })
+  return unwrapData<HolidayItem[]>(res) ?? []
 }
 
 export async function createHoliday(data: {
@@ -24,14 +24,17 @@ export async function createHoliday(data: {
   region?: string
   source?: string
   isDayOff?: boolean
-}): Promise<ApiResponse<HolidayItem>> {
-  return apiClient.post('/holidays', data)
+}): Promise<HolidayItem> {
+  const res = await apiClient.post('/holidays', data)
+  return unwrapData<HolidayItem>(res)
 }
 
-export async function importGovHolidays(year: number): Promise<ApiResponse<{ importedCount: number; year: number }>> {
-  return apiClient.post('/holidays/import', { year })
+export async function importGovHolidays(year: number): Promise<{ importedCount: number; year: number }> {
+  const res = await apiClient.post('/holidays/import', { year })
+  return unwrapData<{ importedCount: number; year: number }>(res)
 }
 
-export async function deleteHoliday(dateStr: string): Promise<ApiResponse<{ deleted: boolean }>> {
-  return apiClient.delete(`/holidays/${dateStr}`)
+export async function deleteHoliday(dateStr: string): Promise<{ deleted: boolean }> {
+  const res = await apiClient.delete(`/holidays/${dateStr}`)
+  return unwrapData<{ deleted: boolean }>(res)
 }

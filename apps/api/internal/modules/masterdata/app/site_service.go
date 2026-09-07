@@ -9,12 +9,17 @@ import (
 
 // SiteService 封裝單位主檔業務邏輯。
 type SiteService struct {
-	store SiteStore
+	store     SiteStore
+	auditRepo AuditWriter
 }
 
 // NewSiteService 建立 SiteService 實例。
-func NewSiteService(store SiteStore) *SiteService {
-	return &SiteService{store: store}
+func NewSiteService(store SiteStore, audits ...AuditWriter) *SiteService {
+	var auditRepo AuditWriter
+	if len(audits) > 0 {
+		auditRepo = audits[0]
+	}
+	return &SiteService{store: store, auditRepo: auditRepo}
 }
 
 // List 查詢單位清單。
@@ -32,7 +37,7 @@ type CreateSiteInput struct {
 }
 
 // Create 新增單位主檔。
-func (s *SiteService) Create(ctx context.Context, in CreateSiteInput) (*Site, error) {
+func (s *SiteService) Create(ctx context.Context, in CreateSiteInput, actors ...ActorContext) (*Site, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return nil, ErrSiteNameRequired
@@ -46,10 +51,12 @@ func (s *SiteService) Create(ctx context.Context, in CreateSiteInput) (*Site, er
 		return nil, ErrSiteRegionRequired
 	}
 
-	// 確保 status 符合資料庫 check constraint，空值或非法值預設 active
+	// 未提供狀態時預設 active；非法值不可靜默改寫。
 	status := strings.TrimSpace(in.Status)
-	if status != "active" && status != "inactive" {
+	if status == "" {
 		status = "active"
+	} else if status != "active" && status != "inactive" {
+		return nil, ErrInvalidStatus
 	}
 
 	openDays := in.OpenDays
@@ -67,6 +74,7 @@ func (s *SiteService) Create(ctx context.Context, in CreateSiteInput) (*Site, er
 	if err := s.store.Create(ctx, &site); err != nil {
 		return nil, err
 	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "create", "sites", site.ID, nil, site.AuditSnapshot())
 	return &site, nil
 }
 
@@ -80,7 +88,7 @@ type UpdateSiteInput struct {
 }
 
 // Update 更新單位主檔。
-func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInput) (*Site, error) {
+func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInput, actors ...ActorContext) (*Site, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return nil, ErrSiteNameRequired
@@ -95,13 +103,27 @@ func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInp
 	}
 
 	status := strings.TrimSpace(in.Status)
-	if status != "active" && status != "inactive" {
+	if status == "" {
 		status = "active"
+	} else if status != "active" && status != "inactive" {
+		return nil, ErrInvalidStatus
 	}
 
 	openDays := in.OpenDays
 	if len(openDays) == 0 {
 		openDays = []int16{1, 2, 3, 4, 5}
+	}
+
+	var before interface{}
+	if s.auditRepo != nil {
+		existing, err := s.store.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if existing == nil {
+			return nil, ErrSiteNotFound
+		}
+		before = existing.AuditSnapshot()
 	}
 
 	site := Site{
@@ -115,10 +137,26 @@ func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInp
 	if err := s.store.Update(ctx, &site); err != nil {
 		return nil, err
 	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "update", "sites", id, before, site.AuditSnapshot())
 	return &site, nil
 }
 
 // Delete 刪除單位。若該單位仍被個案排班參照，資料庫外鍵限制會回傳錯誤。
-func (s *SiteService) Delete(ctx context.Context, id uuid.UUID) error {
-	return s.store.Delete(ctx, id)
+func (s *SiteService) Delete(ctx context.Context, id uuid.UUID, actors ...ActorContext) error {
+	var before interface{}
+	if s.auditRepo != nil {
+		existing, err := s.store.GetByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if existing == nil {
+			return ErrSiteNotFound
+		}
+		before = existing.AuditSnapshot()
+	}
+	if err := s.store.Delete(ctx, id); err != nil {
+		return err
+	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "delete", "sites", id, before, nil)
+	return nil
 }

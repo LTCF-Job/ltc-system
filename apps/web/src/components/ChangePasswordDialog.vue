@@ -55,7 +55,6 @@
 import { ref, reactive } from 'vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { ElMessage, type FormInstance } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import { changeSelfPassword } from '@/api/users'
 
 const visible = ref(false)
@@ -109,8 +108,8 @@ async function handleSubmit() {
 
       ElMessage.success('密碼修改成功，請妥善保管新密碼')
       visible.value = false
-    } catch (err: any) {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '密碼修改失敗，請檢查目前密碼是否正確'))
+    } catch {
+      // API 錯誤由全域 interceptor 統一提示。
     } finally {
       loading.value = false
     }

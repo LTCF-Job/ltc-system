@@ -6,6 +6,7 @@ import (
 
 // CaseImportErrorItem 代表單筆匯入錯誤明細。
 type CaseImportErrorItem struct {
+	RowID    string `json:"rowId,omitempty"`
 	RowIndex int    `json:"rowIndex"`
 	CaseName string `json:"caseName,omitempty"`
 	Field    string `json:"field,omitempty"`
@@ -14,6 +15,7 @@ type CaseImportErrorItem struct {
 
 // CaseImportWarningItem 代表單筆匯入警告或預設值提醒明細。
 type CaseImportWarningItem struct {
+	RowID    string `json:"rowId,omitempty"`
 	RowIndex int    `json:"rowIndex"`
 	CaseName string `json:"caseName,omitempty"`
 	Field    string `json:"field,omitempty"`
@@ -22,13 +24,17 @@ type CaseImportWarningItem struct {
 
 // CaseImportRowResult 代表個案批次匯入單列解析結果。
 type CaseImportRowResult struct {
+	RowID             string            `json:"rowId"`
 	RowIndex          int               `json:"rowIndex"`
 	SheetName         string            `json:"sheetName"`
 	Name              string            `json:"name"`
 	NationalID        string            `json:"nationalId,omitempty"`
+	NationalIDInvalid bool              `json:"nationalIdInvalid"`
 	HouseholdType     string            `json:"householdType,omitempty"`
 	Gender            string            `json:"gender,omitempty"`
 	BirthDate         string            `json:"birthDate,omitempty"`
+	BirthDateRaw      string            `json:"birthDateRaw,omitempty"`
+	BirthDateInvalid  bool              `json:"birthDateInvalid"`
 	CareContactRole   string            `json:"careContactRole,omitempty"`
 	CareContactName   string            `json:"careContactName,omitempty"`
 	RegisteredAddress string            `json:"registeredAddress,omitempty"`
@@ -51,6 +57,7 @@ type CaseImportRowResult struct {
 
 // CaseImportSkippedRow 保留未寫入資料庫的來源列與欄位錯誤。
 type CaseImportSkippedRow struct {
+	RowID     string            `json:"rowId"`
 	RowIndex  int               `json:"rowIndex"`
 	CaseName  string            `json:"caseName"`
 	Reasons   []string          `json:"reasons"`
@@ -60,13 +67,18 @@ type CaseImportSkippedRow struct {
 // CaseImportCommitResult 回傳正式匯入成功與略過的列，供操作人員補正來源資料。
 // Warnings 承載已建立個案但仍需人工處理的提示（如單位/車輛未比對到）。
 type CaseImportCommitResult struct {
-	ImportedCount int                     `json:"importedCount"`
-	SkippedRows   []CaseImportSkippedRow  `json:"skippedRows"`
-	Warnings      []CaseImportWarningItem `json:"warnings,omitempty"`
+	ImportedCount        int                     `json:"importedCount"`
+	AlreadyImportedCount int                     `json:"alreadyImportedCount"`
+	FailedCount          int                     `json:"failedCount"`
+	StagedDuplicateCount int                     `json:"stagedDuplicateCount"`
+	SkippedRows          []CaseImportSkippedRow  `json:"skippedRows"`
+	FailedRows           []CaseImportSkippedRow  `json:"failedRows"`
+	Warnings             []CaseImportWarningItem `json:"warnings,omitempty"`
 }
 
 // CaseImportPreviewResult 批次匯入預覽與統計結構體。
 type CaseImportPreviewResult struct {
+	FileHash    string                   `json:"fileHash,omitempty"`
 	TotalRows   int                      `json:"totalRows"`
 	ValidRows   int                      `json:"validRows"`
 	ErrorRows   int                      `json:"errorRows"`

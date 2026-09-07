@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
+	"strings"
 	"unicode"
 
 	"github.com/gin-gonic/gin"
@@ -34,38 +34,62 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 		periodYM = c.DefaultQuery("month", "11507")
 	}
 	region := c.Query("region")
+	caseIDValues := c.QueryArray("caseIds")
+	if len(caseIDValues) == 0 && c.Query("caseIds") != "" {
+		caseIDValues = strings.Split(c.Query("caseIds"), ",")
+	}
 
 	if c.Request.Method == http.MethodPost {
 		var req struct {
-			PeriodYM string `json:"periodYm"`
-			Region   string `json:"region"`
+			PeriodYM string   `json:"periodYm"`
+			Region   string   `json:"region"`
+			CaseIDs  []string `json:"caseIds"`
 		}
-		if err := c.ShouldBindJSON(&req); err == nil {
-			if req.PeriodYM != "" {
-				periodYM = req.PeriodYM
-			}
-			region = req.Region
+		if err := httpx.BindJSONStrict(c, &req); err != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+			return
 		}
+		if req.PeriodYM != "" {
+			periodYM = req.PeriodYM
+		}
+		region = req.Region
+		caseIDValues = req.CaseIDs
 	}
 
-	report, err := h.precheckService.RunPrecheck(c.Request.Context(), periodYM, region)
+	caseIDs := make([]uuid.UUID, 0, len(caseIDValues))
+	for _, rawID := range caseIDValues {
+		rawID = strings.TrimSpace(rawID)
+		if rawID == "" {
+			continue
+		}
+		caseID, err := uuid.Parse(rawID)
+		if err != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+			return
+		}
+		caseIDs = append(caseIDs, caseID)
+	}
+
+	_, start, end, err := app.ParseClaimPeriod(periodYM)
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	report, err := h.precheckService.RunPrecheck(c.Request.Context(), app.NewClaimScope(start, end, region, caseIDs))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, toPrecheckResponse(report), nil)
+	httpx.RespondSuccess(c, http.StatusOK, toPrecheckResultResponse(report), nil)
 }
 
 // List 取得申報匯出工作歷史紀錄清單。
 func (h *ExportHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 10
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
 	}
 
 	jobs, total, err := h.govClaimService.ListExportJobs(c.Request.Context(), page, pageSize)
@@ -90,7 +114,7 @@ func (h *ExportHandler) List(c *gin.Context) {
 // Create 建立政府申報匯出工作並同步產生逐案工作簿。
 func (h *ExportHandler) Create(c *gin.Context) {
 	var req createExportJobRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}

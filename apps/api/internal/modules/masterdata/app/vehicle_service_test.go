@@ -94,7 +94,6 @@ func TestVehicleService_Create_NormalizesStatus(t *testing.T) {
 		want  string
 	}{
 		{name: "空字串預設 active", input: "", want: "active"},
-		{name: "已收斂的舊列舉值預設 active", input: "maintenance", want: "active"},
 		{name: "接受 active", input: "active", want: "active"},
 		{name: "接受 inactive", input: "inactive", want: "inactive"},
 	}
@@ -106,6 +105,11 @@ func TestVehicleService_Create_NormalizesStatus(t *testing.T) {
 			assert.Equal(t, tt.want, v.Status)
 		})
 	}
+	t.Run("拒絕非法狀態", func(t *testing.T) {
+		svc := NewVehicleService(&fakeVehicleStore{}, newFakeDriverStore(), nil)
+		_, err := svc.Create(context.Background(), VehicleInput{Status: "maintenance"})
+		assert.ErrorIs(t, err, ErrInvalidStatus)
+	})
 }
 
 func TestVehicleService_Update_NormalizesStatus(t *testing.T) {
@@ -115,7 +119,6 @@ func TestVehicleService_Update_NormalizesStatus(t *testing.T) {
 		want  string
 	}{
 		{name: "空字串預設 active", input: "", want: "active"},
-		{name: "已收斂的舊列舉值預設 active", input: "retired", want: "active"},
 		{name: "接受 inactive", input: "inactive", want: "inactive"},
 	}
 	for _, tt := range tests {
@@ -126,6 +129,11 @@ func TestVehicleService_Update_NormalizesStatus(t *testing.T) {
 			assert.Equal(t, tt.want, v.Status)
 		})
 	}
+	t.Run("拒絕非法狀態", func(t *testing.T) {
+		svc := NewVehicleService(&fakeVehicleStore{}, newFakeDriverStore(), nil)
+		_, err := svc.Update(context.Background(), uuid.New(), VehicleInput{Status: "retired"})
+		assert.ErrorIs(t, err, ErrInvalidStatus)
+	})
 }
 
 type fakeMasterAuditWriter struct {
@@ -168,4 +176,23 @@ func TestVehicleService_Delete(t *testing.T) {
 		require.Len(t, audit.entries, 1)
 		assert.Equal(t, "delete", audit.entries[0].Action)
 	})
+
+	t.Run("查無車輛時回傳 NotFound sentinel", func(t *testing.T) {
+		store := &fakeVehicleStore{}
+		store.softDeleteErr = nil
+		// 以 fake 的 false 回傳模擬資料庫沒有更新任何列。
+		storeWithNotFound := &notFoundVehicleStore{fakeVehicleStore: store}
+		svc := NewVehicleService(storeWithNotFound, newFakeDriverStore(), nil)
+
+		err := svc.Delete(context.Background(), uuid.New(), uuid.New(), "admin")
+		assert.ErrorIs(t, err, ErrVehicleNotFound)
+	})
+}
+
+type notFoundVehicleStore struct {
+	*fakeVehicleStore
+}
+
+func (s *notFoundVehicleStore) SoftDelete(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
 }

@@ -22,6 +22,8 @@ func respondIdentityError(c *gin.Context, err error) {
 		httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
 	case errors.Is(err, app.ErrUnknownRole), errors.Is(err, app.ErrUnknownModuleKey):
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+	case errors.Is(err, app.ErrInvalidUserStatus):
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 	case errors.Is(err, app.ErrInvalidCredentials):
 		httpx.RespondErrorCode(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, err, nil)
 	default:

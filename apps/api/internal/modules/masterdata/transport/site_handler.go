@@ -3,11 +3,11 @@ package transport
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
+	"ltc-system/apps/api/internal/platform/auth"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
@@ -23,8 +23,11 @@ func NewSiteHandler(svc *app.SiteService) *SiteHandler {
 
 // List 查詢單位清單。
 func (h *SiteHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
+	}
 
 	sites, total, err := h.svc.List(c.Request.Context(), c.Query("region"), c.Query("q"), c.Query("status"), page, pageSize)
 	if err != nil {
@@ -42,7 +45,7 @@ func (h *SiteHandler) List(c *gin.Context) {
 // Create 新增單位。
 func (h *SiteHandler) Create(c *gin.Context) {
 	var req CreateSiteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		details := httpx.ExtractValidationDetails(err)
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, details)
 		return
@@ -54,8 +57,17 @@ func (h *SiteHandler) Create(c *gin.Context) {
 		Region:   req.Region,
 		OpenDays: req.OpenDays,
 		Status:   req.Status,
+	}, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
 	})
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidStatus) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			return
+		}
 		if errors.Is(err, app.ErrSiteNameRequired) {
 			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
 				{Field: "name", Reason: "請輸入單位名稱"},
@@ -96,7 +108,7 @@ func (h *SiteHandler) Update(c *gin.Context) {
 	}
 
 	var req UpdateSiteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		details := httpx.ExtractValidationDetails(err)
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, details)
 		return
@@ -108,8 +120,17 @@ func (h *SiteHandler) Update(c *gin.Context) {
 		Region:   req.Region,
 		OpenDays: req.OpenDays,
 		Status:   req.Status,
+	}, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
 	})
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidStatus) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			return
+		}
 		if errors.Is(err, app.ErrSiteNotFound) {
 			respondNotFound(c, "查無此單位")
 			return
@@ -153,7 +174,12 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.Delete(c.Request.Context(), id); err != nil {
+	if err := h.svc.Delete(c.Request.Context(), id, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
 			{Field: "id", Reason: "該單位仍有相關資料參照，無法刪除"},
 		})

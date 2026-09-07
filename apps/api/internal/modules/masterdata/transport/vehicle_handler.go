@@ -3,13 +3,12 @@ package transport
 import (
 	"errors"
 	"net/http"
-	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
 	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
@@ -25,8 +24,11 @@ func NewVehicleHandler(svc *app.VehicleService) *VehicleHandler {
 
 // List 查詢車輛清單。
 func (h *VehicleHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
+	}
 
 	filter := app.VehicleFilter{Region: c.Query("region"), Q: c.Query("q"), Status: c.Query("status")}
 	if raw := c.Query("siteId"); raw != "" {
@@ -54,13 +56,22 @@ func (h *VehicleHandler) List(c *gin.Context) {
 // Create 新增車輛。
 func (h *VehicleHandler) Create(c *gin.Context) {
 	var req CreateVehicleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
-	v, err := h.svc.Create(c.Request.Context(), req.toInput())
+	v, err := h.svc.Create(c.Request.Context(), req.toInput(), app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidStatus) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			return
+		}
 		if errors.Is(err, app.ErrDuplicateVehiclePlateNo) {
 			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
 				{Field: "plateNo", Reason: "車牌號碼已存在"},
@@ -89,13 +100,22 @@ func (h *VehicleHandler) Update(c *gin.Context) {
 	}
 
 	var req UpdateVehicleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
-	v, err := h.svc.Update(c.Request.Context(), id, req.toInput())
+	v, err := h.svc.Update(c.Request.Context(), id, req.toInput(), app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidStatus) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			return
+		}
 		if errors.Is(err, app.ErrDuplicateVehiclePlateNo) {
 			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
 				{Field: "plateNo", Reason: "車牌號碼已存在"},
@@ -125,17 +145,22 @@ func (h *VehicleHandler) SetDrivers(c *gin.Context) {
 	}
 
 	var req SetVehicleDriversRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	effectiveFrom := time.Now()
+	effectiveFrom := clock.Today()
 	if req.EffectiveFrom != nil {
 		effectiveFrom = req.EffectiveFrom.toTime()
 	}
 
-	if err := h.svc.SetDrivers(c.Request.Context(), id, req.DriverIDs, effectiveFrom); err != nil {
+	if err := h.svc.SetDrivers(c.Request.Context(), id, req.DriverIDs, effectiveFrom, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}); err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
@@ -154,7 +179,12 @@ func (h *VehicleHandler) Delete(c *gin.Context) {
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
 
-	if err := h.svc.Delete(c.Request.Context(), id, actorID, actorRole); err != nil {
+	if err := h.svc.Delete(c.Request.Context(), id, actorID, actorRole, app.ActorContext{
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}); err != nil {
 		if errors.Is(err, app.ErrVehicleInUse) {
 			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
 			return

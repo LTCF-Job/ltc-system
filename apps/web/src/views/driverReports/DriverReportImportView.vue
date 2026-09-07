@@ -43,24 +43,6 @@
             </template>
           </el-alert>
 
-          <el-alert
-            v-if="overlapRows.length"
-            type="warning"
-            show-icon
-            :closable="false"
-            title="以下車輛涵蓋的月份已有資料，這次會整月覆蓋"
-            class="overlap-alert"
-          >
-            <template #default>
-              <ul class="overlap-list">
-                <li v-for="row in overlapRows" :key="row.key">
-                  {{ row.vehicleName }}：{{ row.overlapMonths.join('、') }}
-                </li>
-              </ul>
-              <el-checkbox v-model="overlapAcknowledged">我已確認風險，仍要覆蓋以上月份的既有資料</el-checkbox>
-            </template>
-          </el-alert>
-
           <div v-if="summary" class="result-banner" role="status">
             成功 {{ summary.succeeded }} 個檔案、共 {{ summary.importedDays }} 天，失敗 {{ summary.failed }} 個檔案
             <template v-if="summary.pendingColumns > 0">
@@ -120,27 +102,21 @@
                         {{ row.message }}
                       </span>
                       <template v-else-if="row.status === 'done'">
-                        <span v-if="row.importedCount > 0" class="text-regular">
-                          可匯入 {{ row.importedCount }} 天
-                          <span v-if="row.pendingColumnCount > 0" class="text-warning">
-                            · {{ row.pendingColumnCount }} 欄待維護
-                          </span>
+                        <span
+                          :class="rowResultPending(row as BatchFileRow) ? 'text-warning' : 'text-regular'"
+                          class="truncate-text"
+                          :title="rowResultText(row as BatchFileRow)"
+                        >
+                          {{ rowResultText(row as BatchFileRow) }}
                         </span>
-                        <span v-else-if="row.pendingColumnCount > 0" class="text-warning">
-                          已建立待維護欄位，前往「待維護資料」完成連結後會自動寫入搭乘紀錄
-                        </span>
-                        <span v-else class="text-muted">沒有可寫入的搭乘資料</span>
                       </template>
-                      <span v-else-if="row.overlapMonths.length" class="text-warning truncate-text" :title="`將整月覆蓋 ${row.overlapMonths.join('、')} 既有資料`">
-                        將整月覆蓋 {{ row.overlapMonths.join('、') }} 既有資料
-                      </span>
                       <span v-else-if="row.status === 'analyzing'" class="text-muted">解析中…</span>
                       <span v-else-if="row.status === 'needsVehicle'" class="text-warning">請先選擇對應代稱</span>
                       <span v-else class="text-muted">-</span>
                     </div>
 
                     <el-button
-                      v-if="row.issues.length || row.status === 'failed' || row.overlapMonths.length"
+                      v-if="row.issues.length || row.status === 'failed'"
                       size="small"
                       type="primary"
                       link
@@ -157,6 +133,16 @@
               <el-table-column label="操作" width="100" align="center" fixed="right" class-name="action-col">
                 <template #default="{ row }">
                   <TableRowActions>
+                    <el-button
+                      v-if="canRetryRow(row as BatchFileRow)"
+                      link
+                      type="warning"
+                      size="small"
+                      :disabled="running"
+                      @click="retryRow(row as BatchFileRow)"
+                    >
+                      重試失敗月份
+                    </el-button>
                     <el-button link type="danger" size="small" :disabled="running" @click="removeRow(row as BatchFileRow)">
                       移除
                     </el-button>
@@ -181,12 +167,14 @@
         <el-empty v-if="!reviewLoading && submissionReviews.length === 0" description="目前沒有待處理的匯報列" />
 
         <el-table
+          ref="submissionReviewTableRef"
           v-else
           :data="submissionReviews"
           v-loading="reviewLoading"
           row-key="submissionId"
           max-height="600"
           border
+          @expand-change="handleSubmissionReviewExpandChange"
         >
           <el-table-column type="expand">
             <template #default="{ row }">
@@ -236,6 +224,29 @@
                       </el-button>
                       <el-button link type="primary" size="small" @click="openQuickCreateDriver(row as SubmissionReviewRow)">
                         新增司機並綁定
+                      </el-button>
+                    </TableRowActions>
+                  </div>
+                </div>
+
+                <div v-for="conflict in row.rowConflicts" :key="conflict.id" class="review-issue-row">
+                  <div class="review-issue-desc">
+                    <el-tag size="small" type="danger">與既有資料衝突</el-tag>
+                    <span class="raw-name">{{ conflict.caseName }}（第 {{ conflict.legSeq }} 趟）</span>
+                    <span class="text-secondary small">
+                      既有：{{ conflict.previousReported === 'boarded' ? '有坐' : '沒坐' }}
+                      / {{ conflict.previousDriverName || '無司機' }}
+                      　新上傳：{{ conflict.newReported === 'boarded' ? '有坐' : '沒坐' }}
+                      / {{ conflict.newDriverName || '無司機' }}
+                    </span>
+                  </div>
+                  <div class="target-binding-box">
+                    <TableRowActions>
+                      <el-button link type="primary" size="small" @click="handleResolveRowConflict(conflict, true)">
+                        採用新資料
+                      </el-button>
+                      <el-button link size="small" @click="handleResolveRowConflict(conflict, false)">
+                        保留原資料
                       </el-button>
                     </TableRowActions>
                   </div>
@@ -346,21 +357,33 @@
           </div>
         </div>
 
+        <div v-if="selectedRowForDetail.months.length" class="month-status-box">
+          <div class="issues-header">
+            <span class="issues-title">月份處理狀態</span>
+            <span class="text-secondary small">成功月份不會因重試再次寫入</span>
+          </div>
+          <div class="month-status-list">
+            <el-tag
+              v-for="month in selectedRowForDetail.months"
+              :key="month"
+              :type="monthStatusType(selectedRowForDetail.monthStates[month])"
+              effect="plain"
+            >
+              {{ month }}：{{ monthStatusLabel(selectedRowForDetail.monthStates[month]) }}
+            </el-tag>
+          </div>
+          <div v-if="canRetryRow(selectedRowForDetail)" class="month-retry-hint">
+            <el-button type="warning" plain size="small" :disabled="running" @click="retryRow(selectedRowForDetail)">
+              僅重試失敗月份
+            </el-button>
+          </div>
+        </div>
+
         <!-- 錯誤告警區 -->
         <el-alert
           v-if="selectedRowForDetail.status === 'failed' && selectedRowForDetail.message"
           :title="selectedRowForDetail.message"
           type="error"
-          show-icon
-          :closable="false"
-          class="dialog-alert"
-        />
-
-        <!-- 重複覆蓋提示 -->
-        <el-alert
-          v-if="selectedRowForDetail.overlapMonths.length"
-          :title="`匯入時將整月覆蓋 ${selectedRowForDetail.overlapMonths.join('、')} 之既有搭乘紀錄`"
-          type="warning"
           show-icon
           :closable="false"
           class="dialog-alert"
@@ -408,24 +431,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { UploadFilled, Document } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
+import { ElMessage, ElMessageBox, type TableInstance, type UploadFile } from 'element-plus'
 import { useRouter } from 'vue-router'
 import {
   createDriverReportForm,
   commitImportDriverReport,
   dryRunImportDriverReport,
   listDriverReportForms,
-  listDriverReportImportedMonths,
   listSubmissionReview,
   matchPendingColumnsByName,
   updateColumnMapping,
-  bindPendingDriver
+  bindPendingDriver,
+  resolveRowConflict
 } from '@/api/driverReports'
 import { listAttendanceConflicts, resolveAttendanceConflict } from '@/api/attendance'
-import { listCases } from '@/api/cases'
-import { listVehicles, listDrivers } from '@/api/masters'
+import { listAllCases } from '@/api/cases'
+import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import PageHeader from '@/components/PageHeader.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
@@ -434,6 +457,7 @@ import CaseCreateDialog from '@/components/cases/CaseCreateDialog.vue'
 import DriverCreateDialog from '@/components/masters/DriverCreateDialog.vue'
 import { resolveErrorMessage } from '@/api/errorCodes'
 import { toColumnDecisionPayload, type ColumnDecisionMap } from './columnDecisions'
+import { describeImportResult, hasPendingWork } from './importSummary'
 import { LEG_SEQ_OPTIONS } from './legOptions'
 import type {
   AttendanceConflictDTO,
@@ -441,8 +465,9 @@ import type {
   DriverDTO,
   DriverReportColumnDTO,
   DriverReportFormDTO,
-  DriverReportImportedMonthDTO,
   DriverReportPreviewDTO,
+  DriverReportCommitResultDTO,
+  RowConflictDTO,
   SubmissionReviewDTO,
   VehicleDTO
 } from '@/types/api'
@@ -463,6 +488,7 @@ function apiErrorCode(error: unknown): string | undefined {
 // ---- 批次上傳 ----
 
 type RowStatus = 'needsVehicle' | 'queued' | 'analyzing' | 'processing' | 'done' | 'failed'
+type MonthImportStatus = 'pending' | 'processing' | 'succeeded' | 'failed'
 type RowIssue = { level: 'error' | 'warning'; message: string }
 
 const IMPORT_FIELD_LABELS: Record<string, string> = {
@@ -481,8 +507,13 @@ interface BatchFileRow {
   formId: string
   status: RowStatus
   months: string[]
-  overlapMonths: string[]
+  monthStates: Record<string, MonthImportStatus>
+  monthMessages: Record<string, string>
   importedCount: number
+  rideRecordCount: number
+  reaffirmedCount: number
+  conflictCount: number
+  backfilledCount: number
   pendingColumnCount: number
   message: string
   issues: RowIssue[]
@@ -496,9 +527,7 @@ const contextLoadFailed = ref(false)
 const rows = ref<BatchFileRow[]>([])
 const vehicles = ref<VehicleDTO[]>([])
 const forms = ref<DriverReportFormDTO[]>([])
-const importedMonths = ref<DriverReportImportedMonthDTO[]>([])
 const summary = ref<{ succeeded: number; failed: number; importedDays: number; pendingColumns: number } | null>(null)
-const overlapAcknowledged = ref(false)
 // 排隊中 + 執行中的解析數，供自動匯入判斷「整批都解析完了沒」
 const analyzePending = ref(0)
 
@@ -520,6 +549,7 @@ const ctaLabel = computed(() => {
   if (vehicles.value.length === 0) return '尚未建立車輛'
   return '選擇 .xlsx 檔案'
 })
+// 拖曳區在資料載完前停用，避免車輛清單還是空的時就跑自動比對而誤判成「待選車輛」
 const dropDisabled = computed(
   () => running.value || contextLoading.value || contextLoadFailed.value || vehicles.value.length === 0
 )
@@ -530,22 +560,14 @@ const hasNoVehicles = computed(
 )
 
 const formByVehicle = computed(() => new Map(forms.value.map((f) => [f.vehicleId, f.id])))
-const importedByKey = computed(
-  () => new Map(importedMonths.value.map((m) => [`${m.formId}::${m.yearMonth}`, m]))
-)
 // 已解析完成、還沒匯入的檔案。已匯入或失敗的列不再納入，否則自動匯入會反覆重跑同一批
 const pendingRows = computed(() => rows.value.filter((r) => r.vehicleId && r.status === 'queued'))
-const overlapRows = computed(() => pendingRows.value.filter((r) => r.overlapMonths.length > 0))
 const canImport = computed(
-  () =>
-    !running.value &&
-    analyzePending.value === 0 &&
-    pendingRows.value.length > 0 &&
-    (overlapRows.value.length === 0 || overlapAcknowledged.value)
+  () => !running.value && analyzePending.value === 0 && pendingRows.value.length > 0
 )
 
-// 沒有送出按鈕：整批解析完就自動匯入。等 analyzePending 歸零才觸發，讓一次拖入的多個檔案併成一批；
-// 命中既有月份時停在這裡等使用者勾選確認風險，勾完 canImport 再次轉真才續跑。
+// 沒有送出按鈕：整批解析完就自動匯入。等 analyzePending 歸零才觸發，讓一次拖入的多個檔案併成一批。
+// 涵蓋月份已有資料時不再攔截確認：逐列比對本來就不覆蓋，值不同的會進待維護等使用者裁決。
 watch(canImport, (ready) => {
   if (ready) void runImport()
 })
@@ -583,8 +605,13 @@ function onFileChange(file: UploadFile) {
     formId: vehicle ? formByVehicle.value.get(vehicle.id) ?? '' : '',
     status: vehicle ? 'queued' : 'needsVehicle',
     months: [],
-    overlapMonths: [],
+    monthStates: {},
+    monthMessages: {},
     importedCount: 0,
+    rideRecordCount: 0,
+    reaffirmedCount: 0,
+    conflictCount: 0,
+    backfilledCount: 0,
     pendingColumnCount: 0,
     message: '',
     issues: []
@@ -600,6 +627,9 @@ function onVehiclePicked(row: BatchFileRow, vehicleId: string) {
   row.vehicleName = vehicle.displayName
   row.formId = formByVehicle.value.get(vehicle.id) ?? ''
   row.status = 'queued'
+  row.months = []
+  row.monthStates = {}
+  row.monthMessages = {}
   enqueueAnalyze(row)
 }
 
@@ -608,6 +638,11 @@ function removeRow(row: BatchFileRow) {
 }
 
 const formCreationByVehicle = new Map<string, Promise<string>>()
+// 同一個表單、月份與檔案若因重複觸發同時送出，只保留一個前端請求；後端沒有檔案層級的
+// 重複判斷，同月併發是由 LockDriverReportImport 的 advisory lock 擋下。
+const activeMonthImports = new Map<string, Promise<DriverReportCommitResultDTO>>()
+// 不同檔案寫入同一表單月份時也要在前端排隊，避免結果互相競速。
+const monthImportLocks = new Map<string, Promise<void>>()
 
 async function ensureForm(row: BatchFileRow): Promise<string> {
   const known = formByVehicle.value.get(row.vehicleId)
@@ -640,6 +675,86 @@ function computeMonths(previewRows: Array<{ errorMessage?: string; serviceDate: 
     if (!r.errorMessage && r.serviceDate) months.add(r.serviceDate.slice(0, 7))
   }
   return [...months].sort()
+}
+
+function activeMonthImportKey(formId: string, row: BatchFileRow, month: string): string {
+  return [formId, month, row.file.name, row.file.size, row.file.lastModified].join('::')
+}
+
+function commitMonthOnce(
+  formId: string,
+  row: BatchFileRow,
+  payload: ReturnType<typeof toColumnDecisionPayload>,
+  month: string
+): Promise<DriverReportCommitResultDTO> {
+  const key = activeMonthImportKey(formId, row, month)
+  const active = activeMonthImports.get(key)
+  if (active) return active
+
+  const lockKey = `${formId}::${month}`
+  const previous = monthImportLocks.get(lockKey) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  monthImportLocks.set(lockKey, current)
+
+  const request = (async () => {
+    await previous
+    try {
+      return await commitImportDriverReport(formId, row.file, payload, month)
+    } finally {
+      release()
+      if (monthImportLocks.get(lockKey) === current) monthImportLocks.delete(lockKey)
+    }
+  })()
+  activeMonthImports.set(key, request)
+  const clear = () => {
+    if (activeMonthImports.get(key) === request) activeMonthImports.delete(key)
+  }
+  void request.then(clear, clear)
+  return request
+}
+
+function failedMonths(row: BatchFileRow): string[] {
+  return row.months.filter((month) => row.monthStates[month] === 'failed')
+}
+
+function canRetryRow(row: BatchFileRow): boolean {
+  return !running.value && failedMonths(row).length > 0
+}
+
+function monthStatusLabel(status: MonthImportStatus | undefined): string {
+  if (status === 'succeeded') return '成功'
+  if (status === 'processing') return '處理中'
+  if (status === 'failed') return '失敗'
+  return '待處理'
+}
+
+function rowResultCounts(row: BatchFileRow) {
+  return {
+    importedDays: row.importedCount,
+    rideRecords: row.rideRecordCount,
+    reaffirmed: row.reaffirmedCount,
+    conflicts: row.conflictCount,
+    backfilled: row.backfilledCount,
+    pendingColumns: row.pendingColumnCount
+  }
+}
+
+function rowResultText(row: BatchFileRow): string {
+  return describeImportResult(rowResultCounts(row))
+}
+
+function rowResultPending(row: BatchFileRow): boolean {
+  return hasPendingWork(rowResultCounts(row))
+}
+
+function monthStatusType(status: MonthImportStatus | undefined): 'success' | 'warning' | 'danger' | 'info' {
+  if (status === 'succeeded') return 'success'
+  if (status === 'failed') return 'danger'
+  if (status === 'processing') return 'warning'
+  return 'info'
 }
 
 function collectPreviewIssues(preview: Pick<DriverReportPreviewDTO, 'errors' | 'warnings'>): RowIssue[] {
@@ -705,18 +820,29 @@ function pumpAnalyzeQueue() {
   }
 }
 
-// analyzeRow 只做「解析出涵蓋月份與是否覆蓋既有資料」的預覽，不寫入任何資料；
+// analyzeRow 只做「解析出涵蓋月份與是否已有既有資料」的預覽，不寫入任何資料；
 // 真正的欄位對應與 commit 交給 processRow，兩者都各自 dry-run 一次，換取程式碼單純。
 async function analyzeRow(row: BatchFileRow) {
   if (row.status === 'needsVehicle') return
   row.status = 'analyzing'
   try {
-    const formId = await ensureForm(row)
+    const formId = formByVehicle.value.get(row.vehicleId) ?? ''
+    row.formId = formId
+    if (!formId) {
+      row.months = []
+      row.monthStates = {}
+      row.monthMessages = {}
+      row.issues = []
+      row.status = 'queued'
+      row.message = '尚未建立匯報表，將於匯入時建立'
+      return
+    }
     const preview = await dryRunImportDriverReport(formId, row.file)
     row.issues = collectPreviewIssues(preview)
     const months = computeMonths(preview.previewRows)
     row.months = months
-    row.overlapMonths = months.filter((m) => importedByKey.value.has(`${formId}::${m}`))
+    row.monthStates = Object.fromEntries(months.map((month) => [month, 'pending' as MonthImportStatus]))
+    row.monthMessages = {}
     row.status = 'queued'
   } catch (error) {
     row.status = 'failed'
@@ -740,31 +866,69 @@ async function processRow(row: BatchFileRow) {
       return
     }
 
+    row.months = months
+    row.monthStates = Object.fromEntries(
+      months.map((month) => [month, row.monthStates[month] ?? 'pending'])
+    ) as Record<string, MonthImportStatus>
+    row.monthMessages = Object.fromEntries(
+      months
+        .filter((month) => row.monthMessages[month])
+        .map((month) => [month, row.monthMessages[month]])
+    )
     const payload = toColumnDecisionPayload(decisions)
-    let importedRows = 0
     for (const month of months) {
-      const result = await commitImportDriverReport(formId, row.file, payload, month)
-      importedRows += result.importedRows
-      row.issues.push(
-        ...result.skippedRows.flatMap((item) =>
-          item.reasons.map((reason) => ({
-            level: 'error' as const,
-            message: `第 ${item.rowIndex} 列${item.reportDate ? `（${item.reportDate}）` : ''}：${reason}`
-          }))
-        ),
-        ...(result.warnings ?? []).map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) }))
-      )
+      if (row.monthStates[month] === 'succeeded') continue
+
+      row.monthStates[month] = 'processing'
+      try {
+        const result = await commitMonthOnce(formId, row, payload, month)
+        row.importedCount += result.importedRows
+        row.rideRecordCount += result.rideRecordRows
+        row.reaffirmedCount += result.reaffirmedRows
+        row.conflictCount += result.pendingConflictRows
+        row.backfilledCount += result.backfilledRows
+        row.monthStates[month] = 'succeeded'
+        row.monthMessages[month] = ''
+        row.issues.push(
+          ...result.skippedRows.flatMap((item) =>
+            item.reasons.map((reason) => ({
+              level: 'error' as const,
+              message: `第 ${item.rowIndex} 列${item.reportDate ? `（${item.reportDate}）` : ''}：${reason}`
+            }))
+          ),
+          ...(result.warnings ?? []).map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) })),
+          ...(result.pendingConflictRows > 0
+            ? [{ level: 'warning' as const, message: `${month}：${result.pendingConflictRows} 筆與既有資料不同，已進入待維護等待選擇` }]
+            : [])
+        )
+      } catch (error) {
+        row.monthStates[month] = 'failed'
+        row.monthMessages[month] = rowErrorMessage(error)
+        row.issues.push({ level: 'error', message: `${month}：${row.monthMessages[month]}` })
+      }
     }
     row.issues = row.issues.filter(
       (issue, index, all) =>
         all.findIndex((candidate) => candidate.level === issue.level && candidate.message === issue.message) === index
     )
-    row.status = 'done'
-    row.importedCount = importedRows
+    const failed = failedMonths(row)
+    row.status = failed.length > 0 ? 'failed' : 'done'
+    row.message = failed.length > 0 ? `${failed.length} 個月份匯入失敗，可只重試失敗月份` : ''
     row.pendingColumnCount = Object.values(decisions).filter((d) => d.mappingStatus === 'pending').length
   } catch (error) {
     row.status = 'failed'
     row.message = rowErrorMessage(error)
+  }
+}
+
+async function retryRow(row: BatchFileRow) {
+  if (!canRetryRow(row)) return
+  running.value = true
+  try {
+    await processRow(row)
+    refreshImportSummary()
+  } finally {
+    running.value = false
   }
 }
 
@@ -805,38 +969,39 @@ async function runImport() {
   try {
     await runWithLimit(targets, processRow)
 
+    const importSummary = refreshImportSummary()
     const succeeded = targets.filter((r) => r.status === 'done')
-    const result = {
-      succeeded: succeeded.length,
-      failed: targets.length - succeeded.length,
-      importedDays: succeeded.reduce((sum, r) => sum + r.importedCount, 0),
-      pendingColumns: succeeded.reduce((sum, r) => sum + r.pendingColumnCount, 0)
-    }
-    summary.value = result
-    importedMonths.value = await listDriverReportImportedMonths().catch(() => importedMonths.value)
-    overlapAcknowledged.value = false
-    if (succeeded.length) await handleUploadSuccess({ pendingColumns: result.pendingColumns })
+    if (succeeded.length) await handleUploadSuccess({ pendingColumns: importSummary.pendingColumns })
   } finally {
     running.value = false
   }
 }
 
-// 拖曳區在資料載完前停用，避免車輛清單還是空的時就跑自動比對而誤判成「待選車輛」。
-// 分頁端點（vehicles）在 0 筆結果時後端回傳 data: null，這裡一律預設空陣列，
-// 避免後續 detectVehicle 等處的 .filter／.map 對 null 直接丟出未捕捉例外。
+function refreshImportSummary(): { succeeded: number; failed: number; importedDays: number; pendingColumns: number } {
+  const processed = rows.value.filter((row) => row.status === 'done' || row.status === 'failed')
+  const succeeded = processed.filter((row) => row.status === 'done')
+  const result = {
+    succeeded: succeeded.length,
+    failed: processed.length - succeeded.length,
+    importedDays: processed.reduce((sum, row) => sum + row.importedCount, 0),
+    pendingColumns: succeeded.reduce((sum, row) => sum + row.pendingColumnCount, 0)
+  }
+  summary.value = result
+  return result
+}
+
+// 分頁端點在 0 筆結果時回傳 data: null，一律預設空陣列，避免後續 detectVehicle 等處
+// 的 .filter／.map 對 null 直接丟出未捕捉例外。
 async function loadUploadContext() {
   try {
-    const [vehiclePage, formList, months] = await Promise.all([
-      listVehicles({ pageSize: 200, status: 'active' }),
-      listDriverReportForms(),
-      listDriverReportImportedMonths()
+    const [vehiclePage, formList] = await Promise.all([
+      listAllVehicles({ status: 'active' }),
+      listDriverReportForms()
     ])
-    vehicles.value = vehiclePage.data ?? []
+    vehicles.value = vehiclePage ?? []
     forms.value = formList ?? []
-    importedMonths.value = months ?? []
-  } catch (error) {
+  } catch {
     contextLoadFailed.value = true
-    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入車輛與匯報表資料失敗，請重新整理頁面再試'))
   } finally {
     contextLoading.value = false
   }
@@ -844,10 +1009,9 @@ async function loadUploadContext() {
 
 async function loadCases() {
   try {
-    const res = await listCases({ pageSize: 200 })
-    cases.value = res.data ?? []
-  } catch (error) {
-    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入個案清單失敗，請重新整理頁面再試'))
+    cases.value = await listAllCases()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -857,6 +1021,31 @@ const cases = ref<CaseDTO[]>([])
 const drivers = ref<DriverDTO[]>([])
 const submissionReviews = ref<SubmissionReviewRow[]>([])
 const reviewLoading = ref(false)
+
+// el-table 的展開狀態綁在資料列的物件參考上；每次連結/略過都會整批重打
+// fetchSubmissionReview 換新陣列，若不自己記住已展開的 submissionId 並在資料回來後
+// 重新展開，使用者連續處理同一列的多個待維護欄位時，畫面會每按一次就收闔一次。
+const submissionReviewTableRef = ref<TableInstance>()
+const expandedSubmissionIds = ref(new Set<string>())
+
+// el-table 的 expand-change 型別是聯集（一般表格傳展開列陣列，樹狀表格傳布林值），
+// 這張表不是樹狀結構，實際上永遠會收到陣列，只是型別上要涵蓋另一種簽名。
+function handleSubmissionReviewExpandChange(
+  _row: SubmissionReviewRow,
+  expandedRows: SubmissionReviewRow[] | boolean
+) {
+  if (!Array.isArray(expandedRows)) return
+  expandedSubmissionIds.value = new Set(expandedRows.map((r) => r.submissionId))
+}
+
+async function restoreSubmissionReviewExpansion() {
+  await nextTick()
+  const table = submissionReviewTableRef.value
+  if (!table) return
+  for (const row of submissionReviews.value) {
+    if (expandedSubmissionIds.value.has(row.submissionId)) table.toggleRowExpansion(row, true)
+  }
+}
 
 const quickCreateCaseVisible = ref(false)
 const quickCreateCaseTarget = ref<EditableCaseIssue | null>(null)
@@ -878,7 +1067,7 @@ function attendanceStatusLabel(status: string): string {
 }
 
 function issueCount(row: SubmissionReviewRow): number {
-  return row.caseIssues.length + (row.driverIssue ? 1 : 0)
+  return row.caseIssues.length + (row.driverIssue ? 1 : 0) + (row.rowConflicts?.length ?? 0)
 }
 
 // pendingTabCount 是頁籤上顯示的總數字，個案／駕駛人待維護列與出勤衝突是兩個獨立區塊，
@@ -887,10 +1076,9 @@ const pendingTabCount = computed(() => submissionReviews.value.length + attendan
 
 async function loadDrivers() {
   try {
-    const res = await listDrivers({ status: 'active', pageSize: 200 })
-    drivers.value = res.data ?? []
-  } catch (error) {
-    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入司機清單失敗，請重新整理頁面再試'))
+    drivers.value = await listAllDrivers({ status: 'active' })
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -927,8 +1115,9 @@ async function fetchSubmissionReview() {
       caseIssues: r.caseIssues.map((c) => ({ ...c, editCaseId: c.suggestedCaseId || '', editLegSeq: c.suggestedLegSeq || 1 })),
       editDriverId: ''
     }))
-  } catch (error) {
-    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入待維護清單失敗'))
+    await restoreSubmissionReviewExpansion()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     reviewLoading.value = false
   }
@@ -943,8 +1132,8 @@ async function handleBindCase(issue: EditableCaseIssue) {
     })
     ElMessage.success(`已將「${issue.columnHeader}」成功綁定，補寫 ${backfilledRows} 筆搭乘紀錄`)
     await fetchSubmissionReview()
-  } catch (error) {
-    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '綁定失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -953,8 +1142,8 @@ async function handleIgnoreCase(issue: EditableCaseIssue) {
     await updateColumnMapping(issue.id, { mappingStatus: 'ignored' })
     ElMessage.info(`已略過「${issue.columnHeader}」`)
     await fetchSubmissionReview()
-  } catch (error) {
-    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '略過失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -962,8 +1151,8 @@ async function fetchAttendanceConflicts() {
   attendanceConflictLoading.value = true
   try {
     attendanceConflicts.value = await listAttendanceConflicts()
-  } catch (error) {
-    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '載入出勤待維護清單失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     attendanceConflictLoading.value = false
   }
@@ -978,8 +1167,18 @@ async function handleResolveAttendanceConflict(conflict: AttendanceConflictDTO, 
         : `已將「${conflict.driverName}」${conflict.recordDate} 改採匯入判斷的出勤結果`
     )
     attendanceConflicts.value = attendanceConflicts.value.filter((c) => c.id !== conflict.id)
-  } catch (error) {
-    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '處理出勤待維護衝突失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  }
+}
+
+async function handleResolveRowConflict(conflict: RowConflictDTO, useNew: boolean) {
+  try {
+    await resolveRowConflict(conflict.id, { useNew })
+    ElMessage.success(useNew ? `已採用「${conflict.caseName}」最新上傳的資料` : `已保留「${conflict.caseName}」原有的資料`)
+    await fetchSubmissionReview()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -992,8 +1191,8 @@ async function handleBindDriver(row: SubmissionReviewRow) {
     })
     ElMessage.success(`已完成司機綁定，共回填 ${affectedCount} 筆搭乘紀錄`)
     await fetchSubmissionReview()
-  } catch (error) {
-    ElMessage.error(resolveErrorMessage(apiErrorCode(error), '綁定司機失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -1014,8 +1213,8 @@ async function handleCaseCreatedFromPending(created: CaseDTO) {
         mappingStatus: 'mapped'
       })
       ElMessage.success(`已建立個案「${created.name}」並完成綁定，補寫 ${backfilledRows} 筆搭乘紀錄`)
-    } catch (error) {
-      ElMessage.error(resolveErrorMessage(apiErrorCode(error), '綁定失敗'))
+    } catch {
+      // 全域攔截器負責顯示 API 錯誤。
     }
   }
   await fetchSubmissionReview()
@@ -1053,8 +1252,8 @@ async function promptRelatedCaseIssues(created: CaseDTO, triggerTarget: Editable
         mappingStatus: 'mapped'
       })
       boundCount++
-    } catch (error) {
-      ElMessage.error(resolveErrorMessage(apiErrorCode(error), `連結「${m.columnHeader}」失敗`))
+    } catch {
+      // 全域攔截器負責顯示 API 錯誤。
     }
   }
   if (boundCount > 0) {
@@ -1078,8 +1277,8 @@ async function handleDriverCreatedFromPending(created: DriverDTO) {
         driverId: created.id
       })
       ElMessage.success(`已建立司機「${created.name}」並完成綁定，共回填 ${affectedCount} 筆搭乘紀錄`)
-    } catch (error) {
-      ElMessage.error(resolveErrorMessage(apiErrorCode(error), '綁定司機失敗'))
+    } catch {
+      // 全域攔截器負責顯示 API 錯誤。
     }
   }
   await fetchSubmissionReview()
@@ -1194,17 +1393,8 @@ onMounted(() => {
   }
 }
 
-.overlap-alert {
-  margin: 0;
-}
-
 .no-vehicles-hint {
   margin: 0 0 var(--app-space-2);
-}
-
-.overlap-list {
-  margin: 0 0 var(--app-space-2);
-  padding-left: var(--app-space-4);
 }
 
 .result-banner {

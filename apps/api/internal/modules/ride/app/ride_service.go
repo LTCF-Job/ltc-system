@@ -2,14 +2,19 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/merge"
 	"ltc-system/apps/api/internal/domain/namenorm"
+	"ltc-system/apps/api/internal/domain/rocdate"
+	"ltc-system/apps/api/internal/platform/clock"
 )
 
 // RideService 封裝司機接送匯報的展開、正規化、混車合併、衝突裁決與更正。
@@ -19,6 +24,107 @@ type RideService struct {
 	caseRepo        ScheduleReader
 	auditRepo       AuditWriter
 	missingProvider MissingReportProvider
+}
+
+var ErrStaleCorrection = errors.New("correction is based on stale ride sources")
+
+// rideAuditSnapshot 避免把查詢組裝出的個案／司機顯示名稱寫入稽核資料。
+type rideAuditSnapshot struct {
+	ID              uuid.UUID  `json:"id"`
+	CaseID          uuid.UUID  `json:"caseId"`
+	ServiceDate     time.Time  `json:"serviceDate"`
+	LegSeq          int16      `json:"legSeq"`
+	EffectiveStatus string     `json:"effectiveStatus"`
+	VehicleID       uuid.UUID  `json:"vehicleId"`
+	DriverID        *uuid.UUID `json:"driverId,omitempty"`
+	HasConflict     bool       `json:"hasConflict"`
+}
+
+// rideCorrectionAuditSnapshot 是更正 PATCH 的固定快照；用 Present 欄位保留三態語意，
+// 不直接把含有自由文字的 request 寫入稽核資料。
+type rideCorrectionAuditSnapshot struct {
+	RideID                 uuid.UUID  `json:"rideId"`
+	EffectiveStatusPresent bool       `json:"effectiveStatusPresent"`
+	EffectiveStatus        *string    `json:"effectiveStatus,omitempty"`
+	VehicleIDPresent       bool       `json:"vehicleIdPresent"`
+	VehicleID              *uuid.UUID `json:"vehicleId,omitempty"`
+	DriverIDPresent        bool       `json:"driverIdPresent"`
+	DriverID               *uuid.UUID `json:"driverId,omitempty"`
+	DepartTimePresent      bool       `json:"departTimeOverridePresent"`
+	DepartTimeOverride     *string    `json:"departTimeOverride,omitempty"`
+	DurationPresent        bool       `json:"durationMinOverridePresent"`
+	DurationMinOverride    *int16     `json:"durationMinOverride,omitempty"`
+	NotClaimedAA09Present  bool       `json:"notClaimedAa09Present"`
+	NotClaimedAA09         *bool      `json:"notClaimedAa09,omitempty"`
+	ReasonPresent          bool       `json:"reasonPresent"`
+	BasedOnFingerprint     string     `json:"basedOnFingerprint,omitempty"`
+}
+
+// rideConflictResolutionAuditSnapshot 是衝突裁決後的非敏感固定快照，不保存裁決自由文字。
+type rideConflictResolutionAuditSnapshot struct {
+	ID          uuid.UUID  `json:"id"`
+	VehicleID   uuid.UUID  `json:"vehicleId"`
+	DriverID    *uuid.UUID `json:"driverId,omitempty"`
+	HasConflict bool       `json:"hasConflict"`
+}
+
+func newRideAuditSnapshot(item *RideRecord) rideAuditSnapshot {
+	if item == nil {
+		return rideAuditSnapshot{}
+	}
+	return rideAuditSnapshot{
+		ID:              item.ID,
+		CaseID:          item.CaseID,
+		ServiceDate:     item.ServiceDate,
+		LegSeq:          item.LegSeq,
+		EffectiveStatus: item.EffectiveStatus,
+		VehicleID:       item.VehicleID,
+		DriverID:        item.DriverID,
+		HasConflict:     item.HasConflict,
+	}
+}
+
+func newRideCorrectionAuditSnapshot(rideID uuid.UUID, req CorrectRideRecordRequest) rideCorrectionAuditSnapshot {
+	return rideCorrectionAuditSnapshot{
+		RideID:                 rideID,
+		EffectiveStatusPresent: req.EffectiveStatus.Present,
+		EffectiveStatus:        req.EffectiveStatus.Value,
+		VehicleIDPresent:       req.VehicleID.Present,
+		VehicleID:              req.VehicleID.Value,
+		DriverIDPresent:        req.DriverID.Present,
+		DriverID:               req.DriverID.Value,
+		DepartTimePresent:      req.DepartTimeOverride.Present,
+		DepartTimeOverride:     req.DepartTimeOverride.Value,
+		DurationPresent:        req.DurationMinOverride.Present,
+		DurationMinOverride:    req.DurationMinOverride.Value,
+		NotClaimedAA09Present:  req.NotClaimedAA09.Present,
+		NotClaimedAA09:         req.NotClaimedAA09.Value,
+		ReasonPresent:          req.Reason.Present,
+		BasedOnFingerprint:     valueOrEmpty(req.BasedOnFingerprint),
+	}
+}
+
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+// sourceFingerprint 以穩定排序的來源 ID 與內容建立更正依據快照。
+func sourceFingerprint(rows []RideSourceRow, serviceDate time.Time, legSeq int16) string {
+	parts := make([]string, 0, len(rows))
+	for _, row := range rows {
+		driver := ""
+		if row.DriverID != nil {
+			driver = row.DriverID.String()
+		}
+		parts = append(parts, fmt.Sprintf("%s|%s|%s|%s|%s", row.SourceID, row.VehicleID, driver, row.Reported, row.SubmittedAt.UTC().Format(time.RFC3339Nano)))
+	}
+	sort.Strings(parts)
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "%s|%d|%s|%s", serviceDate.Format("2006-01-02"), legSeq, strings.Join(parts, ";"), fmt.Sprint(len(rows)))
+	return fmt.Sprintf("sha256:%x", h.Sum(nil))
 }
 
 // NewRideService 建立 RideService 實例。
@@ -48,31 +154,44 @@ type ProcessSubmissionRequest struct {
 	Answers     map[string]string
 }
 
-// IngestSubmission 將一列匯報展開為搭乘來源與搭乘紀錄，回傳實際寫入的搭乘紀錄筆數。
+// IngestResult 彙整一次逐欄寫入的結果，把「新增」「無變化的重複回報」「進待維護」分開計算，
+// 讓匯入結果訊息能區分這三種情況，而不是用單一數字掩蓋掉需要使用者處理的衝突。
+type IngestResult struct {
+	Written    int // 這台車在這個 slot 第一次出現，直接寫入
+	Reaffirmed int // 值與這台車既有資料相同的重複回報，未產生新來源
+	Staged     int // 值與這台車既有資料不同，已進入待維護等待使用者選擇
+}
+
+// IngestSubmission 將一列匯報展開為搭乘來源與搭乘紀錄；回傳值把新增、無變化重複回報、
+// 進待維護三種結果分開計算。
 //
 // 呼叫端已決定匯報表與車輛（一台車一份匯報表），本方法只負責欄位對應查表、
 // 四趟展開與混車合併。
-func (s *RideService) IngestSubmission(ctx context.Context, formID, defaultVehicleID uuid.UUID, req ProcessSubmissionRequest) (int, error) {
+func (s *RideService) IngestSubmission(ctx context.Context, formID, defaultVehicleID uuid.UUID, req ProcessSubmissionRequest) (IngestResult, error) {
 	if req.ServiceDate.IsZero() {
-		return 0, errors.New("service date is required")
+		return IngestResult{}, errors.New("service date is required")
 	}
 
 	submittedAt := req.SubmittedAt
 	if submittedAt.IsZero() {
-		submittedAt = time.Now().UTC()
+		submittedAt = clock.Now()
 	}
 
 	driverID := req.DriverID
 	req.DriverRaw = strings.TrimSpace(req.DriverRaw)
 	if driverID == nil && req.DriverRaw != "" {
-		if d, _ := s.driverRepo.GetByNameNormalized(ctx, namenorm.Normalize(req.DriverRaw)); d != nil {
+		d, err := s.driverRepo.GetByNameNormalized(ctx, namenorm.Normalize(req.DriverRaw))
+		if err != nil {
+			return IngestResult{}, fmt.Errorf("failed to resolve driver: %w", err)
+		}
+		if d != nil {
 			driverID = &d.ID
 		}
 	}
 
 	columns, err := s.formRepo.GetFormColumns(ctx, formID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get form columns: %w", err)
+		return IngestResult{}, fmt.Errorf("failed to get form columns: %w", err)
 	}
 
 	anomalyFlags := detectSubmissionAnomalies(columns, req.Answers)
@@ -88,10 +207,16 @@ func (s *RideService) IngestSubmission(ctx context.Context, formID, defaultVehic
 		ctx, formID, req.ServiceDate, submittedAt, req.DriverRaw, driverID, "import", rawPayload, req.Remark, anomalyFlags,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("failed to save form submission: %w", err)
+		return IngestResult{}, fmt.Errorf("failed to save form submission: %w", err)
 	}
 
-	written := 0
+	var result IngestResult
+	if driverID == nil {
+		// 駕駛人比對不到司機主檔：留在 form_submissions 待維護，不展開成搭乘來源，
+		// 避免一筆缺司機的資料先出現在司機日曆等其他頁面，等使用者綁定後才由
+		// BackfillDriver 補寫。
+		return result, nil
+	}
 	for _, col := range columns {
 		if col.MappingStatus != "mapped" || col.CaseID == nil || col.LegSeq == nil {
 			continue
@@ -107,28 +232,117 @@ func (s *RideService) IngestSubmission(ctx context.Context, formID, defaultVehic
 		}
 
 		caseID := *col.CaseID
-		sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, req.ServiceDate)
+		sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, req.ServiceDate)
+		if err != nil {
+			return result, fmt.Errorf("failed to load active schedule: %w", err)
+		}
 
 		for _, legSeq := range expandLegSeqs(*col.LegSeq, sched) {
-			if err := s.formRepo.InsertRideSource(
-				ctx, submissionID, caseID, req.ServiceDate, legSeq, defaultVehicleID, driverID, reported, col.ColumnIndex,
-			); err != nil {
-				return 0, fmt.Errorf("failed to insert ride source for case %s on %s: %w",
+			outcome, err := s.reconcileRideSource(ctx, formID, submissionID, caseID, req.ServiceDate, legSeq, defaultVehicleID, driverID, reported, col.ColumnIndex, submittedAt)
+			if err != nil {
+				return result, fmt.Errorf("failed to reconcile ride source for case %s on %s: %w",
 					caseID, req.ServiceDate.Format("2006-01-02"), err)
 			}
-
-			if err := s.recalculateRideRecord(ctx, caseID, req.ServiceDate, legSeq, defaultVehicleID, driverID); err != nil {
-				return 0, err
+			switch outcome {
+			case reconcileInserted:
+				result.Written++
+			case reconcileReaffirmed:
+				result.Reaffirmed++
+			case reconcileStaged:
+				result.Staged++
 			}
-			written++
 		}
 	}
 
-	return written, nil
+	return result, nil
+}
+
+// reconcileOutcome 是逐格寫入前比對既有資料後的處理結果。
+type reconcileOutcome int
+
+const (
+	reconcileInserted reconcileOutcome = iota
+	reconcileReaffirmed
+	reconcileStaged
+)
+
+// reconcileRideSource 是「同一台車同一個案」逐列比對的唯一入口，IngestSubmission、
+// BackfillColumn、BackfillDriver 都透過它決定要直接寫入、視為無變化的重複回報，
+// 還是進待維護等待使用者選擇——三個進入點必須共用同一套判斷，否則行為會彼此不一致。
+//
+// 判斷依這台車在這個 slot（case_id, service_date, leg_seq, vehicle_id）目前最新的
+// 一筆來源：不存在就直接寫入；回報值與司機都相同視為重複回報；任一不同則暫存衝突，
+// 保留既有來源不動，等使用者裁決要保留哪一筆（見 docs/decisions/driver-report-import-overwrite.md）。
+func (s *RideService) reconcileRideSource(
+	ctx context.Context,
+	formID, submissionID, caseID uuid.UUID,
+	serviceDate time.Time,
+	legSeq int16,
+	vehicleID uuid.UUID,
+	driverID *uuid.UUID,
+	reported string,
+	colIdx int,
+	submittedAt time.Time,
+) (reconcileOutcome, error) {
+	existing, err := s.formRepo.ListRideSourcesForSlot(ctx, caseID, serviceDate, legSeq)
+	if err != nil {
+		return 0, fmt.Errorf("failed to load existing ride sources for slot: %w", err)
+	}
+
+	var current *RideSourceRow
+	for i := range existing {
+		if existing[i].VehicleID == vehicleID {
+			current = &existing[i] // 已依 submitted_at DESC 排序，第一筆即這台車最新的來源
+			break
+		}
+	}
+
+	if current == nil {
+		if err := s.formRepo.InsertRideSource(ctx, submissionID, caseID, serviceDate, legSeq, vehicleID, driverID, reported, colIdx, submittedAt); err != nil {
+			return 0, err
+		}
+		if err := s.recalculateRideRecord(ctx, caseID, serviceDate, legSeq, vehicleID, driverID); err != nil {
+			return 0, err
+		}
+		return reconcileInserted, nil
+	}
+
+	if current.Reported == reported && sameDriver(current.DriverID, driverID) {
+		return reconcileReaffirmed, nil
+	}
+
+	if _, err := s.formRepo.UpsertRideSourceRowConflict(ctx, RowConflictInput{
+		FormID:               formID,
+		VehicleID:            vehicleID,
+		CaseID:               caseID,
+		ServiceDate:          serviceDate,
+		LegSeq:               legSeq,
+		SourceColumnIndex:    colIdx,
+		PreviousSubmissionID: current.SubmissionID,
+		PreviousReported:     current.Reported,
+		PreviousDriverID:     current.DriverID,
+		PreviousSubmittedAt:  current.SubmittedAt,
+		NewSubmissionID:      submissionID,
+		NewReported:          reported,
+		NewDriverID:          driverID,
+		NewSubmittedAt:       submittedAt,
+	}); err != nil {
+		return 0, err
+	}
+	return reconcileStaged, nil
+}
+
+// sameDriver 比較兩個可為 nil 的司機 ID 是否代表同一人；兩者皆為 nil 視為相同。
+func sameDriver(a, b *uuid.UUID) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // BackfillColumn 用某欄位既有回報中已存的原始儲存格文字，補寫剛完成個案對應的搭乘紀錄，
 // 不需要重新上傳原始檔案；只處理這一欄，其他欄位已寫入的搭乘來源不受影響。
+// skipDates 列出「值另有來源、不該用既有 payload 補」的服務日期，呼叫端沒有這種日期時傳 nil。
 func (s *RideService) BackfillColumn(
 	ctx context.Context,
 	formID, defaultVehicleID uuid.UUID,
@@ -136,31 +350,47 @@ func (s *RideService) BackfillColumn(
 	columnIndex int,
 	caseID uuid.UUID,
 	legSeq int16,
+	skipDates []time.Time,
 ) (int, error) {
 	answers, err := s.formRepo.ListSubmissionAnswersForColumn(ctx, formID, columnHeader)
 	if err != nil {
 		return 0, fmt.Errorf("failed to list submission answers: %w", err)
 	}
 
+	skip := make(map[string]struct{}, len(skipDates))
+	for _, d := range skipDates {
+		skip[d.Format("2006-01-02")] = struct{}{}
+	}
+
 	written := 0
 	for _, a := range answers {
+		// 這些日期的權威值是呼叫端手上那份檔案，payload 可能還是上一次上傳的舊值
+		if _, skipped := skip[a.ServiceDate.Format("2006-01-02")]; skipped {
+			continue
+		}
+		if a.DriverID == nil {
+			// 司機仍待維護：留在 form_submissions，等司機也綁定後由 BackfillDriver 補寫，
+			// 避免一筆缺司機的資料先出現在司機日曆等其他頁面。
+			continue
+		}
 		reported, ok := merge.ParseReportedValue(a.Value)
 		if !ok {
 			continue
 		}
 
-		sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, a.ServiceDate)
+		sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, a.ServiceDate)
+		if err != nil {
+			return written, fmt.Errorf("failed to load active schedule: %w", err)
+		}
 		for _, seq := range expandLegSeqs(legSeq, sched) {
-			if err := s.formRepo.InsertRideSource(
-				ctx, a.SubmissionID, caseID, a.ServiceDate, seq, defaultVehicleID, a.DriverID, reported, columnIndex,
-			); err != nil {
-				return written, fmt.Errorf("failed to insert ride source for case %s on %s: %w",
+			outcome, err := s.reconcileRideSource(ctx, formID, a.SubmissionID, caseID, a.ServiceDate, seq, defaultVehicleID, a.DriverID, reported, columnIndex, a.SubmittedAt)
+			if err != nil {
+				return written, fmt.Errorf("failed to reconcile ride source for case %s on %s: %w",
 					caseID, a.ServiceDate.Format("2006-01-02"), err)
 			}
-			if err := s.recalculateRideRecord(ctx, caseID, a.ServiceDate, seq, defaultVehicleID, a.DriverID); err != nil {
-				return written, err
+			if outcome == reconcileInserted {
+				written++
 			}
-			written++
 		}
 	}
 	return written, nil
@@ -189,6 +419,11 @@ func (s *RideService) ListRideEntriesForFormMonth(ctx context.Context, formID uu
 // BackfillDriver 把姓名正規化後相符、目前比對不到司機主檔的既有回報一次回填為指定
 // 司機，不需要重新上傳原始檔案；回傳實際回填的提交筆數，以及這些回報涉及的服務日期
 // （去重），供呼叫端同步司機出勤月曆。
+//
+// 司機比對不到時這一列完全沒有展開成 ride_sources（見 IngestSubmission 的閘門），所以
+// 這裡是從表單既有欄位對應與這筆提交存的原始答案逐欄重新比對寫入，不是更新既有來源；
+// 每一格仍透過 reconcileRideSource 判斷，若這台車在該 slot 已有其他資料則進待維護，
+// 不會無條件覆蓋。
 func (s *RideService) BackfillDriver(ctx context.Context, driverNameRaw string, driverID uuid.UUID) (int, []time.Time, error) {
 	target := namenorm.Normalize(driverNameRaw)
 	if target == "" {
@@ -211,16 +446,33 @@ func (s *RideService) BackfillDriver(ctx context.Context, driverNameRaw string, 
 			return backfilled, dates, fmt.Errorf("failed to update submission driver: %w", err)
 		}
 
-		sources, err := s.formRepo.ListRideSourcesForSubmission(ctx, u.SubmissionID)
+		columns, err := s.formRepo.GetFormColumns(ctx, u.FormID)
 		if err != nil {
-			return backfilled, dates, fmt.Errorf("failed to list ride sources for submission: %w", err)
+			return backfilled, dates, fmt.Errorf("failed to get form columns: %w", err)
 		}
-		for _, src := range sources {
-			if err := s.formRepo.UpdateRideSourceDriverID(ctx, src.ID, driverID); err != nil {
-				return backfilled, dates, fmt.Errorf("failed to update ride source driver: %w", err)
+		for _, col := range columns {
+			if col.MappingStatus != "mapped" || col.CaseID == nil || col.LegSeq == nil {
+				continue
 			}
-			if err := s.recalculateRideRecord(ctx, src.CaseID, src.ServiceDate, src.LegSeq, src.VehicleID, &driverID); err != nil {
-				return backfilled, dates, err
+			value, exists := u.Answers[col.ColumnHeader]
+			if !exists {
+				continue
+			}
+			reported, ok := merge.ParseReportedValue(value)
+			if !ok {
+				continue
+			}
+
+			caseID := *col.CaseID
+			sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, u.ServiceDate)
+			if err != nil {
+				return backfilled, dates, fmt.Errorf("failed to load active schedule: %w", err)
+			}
+			for _, legSeq := range expandLegSeqs(*col.LegSeq, sched) {
+				if _, err := s.reconcileRideSource(ctx, u.FormID, u.SubmissionID, caseID, u.ServiceDate, legSeq, u.VehicleID, &driverID, reported, col.ColumnIndex, u.SubmittedAt); err != nil {
+					return backfilled, dates, fmt.Errorf("failed to reconcile ride source for case %s on %s: %w",
+						caseID, u.ServiceDate.Format("2006-01-02"), err)
+				}
 			}
 		}
 		backfilled++
@@ -233,52 +485,51 @@ func (s *RideService) BackfillDriver(ctx context.Context, driverNameRaw string, 
 	return backfilled, dates, nil
 }
 
-// ClearImportedDates 移除指定匯報表在這些服務日期已寫入的匯入資料，讓重匯成為覆蓋而非疊加。
-// 回傳刪除的提交紀錄筆數。
-//
-// 只刪本匯報表產生的 form_submissions，ride_sources 由 ON DELETE CASCADE 連帶清除；
-// 其他車輛對同一 slot 的混車來源保持不動，清除後逐 slot 重算合併結果。
-func (s *RideService) ClearImportedDates(ctx context.Context, formID uuid.UUID, dates []time.Time) (int, error) {
-	if len(dates) == 0 {
-		return 0, nil
-	}
+// ErrRowConflictAlreadyResolved 代表這筆同車同個案衝突已被他人裁決過。
+var ErrRowConflictAlreadyResolved = errors.New("row conflict already resolved")
 
-	// 來源列刪除後就查不到受影響的 slot，必須在刪除前收集
-	slots, err := s.formRepo.ListRideSourceSlotsForForm(ctx, formID, dates)
+// ListRowConflicts 轉呼叫 repo，供 driverreport 彙整待維護清單。
+func (s *RideService) ListRowConflicts(ctx context.Context) ([]RowConflict, error) {
+	items, err := s.formRepo.ListPendingRowConflicts(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("failed to list affected ride slots: %w", err)
+		return nil, fmt.Errorf("failed to list row conflicts: %w", err)
 	}
+	if items == nil {
+		items = []RowConflict{}
+	}
+	return items, nil
+}
 
-	removed, err := s.formRepo.DeleteFormSubmissions(ctx, formID, dates)
+// ResolveRowConflict 裁決一筆同車同個案衝突：useNew 時把暫存的新值實際寫入搭乘來源並
+// 重算搭乘紀錄，否則單純標記已解決、保留既有資料不動。回傳值供呼叫端在司機有變更時
+// 同步出勤月曆，比照初次匯入與司機補綁定的既有流程。
+func (s *RideService) ResolveRowConflict(ctx context.Context, conflictID uuid.UUID, useNew bool, operatorID uuid.UUID) (appliedDriverID *uuid.UUID, appliedServiceDate *time.Time, err error) {
+	applied, resolved, err := s.formRepo.ResolveRowConflict(ctx, conflictID, useNew, operatorID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to delete form submissions: %w", err)
+		return nil, nil, fmt.Errorf("failed to resolve row conflict: %w", err)
+	}
+	if !resolved {
+		return nil, nil, ErrRowConflictAlreadyResolved
+	}
+	if !useNew || applied == nil {
+		return nil, nil, nil
 	}
 
-	for _, slot := range slots {
-		rows, err := s.formRepo.ListRideSourcesForSlot(ctx, slot.CaseID, slot.ServiceDate, slot.LegSeq)
-		if err != nil {
-			return 0, fmt.Errorf("failed to load ride sources for slot: %w", err)
-		}
-		// 來源全部清空的 slot 不能靠重算修正，否則會留下沒有來源支撐的過期紀錄
-		if len(rows) == 0 {
-			if err := s.formRepo.DeleteDerivedRideRecord(ctx, slot.CaseID, slot.ServiceDate, slot.LegSeq); err != nil {
-				return 0, fmt.Errorf("failed to delete derived ride record: %w", err)
-			}
-			continue
-		}
-		// 預設車輛取自剩下的來源，不能沿用剛被移除的那台車：全員回報「沒坐」時
-		// merge 會退回預設值，用已清掉的車輛會把錯誤的車寫進搭乘紀錄
-		if err := s.recalculateRideRecord(ctx, slot.CaseID, slot.ServiceDate, slot.LegSeq, rows[0].VehicleID, nil); err != nil {
-			return 0, err
-		}
+	if err := s.formRepo.InsertRideSource(ctx, applied.NewSubmissionID, applied.CaseID, applied.ServiceDate, applied.LegSeq, applied.VehicleID, applied.NewDriverID, applied.NewReported, applied.SourceColumnIndex, applied.NewSubmittedAt); err != nil {
+		return nil, nil, fmt.Errorf("failed to apply resolved row conflict: %w", err)
 	}
-
-	return removed, nil
+	if err := s.recalculateRideRecord(ctx, applied.CaseID, applied.ServiceDate, applied.LegSeq, applied.VehicleID, applied.NewDriverID); err != nil {
+		return nil, nil, err
+	}
+	if applied.NewDriverID == nil {
+		return nil, nil, nil
+	}
+	return applied.NewDriverID, &applied.ServiceDate, nil
 }
 
 // ListImportedMonths 統計每份匯報表各月份已匯入的提交筆數與最後一次匯入時間。
 //
-// 月份不落地成欄位，一律由 form_submissions.service_date 推得，避免統計與實際資料不同步。
+// 月份不另外寫入成欄位，一律由 form_submissions.service_date 推得，避免統計與實際資料不同步。
 func (s *RideService) ListImportedMonths(ctx context.Context) ([]ImportedMonth, error) {
 	months, err := s.formRepo.ListImportedMonths(ctx)
 	if err != nil {
@@ -344,29 +595,21 @@ func (s *RideService) recalculateRideRecord(
 		return fmt.Errorf("failed to load existing ride record: %w", err)
 	}
 
-	var existingState *merge.ExistingRecordState
-	if existingRec != nil {
-		existingState = &merge.ExistingRecordState{
-			HasConflict:        existingRec.HasConflict,
-			ConflictResolvedAt: existingRec.ConflictResolvedAt,
-			ResolvedVehicleID:  &existingRec.VehicleID,
-			ResolvedDriverID:   existingRec.DriverID,
-			CorrectedAt:        existingRec.CorrectedAt,
-			CorrectedBy:        existingRec.CorrectedBy,
-			EffectiveStatus:    existingRec.EffectiveStatus,
-			CorrectedVehicle:   &existingRec.VehicleID,
-			CorrectedDriver:    existingRec.DriverID,
-		}
-	}
-
 	// 查詢當日排班設定預設車輛與司機
-	sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, serviceDate)
+	sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, serviceDate)
+	if err != nil {
+		return fmt.Errorf("failed to load active schedule: %w", err)
+	}
 	if sched != nil {
 		for _, l := range sched.Legs {
 			if l.LegSeq == legSeq && l.VehicleID != nil {
 				defaultVehicleID = *l.VehicleID
 				// 一台車當日可能有多位司機，無從判斷是誰出車時留空由人工指定
-				if drivers, _ := s.driverRepo.ListDriversForVehicleOnDate(ctx, defaultVehicleID, serviceDate); len(drivers) == 1 {
+				drivers, err := s.driverRepo.ListDriversForVehicleOnDate(ctx, defaultVehicleID, serviceDate)
+				if err != nil {
+					return fmt.Errorf("failed to load scheduled drivers: %w", err)
+				}
+				if len(drivers) == 1 {
 					defaultDriverID = &drivers[0].ID
 				}
 				break
@@ -381,39 +624,65 @@ func (s *RideService) recalculateRideRecord(
 		return fmt.Errorf("failed to load ride sources for slot: %w", err)
 	}
 	if len(rows) == 0 {
-		return nil
+		return s.formRepo.DeleteDerivedRideRecord(ctx, caseID, serviceDate, legSeq)
+	}
+
+	fingerprint := sourceFingerprint(rows, serviceDate, legSeq)
+	correctionIsCurrent := existingRec != nil &&
+		(existingRec.BasedOnFingerprint == "" || existingRec.BasedOnFingerprint == fingerprint)
+
+	var existingState *merge.ExistingRecordState
+	if existingRec != nil {
+		existingState = &merge.ExistingRecordState{
+			HasConflict:        existingRec.HasConflict,
+			ConflictResolvedAt: existingRec.ConflictResolvedAt,
+			ResolvedVehicleID:  &existingRec.VehicleID,
+			ResolvedDriverID:   existingRec.DriverID,
+		}
+		if correctionIsCurrent {
+			existingState.CorrectedAt = existingRec.CorrectedAt
+			existingState.CorrectedBy = existingRec.CorrectedBy
+			existingState.EffectiveStatus = existingRec.EffectiveStatus
+			existingState.CorrectedVehicle = &existingRec.VehicleID
+			existingState.CorrectedDriver = existingRec.DriverID
+		}
 	}
 
 	sources := make([]merge.RideSourceInput, 0, len(rows))
 	for _, row := range rows {
 		sources = append(sources, merge.RideSourceInput{
-			VehicleID:   row.VehicleID,
-			DriverID:    row.DriverID,
-			Reported:    row.Reported,
-			SubmittedAt: row.SubmittedAt,
+			SourceID:       row.SourceID,
+			SourcePriority: row.SourcePriority,
+			VehicleID:      row.VehicleID,
+			DriverID:       row.DriverID,
+			Reported:       row.Reported,
+			SubmittedAt:    row.SubmittedAt,
 		})
 	}
 
 	result := merge.MergeRideSources(sources, existingState, defaultVehicleID, defaultDriverID)
 
 	rec := RideRecord{
-		CaseID:          caseID,
-		ServiceDate:     serviceDate,
-		LegSeq:          legSeq,
-		MergedStatus:    result.MergedStatus,
-		EffectiveStatus: result.EffectiveStatus,
-		VehicleID:       result.SelectedVehicle,
-		DriverID:        result.SelectedDriver,
-		HasConflict:     result.HasConflict,
+		CaseID:             caseID,
+		ServiceDate:        serviceDate,
+		LegSeq:             legSeq,
+		MergedStatus:       result.MergedStatus,
+		EffectiveStatus:    result.EffectiveStatus,
+		VehicleID:          result.SelectedVehicle,
+		DriverID:           result.SelectedDriver,
+		HasConflict:        result.HasConflict,
+		BasedOnFingerprint: fingerprint,
 	}
 	if existingRec != nil {
 		rec.ID = existingRec.ID
 		rec.ConflictResolvedAt = existingRec.ConflictResolvedAt
 		rec.ConflictResolvedBy = existingRec.ConflictResolvedBy
-		rec.CorrectedAt = existingRec.CorrectedAt
-		rec.CorrectedBy = existingRec.CorrectedBy
-		rec.CorrectionReason = existingRec.CorrectionReason
-		rec.NotClaimedAA09 = existingRec.NotClaimedAA09
+		if correctionIsCurrent {
+			rec.CorrectedAt = existingRec.CorrectedAt
+			rec.CorrectedBy = existingRec.CorrectedBy
+			rec.CorrectionReason = existingRec.CorrectionReason
+			rec.NotClaimedAA09 = existingRec.NotClaimedAA09
+		}
 	}
 
 	if err := s.formRepo.UpsertRideRecord(ctx, &rec); err != nil {
@@ -424,13 +693,14 @@ func (s *RideService) recalculateRideRecord(
 
 // CorrectRideRecordRequest 代表更正搭乘紀錄之請求結構體。
 type CorrectRideRecordRequest struct {
-	EffectiveStatus     *string    `json:"effectiveStatus"`
-	VehicleID           *uuid.UUID `json:"vehicleId"`
-	DriverID            *uuid.UUID `json:"driverId"`
-	DepartTimeOverride  *string    `json:"departTimeOverride"`
-	DurationMinOverride *int16     `json:"durationMinOverride"`
-	NotClaimedAA09      *bool      `json:"notClaimedAa09"`
-	Reason              *string    `json:"reason"`
+	EffectiveStatus     PatchValue[string]    `json:"effectiveStatus"`
+	VehicleID           PatchValue[uuid.UUID] `json:"vehicleId"`
+	DriverID            PatchValue[uuid.UUID] `json:"driverId"`
+	DepartTimeOverride  PatchValue[string]    `json:"departTimeOverride"`
+	DurationMinOverride PatchValue[int16]     `json:"durationMinOverride"`
+	NotClaimedAA09      PatchValue[bool]      `json:"notClaimedAa09"`
+	Reason              PatchValue[string]    `json:"reason"`
+	BasedOnFingerprint  *string               `json:"basedOnFingerprint"`
 }
 
 // ManualReportRideRequest 代表人工補登或編輯回報內容之請求結構體。
@@ -456,26 +726,63 @@ func (s *RideService) CorrectRideRecord(
 	actorID uuid.UUID,
 	actorRole, ip, ua string,
 ) error {
-	err := s.formRepo.CorrectRideRecord(
-		ctx, rideID, req.EffectiveStatus, req.VehicleID, req.DriverID,
-		req.DepartTimeOverride, req.DurationMinOverride, req.NotClaimedAA09, req.Reason, actorID,
-	)
+	if req.EffectiveStatus.Present && req.EffectiveStatus.Value == nil {
+		return ErrInvalidRideCorrectionField
+	}
+	if req.VehicleID.Present && req.VehicleID.Value == nil {
+		return ErrInvalidRideCorrectionField
+	}
+	before, err := s.formRepo.GetRideRecordByID(ctx, rideID)
+	if err != nil {
+		return fmt.Errorf("failed to load ride record: %w", err)
+	}
+	if before == nil {
+		return ErrRideNotFound
+	}
+	sources, err := s.formRepo.ListRideSourcesForSlot(ctx, before.CaseID, before.ServiceDate, before.LegSeq)
+	if err != nil {
+		return fmt.Errorf("failed to load ride sources for correction: %w", err)
+	}
+	fingerprint := sourceFingerprint(sources, before.ServiceDate, before.LegSeq)
+	if req.BasedOnFingerprint != nil && *req.BasedOnFingerprint != fingerprint {
+		return ErrStaleCorrection
+	}
+	if store, ok := s.formRepo.(CorrectionFingerprintingStore); ok {
+		err = store.CorrectRideRecordWithFingerprint(
+			ctx, rideID, req.EffectiveStatus, req.VehicleID, req.DriverID,
+			req.DepartTimeOverride, req.DurationMinOverride, req.NotClaimedAA09,
+			req.Reason, actorID, fingerprint,
+		)
+	} else {
+		err = s.formRepo.CorrectRideRecord(
+			ctx, rideID, req.EffectiveStatus, req.VehicleID, req.DriverID,
+			req.DepartTimeOverride, req.DurationMinOverride, req.NotClaimedAA09, req.Reason, actorID,
+		)
+		if err == nil {
+			if store, ok := s.formRepo.(CorrectionFingerprintStore); ok {
+				err = store.SetCorrectionFingerprint(ctx, rideID, fingerprint)
+			}
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("failed to correct ride record: %w", err)
 	}
 
 	if s.auditRepo != nil {
 		entityIDStr := rideID.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "correct",
 			EntityType: "ride_records",
 			EntityID:   &entityIDStr,
-			AfterData:  req,
+			BeforeData: newRideAuditSnapshot(before),
+			AfterData:  newRideCorrectionAuditSnapshot(rideID, req),
 			IPAddress:  &ip,
 			UserAgent:  &ua,
-		})
+		}); err != nil {
+			slog.Error("ride correction audit write failed", "action", "correct", "entity_id", rideID.String(), "error", err)
+		}
 	}
 
 	return nil
@@ -492,29 +799,65 @@ func (s *RideService) ManualReportRide(
 		return nil, fmt.Errorf("無效的搭乘狀態：%s", req.EffectiveStatus)
 	}
 
-	serviceDate, err := time.Parse("2006-01-02", req.ServiceDate)
+	serviceDate, err := rocdate.ParseDate(req.ServiceDate)
 	if err != nil {
 		return nil, fmt.Errorf("無效的服務日期格式：%s", req.ServiceDate)
 	}
 
-	// 車輛未指定時由排班回退取得預設車輛
+	// 人工補登只能落在有效排班已定義的趟次；即使請求自行指定車輛，也不能
+	// 藉此建立不存在於排班的任意 leg。
+	if s.caseRepo == nil {
+		return nil, ErrInvalidManualRideLeg
+	}
+	sched, err := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, req.CaseID, serviceDate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load active schedule: %w", err)
+	}
+	if sched == nil {
+		return nil, ErrInvalidManualRideLeg
+	}
+	if len(sched.Weekdays) > 0 {
+		weekday := int16(serviceDate.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		weekdayScheduled := false
+		for _, scheduledWeekday := range sched.Weekdays {
+			if scheduledWeekday == weekday {
+				weekdayScheduled = true
+				break
+			}
+		}
+		if !weekdayScheduled {
+			return nil, ErrInvalidManualRideLeg
+		}
+	}
+	var scheduledLeg *ScheduleLeg
+	for i := range sched.Legs {
+		if sched.Legs[i].LegSeq == req.LegSeq {
+			scheduledLeg = &sched.Legs[i]
+			break
+		}
+	}
+	if scheduledLeg == nil {
+		return nil, ErrInvalidManualRideLeg
+	}
+
 	var vehicleID uuid.UUID
 	if req.VehicleID != nil && *req.VehicleID != uuid.Nil {
 		vehicleID = *req.VehicleID
-	} else if s.caseRepo != nil {
-		sched, _ := s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, req.CaseID, serviceDate)
-		if sched != nil {
-			for _, l := range sched.Legs {
-				if l.LegSeq == req.LegSeq && l.VehicleID != nil {
-					vehicleID = *l.VehicleID
-					break
-				}
-			}
-		}
+	} else if scheduledLeg.VehicleID != nil {
+		vehicleID = *scheduledLeg.VehicleID
+	}
+	if vehicleID == uuid.Nil {
+		return nil, ErrManualRideVehicleRequired
 	}
 
-	existingRec, _ := s.formRepo.GetRideRecordForSlot(ctx, req.CaseID, serviceDate, req.LegSeq)
-	now := time.Now().UTC()
+	existingRec, err := s.formRepo.GetRideRecordForSlot(ctx, req.CaseID, serviceDate, req.LegSeq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load existing ride record: %w", err)
+	}
+	now := clock.Now()
 
 	rec := RideRecord{
 		CaseID:              req.CaseID,
@@ -547,16 +890,19 @@ func (s *RideService) ManualReportRide(
 
 	if s.auditRepo != nil {
 		entityIDStr := rec.ID.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "manual_report",
 			EntityType: "ride_records",
 			EntityID:   &entityIDStr,
-			AfterData:  req,
+			BeforeData: newRideAuditSnapshot(existingRec),
+			AfterData:  newRideAuditSnapshot(&rec),
 			IPAddress:  &ip,
 			UserAgent:  &ua,
-		})
+		}); err != nil {
+			slog.Error("manual ride audit write failed", "action", "manual_report", "entity_id", rec.ID.String(), "error", err)
+		}
 	}
 
 	return &rec, nil
@@ -582,7 +928,7 @@ type ResolveConflictInput struct {
 }
 
 // ResolveConflict 人工裁決同車衝突回報，把裁決結果寫回搭乘紀錄並留存稽核。
-func (s *RideService) ResolveConflict(ctx context.Context, rideID uuid.UUID, req ResolveConflictInput, actorID uuid.UUID, actorRole string) error {
+func (s *RideService) ResolveConflict(ctx context.Context, rideID uuid.UUID, req ResolveConflictInput, actorID uuid.UUID, actorRole string, requestMetadata ...string) error {
 	before, err := s.formRepo.GetRideRecordByID(ctx, rideID)
 	if err != nil {
 		return fmt.Errorf("failed to load ride record: %w", err)
@@ -601,15 +947,31 @@ func (s *RideService) ResolveConflict(ctx context.Context, rideID uuid.UUID, req
 
 	if s.auditRepo != nil {
 		entityIDStr := rideID.String()
-		_ = s.auditRepo.Write(ctx, AuditEntry{
+		ip, ua := "", ""
+		if len(requestMetadata) > 0 {
+			ip = requestMetadata[0]
+		}
+		if len(requestMetadata) > 1 {
+			ua = requestMetadata[1]
+		}
+		if err := s.auditRepo.Write(ctx, AuditEntry{
 			ActorID:    &actorID,
 			ActorRole:  &actorRole,
 			Action:     "resolve_conflict",
 			EntityType: "ride_records",
 			EntityID:   &entityIDStr,
-			BeforeData: before,
-			AfterData:  req,
-		})
+			BeforeData: newRideAuditSnapshot(before),
+			AfterData: rideConflictResolutionAuditSnapshot{
+				ID:          rideID,
+				VehicleID:   req.VehicleID,
+				DriverID:    req.DriverID,
+				HasConflict: false,
+			},
+			IPAddress: &ip,
+			UserAgent: &ua,
+		}); err != nil {
+			slog.Error("ride conflict audit write failed", "action", "resolve_conflict", "entity_id", rideID.String(), "error", err)
+		}
 	}
 
 	return nil
@@ -624,6 +986,7 @@ type IssueRide struct {
 	LegSeq      int16
 	Description string
 	Vehicles    []string
+	RawPayload  string
 }
 
 // ListIssues 依 issueType 分派查詢「異常集中處理」清單，month 格式為 YYYY-MM。
@@ -708,6 +1071,7 @@ func (s *RideService) listImportErrorIssues(ctx context.Context, start, end time
 			CaseName:    r.DriverNameRaw,
 			ServiceDate: r.ServiceDate,
 			Description: describeAnomalyFlags(r.AnomalyFlags),
+			RawPayload:  r.RawPayload,
 		})
 	}
 	return items, total, nil

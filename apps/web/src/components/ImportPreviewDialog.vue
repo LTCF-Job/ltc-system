@@ -40,7 +40,7 @@
         :auto-upload="false"
         :limit="1"
         :on-change="handleFileChange"
-        accept=".xlsx,.xls"
+        accept=".xlsx"
         style="width: 100%; margin-top: 16px;"
       >
         <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
@@ -49,7 +49,7 @@
         </div>
         <template #tip>
           <div class="el-upload__tip">
-            僅支援 .xlsx、.xls 格式之批次匯入檔案
+            僅支援 .xlsx 格式之批次匯入檔案
           </div>
         </template>
       </el-upload>
@@ -111,6 +111,7 @@
           name="columns"
           :checked-duplicate-rows="checkedDuplicateRows"
           :toggle-duplicate-row="toggleDuplicateRow"
+          :get-row-id="getRowId"
         />
       </el-table>
 
@@ -136,9 +137,22 @@
       </div>
 
       <div v-if="commitResult" class="result-list" role="status">
-        <h4>匯入結果：成功 {{ commitResult.importedCount }} 筆，略過 {{ commitResult.skippedRows.length }} 筆</h4>
+        <h4>
+          匯入結果：成功 {{ commitResult.importedCount }} 筆，
+          已完成 {{ commitResult.alreadyImportedCount ?? 0 }} 筆，
+          <template v-if="commitResult.stagedDuplicateCount">
+            待裁決 {{ commitResult.stagedDuplicateCount }} 筆，
+          </template>
+          略過 {{ skippedCount }} 筆，
+          失敗 {{ commitResult.failedCount ?? 0 }} 筆
+        </h4>
         <ul v-if="commitResult.skippedRows.length">
           <li v-for="row in commitResult.skippedRows" :key="`${row.rowIndex}-${row.caseName}`">
+            第 {{ row.rowIndex }} 列（{{ row.caseName }}）：{{ row.reasons.join('；') }}
+          </li>
+        </ul>
+        <ul v-if="commitResult.failedRows && commitResult.failedRows.length" class="failed-row-list">
+          <li v-for="row in commitResult.failedRows" :key="`failed-${row.rowIndex}-${row.caseName}`">
             第 {{ row.rowIndex }} 列（{{ row.caseName }}）：{{ row.reasons.join('；') }}
           </li>
         </ul>
@@ -153,22 +167,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { UploadFilled, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import axios from 'axios'
 import type { DryRunImportResultDTO } from '@/types/api'
 
 interface ImportCommitResult {
   importedCount: number
+  alreadyImportedCount?: number
+  failedCount?: number
+  // 個案匯入專用：疑似重複列不建立個案，改進待裁決暫存；不列出來會讓整批都是重複的
+  // 匯入看起來像什麼都沒發生。照護人員匯入沒有這個欄位，值為 undefined 就不顯示。
+  stagedDuplicateCount?: number
   skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
+  failedRows?: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
   warnings?: Array<{ rowIndex: number; caseName?: string; field?: string; message: string }>
 }
 
 const props = defineProps<{
   title: string
   onDryRun: (file: File) => Promise<DryRunImportResultDTO>
-  onCommit: (file: File, includeDuplicateRows: number[]) => Promise<ImportCommitResult>
+  onCommit: (file: File, includeDuplicateRows: string[]) => Promise<ImportCommitResult>
   onDownloadTemplate?: () => Promise<void> | void
 }>()
 
@@ -183,14 +204,22 @@ const submitting = ref(false)
 const downloadingTemplate = ref(false)
 const dryRunResult = ref<DryRunImportResultDTO | null>(null)
 const commitResult = ref<ImportCommitResult | null>(null)
+const skippedCount = computed(() => {
+  if (!commitResult.value) return 0
+  return Math.max(0, commitResult.value.skippedRows.length - (commitResult.value.alreadyImportedCount ?? 0))
+})
 // 疑似重複列預設不勾選（略過），使用者需主動勾選才會一併匯入
-const checkedDuplicateRows = ref<Set<number>>(new Set())
+const checkedDuplicateRows = ref<Set<string>>(new Set())
 
-function toggleDuplicateRow(rowIndex: number, checked: boolean) {
+function getRowId(row: Record<string, any>, index: number): string {
+  return String(row.rowId ?? `${row.sheetName ?? 'sheet'}:${row.rowIndex ?? index}`)
+}
+
+function toggleDuplicateRow(rowId: string, checked: boolean) {
   if (checked) {
-    checkedDuplicateRows.value.add(rowIndex)
+    checkedDuplicateRows.value.add(rowId)
   } else {
-    checkedDuplicateRows.value.delete(rowIndex)
+    checkedDuplicateRows.value.delete(rowId)
   }
 }
 
@@ -216,6 +245,14 @@ function handleFileChange(uploadFile: any) {
   selectedFile.value = uploadFile.raw
 }
 
+// API 錯誤已由 axios 攔截器統一提示，這裡只負責補上前端自身的例外（例如回應欄位形狀
+// 不如預期而丟出的 TypeError）；沒有這層提示，例外會被 finally 吃掉而看起來像按鈕沒反應。
+function notifyUnexpectedFailure(err: unknown, action: string) {
+  if (axios.isAxiosError(err)) return
+  console.error(`[ImportPreviewDialog] ${action}失敗`, err)
+  ElMessage.error(`${action}失敗，請重新嘗試或聯繫系統管理員`)
+}
+
 async function startDryRun() {
   if (!selectedFile.value) return
   analyzing.value = true
@@ -231,6 +268,8 @@ async function startDryRun() {
       errors: rawData.errors || [],
       warnings: rawData.warnings || []
     }
+  } catch (err) {
+    notifyUnexpectedFailure(err, '解析檔案')
   } finally {
     analyzing.value = false
   }
@@ -255,8 +294,14 @@ async function confirmImport() {
   try {
     const result = await props.onCommit(selectedFile.value, Array.from(checkedDuplicateRows.value))
     commitResult.value = result
-    ElMessage.success(`已匯入 ${result.importedCount} 筆有效資料`)
+    if ((result.failedCount ?? 0) > 0) {
+      ElMessage.warning(`已匯入 ${result.importedCount} 筆，另有 ${result.failedCount} 筆失敗，請查看結果明細`)
+    } else {
+      ElMessage.success(`已匯入 ${result.importedCount} 筆有效資料`)
+    }
     emit('success')
+  } catch (err) {
+    notifyUnexpectedFailure(err, '匯入資料')
   } finally {
     submitting.value = false
   }

@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+var ErrLookupNotFound = errors.New("lookup not found")
 
 // SiteRef 是匯入比對單位時需要的最小資訊。
 type SiteRef struct {
@@ -29,28 +32,31 @@ type VehicleLookup interface {
 	GetByDisplayName(ctx context.Context, displayName string) (*VehicleRef, error)
 }
 
-// TransportPreferenceWriter 寫入個案的單位與去回程車輛偏好。nil 的 ID 表示該欄位
-// 維持現況，raw name 於對應 ID 為 nil 時保留原始名稱待人工關聯。
+// TransportPreferenceWriter 以 PUT 完整替換個案的單位與去回程車輛偏好。
 type TransportPreferenceWriter interface {
 	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 }
 
-// NewCase 是建立個案所需的輸入，僅 Name 為必要欄位。
+// NewCase 是建立個案所需的輸入，僅 Name 為必要欄位。AllowInvalidNationalID 讓身分證字號
+// 格式錯誤時不擋列，改由 casemgmt 標記待維護；BirthDateRaw 是生日解析失敗時的原始字串。
 type NewCase struct {
-	Name              string
-	NationalID        string
-	HouseholdType     *string
-	Gender            *string
-	BirthDate         *time.Time
-	CareContactRole   *string
-	CareContactName   *string
-	RegisteredAddress *string
-	HomeAddress       *string
-	Region            *string
-	ServiceCategory   int
-	ServiceUsageType  int
-	Status            string
-	Remarks           *string
+	ID                     uuid.UUID
+	Name                   string
+	NationalID             string
+	AllowInvalidNationalID bool
+	HouseholdType          *string
+	Gender                 *string
+	BirthDate              *time.Time
+	BirthDateRaw           *string
+	CareContactRole        *string
+	CareContactName        *string
+	RegisteredAddress      *string
+	HomeAddress            *string
+	Region                 *string
+	ServiceCategory        int
+	ServiceUsageType       int
+	Status                 string
+	Remarks                *string
 }
 
 // Actor 代表發動匯入的操作者與來源資訊，供稽核留痕使用。
@@ -91,4 +97,44 @@ type TemplateRenderer interface {
 // TxRunner 讓單列匯入的多次寫入落在同一個資料庫交易內。
 type TxRunner interface {
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// CaseImportIdempotencyStore 以檔案雜湊與來源列識別碼抑制重試造成的重複建立。
+// 實作必須在目前列的 transaction 內以唯一鍵 claim，避免併發匯入穿透。
+type CaseImportIdempotencyStore interface {
+	ClaimCaseImportRow(ctx context.Context, fileHash, rowKey string, caseID uuid.UUID) (bool, error)
+}
+
+// StageDuplicateCandidate 是疑似重複個案暫存所需的完整列輸入。
+type StageDuplicateCandidate struct {
+	RowIndex               int
+	SheetName              string
+	Name                   string
+	NationalID             string
+	HouseholdType          *string
+	Gender                 *string
+	BirthDate              *time.Time
+	BirthDateRaw           *string
+	CareContactRole        *string
+	CareContactName        *string
+	RegisteredAddress      *string
+	HomeAddress            *string
+	Region                 *string
+	ServiceCategory        int
+	ServiceUsageType       int
+	Remarks                *string
+	SiteID                 *uuid.UUID
+	SiteNameRaw            string
+	OutboundVehicleID      *uuid.UUID
+	OutboundVehicleNameRaw string
+	InboundVehicleID       *uuid.UUID
+	InboundVehicleNameRaw  string
+	DuplicateCaseID        uuid.UUID
+}
+
+// DuplicateCandidateStager 讓匯入在偵測到疑似重複個案時，把整列資料交給擁有加密
+// 金鑰與個案能力的模組存入待裁決暫存，不直接建立個案。
+type DuplicateCandidateStager interface {
+	// StageDuplicateRow 寫入一筆暫存列；同一 (fileHash, rowKey) 已存在時回傳 alreadyStaged=true。
+	StageDuplicateRow(ctx context.Context, fileHash, rowKey string, in StageDuplicateCandidate) (id uuid.UUID, alreadyStaged bool, err error)
 }

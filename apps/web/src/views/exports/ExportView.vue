@@ -111,16 +111,16 @@
       </div>
 
       <el-alert
-        v-if="currentJob.skipped?.length"
+        v-if="currentJob.dataGaps?.length"
         type="warning"
         show-icon
         :closable="false"
-        title="部分趟次資料不完整，未納入申報"
+        title="部分欄位資料不完整，該欄位已留白匯出"
         class="skip-alert"
       >
         <ul class="skip-list">
-          <li v-for="(skip, index) in currentJob.skipped" :key="index">
-            {{ skip.caseName }}：{{ skipReasonLabel(skip.reason) }}（{{ skip.count }} 筆）
+          <li v-for="(gap, index) in currentJob.dataGaps" :key="index">
+            {{ gap.caseName }}：{{ dataGapLabel(gap.reason) }}（{{ gap.count }} 筆）
           </li>
         </ul>
       </el-alert>
@@ -271,9 +271,8 @@ import PageHeader from '@/components/PageHeader.vue'
 import CaseSelectDialog from '@/components/CaseSelectDialog.vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import PrecheckResult from '@/components/PrecheckResult.vue'
-import { formatDateTime } from '@/utils/formatters'
+import { formatDateTime, currentLocalMonth } from '@/utils/formatters'
 import {
   precheckExport,
   createExportJob,
@@ -289,7 +288,7 @@ import {
   REGION_LABELS,
   EXPORT_STATUS_LABELS,
   EXPORT_MODE_LABELS,
-  EXPORT_SKIP_REASON_LABELS
+  EXPORT_DATA_GAP_LABELS
 } from '@/types/domain'
 import type { Region, ExportMode, ExportJobStatus } from '@/types/domain'
 import type {
@@ -302,7 +301,7 @@ import type {
 const authStore = useAuthStore()
 const { toRocMonth, toRocPeriodYm, formatRocMonthLabel } = useRocMonth()
 
-const selectedDate = ref<string>('2026-07')
+const selectedDate = ref<string>(currentLocalMonth())
 const checking = ref(false)
 const exporting = ref(false)
 const precheckResult = ref<PrecheckResultDTO | null>(null)
@@ -343,8 +342,8 @@ function rocMonthOf(periodYm: string): string {
   return `${periodYm.slice(0, 3)}-${periodYm.slice(3)}`
 }
 
-function skipReasonLabel(reason: string): string {
-  return EXPORT_SKIP_REASON_LABELS[reason] || reason
+function dataGapLabel(reason: string): string {
+  return EXPORT_DATA_GAP_LABELS[reason] || reason
 }
 
 // 地區是個案清單的篩選條件，改地區後既有勾選可能已不在清單內，一律清空重選
@@ -364,7 +363,8 @@ async function handleRunPrecheck() {
   try {
     const res = await precheckExport({
       periodYm: toRocPeriodYm(selectedDate.value),
-      region: form.region || undefined
+      region: form.region || undefined,
+      caseIds: [...form.caseIds]
     })
     precheckResult.value = res
   } finally {
@@ -381,13 +381,13 @@ async function handleStartExport() {
   await handleRunPrecheck()
 
   if (precheckResult.value?.hasErrors) {
-    ElMessage.error('前置檢核存在阻斷性錯誤，無法執行匯出，請先修正問題。')
+    ElMessage.error('前置檢核存在未裁決的混車衝突，無法執行匯出，請先完成裁決。')
     return
   }
 
   if (precheckResult.value?.hasWarnings) {
     await ElMessageBox.confirm(
-      '本次匯出含有警告事項未處理，確定仍要繼續執行匯出？',
+      '本次匯出有個案資料不完整，缺少的欄位會留白匯出，確定仍要繼續執行匯出？',
       '匯出警告確認',
       {
         confirmButtonText: '繼續匯出',
@@ -410,8 +410,8 @@ async function handleStartExport() {
     currentJob.value = await createExportJob(jobReq)
     ElMessage.success(`已產生 ${currentJob.value.totalCases ?? 0} 份申報檔案`)
     await fetchHistory()
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '產生申報檔失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     exporting.value = false
   }
@@ -424,8 +424,8 @@ async function handleDownloadCaseFile(file: ExportJobFileDTO) {
     const blob = await downloadExportCaseFile(currentJob.value.id, file.caseId)
     downloadBlob(blob, file.fileName)
     ElMessage.success(`${file.fileName} 下載成功`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載檔案失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     downloadingCaseId.value = ''
   }
@@ -438,8 +438,8 @@ async function handleDownloadZip() {
     const blob = await downloadExportZip(currentJob.value.id)
     downloadBlob(blob, currentJob.value.zipFileName || 'gov-claim.zip')
     ElMessage.success('壓縮檔下載成功')
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載壓縮檔失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     downloadingZip.value = false
   }
@@ -451,8 +451,8 @@ async function openHistoryDetail(row: ExportJobDTO) {
   loadingHistoryDetail.value = true
   try {
     historyDetail.value = await getExportJob(row.id)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入匯出明細失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     loadingHistoryDetail.value = false
   }

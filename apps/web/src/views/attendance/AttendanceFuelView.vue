@@ -497,7 +497,6 @@ import TableRowActions from '@/components/TableRowActions.vue'
 import DataTablePage from '@/components/DataTablePage.vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import {
   getMonthAttendance,
   upsertAttendance,
@@ -507,7 +506,8 @@ import {
   deleteFuelLog
 } from '@/api/attendance'
 import { listHolidays, type HolidayItem } from '@/api/holidays'
-import { listDrivers, listVehicles } from '@/api/masters'
+import { listAllDrivers, listAllVehicles } from '@/api/masters'
+import { currentLocalMonth, todayLocal } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/auth'
 import type {
   MonthAttendanceReportDTO,
@@ -524,7 +524,7 @@ const activeTab = ref('attendance')
 // --- 出勤相關狀態 ---
 const attendanceLoading = ref(false)
 const attendanceSaving = ref(false)
-const attendanceMonth = ref('2026-07')
+const attendanceMonth = ref(currentLocalMonth())
 const attendanceQuery = ref('')
 const selectedDriverId = ref<string>()
 const attendanceReport = ref<MonthAttendanceReportDTO | null>(null)
@@ -594,13 +594,13 @@ const fuelRules = {
 async function fetchOptions() {
   try {
     const [dRes, vRes] = await Promise.all([
-      listDrivers({ status: 'active', pageSize: 100 }),
-      listVehicles({ status: 'active', pageSize: 100 })
+      listAllDrivers({ status: 'active' }),
+      listAllVehicles({ status: 'active' })
     ])
-    drivers.value = dRes.data
-    vehicles.value = vRes.data
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入主檔選項失敗'))
+    drivers.value = dRes
+    vehicles.value = vRes
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -621,12 +621,12 @@ async function fetchAttendance() {
         attendanceQuery.value || undefined
       ),
       // 行事曆假日屬月曆輔助標記，若查詢受阻時降級為空清單，避免阻斷主出勤紀錄查詢
-      listHolidays({ startDate, endDate }).catch(() => ({ data: [] } as any))
+      listHolidays({ startDate, endDate }).catch(() => [])
     ])
     attendanceReport.value = attRes
-    holidayMap.value = Object.fromEntries(((holidayRes as any)?.data || []).map((item: any) => [item.holidayDate, item]))
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢出勤紀錄失敗'))
+    holidayMap.value = Object.fromEntries(holidayRes.map((item) => [item.holidayDate, item]))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     attendanceLoading.value = false
   }
@@ -745,8 +745,8 @@ async function handleSaveAttendance() {
     ElMessage.success('出勤狀態更新成功')
     attendanceDialogVisible.value = false
     fetchAttendance()
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新出勤狀態失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     attendanceSaving.value = false
   }
@@ -767,8 +767,8 @@ async function fetchFuelLogs() {
     })
     fuelLogs.value = res.data
     fuelTotal.value = res.meta.total
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '查詢油資紀錄失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     fuelLoading.value = false
   }
@@ -796,7 +796,7 @@ function openFuelDialog(row?: any) {
     editingFuelId.value = null
     fuelForm.vehicleId = fuelVehicleId.value || ''
     fuelForm.driverId = undefined
-    fuelForm.fuelDate = new Date().toISOString().slice(0, 10)
+    fuelForm.fuelDate = todayLocal()
     fuelForm.liters = 0
     fuelForm.cost = 0
     fuelForm.receiptUrl = ''
@@ -819,8 +819,8 @@ async function handleSaveFuel() {
       }
       fuelDialogVisible.value = false
       fetchFuelLogs()
-    } catch (err: any) {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存油資紀錄失敗'))
+    } catch {
+      // 全域攔截器負責顯示 API 錯誤。
     } finally {
       fuelSaving.value = false
     }
@@ -837,10 +837,8 @@ async function handleDeleteFuel(row: any) {
     await deleteFuelLog(row.id)
     ElMessage.success('油資紀錄已刪除')
     fetchFuelLogs()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除失敗'))
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆由各自的全域流程處理。
   }
 }
 

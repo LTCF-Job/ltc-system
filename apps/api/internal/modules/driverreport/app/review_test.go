@@ -128,3 +128,74 @@ func TestListSubmissionReview_CombinesCaseAndDriverIssuesOnTheSameRow(t *testing
 	require.NotNil(t, driverOnly.DriverIssue)
 	assert.Equal(t, "陳大文", driverOnly.DriverIssue.DriverNameRaw)
 }
+
+func TestListSubmissionReview_IncludesRowConflicts(t *testing.T) {
+	conflictSubmission := uuid.New()
+	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+
+	store := &stubStore{}
+	ingestor := &fakeIngestor{
+		rowConflicts: []RowConflictView{
+			{
+				ID: "conflict-1", SubmissionID: conflictSubmission.String(),
+				FormTitle: "竹南2車匯報表", VehicleName: "竹南2車", ServiceDate: serviceDate.Format("2006-01-02"),
+				CaseID: testCaseID, CaseName: "吳桂", LegSeq: 1,
+				PreviousReported: "boarded", NewReported: "absent",
+			},
+		},
+	}
+	svc := NewDriverReportService(store, stubExcel{}, nil, nil, nil, ingestor, nil, nil, directTxRunner{})
+
+	reviews, err := svc.ListSubmissionReview(context.Background())
+	require.NoError(t, err)
+	require.Len(t, reviews, 1)
+	assert.Equal(t, conflictSubmission.String(), reviews[0].SubmissionID)
+	require.Len(t, reviews[0].RowConflicts, 1)
+	assert.Equal(t, "conflict-1", reviews[0].RowConflicts[0].ID)
+	assert.Equal(t, "boarded", reviews[0].RowConflicts[0].PreviousReported)
+	assert.Equal(t, "absent", reviews[0].RowConflicts[0].NewReported)
+}
+
+func TestResolveRowConflict_DelegatesToRideIngestorWithinTransaction(t *testing.T) {
+	ingestor := &fakeIngestor{}
+	svc := NewDriverReportService(&stubStore{}, stubExcel{}, nil, nil, nil, ingestor, nil, nil, directTxRunner{})
+
+	err := svc.ResolveRowConflict(context.Background(), uuid.New().String(), true, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.True(t, ingestor.resolveUseNew)
+	assert.NotEmpty(t, ingestor.resolveRowConflictID)
+}
+
+func TestResolveRowConflict_SyncsAttendanceWhenDriverApplied(t *testing.T) {
+	driverID := uuid.New()
+	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+	ingestor := &fakeIngestor{resolveAppliedDriver: &driverID, resolveAppliedDate: &serviceDate}
+	registrar := &fakeAttendanceRegistrar{}
+	svc := NewDriverReportService(&stubStore{}, stubExcel{}, nil, nil, nil, ingestor, registrar, nil, directTxRunner{})
+
+	err := svc.ResolveRowConflict(context.Background(), uuid.New().String(), true, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	require.Len(t, registrar.calls, 1, "採用新資料且司機有值時要同步出勤，比照初次匯入的既有流程")
+	assert.Equal(t, driverID, registrar.calls[0].driverID)
+}
+
+func TestResolveRowConflict_RejectsInvalidConflictID(t *testing.T) {
+	ingestor := &fakeIngestor{}
+	svc := NewDriverReportService(&stubStore{}, stubExcel{}, nil, nil, nil, ingestor, nil, nil, directTxRunner{})
+
+	err := svc.ResolveRowConflict(context.Background(), "not-a-uuid", true, Actor{})
+
+	require.Error(t, err)
+	assert.Empty(t, ingestor.resolveRowConflictID)
+}
+
+func TestResolveRowConflict_RequiresTransactionRunner(t *testing.T) {
+	svc := NewDriverReportService(&stubStore{}, stubExcel{}, nil, nil, nil, &fakeIngestor{}, nil, nil, nil)
+
+	err := svc.ResolveRowConflict(context.Background(), uuid.New().String(), true, Actor{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "transaction runner not configured")
+}

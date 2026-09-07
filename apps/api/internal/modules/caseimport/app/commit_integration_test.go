@@ -4,12 +4,11 @@ package app_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -62,14 +61,15 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	auditSvc := auditapp.NewService(auditinfra.NewAuditRepository(pool))
 	txRunner := pgxdb.NewTxRunner(pool)
 
-	caseSvc := caseapp.NewCaseService(cfg, caseRepo, siteAdapter{siteRepo}, auditWriter{auditSvc}, caseinfra.NewExcelRenderer())
+	caseSvc := caseapp.NewCaseService(cfg, caseRepo, siteAdapter{siteRepo}, auditWriter{auditSvc}, caseinfra.NewExcelRenderer(), caseinfra.NewCaseDuplicateStagingRepository(pool))
 	excel := importinfra.NewExcelAdapter()
 	importSvc := importapp.NewImportService(
 		caseRegistrar{caseSvc},
 		caseDuplicateFinder{caseSvc},
+		caseDuplicateStager{caseSvc},
 		siteAdapter{siteRepo},
 		vehicleAdapter{vehicleRepo},
-		caseRepo,
+		failingPreferenceWriter{delegate: caseRepo, failName: "FORCE_ROLLBACK"},
 		excel,
 		excel,
 		txRunner,
@@ -77,7 +77,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 
 	region := "hsinchu-" + uuid.NewString()[:8]
 	site := masterapp.Site{
-		Code:     "T-" + uuid.NewString()[:8],
 		Name:     "測試單位-" + uuid.NewString()[:8],
 		Address:  "測試地址",
 		Region:   region,
@@ -96,36 +95,35 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM sites WHERE id = $1`, site.ID)
 	})
 
-
 	// Row A：正常成功列。
 	rowA := importapp.CaseImportRowResult{
-		RowIndex:       1,
-		Name:           "受測個案A",
-		NationalID:     "A202559750",
-		HomeAddress:    "苗栗縣測試路1號",
-		Region:         region,
-		SiteName:       site.Name,
+		RowIndex:    1,
+		Name:        "受測個案A",
+		NationalID:  "A202559750",
+		HomeAddress: "苗栗縣測試路1號",
+		Region:      region,
+		SiteName:    site.Name,
 	}
 
-	// Row B：身分證字號檢查碼故意錯誤，觸發 CreateCase 失敗，用來驗證批次不會因
-	// 單列失敗而中止其餘列的處理。
+	// Row B：故意讓交通偏好 writer 在個案主檔寫入後失敗，用來驗證同一列的
+	// 個案主檔會隨交易回滾，且批次不會因單列失敗而中止其餘列的處理。
 	rowB := importapp.CaseImportRowResult{
-		RowIndex:       2,
-		Name:           "受測個案B",
-		NationalID:     "A100000000",
-		HomeAddress:    "苗栗縣測試路2號",
-		Region:         region,
-		SiteName:       site.Name,
+		RowIndex:        2,
+		Name:            "受測個案B",
+		HomeAddress:     "苗栗縣測試路2號",
+		Region:          region,
+		SiteName:        site.Name,
+		OutboundVehicle: "FORCE_ROLLBACK",
 	}
 
 	// Row C：緊接失敗列之後的正常列，用來驗證批次不會因單列失敗而提早中止。
 	rowC := importapp.CaseImportRowResult{
-		RowIndex:       3,
-		Name:           "受測個案C",
-		NationalID:     "G121806465",
-		HomeAddress:    "苗栗縣測試路3號",
-		Region:         region,
-		SiteName:       site.Name,
+		RowIndex:    3,
+		Name:        "受測個案C",
+		NationalID:  "G121806465",
+		HomeAddress: "苗栗縣測試路3號",
+		Region:      region,
+		SiteName:    site.Name,
 	}
 
 	preview := &importapp.CaseImportPreviewResult{
@@ -141,16 +139,16 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	}
 
 	require.Equal(t, 2, result.ImportedCount, "Row A 與 Row C 應成功匯入")
-	require.Len(t, result.SkippedRows, 1, "Row B 應因身分證字號檢查碼錯誤而被記為略過")
+	require.Len(t, result.SkippedRows, 1, "Row B 應因列交易失敗而被記為略過")
 	require.Equal(t, 2, result.SkippedRows[0].RowIndex)
 
 	// 驗證 Row B 沒有殘留孤兒個案。
-	hmacIdx := crypto.Index(rowB.NationalID, cfg.HMACKey)
-	orphan, err := caseRepo.GetByHMAC(ctx, hmacIdx)
-	require.ErrorIs(t, err, pgx.ErrNoRows, "Row B 的個案主檔必須未寫入")
-	require.Nil(t, orphan)
+	orphans, orphanCount, err := caseRepo.List(ctx, region, "", rowB.Name, 1, 10, false, false)
+	require.NoError(t, err)
+	require.Zero(t, orphanCount, "Row B 的個案主檔必須未寫入")
+	require.Empty(t, orphans, "Row B 的個案主檔必須未寫入")
 
-	// 驗證 Row A／Row C 確實成功落地。
+	// 驗證 Row A／Row C 確實成功寫入。
 	for _, nid := range []string{rowA.NationalID, rowC.NationalID} {
 		hmacIdx := crypto.Index(nid, cfg.HMACKey)
 		created, err := caseRepo.GetByHMAC(ctx, hmacIdx)
@@ -214,15 +212,28 @@ func (a vehicleAdapter) GetByDisplayName(ctx context.Context, displayName string
 	return &importapp.VehicleRef{ID: v.ID}, nil
 }
 
+type failingPreferenceWriter struct {
+	delegate importapp.TransportPreferenceWriter
+	failName string
+}
+
+func (w failingPreferenceWriter) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
+	if outboundVehicleNameRaw == w.failName {
+		return errors.New("forced preference write failure")
+	}
+	return w.delegate.UpsertTransportPreference(ctx, caseID, siteID, outboundVehicleID, inboundVehicleID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw)
+}
+
 type caseRegistrar struct{ svc *caseapp.CaseService }
 
 func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, actor importapp.Actor) (uuid.UUID, error) {
 	entity, err := a.svc.CreateCase(ctx, caseapp.CreateCaseRequest{
+		ID:   in.ID,
 		Name: in.Name, NationalID: in.NationalID,
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
-		ServiceCategory: intPointerOrNilForTest(in.ServiceCategory),
+		ServiceCategory:  intPointerOrNilForTest(in.ServiceCategory),
 		ServiceUsageType: intPointerOrNilForTest(in.ServiceUsageType), Status: in.Status,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {
@@ -252,4 +263,24 @@ func (a caseDuplicateFinder) FindDuplicate(ctx context.Context, nationalID, name
 		return nil, err
 	}
 	return &importapp.DuplicateRef{CaseID: found.ID, CaseName: found.Name}, nil
+}
+
+type caseDuplicateStager struct{ svc *caseapp.CaseService }
+
+func (a caseDuplicateStager) StageDuplicateRow(ctx context.Context, fileHash, rowKey string, in importapp.StageDuplicateCandidate) (uuid.UUID, bool, error) {
+	return a.svc.StageDuplicateCandidate(ctx, caseapp.StageDuplicateCandidateInput{
+		FileHash: fileHash, RowKey: rowKey,
+		RowIndex: in.RowIndex, SheetName: in.SheetName,
+		Name: in.Name, NationalID: in.NationalID,
+		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate, BirthDateRaw: in.BirthDateRaw,
+		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
+		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
+		ServiceCategory:  intPointerOrNilForTest(in.ServiceCategory),
+		ServiceUsageType: intPointerOrNilForTest(in.ServiceUsageType),
+		Remarks:          in.Remarks,
+		SiteID:           in.SiteID, SiteNameRaw: in.SiteNameRaw,
+		OutboundVehicleID: in.OutboundVehicleID, OutboundVehicleNameRaw: in.OutboundVehicleNameRaw,
+		InboundVehicleID: in.InboundVehicleID, InboundVehicleNameRaw: in.InboundVehicleNameRaw,
+		DuplicateCaseID: in.DuplicateCaseID,
+	})
 }

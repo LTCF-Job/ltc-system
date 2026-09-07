@@ -149,12 +149,13 @@ import { ref, onMounted } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { ElMessage } from 'element-plus'
 import { getTripSummaryReport, exportTripSummaryExcel } from '@/api/reports'
-import { listVehicles } from '@/api/masters'
+import { listAllVehicles } from '@/api/masters'
 import type { TripSummaryReportDTO, VehicleDTO } from '@/types/api'
 import { REGION_LABELS } from '@/types/domain'
 import { downloadBlob } from '@/utils/download'
+import { currentLocalMonth } from '@/utils/formatters'
 
-const queryMonth = ref('2026-07')
+const queryMonth = ref(currentLocalMonth())
 const queryKeyword = ref('')
 const queryRegion = ref<string | undefined>(undefined)
 const queryVehicle = ref<string | undefined>(undefined)
@@ -166,10 +167,9 @@ const reportData = ref<TripSummaryReportDTO | null>(null)
 
 async function fetchVehicleOptions() {
   try {
-    const res = await listVehicles()
-    vehicleOptions.value = res.data
+    vehicleOptions.value = await listAllVehicles()
   } catch (error) {
-    // handled
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -183,8 +183,8 @@ async function fetchReport() {
       q: queryKeyword.value || undefined
     })
     reportData.value = res
-  } catch (error: any) {
-    ElMessage.error(error?.message || '載入車輛趟數表失敗')
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     loading.value = false
   }
@@ -207,8 +207,8 @@ async function handleExportExcel() {
     })
     downloadBlob(blob, `車輛趟數表-${queryMonth.value}.xlsx`)
     ElMessage.success('趟數表已成功匯出！')
-  } catch (error: any) {
-    ElMessage.error(error?.message || '匯出 Excel 失敗')
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     exporting.value = false
   }

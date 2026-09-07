@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/modules/casemgmt/app"
 	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
@@ -32,10 +31,10 @@ func NewCaseHandler(
 
 // List 查詢個案清單（回傳遮罩身分證）。
 func (h *CaseHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	if pageSize > 100 {
-		pageSize = 100
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
 	}
 	region := c.Query("region")
 	status := c.Query("status")
@@ -65,7 +64,7 @@ func (h *CaseHandler) List(c *gin.Context) {
 // Create 新增個案主檔。
 func (h *CaseHandler) Create(c *gin.Context) {
 	var req CreateCaseRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -100,6 +99,14 @@ func (h *CaseHandler) Reveal(c *gin.Context) {
 		c.Request.Context(), id, actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
 	)
 	if err != nil {
+		if errors.Is(err, app.ErrNationalIDNotConfigured) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "個案尚未設定身分證資料", nil)
+			return
+		}
+		if errors.Is(err, app.ErrRevealAuditUnavailable) {
+			httpx.RespondErrorCode(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, err, nil)
+			return
+		}
 		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "個案不存在或解密失敗", nil)
 		return
 	}
@@ -133,7 +140,7 @@ func (h *CaseHandler) Delete(c *gin.Context) {
 // CreateSchedule 建立個案排班設定與時段明細。
 func (h *CaseHandler) CreateSchedule(c *gin.Context) {
 	var req CreateScheduleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -203,52 +210,154 @@ func (h *CaseHandler) Update(c *gin.Context) {
 	}
 
 	var req struct {
-		Name              *string `json:"name"`
-		HomeAddress       *string `json:"homeAddress"`
-		Region            *string `json:"region"`
-		LTCLevel          *string `json:"ltcLevel"`
-		ServiceCategory   *int    `json:"serviceCategory"`
-		ServiceUsageType  *int    `json:"serviceUsageType"`
-		ClaimEndDate      *string `json:"claimEndDate"`
-		Status            *string `json:"status"`
-		HouseholdType     *string `json:"householdType"`
-		Gender            *string `json:"gender"`
-		BirthDate         *string `json:"birthDate"`
-		CareContactRole   *string `json:"careContactRole"`
-		CareContactName   *string `json:"careContactName"`
-		RegisteredAddress *string `json:"registeredAddress"`
-		Remarks           *string `json:"remarks"`
+		Name              *string      `json:"name"`
+		HomeAddress       *string      `json:"homeAddress"`
+		Region            *string      `json:"region"`
+		LTCLevel          *string      `json:"ltcLevel"`
+		ServiceCategory   *int         `json:"serviceCategory"`
+		ServiceUsageType  *int         `json:"serviceUsageType"`
+		ClaimEndDate      optionalDate `json:"claimEndDate"`
+		Status            *string      `json:"status"`
+		HouseholdType     *string      `json:"householdType"`
+		Gender            *string      `json:"gender"`
+		BirthDate         optionalDate `json:"birthDate"`
+		NationalID        *string      `json:"nationalId"`
+		CareContactRole   *string      `json:"careContactRole"`
+		CareContactName   *string      `json:"careContactName"`
+		RegisteredAddress *string      `json:"registeredAddress"`
+		Remarks           *string      `json:"remarks"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	in := app.UpdateCaseInput{
-		Name:              req.Name,
-		HomeAddress:       req.HomeAddress,
-		Region:            req.Region,
-		LTCLevel:          req.LTCLevel,
-		ServiceCategory:   req.ServiceCategory,
-		ServiceUsageType:  req.ServiceUsageType,
-		Status:            req.Status,
-		HouseholdType:     req.HouseholdType,
-		Gender:            req.Gender,
-		CareContactRole:   req.CareContactRole,
-		CareContactName:   req.CareContactName,
-		RegisteredAddress: req.RegisteredAddress,
-		Remarks:           req.Remarks,
+		Name:                req.Name,
+		HomeAddress:         req.HomeAddress,
+		Region:              req.Region,
+		LTCLevel:            req.LTCLevel,
+		ServiceCategory:     req.ServiceCategory,
+		ServiceUsageType:    req.ServiceUsageType,
+		ClaimEndDate:        req.ClaimEndDate.Value,
+		ClaimEndDatePresent: req.ClaimEndDate.Present,
+		Status:              req.Status,
+		HouseholdType:       req.HouseholdType,
+		Gender:              req.Gender,
+		NationalID:          req.NationalID,
+		CareContactRole:     req.CareContactRole,
+		CareContactName:     req.CareContactName,
+		RegisteredAddress:   req.RegisteredAddress,
+		Remarks:             req.Remarks,
 	}
-	if req.BirthDate != nil {
-		if t, err := time.Parse("2006-01-02", *req.BirthDate); err == nil {
-			in.BirthDate = &t
-		}
-	}
+	in.BirthDate = req.BirthDate.Value
+	in.BirthDatePresent = req.BirthDate.Present
 
-	entity, err := h.masterService.UpdateCase(c.Request.Context(), id, in)
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+	entity, err := h.masterService.UpdateCase(c.Request.Context(), id, in, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
 		if errors.Is(err, app.ErrCaseNotFound) {
 			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrInvalidNationalIDFormat) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "nationalId", Reason: "身分證字號格式錯誤"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateNationalID) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "nationalId", Reason: "此身分證字號已存在於其他個案"},
+			})
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
+}
+
+// ListDuplicateCandidates 列出所有待裁決的疑似重複個案。
+func (h *CaseHandler) ListDuplicateCandidates(c *gin.Context) {
+	list, err := h.masterService.ListDuplicateCandidates(c.Request.Context())
+	if err != nil {
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢待裁決疑似重複個案失敗", nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusOK, newDuplicateCandidateResponses(list), nil)
+}
+
+// RevealDuplicateCandidateNationalID 解密單筆疑似重複個案暫存列的身分證字號，供裁決頁比對。
+func (h *CaseHandler) RevealDuplicateCandidateNationalID(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的暫存列 ID", nil)
+		return
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+	plainID, err := h.masterService.RevealDuplicateCandidateNationalID(c.Request.Context(), id, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
+	if err != nil {
+		if errors.Is(err, app.ErrDuplicateCandidateNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrNationalIDNotConfigured) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "此列尚未設定身分證資料", nil)
+			return
+		}
+		if errors.Is(err, app.ErrRevealAuditUnavailable) {
+			httpx.RespondErrorCode(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, err, nil)
+			return
+		}
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "解密失敗", nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"nationalId": plainID}, nil)
+}
+
+// ResolveDuplicateCandidate 裁決一筆疑似重複個案。
+func (h *CaseHandler) ResolveDuplicateCandidate(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的暫存列 ID", nil)
+		return
+	}
+
+	var req ResolveDuplicateCandidateRequest
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+	entity, err := h.masterService.ResolveDuplicateCandidate(
+		c.Request.Context(), id, req.Decision, req.TargetCaseID, req.MergeRemarks, actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
+	)
+	if err != nil {
+		if errors.Is(err, app.ErrInvalidDuplicateDecision) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "decision", Reason: "decision 必須為 confirmed_new 或 merged_existing"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateCandidateNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateCandidateResolved) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateNationalID) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "nationalId", Reason: "此身分證字號已存在於其他個案"},
+			})
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
@@ -275,7 +384,7 @@ func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 		OutboundVehicleNameRaw string     `json:"outboundVehicleNameRaw"`
 		InboundVehicleNameRaw  string     `json:"inboundVehicleNameRaw"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -283,6 +392,12 @@ func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 	entity, err := h.masterService.UpdateCaseTransportPreference(
 		c.Request.Context(), id, req.SiteID, req.OutboundVehicleID, req.InboundVehicleID,
 		req.SiteNameRaw, req.OutboundVehicleNameRaw, req.InboundVehicleNameRaw,
+		app.AuditContext{
+			ActorID:   auth.GetActorID(c),
+			ActorRole: auth.GetActorRole(c),
+			IPAddress: c.ClientIP(),
+			UserAgent: c.Request.UserAgent(),
+		},
 	)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "更新交通偏好失敗", nil)
@@ -301,16 +416,14 @@ func (h *CaseHandler) GetSchedule(c *gin.Context) {
 		return
 	}
 
-	// TODO: 尚無「個案排班」在無現行排班時的產品規格確認，先誠實回傳查無資料，
-	// 不再回傳假造的竹北日照中心／竹北一車預設排班（原本無論真實查詢成功與否，
-	// 只要查無排班或查詢出錯都會回傳同一組寫死的假資料，兩種情況也未區分）。
-	sched, err := h.masterService.GetActiveScheduleForCaseOnDate(c.Request.Context(), id, time.Now())
+	sched, err := h.masterService.GetActiveScheduleForCaseOnDate(c.Request.Context(), id, clock.Today())
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢個案排班失敗", nil)
 		return
 	}
+	// 個案尚未排班是正常狀態而非錯誤，以 200 搭配 null data 呈現，交由前端顯示「尚無現行排班」
 	if sched == nil {
-		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無現行排班", nil)
+		httpx.RespondSuccess(c, http.StatusOK, nil, nil)
 		return
 	}
 
@@ -319,13 +432,19 @@ func (h *CaseHandler) GetSchedule(c *gin.Context) {
 
 // SaveSchedule 儲存/更新個案排班。
 func (h *CaseHandler) SaveSchedule(c *gin.Context) {
-	var req CreateScheduleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	caseID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的個案 ID", nil)
+		return
+	}
+
+	var req SaveScheduleRequest
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
-	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req.ToService())
+	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req.ToService(caseID))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return

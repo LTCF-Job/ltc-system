@@ -24,7 +24,8 @@ func TestCalculateExpectedRides(t *testing.T) {
 		},
 	}
 
-	rides := CalculateExpectedRides(2026, 7, input)
+	rides, err := CalculateExpectedRides(2026, 7, input)
+	assert.NoError(t, err)
 	assert.NotEmpty(t, rides)
 
 	for _, r := range rides {
@@ -43,16 +44,22 @@ func TestCalculateExpectedRides_PriorityOrder(t *testing.T) {
 		{LegSeq: 1, Direction: "outbound", DepartTime: "09:00"},
 		{LegSeq: 2, Direction: "inbound", DepartTime: "16:00"},
 	}
+	fourLegs := []LegInput{
+		{LegSeq: 1, Direction: "outbound", DepartTime: "08:30"},
+		{LegSeq: 2, Direction: "inbound", DepartTime: "11:30"},
+		{LegSeq: 3, Direction: "outbound", DepartTime: "13:30"},
+		{LegSeq: 4, Direction: "inbound", DepartTime: "16:30"},
+	}
 
 	input := CaseScheduleCalendarInput{
-		CaseID:         caseID,
-		EffectiveFrom:  time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-		Weekdays:       []int16{1, 2, 3, 4, 5},
-		SiteOpenDays:   []int16{1, 2, 3, 4, 5},
-		Legs:           fixedLegs,
+		CaseID:        caseID,
+		EffectiveFrom: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+		Weekdays:      []int16{1, 2, 3, 4, 5},
+		SiteOpenDays:  []int16{1, 2, 3, 4, 5},
+		Legs:          fixedLegs,
 		// 當周排班：週二 4 趟、週三 0 趟
 		WeeklyConfigs: map[int]WeekdayScheduleInput{
-			2: {TripCount: 4},
+			2: {TripCount: 4, Legs: fourLegs},
 			3: {TripCount: 0},
 		},
 		// 當月排班：
@@ -61,12 +68,13 @@ func TestCalculateExpectedRides_PriorityOrder(t *testing.T) {
 		// 2026-07-16 (週四)：當月特開 4 趟 (覆寫固定 2 趟)
 		MonthlyConfigs: map[string]DayScheduleInput{
 			"2026-07-14": {TripCount: 0},
-			"2026-07-15": {TripCount: 2},
-			"2026-07-16": {TripCount: 4},
+			"2026-07-15": {TripCount: 2, Legs: fixedLegs},
+			"2026-07-16": {TripCount: 4, Legs: fourLegs},
 		},
 	}
 
-	rides := CalculateExpectedRides(2026, 7, input)
+	rides, err := CalculateExpectedRides(2026, 7, input)
+	assert.NoError(t, err)
 
 	dateRideCount := make(map[string]int)
 	for _, r := range rides {
@@ -91,4 +99,19 @@ func TestCalculateExpectedRides_PriorityOrder(t *testing.T) {
 
 	// 6. 驗證回落固定 (2026-07-24 週五)：當月與當周皆無設定，回落固定 2 趟
 	assert.Equal(t, 2, dateRideCount["2026-07-24"], "7/24 應回落至固定常態排班 (2 趟)")
+}
+
+func TestCalculateExpectedRides_RejectsMissingLegDefinition(t *testing.T) {
+	input := CaseScheduleCalendarInput{
+		CaseID:        uuid.New(),
+		EffectiveFrom: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+		Weekdays:      []int16{2},
+		SiteOpenDays:  []int16{2},
+		Legs:          []LegInput{{LegSeq: 1, Direction: "outbound", DepartTime: "09:00"}},
+		WeeklyConfigs: map[int]WeekdayScheduleInput{2: {TripCount: 2}},
+	}
+
+	_, err := CalculateExpectedRides(2026, 7, input)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no complete leg definition")
 }

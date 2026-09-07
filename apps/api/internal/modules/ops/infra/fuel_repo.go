@@ -2,17 +2,48 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/ops/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // FuelRepository 提供車輛油資紀錄之資料存取。
 type FuelRepository struct {
 	db *pgxpool.Pool
+}
+
+// GetByID 取得單筆油資紀錄，供 mutation audit 建立 before snapshot。
+func (r *FuelRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.FuelLog, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("fuel database is not configured")
+	}
+	var item app.FuelLog
+	err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, `
+		SELECT f.id, f.vehicle_id, v.display_name, v.plate_no,
+		       f.driver_id, d.name, f.fuel_date, f.liters, f.cost,
+		       f.receipt_url, f.created_by, f.created_at
+		FROM fuel_logs f
+		JOIN vehicles v ON v.id = f.vehicle_id
+		LEFT JOIN drivers d ON d.id = f.driver_id
+		WHERE f.id = $1
+	`, id).Scan(
+		&item.ID, &item.VehicleID, &item.VehicleName, &item.PlateNo,
+		&item.DriverID, &item.DriverName, &item.FuelDate, &item.Liters,
+		&item.Cost, &item.ReceiptURL, &item.CreatedBy, &item.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get fuel log: %w", err)
+	}
+	return &item, nil
 }
 
 // NewFuelRepository 建立 FuelRepository 實例。
@@ -93,6 +124,9 @@ func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID
 			return nil, 0, fmt.Errorf("failed to scan fuel log: %w", err)
 		}
 		list = append(list, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate fuel logs: %w", err)
 	}
 
 	return list, total, nil
