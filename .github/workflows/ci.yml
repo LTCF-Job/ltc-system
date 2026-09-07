@@ -225,7 +225,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 不使用 gitleaks-action：該 action 對 organization repo 需要授權金鑰，
+      # gitleaks 本體則無此限制，直接跑官方 image 可維持相同掃描規則。
       - name: Scan repository for secrets
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.18.4 \
+            detect --source=/repo --redact --no-banner --exit-code 1
