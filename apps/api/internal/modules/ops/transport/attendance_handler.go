@@ -70,7 +70,7 @@ func (h *AttendanceHandler) ResolveConflict(c *gin.Context) {
 		Choice string `json:"choice" binding:"required,oneof=keep_manual use_import"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -79,7 +79,7 @@ func (h *AttendanceHandler) ResolveConflict(c *gin.Context) {
 	resolved, err := h.attendanceSvc.ResolveConflict(c.Request.Context(), id, req.Choice, &actorID, &actorRole, auditContext(c))
 	if err != nil {
 		if errors.Is(err, app.ErrAttendanceConflictNotFound) {
-			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "", nil)
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無此出勤衝突，可能已由其他人處理，請重新整理後再試", nil)
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
@@ -100,7 +100,7 @@ func (h *AttendanceHandler) IgnoreConflict(c *gin.Context) {
 	actorRole := auth.GetActorRole(c)
 	if err := h.attendanceSvc.IgnoreConflict(c.Request.Context(), id, &actorID, &actorRole, auditContext(c)); err != nil {
 		if errors.Is(err, app.ErrAttendanceConflictNotFound) {
-			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "", nil)
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無此出勤衝突，可能已由其他人處理，請重新整理後再試", nil)
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
@@ -119,7 +119,7 @@ func (h *AttendanceHandler) Upsert(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 

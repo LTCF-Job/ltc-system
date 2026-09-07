@@ -3,6 +3,7 @@ package httpx
 import (
 	"fmt"
 	"log/slog"
+	"sort"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,6 +24,15 @@ const (
 	CodeInternalError      = "INTERNAL_ERROR"
 	CodeServiceUnavailable = "SERVICE_UNAVAILABLE"
 	CodeResourceInUse      = "RESOURCE_IN_USE"
+
+	// 檔案類錯誤獨立成碼，讓「格式不對」「檔案太大」「範本不符」不再共用
+	// VALIDATION_FAILED，使用者才知道要換檔案而不是改欄位。
+	CodeUnsupportedFileType    = "UNSUPPORTED_FILE_TYPE"
+	CodeFileTooLarge           = "FILE_TOO_LARGE"
+	CodeFileUnreadable         = "FILE_UNREADABLE"
+	CodeImportTemplateMismatch = "IMPORT_TEMPLATE_MISMATCH"
+
+	CodeRouteNotFound = "ROUTE_NOT_FOUND"
 )
 
 // codeMessages 為每個錯誤碼提供固定、非技術性的預設訊息，是前端顯示文字的單一事實來源。
@@ -41,6 +51,32 @@ var codeMessages = map[string]string{
 	CodeFormMappingFailed:  "更新欄位對應設定失敗，請稍後再試",
 	CodeInternalError:      "系統發生錯誤，請稍後再試",
 	CodeServiceUnavailable: "服務暫時無法使用，請稍後再試",
+	CodeResourceInUse:      "此資料已被其他紀錄使用，無法刪除",
+
+	CodeUnsupportedFileType:    "檔案格式不支援，請改用 .xlsx 檔案",
+	CodeFileTooLarge:           "檔案超過大小上限，請分批匯入",
+	CodeFileUnreadable:         "檔案無法讀取，可能已損毀或非有效的 Excel 檔",
+	CodeImportTemplateMismatch: "檔案欄位與匯入範本不符，請下載標準範本重新填寫",
+
+	CodeRouteNotFound: "找不到此功能的服務位址，請重新整理頁面或聯繫系統管理員",
+}
+
+// MessageForCode 回傳錯誤碼的預設非技術性訊息；查無對應碼時退回內部系統錯誤訊息。
+func MessageForCode(code string) string {
+	if message, ok := codeMessages[code]; ok {
+		return message
+	}
+	return codeMessages[CodeInternalError]
+}
+
+// ErrorCodes 回傳所有已定義的錯誤碼，供契約測試比對前端字典。
+func ErrorCodes() []string {
+	codes := make([]string, 0, len(codeMessages))
+	for code := range codeMessages {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+	return codes
 }
 
 // APIResponse 定義 API 成功回應結構。
@@ -61,10 +97,12 @@ type ErrorResponse struct {
 }
 
 // ErrorBody 定義 API 錯誤主體。
+// RequestID 讓使用者回報的畫面訊息能對應到伺服器 log 中同一筆請求。
 type ErrorBody struct {
-	Code    string        `json:"code"`
-	Message string        `json:"message"`
-	Details []ErrorDetail `json:"details,omitempty"`
+	Code      string        `json:"code"`
+	Message   string        `json:"message"`
+	Details   []ErrorDetail `json:"details,omitempty"`
+	RequestID string        `json:"requestId,omitempty"`
 }
 
 // PaginationMeta 定義分頁資訊。
@@ -84,12 +122,18 @@ func RespondSuccess(c *gin.Context, httpStatus int, data interface{}, meta inter
 }
 
 // RespondError 回傳標準錯誤 JSON 回應。
+// message 一律是呼叫端寫死的非技術性字串；傳空字串代表沿用錯誤碼的預設訊息，
+// 避免前端收到空白提示。
 func RespondError(c *gin.Context, httpStatus int, code string, message string, details []ErrorDetail) {
+	if message == "" {
+		message = MessageForCode(code)
+	}
 	c.AbortWithStatusJSON(httpStatus, ErrorResponse{
 		Error: ErrorBody{
-			Code:    code,
-			Message: message,
-			Details: details,
+			Code:      code,
+			Message:   message,
+			Details:   details,
+			RequestID: RequestID(c),
 		},
 	})
 }
@@ -100,16 +144,12 @@ func RespondErrorCode(c *gin.Context, httpStatus int, code string, err error, de
 	if err != nil {
 		slog.Error("api_error",
 			slog.String("code", code),
+			slog.String("request_id", RequestID(c)),
 			slog.String("path", c.Request.URL.Path),
 			slog.String("method", c.Request.Method),
 			slog.String("error_type", fmt.Sprintf("%T", err)),
 			slog.String("error_message", err.Error()),
 		)
 	}
-	message, ok := codeMessages[code]
-	// 查無對應錯誤碼時降級為內部系統錯誤
-	if !ok {
-		message = codeMessages[CodeInternalError]
-	}
-	RespondError(c, httpStatus, code, message, details)
+	RespondError(c, httpStatus, code, MessageForCode(code), details)
 }

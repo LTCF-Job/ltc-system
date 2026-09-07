@@ -40,5 +40,5 @@ func BindUploadFile(c *gin.Context, field string) (*multipart.FileHeader, bool) 
 }
 
 func respondUploadTooLarge(c *gin.Context) {
-	RespondError(c, http.StatusRequestEntityTooLarge, CodeValidationFailed, "上傳檔案超過 20 MB 上限，請分批匯入", nil)
+	RespondError(c, http.StatusRequestEntityTooLarge, CodeFileTooLarge, "上傳檔案超過 20 MB 上限，請分批匯入", nil)
 }

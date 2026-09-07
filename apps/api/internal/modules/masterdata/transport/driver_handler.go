@@ -46,7 +46,7 @@ func (h *DriverHandler) List(c *gin.Context) {
 func (h *DriverHandler) Create(c *gin.Context) {
 	var req CreateDriverRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *DriverHandler) Update(c *gin.Context) {
 
 	var req UpdateDriverRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -204,7 +204,7 @@ func (h *DriverHandler) AssignVehicle(c *gin.Context) {
 
 	var req AssignVehicleRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 

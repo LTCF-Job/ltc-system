@@ -108,7 +108,7 @@ func (h *DriverReportHandler) GetMonthDetail(c *gin.Context) {
 func (h *DriverReportHandler) CreateForm(c *gin.Context) {
 	var req CreateFormRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *DriverReportHandler) CreateForm(c *gin.Context) {
 		return
 	}
 	if form == nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "建立匯報表失敗，請稍後再試", nil)
 		return
 	}
 	httpx.RespondSuccess(c, http.StatusCreated, toFormListItemDTO(*form), nil)
@@ -228,7 +228,7 @@ func (h *DriverReportHandler) ListColumns(c *gin.Context) {
 func (h *DriverReportHandler) UpdateColumnMapping(c *gin.Context) {
 	var req UpdateColumnMappingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -252,7 +252,7 @@ func (h *DriverReportHandler) UpdateColumnMapping(c *gin.Context) {
 func (h *DriverReportHandler) BatchMapping(c *gin.Context) {
 	var req BatchMappingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -307,7 +307,7 @@ func (h *DriverReportHandler) ListSubmissionReview(c *gin.Context) {
 func (h *DriverReportHandler) BindDriver(c *gin.Context) {
 	var req BindDriverRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -324,7 +324,7 @@ func (h *DriverReportHandler) BindDriver(c *gin.Context) {
 func (h *DriverReportHandler) ResolveRowConflict(c *gin.Context) {
 	var req ResolveRowConflictRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -420,7 +420,7 @@ func respondImportInputError(c *gin.Context, field, reason string) {
 // 只顯示通用訊息會讓操作人員無從得知該改哪一欄。
 func respondReportError(c *gin.Context, err error) {
 	if errors.Is(err, app.ErrFormNotFound) {
-		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "", nil)
+		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無此匯報表，可能已被刪除，請重新整理後再試", nil)
 		return
 	}
 	reason := "檔案內容無法解析，請確認為符合範本的 .xlsx 檔案"

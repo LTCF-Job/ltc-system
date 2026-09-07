@@ -146,7 +146,7 @@ func (h *VehicleHandler) SetDrivers(c *gin.Context) {
 
 	var req SetVehicleDriversRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 

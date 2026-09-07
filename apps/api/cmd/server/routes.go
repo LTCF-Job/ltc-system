@@ -1,7 +1,9 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -20,6 +22,7 @@ import (
 	tasktransport "ltc-system/apps/api/internal/modules/task/transport"
 	"ltc-system/apps/api/internal/platform/auth"
 	"ltc-system/apps/api/internal/platform/config"
+	"ltc-system/apps/api/internal/platform/httpx"
 	"ltc-system/apps/api/internal/platform/logging"
 
 	"github.com/gin-contrib/cors"
@@ -55,7 +58,9 @@ type handlers struct {
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
 func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.PermissionResolver, customPerm auth.CustomPermissionResolver, userState auth.UserStateResolver) *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Recovery())
+	// 識別碼要先於其他 middleware 產生，panic 與 404 的錯誤回應才帶得到它。
+	r.Use(httpx.RequestIDMiddleware())
+	r.Use(recoveryMiddleware())
 	r.Use(logging.Middleware())
 
 	// CORS 設定：正式環境限制為白名單網域，本機開發維持全放行以配合任意 port 測試
@@ -281,5 +286,30 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.POST("/auth/change-password", h.identity.ChangeSelfPassword)
 	}
 
+	// gin 預設的 404／405 回應是純文字，前端拿不到 error.code 只能顯示通用訊息；
+	// 改成標準錯誤 envelope，讓「呼叫到不存在的位址」與「後端真的壞掉」可以分辨。
+	r.NoRoute(func(c *gin.Context) {
+		httpx.RespondError(c, http.StatusNotFound, httpx.CodeRouteNotFound, "", nil)
+	})
+	r.NoMethod(func(c *gin.Context) {
+		httpx.RespondError(c, http.StatusMethodNotAllowed, httpx.CodeRouteNotFound, "", nil)
+	})
+
 	return r
+}
+
+// recoveryMiddleware 取代 gin.Recovery()：預設的 recovery 在 panic 時只寫出空 body 的 500，
+// 前端解不到 error.code，使用者會看到毫無線索的通用錯誤。這裡改為回傳標準錯誤 envelope，
+// 並把 panic 內容與請求識別碼一起記在伺服器端。
+func recoveryMiddleware() gin.HandlerFunc {
+	return gin.CustomRecoveryWithWriter(nil, func(c *gin.Context, recovered any) {
+		slog.Error("panic_recovered",
+			slog.String("request_id", httpx.RequestID(c)),
+			slog.String("path", c.Request.URL.Path),
+			slog.String("method", c.Request.Method),
+			slog.Any("panic", recovered),
+			slog.String("stack", string(debug.Stack())),
+		)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "", nil)
+	})
 }

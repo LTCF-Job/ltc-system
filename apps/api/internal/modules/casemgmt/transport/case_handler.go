@@ -68,7 +68,7 @@ func (h *CaseHandler) List(c *gin.Context) {
 func (h *CaseHandler) Create(c *gin.Context) {
 	var req CreateCaseRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -144,7 +144,7 @@ func (h *CaseHandler) Delete(c *gin.Context) {
 func (h *CaseHandler) CreateSchedule(c *gin.Context) {
 	var req CreateScheduleRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -231,7 +231,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		Remarks           *string      `json:"remarks"`
 	}
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -333,7 +333,7 @@ func (h *CaseHandler) ResolveDuplicateCandidate(c *gin.Context) {
 
 	var req ResolveDuplicateCandidateRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -416,7 +416,7 @@ func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 		InboundVehicleNameRaw  string     `json:"inboundVehicleNameRaw"`
 	}
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -471,7 +471,7 @@ func (h *CaseHandler) SaveSchedule(c *gin.Context) {
 
 	var req SaveScheduleRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
