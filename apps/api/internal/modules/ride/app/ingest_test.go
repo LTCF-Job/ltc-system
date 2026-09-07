@@ -662,13 +662,40 @@ func TestBackfillColumn_WritesFromStoredAnswersWithoutOriginalFile(t *testing.T)
 	)
 	require.NoError(t, err)
 
-	written, err := svc.BackfillColumn(context.Background(), formID, vehicleID, "1.吳桂 [去程]", 3, caseID, 1)
+	written, err := svc.BackfillColumn(context.Background(), formID, vehicleID, "1.吳桂 [去程]", 3, caseID, 1, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, written, "已存的原始回答要能直接補寫，不需要重新上傳檔案")
 
 	rec := store.records[slotKey{caseID, "2026-03-02", 1}]
 	require.NotNil(t, rec)
 	assert.Equal(t, "boarded", rec.EffectiveStatus)
+}
+
+func TestBackfillColumn_SkipsDatesOwnedByTheCaller(t *testing.T) {
+	// 匯入路徑會排除本次檔案涵蓋的日期：那些天的權威值是手上這份檔案，
+	// payload 可能還是上一次上傳、尚未被這一批覆蓋的舊值
+	caseID := uuid.New()
+	formID := uuid.New()
+	vehicleID := uuid.New()
+	driverID := uuid.New()
+	serviceDate := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+	store := newFakeRecordStore(nil)
+	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
+
+	_, err := store.SaveFormSubmission(
+		context.Background(), formID, serviceDate, time.Now().UTC(),
+		"林彥衡", &driverID, "import",
+		map[string]interface{}{"answers": map[string]string{"1.吳桂 [去程]": "有坐"}}, "", nil,
+	)
+	require.NoError(t, err)
+
+	written, err := svc.BackfillColumn(
+		context.Background(), formID, vehicleID, "1.吳桂 [去程]", 3, caseID, 1,
+		[]time.Time{serviceDate},
+	)
+	require.NoError(t, err)
+	assert.Zero(t, written, "被排除的日期不得用既有 payload 補寫")
+	assert.Empty(t, store.records)
 }
 
 func TestBackfillColumn_SkipsSubmissionsWithoutThisColumn(t *testing.T) {
@@ -684,7 +711,7 @@ func TestBackfillColumn_SkipsSubmissionsWithoutThisColumn(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	written, err := svc.BackfillColumn(context.Background(), formID, uuid.New(), "2.李四 [去程]", 4, uuid.New(), 1)
+	written, err := svc.BackfillColumn(context.Background(), formID, uuid.New(), "2.李四 [去程]", 4, uuid.New(), 1, nil)
 	require.NoError(t, err)
 	assert.Zero(t, written)
 	assert.Empty(t, store.records)
@@ -704,7 +731,7 @@ func TestBackfillColumn_SkipsAnswersWithUnresolvedDriver(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	written, err := svc.BackfillColumn(context.Background(), formID, uuid.New(), "1.吳桂 [去程]", 3, caseID, 1)
+	written, err := svc.BackfillColumn(context.Background(), formID, uuid.New(), "1.吳桂 [去程]", 3, caseID, 1, nil)
 	require.NoError(t, err)
 	assert.Zero(t, written, "司機仍待維護時，個案對應完成也不該展開成搭乘來源")
 	assert.Empty(t, store.records)

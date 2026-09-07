@@ -201,7 +201,8 @@ func (s *DriverReportService) UpdateColumnMapping(ctx context.Context, colID, st
 			return fmt.Errorf("個案編號格式錯誤: %w", err)
 		}
 
-		backfilled, err = s.rideIngestor.BackfillColumn(txCtx, formID, form.VehicleID, header, columnIndex, parsedCaseID, *legSeq)
+		// 待維護頁的手動綁定沒有「另有來源」的日期，這一欄留下的既有回報全部都要補寫
+		backfilled, err = s.rideIngestor.BackfillColumn(txCtx, formID, form.VehicleID, header, columnIndex, parsedCaseID, *legSeq, nil)
 		return err
 	})
 	if txErr != nil {

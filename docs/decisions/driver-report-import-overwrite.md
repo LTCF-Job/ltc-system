@@ -2,7 +2,9 @@
 doc_type: decision
 covers:
   - apps/api/internal/modules/driverreport/app/commit.go
+  - apps/api/internal/modules/driverreport/infra/driver_report_repo.go
   - apps/api/internal/modules/ride/app/ride_service.go
+  - apps/web/src/views/driverReports/importSummary.ts
 ---
 
 # 司機接送匯報匯入改採逐列比對，取代先刪後寫的整段覆蓋
@@ -75,3 +77,70 @@ form_submissions.driver_id)`，避免這次沒解析出司機（`NULL`）覆蓋�
 - `ListRideSourceSlotsForForm`／`DeleteFormSubmissions`／`ListRideSourcesForSubmission`／
   `UpdateRideSourceDriverID`／`ClearImportedDates` 與其對應的 `RideSlot`／`RideSourceForSubmission`
   型別已全數移除；未來若需要「刪除本月匯入」之類的管理功能，需要重新設計，不能沿用這些已刪除的方法。
+
+## 後續修訂：移除檔案雜湊冪等鍵，冪等單獨由逐列比對保證
+
+### Context
+
+上面的逐列比對上線後，`CommitDriverReport` 仍保留了更早期加入的第二層防護：以
+`(form_id, year_month, file_hash)` 為鍵的 `driver_report_imports` claim（migration `000030`）。
+命中時整份 commit 直接短路 return，欄位對應不登記、一列都不寫，回傳
+`status: already_imported`、`importedRows: 0`。
+
+實際使用時這道防護造成誤判：使用者把一份檔案關聯到某台車上傳，畫面顯示「已匯入、共 0 天、
+沒有可寫入的搭乘資料」，卻查不出原因——因為那台車的表單在同樣月份早已存在同樣雜湊的 claim。
+系統無法區分「真的是重複上傳」與「使用者選錯車輛、恰好撞到不相干的既有 claim」。
+
+而這道防護與逐列比對功能重疊：檔案內容完全相同時，`reconcileRideSource` 對每一格的判定
+必然是「值相同 → 不動作」，本身就是冪等的。上層那道只省下一次計算，卻引入了 false negative。
+
+### Decision
+
+- 移除 `ClaimDriverReportImport`、`DriverReportImportIdempotencyStore` 與
+  `CommitResult.FileHash`／`AlreadyImported`；`driver_report_imports` 表由 migration `000036` 移除。
+  冪等完全交給 `reconcileRideSource`。`LockDriverReportImport`（advisory lock）與前端
+  `commitMonthOnce` 的本地去重都保留，兩者防的是併發與重複送出，不是內容重複。
+- **已裁決「保留原資料」後重傳同一份檔案，會重新產生一筆未解決衝突，這是刻意行為。**
+  `uq_ride_source_row_conflict_open` 只涵蓋 `resolved_at IS NULL`，已裁決的列不擋新的 INSERT。
+  使用者要求每次上傳都重新判斷，不希望任何比對不上的資料被系統自行吞掉；代價是重傳同一份
+  與既有資料不同的檔案會反覆要求裁決。先前這條路被檔案雜湊鍵擋住而從未觸發。
+- **匯入路徑與待維護頁手動綁定共用同一套回填觸發條件。** `UpdateColumnMappingByHeader` 改為
+  比照 `UpdateColumnMappingByID` 回傳更新前狀態，`persistColumnDecisions` 收集這次真正
+  `pending → mapped` 的欄位，於逐列寫入後呼叫 `BackfillColumn`，筆數回傳為 `backfilledRows`。
+- **`BackfillColumn` 必須排在逐列 `IngestSubmission` 之後**，因為 `SaveFormSubmission` 是
+  `(form_id, service_date)` 原地更新：先補寫會讀到這幾天更新前的舊答案寫進去，再被本次的新值
+  比出一筆並不存在的衝突。放在之後，本月各天走 Reaffirmed 跳過，只有先前月份真的被補寫。
+- **回填要排除這份檔案涵蓋的所有服務日期，不只本次宣告的月份**。`ListSubmissionAnswersForColumn`
+  沒有日期條件，回填範圍是整份表單的全部歷史；而跨月檔案是逐月各送一次 commit，先 commit 的
+  那個月回填時其他月份的 payload 還是上一次上傳的舊值，補進去就會在下一輪被比出一批假衝突。
+  `BackfillColumn` 因此新增 `skipDates`，由 `collectFileServiceDates` 從預覽列取出整份檔案的
+  日期傳入；待維護頁的手動綁定沒有這種日期，傳 `nil`。
+- 前端移除「這幾個月份已有資料，請勾選確認」的攔截，選完檔案直接上傳；改以
+  `importSummary.ts` 把 `rideRecordRows`／`reaffirmedRows`／`pendingConflictRows`／
+  `backfilledRows` 呈現成一行說明，重傳同一份檔案會明講「內容與既有資料完全相同」。
+
+### Alternatives
+
+- **保留雜湊鍵，只是把命中時的回應改成明確提示。** 使用者仍然無法重傳，且「選錯車輛撞到
+  別人的 claim」這個根本問題沒解決，只是把靜默失敗換成看得懂的失敗。
+- **雜湊鍵改帶車輛以外的維度（例如檔名）。** 治標：只要維度沒涵蓋「使用者其實想重新比對」
+  這個意圖，就仍然會擋掉合法的重傳。
+- **匯入時自動對應的欄位不回填，讓它留在待維護。** 欄位既然已經對應到個案，留在待維護是
+  假的待辦；而且待維護清單是 `mapping_status = 'pending'` 與 payload 的交叉查詢，欄位一旦
+  變 mapped 就查不到，等於資料還在 payload 裡卻永遠沒有入口撈得出來。
+- **已裁決 kept_previous 後重傳不再跳出（把已裁決的新舊值組合納入比對）。** 噪音較低，但
+  使用者明確要求每次都重新判斷，不接受系統代為省略。
+
+### Consequences
+
+- 重傳同一份檔案不再被擋，會完整跑一次逐列比對；值相同時 `rideRecordRows` 為 0 但
+  `reaffirmedRows` 有數字，前端據此顯示「內容與既有資料完全相同」而不是「沒有可寫入的資料」。
+- `writeImportAudit` 原本被雜湊鍵擋住的重複匯入現在都會留痕，稽核表成長變快；每次上傳本就是
+  獨立事件，留痕正確，量大時再另評估保留策略。檔案雜湊仍算在稽核快照裡（`AuditSnapshot` 的
+  `fileHash` 參數），純粹供事後追溯某筆搭乘來源出自哪一次上傳，不再參與任何重複判斷。
+- 匯入現在可能寫入本次宣告月份以外的資料：剛完成對應的欄位會補寫**不在這份檔案裡**的先前月份，
+  `backfilledRows` 是唯一能看出這件事的數字。檔案自己涵蓋的月份一律由各自的 commit 寫入。
+- `expandLegSeqs` 依當下排班展開：排班改過後重傳同一份檔案，舊 legSeq 的來源留著、新 legSeq
+  走 Inserted，會出現「重傳卻有新增」，屬預期。
+- migration `000036` 直接 `DROP TABLE driver_report_imports`，down migration 只還原結構、
+  不還原資料；正式環境執行前需備份資料庫（比照 `000034` 的既有要求）。

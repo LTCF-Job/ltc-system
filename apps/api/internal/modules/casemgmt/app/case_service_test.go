@@ -185,7 +185,7 @@ func TestCaseService_CreateCaseSchedule_ValidatesRequest(t *testing.T) {
 			req.Weekdays = append([]int16(nil), base.Weekdays...)
 			req.Legs = append([]CreateScheduleLegItemRequest(nil), base.Legs...)
 			tt.mutate(&req)
-			svc := NewCaseService(testConfig(), newFakeCaseStore(), &fakeSiteFinder{site: &SiteRef{ID: req.SiteID, Region: "north"}}, nil, nil)
+			svc := NewCaseService(testConfig(), newFakeCaseStore(), &fakeSiteFinder{site: &SiteRef{ID: req.SiteID, Region: "north"}}, nil, nil, nil)
 
 			_, err := svc.CreateCaseSchedule(context.Background(), req)
 			require.ErrorIs(t, err, tt.want)
@@ -214,7 +214,7 @@ func (r *fakeCaseTransactionRunner) WithTx(ctx context.Context, fn func(context.
 func TestCaseService_Delete(t *testing.T) {
 	t.Run("查無個案回錯誤", func(t *testing.T) {
 		store := newFakeCaseStore()
-		svc := NewCaseService(testConfig(), store, nil, nil, nil)
+		svc := NewCaseService(testConfig(), store, nil, nil, nil, nil)
 
 		err := svc.Delete(context.Background(), uuid.New(), uuid.New(), "admin", "127.0.0.1", "test-agent")
 		assert.Error(t, err)
@@ -225,7 +225,7 @@ func TestCaseService_Delete(t *testing.T) {
 		caseID := uuid.New()
 		store.byID[caseID] = &Case{ID: caseID, Name: "交易個案"}
 		txRunner := &fakeCaseTransactionRunner{}
-		svc := NewCaseService(testConfig(), store, nil, nil, nil, txRunner)
+		svc := NewCaseService(testConfig(), store, nil, nil, nil, nil, txRunner)
 
 		err := svc.Delete(context.Background(), caseID, uuid.New(), "admin", "", "")
 
@@ -238,7 +238,7 @@ func TestCaseService_Delete(t *testing.T) {
 		caseID := uuid.New()
 		store.byID[caseID] = &Case{ID: caseID, Name: "測試個案"}
 		audit := &fakeCaseAuditWriter{}
-		svc := NewCaseService(testConfig(), store, nil, audit, nil)
+		svc := NewCaseService(testConfig(), store, nil, audit, nil, nil)
 
 		err := svc.Delete(context.Background(), caseID, uuid.New(), "admin", "127.0.0.1", "test-agent")
 		require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestCaseService_Delete(t *testing.T) {
 		store := newFakeCaseStore()
 		caseID := uuid.New()
 		store.byID[caseID] = &Case{ID: caseID}
-		svc := NewCaseService(testConfig(), store, nil, nil, nil)
+		svc := NewCaseService(testConfig(), store, nil, nil, nil, nil)
 
 		require.NoError(t, svc.Delete(context.Background(), caseID, uuid.New(), "admin", "127.0.0.1", "test-agent"))
 		err := svc.Delete(context.Background(), caseID, uuid.New(), "admin", "127.0.0.1", "test-agent")
@@ -262,7 +262,7 @@ func TestCaseService_Delete(t *testing.T) {
 
 func TestCreateCase_OnlyNameSucceeds(t *testing.T) {
 	store := newFakeCaseStore()
-	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+	svc := NewCaseService(testConfig(), store, nil, nil, nil, nil)
 
 	entity, err := svc.CreateCase(context.Background(), CreateCaseRequest{Name: "只填姓名"}, uuid.New(), "admin", "127.0.0.1", "test-agent")
 
@@ -304,7 +304,7 @@ func TestCaseAuditSnapshotsUseWhitelistWithoutSensitiveFields(t *testing.T) {
 
 func TestCreateCase_WritesSanitizedAuditSnapshot(t *testing.T) {
 	audit := &fakeCaseAuditWriter{}
-	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, audit, nil)
+	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, audit, nil, nil)
 
 	_, err := svc.CreateCase(context.Background(), CreateCaseRequest{
 		Name:              "王小明",
@@ -329,7 +329,7 @@ func stringPtr(value string) *string { return &value }
 
 func TestCreateCase_DuplicateNationalIDNoLongerErrors(t *testing.T) {
 	store := newFakeCaseStore()
-	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+	svc := NewCaseService(testConfig(), store, nil, nil, nil, nil)
 
 	first, err := svc.CreateCase(context.Background(), CreateCaseRequest{Name: "個案一", NationalID: "A202559750"}, uuid.New(), "admin", "127.0.0.1", "test-agent")
 	require.NoError(t, err)
@@ -343,7 +343,7 @@ func TestCreateCase_DuplicateNationalIDNoLongerErrors(t *testing.T) {
 
 func TestCreateCase_RejectsMalformedNationalIDWhenProvided(t *testing.T) {
 	store := newFakeCaseStore()
-	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+	svc := NewCaseService(testConfig(), store, nil, nil, nil, nil)
 
 	_, err := svc.CreateCase(context.Background(), CreateCaseRequest{Name: "格式錯誤個案", NationalID: "NOT-VALID"}, uuid.New(), "admin", "127.0.0.1", "test-agent")
 	assert.Error(t, err)
@@ -353,7 +353,7 @@ func TestUpdateCase_NameSynchronizesNormalizedIndex(t *testing.T) {
 	store := newFakeCaseStore()
 	caseID := uuid.New()
 	store.byID[caseID] = &Case{ID: caseID, Name: "舊姓名", NameNormalized: namenorm.Normalize("舊姓名")}
-	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+	svc := NewCaseService(testConfig(), store, nil, nil, nil, nil)
 	newName := " 劉温月妹 "
 
 	entity, err := svc.UpdateCase(context.Background(), caseID, UpdateCaseInput{Name: &newName}, uuid.New(), "admin", "127.0.0.1", "test-agent")
@@ -368,7 +368,7 @@ func TestUpdateCase_RejectsBlankName(t *testing.T) {
 	store := newFakeCaseStore()
 	caseID := uuid.New()
 	store.byID[caseID] = &Case{ID: caseID, Name: "原姓名", NameNormalized: namenorm.Normalize("原姓名")}
-	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+	svc := NewCaseService(testConfig(), store, nil, nil, nil, nil)
 	blank := "   "
 
 	_, err := svc.UpdateCase(context.Background(), caseID, UpdateCaseInput{Name: &blank}, uuid.New(), "admin", "127.0.0.1", "test-agent")
@@ -381,7 +381,7 @@ func TestRevealCaseNationalID_RejectsMissingCipher(t *testing.T) {
 	store := newFakeCaseStore()
 	caseID := uuid.New()
 	store.byID[caseID] = &Case{ID: caseID, Name: "無身分證個案"}
-	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+	svc := NewCaseService(testConfig(), store, nil, nil, nil, nil)
 
 	_, err := svc.RevealCaseNationalID(context.Background(), caseID, uuid.New(), "admin", "", "")
 
@@ -395,7 +395,7 @@ func TestRevealCaseNationalID_RequiresDurableAudit(t *testing.T) {
 	require.NoError(t, err)
 	store.byID[caseID] = &Case{ID: caseID, NationalIDCipher: cipher}
 	audit := &fakeCaseAuditWriter{}
-	svc := NewCaseService(testConfig(), store, nil, audit, nil)
+	svc := NewCaseService(testConfig(), store, nil, audit, nil, nil)
 
 	plainID, err := svc.RevealCaseNationalID(context.Background(), caseID, uuid.New(), "admin", "", "")
 
@@ -407,7 +407,7 @@ func TestRevealCaseNationalID_RequiresDurableAudit(t *testing.T) {
 
 func TestRecordSkippedCaseImport_SanitizesPII(t *testing.T) {
 	audit := &fakeCaseAuditWriter{}
-	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, audit, nil)
+	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, audit, nil, nil)
 
 	svc.RecordSkippedCaseImport(context.Background(), CaseImportSkippedRow{
 		RowIndex: 5,
@@ -430,7 +430,7 @@ func TestRecordSkippedCaseImport_SanitizesPII(t *testing.T) {
 
 func TestUpdateCaseTransportPreference_PutUsesExplicitFullReplacement(t *testing.T) {
 	store := newFakeCaseStore()
-	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+	svc := NewCaseService(testConfig(), store, nil, nil, nil, nil)
 	caseID := uuid.New()
 	store.byID[caseID] = &Case{ID: caseID}
 

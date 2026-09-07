@@ -255,8 +255,8 @@ type caseRegistrar struct{ svc *caseapp.CaseService }
 func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, actor importapp.Actor) (uuid.UUID, error) {
 	entity, err := a.svc.CreateCase(ctx, caseapp.CreateCaseRequest{
 		ID:   in.ID,
-		Name: in.Name, NationalID: in.NationalID,
-		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
+		Name: in.Name, NationalID: in.NationalID, AllowInvalidNationalID: in.AllowInvalidNationalID,
+		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate, BirthDateRaw: in.BirthDateRaw,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
 		ServiceCategory:  intPointerOrNil(in.ServiceCategory),
@@ -272,6 +272,28 @@ func (a caseRegistrar) RecordSkipped(ctx context.Context, row importapp.CaseImpo
 	a.svc.RecordSkippedCaseImport(ctx, caseapp.CaseImportSkippedRow{
 		RowID: row.RowID, RowIndex: row.RowIndex, CaseName: row.CaseName, Reasons: row.Reasons, RawValues: row.RawValues,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
+}
+
+// caseDuplicateStager 讓 caseimport 透過 casemgmt 把疑似重複列存入待裁決暫存，
+// 不直接建立個案；身分證字號加密與明文邊界由 CaseService 內部處理。
+type caseDuplicateStager struct{ svc *caseapp.CaseService }
+
+func (a caseDuplicateStager) StageDuplicateRow(ctx context.Context, fileHash, rowKey string, in importapp.StageDuplicateCandidate) (uuid.UUID, bool, error) {
+	return a.svc.StageDuplicateCandidate(ctx, caseapp.StageDuplicateCandidateInput{
+		FileHash: fileHash, RowKey: rowKey,
+		RowIndex: in.RowIndex, SheetName: in.SheetName,
+		Name: in.Name, NationalID: in.NationalID,
+		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate, BirthDateRaw: in.BirthDateRaw,
+		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
+		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
+		ServiceCategory:  intPointerOrNil(in.ServiceCategory),
+		ServiceUsageType: intPointerOrNil(in.ServiceUsageType),
+		Remarks:          in.Remarks,
+		SiteID:           in.SiteID, SiteNameRaw: in.SiteNameRaw,
+		OutboundVehicleID: in.OutboundVehicleID, OutboundVehicleNameRaw: in.OutboundVehicleNameRaw,
+		InboundVehicleID: in.InboundVehicleID, InboundVehicleNameRaw: in.InboundVehicleNameRaw,
+		DuplicateCaseID: in.DuplicateCaseID,
+	})
 }
 
 // intPointerOrNil 匯入範本目前沒有服務類別／服務使用類型欄位，一律視為未提供；
@@ -387,8 +409,8 @@ func (a driverReportRideIngestor) ResolveRowConflict(ctx context.Context, confli
 	return a.svc.ResolveRowConflict(ctx, conflictID, useNew, operatorID)
 }
 
-func (a driverReportRideIngestor) BackfillColumn(ctx context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16) (int, error) {
-	return a.svc.BackfillColumn(ctx, formID, vehicleID, columnHeader, columnIndex, caseID, legSeq)
+func (a driverReportRideIngestor) BackfillColumn(ctx context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16, skipDates []time.Time) (int, error) {
+	return a.svc.BackfillColumn(ctx, formID, vehicleID, columnHeader, columnIndex, caseID, legSeq, skipDates)
 }
 
 func (a driverReportRideIngestor) ListSubmissionsForForms(ctx context.Context, formIDs []uuid.UUID) ([]drapp.SubmissionAnswerRow, error) {

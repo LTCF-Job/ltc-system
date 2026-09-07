@@ -35,10 +35,13 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/cases/:id/schedule` | viewer, staff, admin | 取得排班（星期、時段、四趟制設定） |
 | PUT | `/cases/:id/schedule` | staff, admin | 覆寫排班 |
 | POST | `/cases/schedules` | staff, admin | 批次建立排班 |
-| POST | `/cases/import` | staff, admin | 批次匯入個案 Excel |
+| POST | `/cases/import` | staff, admin | 批次匯入個案 Excel；疑似重複個案不建立個案，改建立為待裁決暫存列 |
 | POST | `/masters/import` | staff, admin | 同上，走另一條相容路徑（歷史因素，實際都打 `caseH.ImportExcel`） |
 | GET | `/cases/export?caseIds=` | viewer, staff, admin | 匯出個案彙整表；`caseIds` 為逗號分隔的個案 ID，省略則匯出全部個案 |
-| PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定 |
+| PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定（完整替換語意：`siteId`／`outboundVehicleId`／`inboundVehicleId` 與對應的 `siteNameRaw`／`outboundVehicleNameRaw`／`inboundVehicleNameRaw` 未帶上即視為清空，尚未完成關聯的匯入原始名稱必須原樣回送） |
+| GET | `/cases/import/duplicates` | viewer, staff, admin | 列出待裁決的疑似重複個案暫存列 |
+| POST | `/cases/import/duplicates/:id/reveal` | staff, admin | 解密單筆暫存列身分證字號供裁決比對（會寫 audit log 的 `reveal_pii`） |
+| POST | `/cases/import/duplicates/:id/resolve` | staff, admin | 裁決疑似重複個案（`confirmed_new` 建立新個案／`merged_existing` 合併進既有個案） |
 
 ## 單位主檔 `siteH`
 

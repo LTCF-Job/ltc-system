@@ -80,46 +80,67 @@ func (fakeTxRunner) WithTx(ctx context.Context, fn func(ctx context.Context) err
 	return fn(ctx)
 }
 
-func TestCommitCases_SkipsUnflaggedDuplicateAndImportsFlaggedOne(t *testing.T) {
+// fakeDuplicateCandidateStager is a deterministic DuplicateCandidateStager test double.
+type fakeDuplicateCandidateStager struct {
+	staged      []StageDuplicateCandidate
+	alreadyKeys map[string]bool
+	stageErr    error
+}
+
+func (f *fakeDuplicateCandidateStager) StageDuplicateRow(ctx context.Context, fileHash, rowKey string, in StageDuplicateCandidate) (uuid.UUID, bool, error) {
+	if f.stageErr != nil {
+		return uuid.Nil, false, f.stageErr
+	}
+	key := fileHash + ":" + rowKey
+	if f.alreadyKeys != nil && f.alreadyKeys[key] {
+		return uuid.Nil, true, nil
+	}
+	f.staged = append(f.staged, in)
+	return uuid.New(), false, nil
+}
+
+func TestCommitCases_DuplicateRowsAlwaysStaged(t *testing.T) {
 	registrar := &fakeCaseRegistrar{}
-	svc := &ImportService{cases: registrar, prefRepo: &fakeTransportPreferenceWriter{}, txRunner: fakeTxRunner{}}
+	stager := &fakeDuplicateCandidateStager{}
+	svc := &ImportService{cases: registrar, duplicateStager: stager, prefRepo: &fakeTransportPreferenceWriter{}, txRunner: fakeTxRunner{}}
 
 	dupID := uuid.New()
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
-		{RowIndex: 1, Name: "未勾選重複", IsDuplicate: true, DuplicateCaseID: &dupID},
-		{RowIndex: 2, Name: "已勾選重複", IsDuplicate: true, DuplicateCaseID: &dupID},
+		{RowIndex: 1, Name: "疑似重複甲", IsDuplicate: true, DuplicateCaseID: &dupID},
+		{RowIndex: 2, Name: "疑似重複乙", IsDuplicate: true, DuplicateCaseID: &dupID},
 		{RowIndex: 3, Name: "非重複個案"},
 	}}
 
-	result, err := svc.CommitCases(context.Background(), preview, map[string]bool{"legacy:2": true}, Actor{ActorID: uuid.New()})
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
 
 	require.NoError(t, err)
-	assert.Equal(t, 2, result.ImportedCount, "第 2、3 列應成功匯入")
-	require.Len(t, result.SkippedRows, 1)
-	assert.Equal(t, 1, result.SkippedRows[0].RowIndex)
-	assert.Contains(t, result.SkippedRows[0].Reasons, "偵測為重複個案，未勾選匯入")
+	assert.Equal(t, 1, result.ImportedCount, "只有非重複列直接建立個案")
+	assert.Equal(t, 2, result.StagedDuplicateCount, "疑似重複列一律暫存待裁決，不直接建立個案")
+	assert.Empty(t, result.SkippedRows)
 
-	require.Len(t, registrar.created, 2)
-	assert.Equal(t, "已勾選重複", registrar.created[0].Name)
-	assert.Equal(t, "非重複個案", registrar.created[1].Name)
+	require.Len(t, stager.staged, 2)
+	assert.Equal(t, "疑似重複甲", stager.staged[0].Name)
+	assert.Equal(t, dupID, stager.staged[0].DuplicateCaseID)
+	require.Len(t, registrar.created, 1)
+	assert.Equal(t, "非重複個案", registrar.created[0].Name)
 }
 
-func TestCommitCases_UsesRowIDAcrossSheets(t *testing.T) {
+func TestCommitCases_AlreadyStagedDuplicateCountsAsAlreadyImported(t *testing.T) {
 	registrar := &fakeCaseRegistrar{}
-	svc := &ImportService{cases: registrar, prefRepo: &fakeTransportPreferenceWriter{}, txRunner: fakeTxRunner{}}
 	dupID := uuid.New()
+	stager := &fakeDuplicateCandidateStager{alreadyKeys: map[string]bool{":legacy:1": true}}
+	svc := &ImportService{cases: registrar, duplicateStager: stager, prefRepo: &fakeTransportPreferenceWriter{}, txRunner: fakeTxRunner{}}
+
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
-		{RowID: "Sheet-A:2", RowIndex: 2, Name: "A 工作表", IsDuplicate: true, DuplicateCaseID: &dupID},
-		{RowID: "Sheet-B:2", RowIndex: 2, Name: "B 工作表", IsDuplicate: true, DuplicateCaseID: &dupID},
+		{RowIndex: 1, Name: "重複重試列", IsDuplicate: true, DuplicateCaseID: &dupID},
 	}}
 
-	result, err := svc.CommitCases(context.Background(), preview, map[string]bool{"Sheet-B:2": true}, Actor{ActorID: uuid.New()})
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
 
 	require.NoError(t, err)
-	assert.Equal(t, 1, result.ImportedCount)
-	require.Len(t, result.SkippedRows, 1)
-	assert.Equal(t, "Sheet-A:2", result.SkippedRows[0].RowID)
-	assert.Equal(t, "B 工作表", registrar.created[0].Name)
+	assert.Equal(t, 0, result.StagedDuplicateCount)
+	assert.Equal(t, 1, result.AlreadyImportedCount)
+	assert.Empty(t, stager.staged)
 }
 
 func TestCommitCases_CreatesCaseWhenSiteAndVehicleNamesDoNotMatch(t *testing.T) {
@@ -137,7 +158,7 @@ func TestCommitCases_CreatesCaseWhenSiteAndVehicleNamesDoNotMatch(t *testing.T) 
 		{RowIndex: 1, Name: "個案甲", SiteName: "查無此單位", OutboundVehicle: "查無此車", InboundVehicle: "查無此車回"},
 	}}
 
-	result, err := svc.CommitCases(context.Background(), preview, nil, Actor{ActorID: uuid.New()})
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.ImportedCount, "單位/車輛比對不到仍應建立個案")
@@ -171,7 +192,7 @@ func TestCommitCases_ResolvesSiteAndVehicleWhenNamesMatch(t *testing.T) {
 		{RowIndex: 1, Name: "個案乙", SiteName: "竹南日照單位", OutboundVehicle: "竹南1車", InboundVehicle: "查無此車回"},
 	}}
 
-	result, err := svc.CommitCases(context.Background(), preview, nil, Actor{ActorID: uuid.New()})
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.ImportedCount)
@@ -225,7 +246,7 @@ func TestCommitCases_LookupDatabaseErrorFailsOnlyThatRow(t *testing.T) {
 		{RowIndex: 2, Name: "仍可匯入的個案"},
 	}}
 
-	result, err := svc.CommitCases(context.Background(), preview, nil, Actor{ActorID: uuid.New()})
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.ImportedCount)
@@ -245,13 +266,36 @@ func TestCommitCases_IdempotencySkipsRepeatedFileRow(t *testing.T) {
 		Rows:     []CaseImportRowResult{{RowID: "Sheet-A:2", RowIndex: 2, Name: "同一列"}},
 	}
 
-	first, err := svc.CommitCases(context.Background(), preview, nil, Actor{ActorID: uuid.New()})
+	first, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
 	require.NoError(t, err)
-	second, err := svc.CommitCases(context.Background(), preview, nil, Actor{ActorID: uuid.New()})
+	second, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, first.ImportedCount)
 	assert.Equal(t, 0, second.ImportedCount)
 	assert.Equal(t, 1, second.AlreadyImportedCount)
 	assert.Len(t, second.SkippedRows, 1)
+}
+
+func TestCommitCases_BirthDateAndNationalIDInvalid_StillCreatesCase(t *testing.T) {
+	registrar := &fakeCaseRegistrar{}
+	svc := &ImportService{cases: registrar, prefRepo: &fakeTransportPreferenceWriter{}, txRunner: fakeTxRunner{}}
+
+	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
+		{RowIndex: 1, Name: "格式待補正個案", BirthDateInvalid: true, BirthDateRaw: "民國78年怪日期", NationalIDInvalid: true, NationalID: "NOT-VALID"},
+	}}
+
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ImportedCount, "格式錯誤不擋列，個案仍建立並標記待補正")
+	assert.Empty(t, result.SkippedRows)
+
+	require.Len(t, registrar.created, 1)
+	created := registrar.created[0]
+	assert.True(t, created.AllowInvalidNationalID)
+	assert.Nil(t, created.BirthDate)
+	require.NotNil(t, created.BirthDateRaw)
+	assert.Equal(t, "民國78年怪日期", *created.BirthDateRaw)
+	assert.Equal(t, "NOT-VALID", created.NationalID)
 }

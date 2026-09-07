@@ -874,8 +874,8 @@ watch(
 
 async function loadSitesAndVehicles() {
   const [sitesRes, vehiclesRes] = await Promise.all([
-    listAllSites({ region: props.region, status: 'active' }),
-    listAllVehicles({ region: props.region, status: 'active' })
+    listAllSites({ status: 'active' }),
+    listAllVehicles({ status: 'active' })
   ])
   availableSites.value = sitesRes
   availableVehicles.value = vehiclesRes

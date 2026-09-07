@@ -17,6 +17,7 @@ description: Use when changing an API endpoint, route, DTO, request or response 
 - endpoint 變更同步檢查 handler、service、repository interface、client、TypeScript type、mock、文件與測試。
 - transport layer 集中進行 domain error mapping；`not found`、`validation`、`conflict` 與 infrastructure failure 保留可區分的 HTTP 結果。
 - 無效 resource ID、關聯 ID 或請求格式進入明確錯誤路徑；成功結果只代表實際完成，不以空陣列、假分頁或假成功訊息替代失敗。
+- 查無資料的 HTTP 結果依 API 語意決定，不是「DB 查不到就一律 404」：查單一資源且該資源本應存在（`GET/PUT/PATCH/DELETE /resource/:id`）用 `404`／`CodeNotFound`；查集合／清單／搜尋結果用 `200` 搭配空陣列；子資源或欄位「可以不存在」時用 `200` 搭配 `data: null`，是否算獨立資源見下方判斷依據。判斷依據、範例與現有各端點的分類見 `docs/decisions/not-found-vs-empty-result.md`。
 
 ## 驗證
 

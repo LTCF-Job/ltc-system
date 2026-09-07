@@ -342,6 +342,7 @@ func sameDriver(a, b *uuid.UUID) bool {
 
 // BackfillColumn 用某欄位既有回報中已存的原始儲存格文字，補寫剛完成個案對應的搭乘紀錄，
 // 不需要重新上傳原始檔案；只處理這一欄，其他欄位已寫入的搭乘來源不受影響。
+// skipDates 列出「值另有來源、不該用既有 payload 補」的服務日期，呼叫端沒有這種日期時傳 nil。
 func (s *RideService) BackfillColumn(
 	ctx context.Context,
 	formID, defaultVehicleID uuid.UUID,
@@ -349,14 +350,24 @@ func (s *RideService) BackfillColumn(
 	columnIndex int,
 	caseID uuid.UUID,
 	legSeq int16,
+	skipDates []time.Time,
 ) (int, error) {
 	answers, err := s.formRepo.ListSubmissionAnswersForColumn(ctx, formID, columnHeader)
 	if err != nil {
 		return 0, fmt.Errorf("failed to list submission answers: %w", err)
 	}
 
+	skip := make(map[string]struct{}, len(skipDates))
+	for _, d := range skipDates {
+		skip[d.Format("2006-01-02")] = struct{}{}
+	}
+
 	written := 0
 	for _, a := range answers {
+		// 這些日期的權威值是呼叫端手上那份檔案，payload 可能還是上一次上傳的舊值
+		if _, skipped := skip[a.ServiceDate.Format("2006-01-02")]; skipped {
+			continue
+		}
 		if a.DriverID == nil {
 			// 司機仍待維護：留在 form_submissions，等司機也綁定後由 BackfillDriver 補寫，
 			// 避免一筆缺司機的資料先出現在司機日曆等其他頁面。

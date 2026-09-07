@@ -46,8 +46,15 @@ func (s *stubStore) UpsertColumns(context.Context, uuid.UUID, []ColumnDraft) err
 func (s *stubStore) UpdateColumnMappingByID(context.Context, string, string, *string, *int16) (uuid.UUID, string, int, string, error) {
 	return uuid.Nil, "", 0, "", nil
 }
-func (s *stubStore) UpdateColumnMappingByHeader(context.Context, uuid.UUID, string, string, *string, *int16) error {
-	return nil
+// UpdateColumnMappingByHeader 依 existing 裡的欄位回答更新前狀態，讓測試能用「欄位原本
+// 是 pending 還是 mapped」控制匯入路徑要不要觸發回填。
+func (s *stubStore) UpdateColumnMappingByHeader(_ context.Context, _ uuid.UUID, header, _ string, _ *string, _ *int16) (int, string, error) {
+	for _, c := range s.existing {
+		if c.ColumnHeader == header {
+			return c.ColumnIndex, c.MappingStatus, nil
+		}
+	}
+	return 0, "", nil
 }
 func (s *stubStore) MarkImported(context.Context, uuid.UUID, time.Time) error { return nil }
 

@@ -294,11 +294,8 @@ async function fetchDetail() {
   try {
     const [rawCase, rawSchedule] = await Promise.all([
       getCase(caseId.value) as Promise<any>,
-      // 404／查無排班是合法的「尚未排班」狀態；其餘錯誤（如伺服器錯誤）需往外拋出，不得一併當成無排班
-      getCaseSchedule(caseId.value).catch((err: any) => {
-        if (err?.response?.status === 404) return null
-        throw err
-      }) as Promise<any>
+      // 個案尚未排班時後端回傳 data: null，屬於正常狀態
+      getCaseSchedule(caseId.value) as Promise<any>
     ])
     const res: any = rawCase?.data ?? rawCase
     const sched: any = rawSchedule?.data ?? rawSchedule
@@ -358,11 +355,15 @@ async function handleUpdateCase() {
 async function handleUpdateTransportPreference() {
   savingTransportPreference.value = true
   try {
-    // 三個欄位皆選填：只送出有值的欄位，避免把使用者未異動、原本為空的欄位當成「明確清空」送出
+    // 三個欄位皆選填：只送出有值的欄位，避免把使用者未異動、原本為空的欄位當成「明確清空」送出。
+    // 這支 API 是完整替換，仍未關聯那幾欄的匯入原始名稱必須原樣回送，否則個案會無聲離開待維護清單
     const payload: UpdateCaseTransportPreferenceRequest = {
       siteId: transportForm.siteId || null,
       outboundVehicleId: transportForm.outboundVehicleId || null,
-      inboundVehicleId: transportForm.inboundVehicleId || null
+      inboundVehicleId: transportForm.inboundVehicleId || null,
+      siteNameRaw: transportForm.siteId ? '' : caseData.value?.siteNameRaw || '',
+      outboundVehicleNameRaw: transportForm.outboundVehicleId ? '' : caseData.value?.outboundVehicleNameRaw || '',
+      inboundVehicleNameRaw: transportForm.inboundVehicleId ? '' : caseData.value?.inboundVehicleNameRaw || ''
     }
     await updateCaseTransportPreference(caseId.value, payload)
     ElMessage.success('交通偏好已更新')

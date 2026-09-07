@@ -75,6 +75,7 @@ type backfillCall struct {
 	columnIndex  int
 	caseID       uuid.UUID
 	legSeq       int16
+	skipDates    []time.Time
 }
 
 func (f *fakeIngestor) ListImportedMonths(context.Context) ([]ImportedMonth, error) {
@@ -106,9 +107,11 @@ func (f *fakeIngestor) ResolveRowConflict(_ context.Context, conflictID uuid.UUI
 	return f.resolveAppliedDriver, f.resolveAppliedDate, nil
 }
 
-func (f *fakeIngestor) BackfillColumn(_ context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16) (int, error) {
+func (f *fakeIngestor) BackfillColumn(_ context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16, skipDates []time.Time) (int, error) {
+	f.events = append(f.events, "backfill")
 	f.backfillCalls = append(f.backfillCalls, backfillCall{
 		formID: formID, vehicleID: vehicleID, columnHeader: columnHeader, columnIndex: columnIndex, caseID: caseID, legSeq: legSeq,
+		skipDates: append([]time.Time(nil), skipDates...),
 	})
 	if f.backfillErr != nil {
 		return 0, f.backfillErr
@@ -186,8 +189,14 @@ func newCommitService(table [][]string, ingestor *fakeIngestor) (*DriverReportSe
 }
 
 func newCommitServiceWithAttendance(table [][]string, ingestor *fakeIngestor) (*DriverReportService, *recordingStore, *fakeAttendanceRegistrar) {
+	return newCommitServiceWithColumns(table, ingestor, []ColumnMapping{mappedColumnMapping()})
+}
+
+// newCommitServiceWithColumns 讓測試自訂表單既有的欄位對應狀態，用來區分「本次才從
+// 待維護變成已對應」與「原本就已對應」兩種回填觸發條件。
+func newCommitServiceWithColumns(table [][]string, ingestor *fakeIngestor, existing []ColumnMapping) (*DriverReportService, *recordingStore, *fakeAttendanceRegistrar) {
 	store := &recordingStore{stubStore: &stubStore{
-		existing: []ColumnMapping{mappedColumnMapping()},
+		existing: existing,
 		form: &ReportForm{
 			ID:                 uuid.MustParse(testFormID),
 			VehicleID:          uuid.MustParse("33333333-3333-3333-3333-333333333333"),
@@ -210,14 +219,41 @@ func newCommitServiceWithAttendance(table [][]string, ingestor *fakeIngestor) (*
 }
 
 func commit(svc *DriverReportService, yearMonth string) (*CommitResult, error) {
+	return commitWithDecisions(svc, yearMonth, nil)
+}
+
+func commitWithDecisions(svc *DriverReportService, yearMonth string, decisions []ColumnDecision) (*CommitResult, error) {
 	return svc.CommitDriverReport(
 		context.Background(),
 		uuid.MustParse(testFormID),
 		strings.NewReader("x"),
-		nil,
+		decisions,
 		yearMonth,
 		Actor{},
 	)
+}
+
+// mapDecisionForSampleColumn 把 sampleTable 的個案欄位標成已對應，模擬前端把系統推薦
+// 的欄位自動送出 mapped。
+func mapDecisionForSampleColumn() []ColumnDecision {
+	caseID := testCaseID
+	legSeq := int16(1)
+	return []ColumnDecision{{
+		ColumnHeader:  "1.吳桂(去程竹3) [去程]",
+		MappingStatus: "mapped",
+		CaseID:        &caseID,
+		LegSeq:        &legSeq,
+	}}
+}
+
+// pendingColumnMapping 是同一個欄位尚未對應個案時的狀態。
+func pendingColumnMapping() ColumnMapping {
+	return ColumnMapping{
+		ID:            uuid.New().String(),
+		ColumnIndex:   3,
+		ColumnHeader:  "1.吳桂(去程竹3) [去程]",
+		MappingStatus: "pending",
+	}
 }
 
 func validSampleTable() [][]string {
@@ -320,6 +356,93 @@ func TestCommitDriverReport_BlockingErrorWritesNothing(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Empty(t, ingestor.submissions, "阻斷性錯誤時不得寫入任何資料")
 	assert.False(t, store.markedImported)
+}
+
+func TestCommitDriverReport_SameFileTwiceStillReconciles(t *testing.T) {
+	// 冪等改由逐列比對保證：重傳同一份檔案要照樣逐列走一次，不再整份短路成「已匯入」
+	ingestor := &fakeIngestor{ingestOutcome: IngestOutcome{Reaffirmed: 1}}
+	svc, store := newCommitService(validSampleTable(), ingestor)
+
+	first, err := commit(svc, "")
+	require.NoError(t, err)
+	second, err := commit(svc, "")
+	require.NoError(t, err)
+
+	assert.Equal(t, "succeeded", second.Status)
+	assert.Equal(t, first.ImportedRows, second.ImportedRows, "重傳同一份檔案仍逐列處理")
+	assert.Zero(t, second.RideRecordRows, "值與既有相同時不新增任何搭乘來源")
+	assert.Equal(t, second.ImportedRows, second.ReaffirmedRows)
+	assert.Len(t, ingestor.events, 2*first.ImportedRows, "兩次上傳各自逐列呼叫，沒有被冪等鍵短路")
+	assert.True(t, store.markedImported)
+}
+
+func TestCommitDriverReport_NewlyMappedColumnTriggersBackfill(t *testing.T) {
+	// 欄位這次才從待維護變成已對應時，先前月份留在 form_submissions 的原始值要一併補寫，
+	// 否則待維護項目會消失但資料永遠寫不進去
+	ingestor := &fakeIngestor{backfillResult: 4}
+	svc, _, _ := newCommitServiceWithColumns(validSampleTable(), ingestor, []ColumnMapping{pendingColumnMapping()})
+
+	result, err := commitWithDecisions(svc, "", mapDecisionForSampleColumn())
+
+	require.NoError(t, err)
+	require.Len(t, ingestor.backfillCalls, 1)
+	call := ingestor.backfillCalls[0]
+	assert.Equal(t, uuid.MustParse(testFormID), call.formID)
+	assert.Equal(t, uuid.MustParse("33333333-3333-3333-3333-333333333333"), call.vehicleID)
+	assert.Equal(t, "1.吳桂(去程竹3) [去程]", call.columnHeader)
+	assert.Equal(t, 3, call.columnIndex)
+	assert.Equal(t, uuid.MustParse(testCaseID), call.caseID)
+	assert.Equal(t, int16(1), call.legSeq)
+	assert.Equal(t, 4, result.BackfilledRows)
+}
+
+func TestCommitDriverReport_AlreadyMappedColumnSkipsBackfill(t *testing.T) {
+	// 欄位原本就已對應時重複送出同樣的決定不該再回填，避免疊加重複的搭乘來源
+	ingestor := &fakeIngestor{backfillResult: 4}
+	svc, _, _ := newCommitServiceWithColumns(validSampleTable(), ingestor, []ColumnMapping{mappedColumnMapping()})
+
+	result, err := commitWithDecisions(svc, "", mapDecisionForSampleColumn())
+
+	require.NoError(t, err)
+	assert.Empty(t, ingestor.backfillCalls)
+	assert.Zero(t, result.BackfilledRows)
+}
+
+func TestCommitDriverReport_BackfillSkipsEveryDateInTheFile(t *testing.T) {
+	// 跨月檔案是逐月各送一次 commit：先 commit 的那個月若拿舊 payload 補寫尚未輪到的月份，
+	// 下一輪就會用本次的新值比出一批系統自己製造的衝突
+	ingestor := &fakeIngestor{}
+	table := [][]string{
+		{"民國日期", "駕駛人", "1.吳桂(去程竹3) [去程]", "備註"},
+		{"1150302", "林彥衡", "有坐", ""},
+		{"1150402", "林彥衡", "有坐", ""},
+	}
+	svc, _, _ := newCommitServiceWithColumns(table, ingestor, []ColumnMapping{pendingColumnMapping()})
+
+	_, err := commitWithDecisions(svc, "2026-03", mapDecisionForSampleColumn())
+
+	require.NoError(t, err)
+	require.Len(t, ingestor.backfillCalls, 1)
+	skipped := make([]string, 0, len(ingestor.backfillCalls[0].skipDates))
+	for _, d := range ingestor.backfillCalls[0].skipDates {
+		skipped = append(skipped, d.Format("2006-01-02"))
+	}
+	assert.ElementsMatch(t, []string{"2026-03-02", "2026-04-02"}, skipped,
+		"宣告月份以外的日期也要排除，那些月份還沒輪到 commit，payload 仍是上一次上傳的值")
+}
+
+func TestCommitDriverReport_BackfillRunsAfterIngest(t *testing.T) {
+	// form_submissions 是一車一天一筆原地更新：補寫必須排在逐列寫入之後，否則會讀到
+	// 這幾天更新前的舊答案，再被本次新值比出一筆並不存在的衝突
+	ingestor := &fakeIngestor{}
+	svc, _, _ := newCommitServiceWithColumns(validSampleTable(), ingestor, []ColumnMapping{pendingColumnMapping()})
+
+	result, err := commitWithDecisions(svc, "", mapDecisionForSampleColumn())
+
+	require.NoError(t, err)
+	require.NotEmpty(t, ingestor.events)
+	assert.Equal(t, "backfill", ingestor.events[len(ingestor.events)-1])
+	assert.Equal(t, result.ImportedRows, len(ingestor.events)-1, "補寫只在所有列寫入後跑一次")
 }
 
 func TestCommitDriverReport_PersistsPendingColumnAnswersForLaterBackfill(t *testing.T) {

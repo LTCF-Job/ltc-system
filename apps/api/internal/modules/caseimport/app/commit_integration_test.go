@@ -61,11 +61,12 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	auditSvc := auditapp.NewService(auditinfra.NewAuditRepository(pool))
 	txRunner := pgxdb.NewTxRunner(pool)
 
-	caseSvc := caseapp.NewCaseService(cfg, caseRepo, siteAdapter{siteRepo}, auditWriter{auditSvc}, caseinfra.NewExcelRenderer())
+	caseSvc := caseapp.NewCaseService(cfg, caseRepo, siteAdapter{siteRepo}, auditWriter{auditSvc}, caseinfra.NewExcelRenderer(), caseinfra.NewCaseDuplicateStagingRepository(pool))
 	excel := importinfra.NewExcelAdapter()
 	importSvc := importapp.NewImportService(
 		caseRegistrar{caseSvc},
 		caseDuplicateFinder{caseSvc},
+		caseDuplicateStager{caseSvc},
 		siteAdapter{siteRepo},
 		vehicleAdapter{vehicleRepo},
 		failingPreferenceWriter{delegate: caseRepo, failName: "FORCE_ROLLBACK"},
@@ -262,4 +263,24 @@ func (a caseDuplicateFinder) FindDuplicate(ctx context.Context, nationalID, name
 		return nil, err
 	}
 	return &importapp.DuplicateRef{CaseID: found.ID, CaseName: found.Name}, nil
+}
+
+type caseDuplicateStager struct{ svc *caseapp.CaseService }
+
+func (a caseDuplicateStager) StageDuplicateRow(ctx context.Context, fileHash, rowKey string, in importapp.StageDuplicateCandidate) (uuid.UUID, bool, error) {
+	return a.svc.StageDuplicateCandidate(ctx, caseapp.StageDuplicateCandidateInput{
+		FileHash: fileHash, RowKey: rowKey,
+		RowIndex: in.RowIndex, SheetName: in.SheetName,
+		Name: in.Name, NationalID: in.NationalID,
+		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate, BirthDateRaw: in.BirthDateRaw,
+		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
+		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
+		ServiceCategory:  intPointerOrNilForTest(in.ServiceCategory),
+		ServiceUsageType: intPointerOrNilForTest(in.ServiceUsageType),
+		Remarks:          in.Remarks,
+		SiteID:           in.SiteID, SiteNameRaw: in.SiteNameRaw,
+		OutboundVehicleID: in.OutboundVehicleID, OutboundVehicleNameRaw: in.OutboundVehicleNameRaw,
+		InboundVehicleID: in.InboundVehicleID, InboundVehicleNameRaw: in.InboundVehicleNameRaw,
+		DuplicateCaseID: in.DuplicateCaseID,
+	})
 }

@@ -240,22 +240,36 @@ func (r *DriverReportRepository) UpdateColumnMappingByID(ctx context.Context, co
 	return
 }
 
-// UpdateColumnMappingByHeader 以表頭文字定位欄位並更新對應，供匯入預覽的就地確認使用。
-func (r *DriverReportRepository) UpdateColumnMappingByHeader(ctx context.Context, formID uuid.UUID, header, status string, caseID *string, legSeq *int16) error {
+// UpdateColumnMappingByHeader 以表頭文字定位欄位並更新對應，回傳更新前的狀態與欄號，
+// 供匯入路徑判斷是否為「剛從待維護變成已對應」以觸發回填。
+func (r *DriverReportRepository) UpdateColumnMappingByHeader(ctx context.Context, formID uuid.UUID, header, status string, caseID *string, legSeq *int16) (columnIndex int, previousStatus string, err error) {
 	if r.db == nil {
-		return ErrNoDatabase
+		err = ErrNoDatabase
+		return
 	}
 
 	query := `
+		WITH prev AS (
+			SELECT id, column_index, mapping_status
+			FROM form_columns
+			WHERE form_id = $1 AND column_header = $2
+		)
 		UPDATE form_columns
 		SET mapping_status = $3,
 		    case_id = NULLIF($4, '')::uuid,
 		    leg_seq = $5,
 		    updated_at = now()
-		WHERE form_id = $1 AND column_header = $2
+		FROM prev
+		WHERE form_columns.id = prev.id
+		RETURNING prev.column_index, prev.mapping_status
 	`
-	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, query, formID, header, status, caseID, legSeq)
-	return err
+	err = pgxdb.FromContext(ctx, r.db).QueryRow(ctx, query, formID, header, status, caseID, legSeq).
+		Scan(&columnIndex, &previousStatus)
+	// 表頭不在這份表單時維持既有的寬容行為：不更新也不報錯，空的 previousStatus 讓呼叫端不觸發回填
+	if err == pgx.ErrNoRows {
+		return 0, "", nil
+	}
+	return
 }
 
 // MarkImported 記錄最後一次成功匯入的時間。
@@ -277,25 +291,4 @@ func (r *DriverReportRepository) LockDriverReportImport(ctx context.Context, for
 	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx,
 		`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, formID.String()+":"+yearMonth)
 	return err
-}
-
-// ClaimDriverReportImport 記錄同一表單／月份／檔案雜湊只成功提交一次。
-func (r *DriverReportRepository) ClaimDriverReportImport(ctx context.Context, formID uuid.UUID, yearMonth, fileHash string) (bool, error) {
-	if r.db == nil {
-		return false, ErrNoDatabase
-	}
-	var claimed bool
-	err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, `
-		INSERT INTO driver_report_imports (form_id, year_month, file_hash, imported_at)
-		VALUES ($1, $2, $3, now())
-		ON CONFLICT (form_id, year_month, file_hash) DO NOTHING
-		RETURNING true
-	`, formID, yearMonth, fileHash).Scan(&claimed)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return false, nil
-		}
-		return false, err
-	}
-	return claimed, nil
 }

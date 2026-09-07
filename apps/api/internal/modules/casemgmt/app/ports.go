@@ -25,6 +25,16 @@ type CaseStore interface {
 	CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error
 }
 
+// DuplicateStagingStore 定義疑似重複個案暫存列的讀寫邊界；裁決前不落地到 cases 表。
+type DuplicateStagingStore interface {
+	// Insert 寫入一筆暫存列；同一 (fileHash, rowKey) 已存在時回傳 alreadyStaged=true 且不重複寫入。
+	Insert(ctx context.Context, cand DuplicateCandidate) (id uuid.UUID, alreadyStaged bool, err error)
+	ListPending(ctx context.Context) ([]DuplicateCandidate, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*DuplicateCandidate, error)
+	// Resolve 將暫存列標記為裁決結果；rowsAffected=0 代表該列已被裁決過（並發保護）。
+	Resolve(ctx context.Context, id uuid.UUID, status string, resolvedBy uuid.UUID, resultingCaseID *uuid.UUID) (rowsAffected int64, err error)
+}
+
 // SiteRef 是驗證個案交通偏好所需的最小單位資訊。
 type SiteRef struct {
 	ID     uuid.UUID

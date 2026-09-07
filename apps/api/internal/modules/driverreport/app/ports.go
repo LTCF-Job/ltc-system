@@ -18,14 +18,10 @@ type FormStore interface {
 	// UpdateColumnMappingByID 更新欄位對應，並回傳更新前的狀態供呼叫端判斷是否為
 	// 「剛從待維護變成已對應」，藉此決定是否要觸發回填搭乘紀錄。
 	UpdateColumnMappingByID(ctx context.Context, colID, status string, caseID *string, legSeq *int16) (formID uuid.UUID, columnHeader string, columnIndex int, previousStatus string, err error)
-	UpdateColumnMappingByHeader(ctx context.Context, formID uuid.UUID, header, status string, caseID *string, legSeq *int16) error
+	// UpdateColumnMappingByHeader 同樣回傳更新前的狀態與欄號，讓匯入路徑能用與
+	// UpdateColumnMappingByID 相同的條件判斷是否要回填。
+	UpdateColumnMappingByHeader(ctx context.Context, formID uuid.UUID, header, status string, caseID *string, legSeq *int16) (columnIndex int, previousStatus string, err error)
 	MarkImported(ctx context.Context, formID uuid.UUID, importedAt time.Time) error
-}
-
-// DriverReportImportIdempotencyStore 以表單、宣告月份與檔案雜湊抑制重試造成的重複覆蓋。
-// claim 必須在同一筆匯入交易內執行；交易回滾時 claim 也必須一併回滾。
-type DriverReportImportIdempotencyStore interface {
-	ClaimDriverReportImport(ctx context.Context, formID uuid.UUID, yearMonth, fileHash string) (bool, error)
 }
 
 // DriverReportImportLocker 以共享資料庫交易鎖序列化同一表單月份的覆蓋匯入。
@@ -164,7 +160,9 @@ type RideIngestor interface {
 	ResolveRowConflict(ctx context.Context, conflictID uuid.UUID, useNew bool, operatorID uuid.UUID) (appliedDriverID *uuid.UUID, appliedServiceDate *time.Time, err error)
 	// BackfillColumn 用某欄位既有回報中已存的原始儲存格文字補寫搭乘紀錄，回傳補寫筆數。
 	// 用於欄位從待維護變成已對應時，不需要使用者重新上傳原始檔案。
-	BackfillColumn(ctx context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16) (int, error)
+	// skipDates 排除「值另有來源」的服務日期：匯入路徑要傳入本次檔案涵蓋的所有日期，
+	// 否則跨月檔案逐月 commit 時，先 commit 的那個月會用尚未更新的舊 payload 補寫其他月份。
+	BackfillColumn(ctx context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16, skipDates []time.Time) (int, error)
 	// ListSubmissionsForForms 取出指定表單目前存在的所有回報列與其完整原始儲存格文字，
 	// 供彙整待維護清單時比對哪些欄位這一列「有回報」但仍待對應個案。
 	ListSubmissionsForForms(ctx context.Context, formIDs []uuid.UUID) ([]SubmissionAnswerRow, error)

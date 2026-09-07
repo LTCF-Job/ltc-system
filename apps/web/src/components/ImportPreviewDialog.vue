@@ -140,6 +140,9 @@
         <h4>
           匯入結果：成功 {{ commitResult.importedCount }} 筆，
           已完成 {{ commitResult.alreadyImportedCount ?? 0 }} 筆，
+          <template v-if="commitResult.stagedDuplicateCount">
+            待裁決 {{ commitResult.stagedDuplicateCount }} 筆，
+          </template>
           略過 {{ skippedCount }} 筆，
           失敗 {{ commitResult.failedCount ?? 0 }} 筆
         </h4>
@@ -174,6 +177,9 @@ interface ImportCommitResult {
   importedCount: number
   alreadyImportedCount?: number
   failedCount?: number
+  // 個案匯入專用：疑似重複列不建立個案，改進待裁決暫存；不列出來會讓整批都是重複的
+  // 匯入看起來像什麼都沒發生。照護人員匯入沒有這個欄位，值為 undefined 就不顯示。
+  stagedDuplicateCount?: number
   skippedRows: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
   failedRows?: Array<{ rowIndex: number; caseName: string; reasons: string[] }>
   warnings?: Array<{ rowIndex: number; caseName?: string; field?: string; message: string }>

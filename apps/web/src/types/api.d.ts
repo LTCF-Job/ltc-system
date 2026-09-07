@@ -181,6 +181,7 @@ export interface CaseDTO {
   nameNormalized?: string;
   nationalId?: string;
   nationalIdMasked?: string;
+  nationalIdInvalid?: boolean;
   homeAddress?: string;
   region?: Region;
   ltcLevel?: string;
@@ -191,6 +192,7 @@ export interface CaseDTO {
   householdType?: string;
   gender?: string;
   birthDate?: string;
+  birthDateRaw?: string;
   careContactRole?: string;
   careContactName?: string;
   registeredAddress?: string;
@@ -229,10 +231,15 @@ export interface CreateCaseRequest {
 }
 
 // 三欄位皆選填：未帶入的欄位維持既有關聯不變，僅更新有帶值的那一項
+// PUT 為完整替換語意：未帶上的 *NameRaw 會被後端清成 NULL。呼叫端必須把該欄
+// 尚未完成關聯的匯入原始名稱一併回送，只有真的關聯成功的那一欄才送空字串。
 export interface UpdateCaseTransportPreferenceRequest {
   siteId: string | null;
   outboundVehicleId: string | null;
   inboundVehicleId: string | null;
+  siteNameRaw?: string;
+  outboundVehicleNameRaw?: string;
+  inboundVehicleNameRaw?: string;
 }
 
 export interface UpdateCaseRequest extends Partial<CreateCaseRequest> {}
@@ -538,15 +545,15 @@ export interface DriverReportColumnDecision {
 }
 
 export interface DriverReportCommitResultDTO {
-  status: "pending" | "already_imported" | "succeeded";
-  fileHash?: string;
-  alreadyImported: boolean;
+  status: "pending" | "succeeded";
   importedRows: number;
   rideRecordRows: number;
   // reaffirmedRows 是值與既有資料相同的重複回報；pendingConflictRows 是與既有資料不同、
-  // 已進入待維護等待使用者選擇的筆數。兩者與 rideRecordRows 分開計算。
+  // 已進入待維護等待使用者選擇的筆數；backfilledRows 是本次有欄位剛完成對應而補寫的
+  // 先前月份筆數。這幾個數字與 rideRecordRows 分開計算。
   reaffirmedRows: number;
   pendingConflictRows: number;
+  backfilledRows: number;
   mappedColumns: number;
   skippedRows: Array<{
     rowIndex: number;
@@ -865,17 +872,21 @@ export interface CaseImportDuplicateOfDTO {
   name?: string;
 }
 
-// 個案匯入預覽列：isDuplicate/duplicateOf 之外的欄位沿用 DryRunImportResultDTO.previewRows 的動態結構
+// 個案匯入預覽列：isDuplicate/duplicateOf 之外的欄位沿用 DryRunImportResultDTO.previewRows 的動態結構。
+// isDuplicate 為 true 的列正式匯入時不會建立個案，改建立為待裁決暫存項目。
 export interface CaseImportPreviewRowDTO extends Record<string, any> {
   rowId?: string;
   isDuplicate?: boolean;
   duplicateOf?: CaseImportDuplicateOfDTO;
+  birthDateInvalid?: boolean;
+  nationalIdInvalid?: boolean;
 }
 
 export interface CaseImportCommitResult {
   importedCount: number;
   alreadyImportedCount: number;
   failedCount: number;
+  stagedDuplicateCount: number;
   skippedRows: Array<{
     rowId?: string;
     rowIndex: number;
@@ -894,6 +905,46 @@ export interface CaseImportCommitResult {
     field?: string;
     message: string;
   }>;
+}
+
+// 待裁決的疑似重複個案暫存列；裁決前不對應任何 cases 資料列，故無 caseId。
+// 身分證字號只提供遮罩值，明文需另外呼叫 reveal API 並留下稽核紀錄後才會回傳。
+export interface CaseDuplicateCandidateDTO {
+  id: string;
+  rowIndex: number;
+  sheetName?: string;
+  name: string;
+  nationalIdMasked?: string;
+  nationalIdInvalid?: boolean;
+  householdType?: string;
+  gender?: string;
+  birthDate?: string;
+  birthDateRaw?: string;
+  careContactRole?: string;
+  careContactName?: string;
+  registeredAddress?: string;
+  homeAddress?: string;
+  region?: Region;
+  siteId?: string;
+  siteName?: string;
+  siteNameRaw?: string;
+  outboundVehicleId?: string;
+  outboundVehicle?: string;
+  outboundVehicleNameRaw?: string;
+  inboundVehicleId?: string;
+  inboundVehicle?: string;
+  inboundVehicleNameRaw?: string;
+  remarks?: string;
+  duplicateCaseId: string;
+  duplicateCaseName: string;
+  status: 'pending' | 'confirmed_new' | 'merged_existing';
+  createdAt: string;
+}
+
+export interface ResolveDuplicateCandidateRequest {
+  decision: 'confirmed_new' | 'merged_existing';
+  targetCaseId?: string;
+  mergeRemarks?: boolean;
 }
 
 // 照護人員匯入結果：warnings 的 field 為 "site"／"contact"／"notes"，供「待維護」頁籤分類顯示

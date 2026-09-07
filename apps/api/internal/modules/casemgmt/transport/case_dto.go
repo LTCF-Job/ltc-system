@@ -10,6 +10,14 @@ import (
 	"ltc-system/apps/api/internal/modules/casemgmt/app"
 )
 
+// parseFlexibleDate 依序嘗試西元／民國純日期字串與完整 RFC3339 時間字串，相容前端日期選擇器與既有 API 呼叫者。
+func parseFlexibleDate(raw string) (time.Time, error) {
+	if value, err := rocdate.ParseDate(raw); err == nil {
+		return value, nil
+	}
+	return time.Parse(time.RFC3339, raw)
+}
+
 type optionalDate struct {
 	Present bool
 	Value   *time.Time
@@ -29,12 +37,40 @@ func (d *optionalDate) UnmarshalJSON(data []byte) error {
 		d.Value = nil
 		return nil
 	}
-	value, err := rocdate.ParseDate(raw)
+	value, err := parseFlexibleDate(raw)
 	if err != nil {
 		return err
 	}
 	d.Value = &value
 	return nil
+}
+
+// toTimePtr 將可能為 nil 的 optionalDate 轉為服務層使用的 *time.Time；欄位未提供或明確傳入 null 皆視為無結束日。
+func (d *optionalDate) toTimePtr() *time.Time {
+	if d == nil {
+		return nil
+	}
+	return d.Value
+}
+
+// requiredDate 解析必填日期欄位（如排班生效起始日），接受前端日期選擇器送出的純日期字串或既有呼叫者送出的 RFC3339 時間字串。
+type requiredDate time.Time
+
+func (d *requiredDate) UnmarshalJSON(data []byte) error {
+	var raw string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	value, err := parseFlexibleDate(raw)
+	if err != nil {
+		return err
+	}
+	*d = requiredDate(value)
+	return nil
+}
+
+func (d requiredDate) toTime() time.Time {
+	return time.Time(d)
 }
 
 // CreateCaseRequest 代表新增個案主檔請求。僅姓名為必要欄位；其餘欄位皆選填。
@@ -83,8 +119,8 @@ func (r CreateCaseRequest) ToService() app.CreateCaseRequest {
 type CreateScheduleRequest struct {
 	CaseID             uuid.UUID                      `json:"caseId" binding:"required"`
 	SiteID             uuid.UUID                      `json:"siteId" binding:"required"`
-	EffectiveFrom      time.Time                      `json:"effectiveFrom" binding:"required"`
-	EffectiveTo        *time.Time                     `json:"effectiveTo"`
+	EffectiveFrom      requiredDate                   `json:"effectiveFrom" binding:"required"`
+	EffectiveTo        *optionalDate                  `json:"effectiveTo"`
 	Weekdays           []int16                        `json:"weekdays" binding:"required"`
 	TripPattern        int16                          `json:"tripPattern" binding:"required"`
 	UnitPrice          float64                        `json:"unitPrice" binding:"required"`
@@ -106,8 +142,8 @@ type CreateScheduleLegItemRequest struct {
 // SaveScheduleRequest 代表依個案路徑參數儲存排班設定之請求參數。
 type SaveScheduleRequest struct {
 	SiteID             uuid.UUID                      `json:"siteId" binding:"required"`
-	EffectiveFrom      time.Time                      `json:"effectiveFrom" binding:"required"`
-	EffectiveTo        *time.Time                     `json:"effectiveTo"`
+	EffectiveFrom      requiredDate                   `json:"effectiveFrom" binding:"required"`
+	EffectiveTo        *optionalDate                  `json:"effectiveTo"`
 	Weekdays           []int16                        `json:"weekdays" binding:"required"`
 	TripPattern        int16                          `json:"tripPattern" binding:"required"`
 	UnitPrice          float64                        `json:"unitPrice" binding:"required"`
@@ -123,8 +159,8 @@ func (r SaveScheduleRequest) ToService(caseID uuid.UUID) app.CreateScheduleReque
 	return app.CreateScheduleRequest{
 		CaseID:             caseID,
 		SiteID:             r.SiteID,
-		EffectiveFrom:      r.EffectiveFrom,
-		EffectiveTo:        r.EffectiveTo,
+		EffectiveFrom:      r.EffectiveFrom.toTime(),
+		EffectiveTo:        r.EffectiveTo.toTimePtr(),
 		Weekdays:           r.Weekdays,
 		TripPattern:        r.TripPattern,
 		UnitPrice:          r.UnitPrice,
@@ -154,8 +190,8 @@ func (r CreateScheduleRequest) ToService() app.CreateScheduleRequest {
 	return app.CreateScheduleRequest{
 		CaseID:             r.CaseID,
 		SiteID:             r.SiteID,
-		EffectiveFrom:      r.EffectiveFrom,
-		EffectiveTo:        r.EffectiveTo,
+		EffectiveFrom:      r.EffectiveFrom.toTime(),
+		EffectiveTo:        r.EffectiveTo.toTimePtr(),
 		Weekdays:           r.Weekdays,
 		TripPattern:        r.TripPattern,
 		UnitPrice:          r.UnitPrice,
@@ -173,9 +209,11 @@ type CaseResponse struct {
 	Name              string     `json:"name"`
 	NameNormalized    string     `json:"nameNormalized"`
 	NationalIDMasked  string     `json:"nationalIdMasked"`
+	NationalIDInvalid bool       `json:"nationalIdInvalid"`
 	HouseholdType     *string    `json:"householdType"`
 	Gender            *string    `json:"gender"`
 	BirthDate         *time.Time `json:"birthDate"`
+	BirthDateRaw      *string    `json:"birthDateRaw"`
 	CareContactRole   *string    `json:"careContactRole"`
 	CareContactName   *string    `json:"careContactName"`
 	RegisteredAddress *string    `json:"registeredAddress"`
@@ -203,9 +241,11 @@ func newCaseResponse(c app.Case) CaseResponse {
 		Name:              c.Name,
 		NameNormalized:    c.NameNormalized,
 		NationalIDMasked:  c.NationalIDMasked,
+		NationalIDInvalid: c.NationalIDInvalid,
 		HouseholdType:     c.HouseholdType,
 		Gender:            c.Gender,
 		BirthDate:         c.BirthDate,
+		BirthDateRaw:      c.BirthDateRaw,
 		CareContactRole:   c.CareContactRole,
 		CareContactName:   c.CareContactName,
 		RegisteredAddress: c.RegisteredAddress,
@@ -226,6 +266,89 @@ func newCaseResponse(c app.Case) CaseResponse {
 		CreatedAt:         c.CreatedAt,
 		UpdatedAt:         c.UpdatedAt,
 	}
+}
+
+// DuplicateCandidateResponse 代表回傳給前端的待裁決疑似重複個案暫存列。身分證字號
+// 只提供遮罩值，明文需另外呼叫 reveal API 並留下稽核紀錄後才會回傳。
+type DuplicateCandidateResponse struct {
+	ID                     uuid.UUID  `json:"id"`
+	RowIndex               int        `json:"rowIndex"`
+	SheetName              string     `json:"sheetName"`
+	Name                   string     `json:"name"`
+	NationalIDMasked       string     `json:"nationalIdMasked"`
+	NationalIDInvalid      bool       `json:"nationalIdInvalid"`
+	HouseholdType          *string    `json:"householdType"`
+	Gender                 *string    `json:"gender"`
+	BirthDate              *time.Time `json:"birthDate"`
+	BirthDateRaw           *string    `json:"birthDateRaw"`
+	CareContactRole        *string    `json:"careContactRole"`
+	CareContactName        *string    `json:"careContactName"`
+	RegisteredAddress      *string    `json:"registeredAddress"`
+	HomeAddress            *string    `json:"homeAddress"`
+	Region                 *string    `json:"region"`
+	SiteID                 *uuid.UUID `json:"siteId"`
+	SiteName               string     `json:"siteName"`
+	SiteNameRaw            *string    `json:"siteNameRaw"`
+	OutboundVehicleID      *uuid.UUID `json:"outboundVehicleId"`
+	OutboundVehicle        string     `json:"outboundVehicle"`
+	OutboundVehicleNameRaw *string    `json:"outboundVehicleNameRaw"`
+	InboundVehicleID       *uuid.UUID `json:"inboundVehicleId"`
+	InboundVehicle         string     `json:"inboundVehicle"`
+	InboundVehicleNameRaw  *string    `json:"inboundVehicleNameRaw"`
+	Remarks                *string    `json:"remarks"`
+	DuplicateCaseID        uuid.UUID  `json:"duplicateCaseId"`
+	DuplicateCaseName      string     `json:"duplicateCaseName"`
+	Status                 string     `json:"status"`
+	CreatedAt              time.Time  `json:"createdAt"`
+}
+
+func newDuplicateCandidateResponse(c app.DuplicateCandidate) DuplicateCandidateResponse {
+	return DuplicateCandidateResponse{
+		ID:                     c.ID,
+		RowIndex:               c.RowIndex,
+		SheetName:              c.SheetName,
+		Name:                   c.Name,
+		NationalIDMasked:       c.NationalIDMasked,
+		NationalIDInvalid:      c.NationalIDInvalid,
+		HouseholdType:          c.HouseholdType,
+		Gender:                 c.Gender,
+		BirthDate:              c.BirthDate,
+		BirthDateRaw:           c.BirthDateRaw,
+		CareContactRole:        c.CareContactRole,
+		CareContactName:        c.CareContactName,
+		RegisteredAddress:      c.RegisteredAddress,
+		HomeAddress:            c.HomeAddress,
+		Region:                 c.Region,
+		SiteID:                 c.SiteID,
+		SiteName:               c.SiteName,
+		SiteNameRaw:            c.SiteNameRaw,
+		OutboundVehicleID:      c.OutboundVehicleID,
+		OutboundVehicle:        c.OutboundVehicle,
+		OutboundVehicleNameRaw: c.OutboundVehicleNameRaw,
+		InboundVehicleID:       c.InboundVehicleID,
+		InboundVehicle:         c.InboundVehicle,
+		InboundVehicleNameRaw:  c.InboundVehicleNameRaw,
+		Remarks:                c.Remarks,
+		DuplicateCaseID:        c.DuplicateCaseID,
+		DuplicateCaseName:      c.DuplicateCaseName,
+		Status:                 c.Status,
+		CreatedAt:              c.CreatedAt,
+	}
+}
+
+func newDuplicateCandidateResponses(list []app.DuplicateCandidate) []DuplicateCandidateResponse {
+	out := make([]DuplicateCandidateResponse, 0, len(list))
+	for _, c := range list {
+		out = append(out, newDuplicateCandidateResponse(c))
+	}
+	return out
+}
+
+// ResolveDuplicateCandidateRequest 代表裁決一筆疑似重複個案的請求。
+type ResolveDuplicateCandidateRequest struct {
+	Decision     string     `json:"decision" binding:"required"`
+	TargetCaseID *uuid.UUID `json:"targetCaseId"`
+	MergeRemarks bool       `json:"mergeRemarks"`
 }
 
 func newCaseResponses(list []app.Case) []CaseResponse {
