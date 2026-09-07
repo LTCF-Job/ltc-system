@@ -216,6 +216,18 @@ jobs:
       - name: Build
         run: npm run build
 
-# secret-scan job 暫時移除：gitleaks-action 對 organization repo 需要授權金鑰，
-# 改跑 gitleaks 本體後掃出 21 筆待處理結果（含歷史遺留的 Google API key 與多筆
-# 開發用假金鑰），尚未決定 allowlist 與掃描範圍，補回時一併處理。
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 不用 gitleaks-action：它對 organization repo 需要授權金鑰，gitleaks 本體沒有此限制。
+      # 以 dir 模式只掃 checkout 出來的工作樹，不掃 git 歷史：歷史裡的舊金鑰無法靠掃描修復，
+      # 只能靠輪換，掃描的職責是擋下新的外洩。放行清單見 .gitleaks.toml。
+      - name: Scan working tree for secrets
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo:ro" \
+            ghcr.io/gitleaks/gitleaks:v8.21.2 \
+            dir /repo --redact --no-banner --config=/repo/.gitleaks.toml --exit-code 1

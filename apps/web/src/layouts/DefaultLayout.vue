@@ -510,6 +510,11 @@ async function handleCommand(cmd: string) {
       }
     }
 
+    /* 箭頭的 width: inherit 會吃到 title 的 width: 100%，撐成整列寬後被置中畫在文字上，直接不顯示 */
+    :deep(.el-sub-menu__icon-arrow) {
+      display: none;
+    }
+
     :deep(.el-menu-item > span),
     :deep(.el-sub-menu__title > span:not(.el-sub-menu__icon-arrow)) {
       flex: 0 0 auto;
