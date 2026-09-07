@@ -157,7 +157,7 @@ POST /exports（同步產檔）
 
 ## 6. 通知（`NotificationService`）
 
-`SendNotification` 依 topic（例如未回報告警、月底提醒）撈出啟用中的收件人清單逐一寄信，寄送介面是 `EmailSender`，正式環境用 Resend（`RESEND_API_KEY`），本機未設定時才使用 `LogEmailSender`（只印 log，不真的寄信）。`SendResult` 會區分實際成功與失敗數量；任一 provider failure 會回傳 error，不再記成永遠成功。收件人管理走 `settings/notification-recipients` 系列端點。
+`SendNotification` 依 topic（例如未回報告警、月底提醒）撈出啟用中的收件人清單逐一寄信，寄送介面是 `EmailSender`，只有設定 `RESEND_API_KEY` 時才改用 Resend；未設定時（含正式環境）使用 `LogEmailSender`（只印 log，不真的寄信）。`SendResult` 會區分實際成功與失敗數量；任一 provider failure 會回傳 error，不再記成永遠成功。收件人管理走 `settings/notification-recipients` 系列端點。
 
 `GET /rides/missing` 只呼叫 `TaskService.ListMissingReports` 查詢資料，不會觸發通知；只有明確執行檢核的 `POST /tasks/check-missing-reports` 才呼叫 `CheckMissingReports` 並派送告警。
 

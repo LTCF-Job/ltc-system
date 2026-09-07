@@ -146,10 +146,13 @@ func main() {
 	)
 	importSvc.SetIdempotencyStore(caseRepo)
 	var emailSender notifyapp.EmailSender
-	if cfg.AppEnv == "production" || cfg.ResendAPIKey != "" {
+	if cfg.ResendAPIKey != "" {
 		emailSender = notifyinfra.NewResendEmailSender(cfg.ResendAPIKey, cfg.NotifyFrom, &http.Client{Timeout: 10 * time.Second})
 	} else {
-		// LogEmailSender 僅限 local；production 的設定驗證已要求真正的 provider 金鑰。
+		// 未設定寄信 provider 時通知仍寫入資料庫，只是不對外送出；production 留一筆警告，避免誤以為信已寄達
+		if cfg.AppEnv == "production" {
+			slog.Warn("RESEND_API_KEY is not set, notification emails are only logged and never delivered")
+		}
 		emailSender = &notifyapp.LogEmailSender{}
 	}
 	notificationSvc := notifyapp.NewNotificationService(

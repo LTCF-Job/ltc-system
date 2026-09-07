@@ -151,7 +151,7 @@ Console →「Security」→「Secret Manager」→「建立密鑰」，建立�
 - `DATABASE_URL`：步驟一記下的資料庫連線字串
 - `ENCRYPTION_KEY`：一組隨機產生的密碼，執行 `openssl rand -base64 32`（終端機指令）就能產生一組
 - `HMAC_KEY`：跟上面一樣的方式再產生一組（兩個要不一樣）
-- `RESEND_API_KEY`：Resend 控制台建立的 API key，正式環境用來實際寄送通知信
+- `RESEND_API_KEY`：**選填**，Resend 控制台建立的 API key。不建立這個密鑰時通知仍會寫入資料庫、前端通知頁面照常運作，只是不會實際寄出郵件；要真的寄信才建立，並同時設定 `NOTIFY_FROM` 為已在 Resend 驗證過的網域位址
 - `SUPABASE_SERVICE_ROLE_KEY`：Supabase Project Settings → API 的 service_role secret，供後端管理使用者與存取 private export bucket；不可放進前端或一般環境變數截圖
 
 ### 幫服務跟工作補上其他設定
@@ -167,14 +167,14 @@ Console →「Cloud Run」→「服務」→ 點進 `ltc-api` →「編輯並部
   - `LOG_LEVEL=info`
   - `ALLOWED_ORIGINS=https://placeholder.example.com`（先填這個佔位值，步驟五拿到真正的網站網址後記得回來換掉，這欄位是「允許呼叫這個後端的網站清單」）
   - `NOTIFY_FROM=noreply@你的正式網域`
-- 「密鑰」區塊「參照密鑰」，把 `DATABASE_URL`／`ENCRYPTION_KEY`／`HMAC_KEY`／`RESEND_API_KEY`／`SUPABASE_SERVICE_ROLE_KEY` 五個密鑰各自掛成同名環境變數（版本選「最新」）。
+- 「密鑰」區塊「參照密鑰」，把 `DATABASE_URL`／`ENCRYPTION_KEY`／`HMAC_KEY`／`SUPABASE_SERVICE_ROLE_KEY` 四個密鑰各自掛成同名環境變數（版本選「最新」）；有建立 `RESEND_API_KEY` 才一併掛上。
 - Supabase Dashboard → Storage 建立 `ltc-exports` bucket，Access 必須選 **Private**；API 會以 `exports/{jobId}/{fileName}` 保存歷史申報檔，前端不直接拿 Storage 金鑰。
 - 按「部署」。
 
 再到「Cloud Run」→「工作」→ 點進 `ltc-api-migrate` →「編輯」，一樣在「變數與密鑰」頁籤：
 
 - 「環境變數」加入 `APP_ENV=production`、`SUPABASE_PROJECT_REF=...`、`SUPABASE_JWKS_URL=...`（值跟上面一樣）、`ALLOWED_ORIGINS=https://placeholder.example.com`、`NOTIFY_FROM=noreply@你的正式網域`。
-- 「密鑰」掛上 `DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`、`RESEND_API_KEY`、`SUPABASE_SERVICE_ROLE_KEY`。
+- 「密鑰」掛上 `DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`、`SUPABASE_SERVICE_ROLE_KEY`。
 - 儲存。
 
 > **為什麼工作（job）也要設一次？** 因為「服務」跟「工作」是兩個獨立的東西，各自有各自的設定，不會互相共用。少設了任何一個，資料庫初始化工作在每次自動部署時都會失敗，錯誤訊息通常是 `Failed to load config`。填錯字也會有一樣的症狀（例如打成 `APP_ENV=produciton`），這種情況錯誤訊息不會明確告訴你是哪裡打錯，遇到問題先把這兩邊的設定值一字一字核對一次。
@@ -337,15 +337,34 @@ gcloud run jobs create ltc-api-migrate \
 echo -n '<DATABASE_URL>'   | gcloud secrets create DATABASE_URL   --data-file=-
 echo -n '<ENCRYPTION_KEY>' | gcloud secrets create ENCRYPTION_KEY --data-file=-
 echo -n '<HMAC_KEY>'       | gcloud secrets create HMAC_KEY       --data-file=-
-echo -n '<RESEND_API_KEY>' | gcloud secrets create RESEND_API_KEY --data-file=-
 echo -n '<SUPABASE_SERVICE_ROLE_KEY>' | gcloud secrets create SUPABASE_SERVICE_ROLE_KEY --data-file=-
+echo -n '<DEFAULT_ADMIN_EMAIL>'    | gcloud secrets create DEFAULT_ADMIN_EMAIL    --data-file=-
+echo -n '<DEFAULT_ADMIN_PASSWORD>' | gcloud secrets create DEFAULT_ADMIN_PASSWORD --data-file=-
+
+# 掛 secret 的是 Cloud Run 的 runtime service account（預設是 compute 預設 SA），
+# 不是 GitHub Actions 的部署 SA；漏掉這步，deploy-api.yml 會在
+# 「Sync migration job configuration」直接以 Permission denied on secret 失敗。
+RUNTIME_SA="<GCP_PROJECT_NUMBER>-compute@developer.gserviceaccount.com"
+
+for SECRET in \
+  DATABASE_URL \
+  ENCRYPTION_KEY \
+  HMAC_KEY \
+  SUPABASE_SERVICE_ROLE_KEY \
+  DEFAULT_ADMIN_EMAIL \
+  DEFAULT_ADMIN_PASSWORD
+do
+  gcloud secrets add-iam-policy-binding "$SECRET" \
+    --member="serviceAccount:${RUNTIME_SA}" \
+    --role="roles/secretmanager.secretAccessor"
+done
 
 gcloud run services update ltc-api --region <GCP_REGION> \
-  --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
+  --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
   --update-env-vars="APP_ENV=production,SUPABASE_PROJECT_REF=<project-ref>,SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json,STORAGE_BUCKET=ltc-exports,STORAGE_SIGNED_URL_TTL=24h,LOG_LEVEL=info,ALLOWED_ORIGINS=https://placeholder.example.com,NOTIFY_FROM=noreply@your-domain.example"
 
 gcloud run jobs update ltc-api-migrate --region <GCP_REGION> \
-  --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
+  --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
   --update-env-vars="APP_ENV=production,SUPABASE_PROJECT_REF=<project-ref>,SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json,ALLOWED_ORIGINS=https://placeholder.example.com,NOTIFY_FROM=noreply@your-domain.example"
 
 # 步驟六：建立 GitHub Environment 並填入設定值
