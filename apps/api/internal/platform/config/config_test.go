@@ -21,6 +21,8 @@ func clearEnv(t *testing.T) {
 	t.Setenv("ENCRYPTION_KEY", devDefaultEncryptionKeyB64)
 	t.Setenv("HMAC_KEY", devDefaultHMACKeyB64)
 	t.Setenv("ALLOWED_ORIGINS", "")
+	t.Setenv("RESEND_API_KEY", "")
+	t.Setenv("NOTIFY_FROM", "")
 }
 
 // setProductionEnv 設定一組通過所有 production 驗證的環境變數，供各測試單獨拿掉其中一項。
@@ -70,19 +72,25 @@ func TestLoadFromEnv_ProductionRequiresAllowedOrigins(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnv_ProductionRequiresResendAPIKey(t *testing.T) {
+func TestLoadFromEnv_ProductionAllowsMissingResendAPIKey(t *testing.T) {
 	setProductionEnv(t)
 	t.Setenv("RESEND_API_KEY", "")
-	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("expected error when APP_ENV=production without RESEND_API_KEY, got nil")
+	t.Setenv("NOTIFY_FROM", "")
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("expected production to start without RESEND_API_KEY, got error: %v", err)
+	}
+	if cfg.ResendAPIKey != "" {
+		t.Fatalf("expected empty ResendAPIKey, got %q", cfg.ResendAPIKey)
 	}
 }
 
-func TestLoadFromEnv_ProductionRequiresNotifyFrom(t *testing.T) {
+func TestLoadFromEnv_RequiresNotifyFromWhenResendAPIKeySet(t *testing.T) {
 	setProductionEnv(t)
+	t.Setenv("RESEND_API_KEY", "resend-test-key")
 	t.Setenv("NOTIFY_FROM", "")
 	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("expected error when APP_ENV=production without NOTIFY_FROM, got nil")
+		t.Fatal("expected error when RESEND_API_KEY is set without NOTIFY_FROM, got nil")
 	}
 }
 

@@ -28,7 +28,7 @@ type SendResult struct {
 	Failed int
 }
 
-// LogEmailSender 供本機或測試環境使用之日誌模擬發送器。
+// LogEmailSender 只寫日誌、不對外送信的模擬發送器；未設定寄信 provider 時（含 production）由它承接。
 type LogEmailSender struct{}
 
 func (s *LogEmailSender) SendEmail(ctx context.Context, to, subject, body string) error {

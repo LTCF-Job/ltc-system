@@ -76,7 +76,7 @@ API 預設 listen address 依 `PORT`／config 設定，常見本機位址是 `ht
 | Supabase Admin | `SUPABASE_SERVICE_ROLE_KEY`、`SUPABASE_ADMIN_API_TIMEOUT` | user、role bootstrap 與管理 API；缺少時 identity admin endpoints 可能回 503 |
 | Bootstrap | `DEFAULT_ADMIN_EMAIL`、`DEFAULT_ADMIN_PASSWORD` | 兩者和 Admin 設定都具備時才會嘗試 idempotent default admin bootstrap；只在 secret manager／本機安全環境提供 |
 | Frontend | `VITE_API_BASE_URL`、Supabase public URL／anon key 等 Vite 設定 | build 時注入；不要將 service role key 放入 `VITE_*` |
-| External | `RESEND_API_KEY`、`NOTIFY_FROM`、holiday provider 設定 | Resend 設定目前存在但 notification service 預設仍使用 simulated sender |
+| External | `RESEND_API_KEY`、`NOTIFY_FROM`、holiday provider 設定 | `RESEND_API_KEY` 選填，未設定時（含正式環境）notification service 使用 simulated sender |
 
 設定名稱與目前程式碼不一致時，以 `apps/api/internal/platform/config/config.go` 和 `apps/web` 的 runtime config 為準；不要沿用歷史文件中的 `GOOGLE_SA_JSON`、`/healthz` 或其他已移除名稱。
 
@@ -148,7 +148,7 @@ identity management 需要 Supabase Admin API 與 service role 設定。缺少�
 
 ### Notification 看起來成功但收不到信
 
-目前 server composition root 以 `nil` sender 建立 notification service，service 會套用 `LogEmailSender`，只在 log 顯示 simulated email。`RESEND_API_KEY`／`NOTIFY_FROM` 目前不是「已實際寄信」的證據；需完成 adapter、provider credentials、delivery log 與 runtime verification 後才能宣稱寄信可用。
+`RESEND_API_KEY` 未設定時 server composition root 會掛上 `LogEmailSender`，通知寫進資料庫但不外送，log 只有 simulated email；正式環境走到這條路徑會另外留下一筆 `RESEND_API_KEY is not set` 警告。目前正式環境就是這個狀態。設定了 `RESEND_API_KEY` 也不等於信已寄達，仍需 provider delivery log 與實際收件驗證才能宣稱寄信可用。
 
 ### 前端表格資料與 backend 不一致
 

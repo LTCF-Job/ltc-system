@@ -75,11 +75,10 @@ func LoadFromEnv() (*Config, error) {
 		return nil, errors.New("ALLOWED_ORIGINS is required when APP_ENV=production")
 	}
 
-	if cfg.AppEnv == "production" && cfg.ResendAPIKey == "" {
-		return nil, errors.New("RESEND_API_KEY is required when APP_ENV=production")
-	}
-	if cfg.AppEnv == "production" && cfg.NotifyFrom == "" {
-		return nil, errors.New("NOTIFY_FROM is required when APP_ENV=production")
+	// RESEND_API_KEY 未設定時通知改由 LogEmailSender 承接，只寫入資料庫與 log、不對外寄信，
+	// 因此不再是 production 的啟動條件；一旦設了 key 就會真的送出郵件，寄件位址不能缺。
+	if cfg.ResendAPIKey != "" && cfg.NotifyFrom == "" {
+		return nil, errors.New("NOTIFY_FROM is required when RESEND_API_KEY is set")
 	}
 
 	encKey, err := base64.StdEncoding.DecodeString(cfg.EncryptionKeyB64)
