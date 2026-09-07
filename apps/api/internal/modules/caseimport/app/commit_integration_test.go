@@ -137,10 +137,13 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	for _, sr := range result.SkippedRows {
 		t.Logf("skipped row %d (%s): %v", sr.RowIndex, sr.CaseName, sr.Reasons)
 	}
+	for _, fr := range result.FailedRows {
+		t.Logf("failed row %d (%s): %v", fr.RowIndex, fr.CaseName, fr.Reasons)
+	}
 
 	require.Equal(t, 2, result.ImportedCount, "Row A 與 Row C 應成功匯入")
-	require.Len(t, result.SkippedRows, 1, "Row B 應因列交易失敗而被記為略過")
-	require.Equal(t, 2, result.SkippedRows[0].RowIndex)
+	require.Len(t, result.FailedRows, 1, "Row B 應因列交易失敗而被記為失敗")
+	require.Equal(t, 2, result.FailedRows[0].RowIndex)
 
 	// 驗證 Row B 沒有殘留孤兒個案。
 	orphans, orphanCount, err := caseRepo.List(ctx, region, "", rowB.Name, 1, 10, false, false)
@@ -183,7 +186,14 @@ func (a siteAdapter) GetByID(ctx context.Context, id uuid.UUID) (*caseapp.SiteRe
 func (a siteAdapter) GetByName(ctx context.Context, name string) (*importapp.SiteRef, error) {
 	s, err := a.repo.GetByName(ctx, name)
 	if err != nil {
+		// 與 composition root 一致：查無單位屬於保留原始名稱待人工關聯，不是整列失敗。
+		if errors.Is(err, masterapp.ErrSiteNotFound) {
+			return nil, importapp.ErrLookupNotFound
+		}
 		return nil, err
+	}
+	if s == nil {
+		return nil, nil
 	}
 	return &importapp.SiteRef{ID: s.ID, Name: s.Name}, nil
 }
@@ -207,7 +217,14 @@ type vehicleAdapter struct {
 func (a vehicleAdapter) GetByDisplayName(ctx context.Context, displayName string) (*importapp.VehicleRef, error) {
 	v, err := a.repo.GetByDisplayName(ctx, displayName)
 	if err != nil {
+		// 與 composition root 一致：查無車輛屬於保留原始名稱待人工關聯，不是整列失敗。
+		if errors.Is(err, masterapp.ErrVehicleNotFound) {
+			return nil, importapp.ErrLookupNotFound
+		}
 		return nil, err
+	}
+	if v == nil {
+		return nil, nil
 	}
 	return &importapp.VehicleRef{ID: v.ID}, nil
 }
