@@ -1,6 +1,7 @@
-import { apiClient } from './client'
+import { apiClient, createPaginationMeta, unwrapData, unwrapPaged } from './client'
 import type {
   MonthAttendanceReportDTO,
+  AttendanceRecordDTO,
   UpsertAttendanceRequest,
   AttendanceConflictDTO,
   ResolveAttendanceConflictRequest,
@@ -12,17 +13,18 @@ import type {
 
 export async function getMonthAttendance(month?: string, driverId?: string, q?: string): Promise<MonthAttendanceReportDTO> {
   const res = await apiClient.get('/attendance', { params: { month, driverId, q } })
-  return (res as any).data ?? (res as any)
+  return unwrapData<MonthAttendanceReportDTO>(res)
 }
 
-export async function upsertAttendance(data: UpsertAttendanceRequest): Promise<any> {
-  return apiClient.post('/attendance', data)
+export async function upsertAttendance(data: UpsertAttendanceRequest): Promise<AttendanceRecordDTO> {
+  const res = await apiClient.post('/attendance', data)
+  return unwrapData<AttendanceRecordDTO>(res)
 }
 
 // listAttendanceConflicts 取回司機接送匯報匯入自動同步出勤時，與人工登記不一致的待維護衝突。
 export async function listAttendanceConflicts(): Promise<AttendanceConflictDTO[]> {
   const res = await apiClient.get('/attendance/conflicts')
-  return (res as any)?.data ?? []
+  return unwrapData<AttendanceConflictDTO[]>(res) ?? []
 }
 
 // resolveAttendanceConflict 依使用者選擇解決一筆出勤待維護衝突。
@@ -31,7 +33,7 @@ export async function resolveAttendanceConflict(
   data: ResolveAttendanceConflictRequest
 ): Promise<AttendanceConflictDTO> {
   const res = await apiClient.post(`/attendance/conflicts/${id}/resolve`, data)
-  return (res as any)?.data ?? res
+  return unwrapData<AttendanceConflictDTO>(res)
 }
 
 export async function listFuelLogs(params?: {
@@ -43,23 +45,22 @@ export async function listFuelLogs(params?: {
   endDate?: string
   q?: string
 }): Promise<Paged<FuelLogDTO>> {
-  const res = await apiClient.get<FuelLogDTO[]>('/fuel-logs', { params })
-  const data = (res as any).data || (res as any)
-  // 後端未回傳分頁 meta 時，以實際筆數推算，避免顯示與清單內容矛盾的假總數
-  return {
-    data,
-    meta: (res as any).meta || { page: params?.page || 1, pageSize: params?.pageSize || 20, total: data.length, totalPages: 1 }
-  }
+  const res = await apiClient.get('/fuel-logs', { params })
+  const fallback = createPaginationMeta(params?.page, params?.pageSize)
+  return unwrapPaged<FuelLogDTO>(res, fallback)
 }
 
 export async function createFuelLog(data: CreateFuelLogRequest): Promise<FuelLogDTO> {
-  return apiClient.post('/fuel-logs', data)
+  const res = await apiClient.post('/fuel-logs', data)
+  return unwrapData<FuelLogDTO>(res)
 }
 
 export async function updateFuelLog(id: string, data: UpdateFuelLogRequest): Promise<FuelLogDTO> {
-  return apiClient.patch(`/fuel-logs/${id}`, data)
+  const res = await apiClient.patch(`/fuel-logs/${id}`, data)
+  return unwrapData<FuelLogDTO>(res)
 }
 
 export async function deleteFuelLog(id: string): Promise<{ success: boolean }> {
-  return apiClient.delete(`/fuel-logs/${id}`)
+  const res = await apiClient.delete(`/fuel-logs/${id}`)
+  return unwrapData<{ success: boolean }>(res)
 }

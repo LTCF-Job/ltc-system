@@ -1,6 +1,6 @@
 # 後端核心業務流程
 
-這份文件拆解幾條橫跨多個 handler／service／domain 套件的目前流程，比單看某一個檔案更容易看懂系統在幹嘛。分層架構背景見 [backend-framework.md](backend-framework.md)，逐支端點清單見 [backend-api-reference.md](backend-api-reference.md)。流程中的「靜態已確認」不代表已用真實 DB／Supabase／外部 provider 執行驗證；目前已知落差集中在 [2026-09-04 Full-stack Review](../reviews/2026-09-04-full-stack-review.md)。
+這份文件拆解幾條橫跨多個 handler／service／domain 套件的完整流程，比單看某一個檔案更容易看懂系統在幹嘛。分層架構背景見 [backend-framework.md](backend-framework.md)，逐支端點清單見 [backend-api-reference.md](backend-api-reference.md)。
 
 ## 1. 司機接送匯報匯入 → 搭乘紀錄（`DriverReportService.CommitDriverReport` → `RideService.IngestSubmission`）
 
@@ -11,20 +11,26 @@
    沒對應過的欄位附上以姓名相似度算出的推薦個案與由 `[去程]／[回程]` 推得的推薦趟次。
 2. 使用者在預覽畫面就地確認欄位對應後，改打 `?dryRun=false`，並以 form field `columnDecisions`
    帶回確認結果。`CommitDriverReport` 先把欄位對應寫回 `form_columns`（以表頭文字為鍵，
-   個案增減造成的欄號位移不會錯配），清掉本次要覆蓋的既有匯入資料，再逐列交給 ride 模組。
-3. `RideService.IngestSubmission` 把該列原封不動存一筆 `form_submissions`（`source = 'import'`，
-   raw payload 方便日後追查），並用 `domain/namenorm.Normalize` 正規化司機姓名比對司機主檔抓
-   `driver_id`（配不到就先留空，並在預覽階段以警告提示）。
+   個案增減造成的欄號位移不會錯配），再逐列交給 ride 模組——不再先清除既有資料，每次上傳是
+   獨立事件，見下方「逐列比對與交易邊界」。
+3. `RideService.IngestSubmission` 把該列存一筆 `form_submissions`（`source = 'import'`，raw
+   payload 方便日後追查；一車一天只有一筆，同一天重傳原地更新），並用
+   `domain/namenorm.Normalize` 正規化司機姓名比對司機主檔抓 `driver_id`（配不到就先留空，並在
+   預覽階段以警告提示；配不到時這一列完全不會展開成搭乘來源，見下方閘門說明）。
 4. 逐一走過已設定對應（`mapping_status = mapped`）的欄位，用 `domain/merge.ParseReportedValue`
-   判斷每欄值是「有坐」還是「沒坐」，其他文字（含空白）視為未回報直接跳過。
+   依明確白名單判斷「有坐／有搭乘」或「沒坐／沒有坐／未搭乘／沒有搭乘」；其他文字（含空白）視為未回報直接跳過。
 5. 若個案排班是四趟制，匯報表上的「第 1 趟」「第 2 趟」要展開成資料庫的四趟（1→1,3；2→2,4），
    這是四趟展開規則的實作位置（`expandLegSeqs`）。
-6. 每個展開後的趟次都會 `InsertRideSource` 存一筆來源紀錄，然後呼叫 `recalculateRideRecord`
-   讀回該 slot 的全部來源列跑 `domain/merge` 演算法，用「同車取最新、跨車 OR」規則重算
-   `ride_records` 的最終狀態——已經被人工更正過的紀錄不會被自動覆蓋。
+6. 每個展開後的趟次呼叫 `reconcileRideSource`：比對這台車在這個 slot 目前最新的一筆來源，
+   沒有就 `InsertRideSource` 直接寫入；回報值與司機都相同視為重複回報不動作；任一不同則暫存
+   進 `ride_source_row_conflicts` 待使用者裁決，既有來源不動。實際寫入後呼叫
+   `recalculateRideRecord` 讀回該 slot 的全部來源列跑 `domain/merge` 演算法，用「同車取最新、
+   跨車 OR」規則重算 `ride_records` 的最終狀態——已經被人工更正過的紀錄不會被自動覆蓋。
 
-單列日期無法解析時只略過該列並回報原因，其餘日期照常寫入，不會讓一整個月的匯報因為
-一列打錯而全部匯不進來。
+未指定 `yearMonth` 時，單列日期無法解析只略過該列並回報原因，其餘日期照常寫入；指定
+`yearMonth` 時，任何阻斷性解析錯誤都會拒絕整份匯入，不寫入任何資料。`yearMonth` 只用來判斷
+檔案內落在該月以外的日期要標成錯誤列，不再代表「整月覆蓋」——詳見
+[driver-report-import-overwrite.md](../decisions/driver-report-import-overwrite.md)。
 
 `CommitDriverReport` 逐列呼叫 `RideService.IngestSubmission` 之後，若這一列比對到司機
 （`driver_id` 有值），會在同一個交易內接著呼叫 `AttendanceService.SyncFromImport`（透過
@@ -42,26 +48,26 @@
   「司機待維護」流程（見下方司機回填段落），不會產生出勤衝突。
 - `GET /api/v1/attendance/conflicts` 查詢目前待處理清單；
   `POST /api/v1/attendance/conflicts/:id/resolve` 提交使用者的選擇。
+- 出勤月報只讀取資料庫中所有未刪除且啟用的司機；司機清單或假日資料查詢失敗時直接回傳錯誤，
+  不使用假資料，也不以固定筆數上限截斷結果。
 
-### 覆蓋語意與交易邊界
+### 逐列比對與交易邊界
 
-匯入是覆蓋不是疊加：重匯同一份檔案的結果與只匯一次相同。`clearPreviousImport` 在寫入前呼叫
-`RideService.ClearImportedDates` 刪掉這份匯報表在本次涵蓋日期的 `form_submissions`，`ride_sources`
-由 `submission_id` 的 `ON DELETE CASCADE` 連帶清除；只刪本匯報表的提交，其他車輛對同一 slot
-的混車來源不受影響。
+每次上傳是獨立事件，不整段覆蓋既有資料：`RideService.reconcileRideSource` 逐格比對這台車在
+這個 slot（`case_id`, `service_date`, `leg_seq`, `vehicle_id`）目前最新的一筆來源，決定直接
+寫入、視為無變化的重複回報，還是暫存進 `ride_source_row_conflicts` 待使用者裁決。設計決策與
+取捨見 [driver-report-import-overwrite.md](../decisions/driver-report-import-overwrite.md)。
 
-清除範圍由選填的 `yearMonth`（`YYYY-MM`）query param 決定：
+司機比對不到司機主檔時，這一列完全不會展開成搭乘來源（只留在 `form_submissions.payload`），
+避免一筆缺司機的資料先出現在司機日曆等其他頁面；司機補綁定後才由 `BackfillDriver` 讀取表單
+既有欄位對應與這筆提交的原始答案，逐欄重新跑一次 `reconcileRideSource`。
 
-- 有帶：整個月都被這份檔案覆蓋，且檔案內任一有效列落在該月之外就整份拒絕（dry run 階段就擋）。
-- 未帶：只覆蓋檔案實際涵蓋的日期。
-- 檔案沒有任何可寫入的列時不執行清除，避免傳錯空檔清空整月資料。
+帶有 `corrected_at`、`conflict_resolved_at` 或 `not_claimed_aa09` 的紀錄一律保留，人工成果
+不會被匯入或補綁定流程覆蓋。
 
-來源被清空的 slot 不能靠重算修正，會由 `DeleteDerivedRideRecord` 刪除；帶有 `corrected_at`、
-`conflict_resolved_at` 或 `not_claimed_aa09` 的紀錄一律保留，人工成果不被覆蓋式重匯抹掉。
-
-清除與重寫落在同一個 `pgxdb.TxRunner` 交易內。解析層級的失敗仍逐列略過，但資料庫層級的失敗
-會整份回滾，`last_imported_at` 不更新——先刪後寫若中途失敗而不回滾，該月資料會直接消失。
-`RideRepository` 與 `DriverReportRepository` 因此都改用 `pgxdb.FromContext` 取用外層交易。
+寫入落在同一個 `pgxdb.TxRunner` 交易內。解析層級的失敗仍逐列略過，但資料庫層級的失敗會整份
+回滾，`last_imported_at` 不更新。`RideRepository` 與 `DriverReportRepository` 都改用
+`pgxdb.FromContext` 取用外層交易。
 
 ```
 使用者上傳匯報表 .xlsx
@@ -76,19 +82,18 @@ POST /driver-reports/:id/import?dryRun=false + columnDecisions
 寫回 form_columns（以表頭文字為鍵）
    │
    ▼
-ClearImportedDates（刪本表本月 form_submissions，cascade 清 ride_sources）
+存／更新 form_submissions（一車一天一筆，原始 payload，source = import）
    │
    ▼
-存 form_submissions（原始 payload，source = import）
-   │
-   ▼
-namenorm.Normalize(driverRaw) → 配對司機主檔
+namenorm.Normalize(driverRaw) → 配對司機主檔（配不到就不往下展開，留在待維護）
    │
    ▼
 逐欄位判斷「有坐/沒坐」 → 四趟展開（若排班為四趟制）
    │
    ▼
-InsertRideSource（來源紀錄）
+reconcileRideSource：沒有既有來源 → InsertRideSource
+                      值相同        → 不動作（重複回報）
+                      值不同        → 暫存 ride_source_row_conflicts（待裁決）
    │
    ▼
 merge.MergeRideSources（同車取最新、跨車 OR）
@@ -106,24 +111,24 @@ merge.MergeRideSources（同車取最新、跨車 OR）
 
 ## 3. 未回報偵測與月底提醒（`TaskService`）
 
-- `CheckMissingReports(ctx, targetDate, region)`：拿 `domain/calendar.CalculateExpectedRides` 算出「這天應該有的搭乘」，跟實際 `ride_records` 比對，抓出應搭但沒回報的趟次，並可能觸發告警通知。
+- `ListMissingReports(ctx, targetDate, region)`：拿 `domain/calendar.CalculateExpectedRides` 算出「這天應該有的搭乘」，跟實際 `ride_records` 比對，供前端「未回報清單」頁查詢，純查詢不觸發通知。
+- `CheckMissingReports(ctx, targetDate, region)`：同樣比對應搭與實際回報，但只由明確的後台任務入口呼叫，並觸發告警通知。
 - `MonthEndReminder(ctx, year, month)`：每月 26 日跑，彙整檢核結果並發信提醒。
 - 這兩支都各自有 `POST /tasks/*` 端點，正式環境由 Cloud Scheduler 定期打；本機要測試就直接手動 curl 這兩支。
-
-目前另有 `GET /api/v1/rides/missing` 接到 `taskH.GetMissingReports`，前端把它當成可分頁、可篩選的查詢頁使用，但 handler 只解析少數 query，且呼叫的 task path 具有 notification-capable 行為。這是目前的 query／command 邊界缺陷：在修正前不要把該 GET 當成純讀取 API，也不要以頁面顯示結果推論通知已成功送達。
 
 ## 4. 政府申報匯出（`PrecheckService` + `GovClaimService`）
 
 一個個案一個月產一份 `.xlsx`，欄位比照政府範本的 33 欄（`domain/govform.Headers33`，工作表名「工作表1」）。
 
 1. 使用者在「政府申報匯出」頁選申報年月、申報地區、申報個案（可多選）與匯出檔案模式（直接下載／壓縮檔）。
-2. `GET/POST /exports/precheck` 跑 `PrecheckService.RunPrecheck`，回傳 `PrecheckReport`；有 error 就擋住匯出，前端列出 issue 讓使用者回去修。
+2. `GET/POST /exports/precheck` 以年月、地區與選取的 `caseIds` 建立 `ClaimScope` 後跑 `PrecheckService.RunPrecheck`，回傳 `PrecheckReport`；資料庫查詢失敗或有任何 error（目前只有未裁決混車衝突）就擋住匯出，前端列出 issue 讓使用者回去修。個案資料缺漏是 `warning`，不擋匯出。
+   `POST /exports` 會以同一組年月、地區與 `caseIds` 建立 scope 並查詢申報來源，避免前置檢核與實際匯出檢查不同資料集。
 3. `POST /exports` 交給 `GovClaimService.CreateGovClaimJob` 同步產檔（專案沒有背景 worker）：
-   - `GovClaimRepository.QueryGovClaimSources` 一次撈齊該月 `effective_status = 'boarded'` 的趟次，join `cases`／`case_schedules`／`schedule_legs`／`sites`／`vehicles`／`drivers`。
-   - 逐筆驗證後呼叫 `domain/govform.BuildClaimRow` 組出 33 欄，再用 `SortClaimRows` 排成「leg1 整月 → leg2 整月」。缺排班趟次、缺司機、缺出發時間等資料的趟次計入 `skipped` 並回報，不套用預設值硬湊。
+   - `GovClaimRepository.QueryGovClaimSources` 一次撈齊該月 `effective_status = 'boarded'` 且沒有未裁決衝突的趟次，join `cases`／`case_schedules`／`schedule_legs`／`sites`／`vehicles`／`drivers`；`case_schedules`／`sites`／`schedule_legs` 全部是 LEFT JOIN，個案在該服務日沒有排班時該列仍會出現（排班衍生欄位為 NULL），交由下一步明確計入資料缺漏清單，不會被 INNER JOIN 整列濾掉、讓「缺排班」在結果上完全看不見。
+   - 逐筆呼叫 `domain/govform.BuildClaimRow` 組出 33 欄，再用 `SortClaimRows` 排成「leg1 整月 → leg2 整月」。缺排班趟次、缺司機、缺出發時間等資料**只把該欄位留白**，不套用預設值硬湊，也不把整列丟掉；缺了什麼逐案逐欄計入 `dataGaps` 回報。**缺資料一律不阻擋匯出**，工作照樣標記成功，前端「政府申報匯出」頁在完成畫面直接列出留白原因。只有連留白都組不出列（例如服務日期無法換算民國年）才會少掉那一列，計入 `BUILD_ROW_FAILED`。
    - `ExcelRenderer.RenderGovClaim` 產出每個個案的工作簿位元組；壓縮檔模式再由 `ZipArchiver.BuildZip` 打包。
-   - 單一交易寫入 `export_lines`（申報列快照）、`export_job_files`（逐案檔案中繼資料）與 `export_jobs` 狀態。
-4. 下載時不從物件儲存讀檔（專案沒有 storage adapter），改由 `export_lines.raw_payload` 快照重繪。快照的第 1 欄與第 7 欄（個案／服務人員身分證）一律留空，只存 `driverId`，重繪時才由密文解密補回，明文身分證不落資料庫。
+   - 單一交易寫入 `export_lines`（申報列快照）、`export_job_files`（逐案檔案中繼資料）與 `export_jobs` 狀態；原始 XLSX 同步寫入 private Supabase Storage 的 `exports/{jobId}/{fileName}`，資料庫只保存 object path、checksum 與大小。
+4. 下載時優先從 private object storage 讀取匯出成功當下的完整 XLSX，API 驗證權限後才代為轉送，禁止前端取得 service-role key。舊資料若沒有 object path，才由 `export_lines.raw_payload` 快照重繪；快照的第 1 欄與第 7 欄（個案／服務人員身分證）一律留空，只存 `driverId`，重繪時才由密文解密補回，明文身分證不落資料庫。
 5. `GET /exports/:id/files/:caseId/download` 取單一個案的 `.xlsx`；`GET /exports/:id/download` 只服務壓縮檔模式的工作。歷史紀錄頁不提供下載，只能用 `GET /exports/:id` 查看該次匯出包含哪些個案。
 
 ```
@@ -135,9 +140,10 @@ GET/POST /exports/precheck ──未通過──► 前端列出 issue，回去�
    ▼
 POST /exports（同步產檔）
    │  QueryGovClaimSources → BuildClaimRow → SortClaimRows → RenderGovClaim（→ BuildZip）
+   │  Upload private exports/{jobId}/{fileName}
    │  單一交易寫入 export_lines + export_job_files + export_jobs
    ▼
-逐案下載 GET /exports/:id/files/:caseId/download（由快照重繪）
+逐案下載 GET /exports/:id/files/:caseId/download（讀 private object；舊資料才由快照重繪）
 或整包下載 GET /exports/:id/download（僅壓縮檔模式）
 ```
 
@@ -147,9 +153,15 @@ POST /exports（同步產檔）
 
 `POST /cases/import`（或相容路徑 `/masters/import`）吃使用者上傳的 Excel，`ImportService.ParseCasesFromExcel` 逐列解析、驗證欄位（含 `ParseWeekdays` 解析「每週單位開放時間」這種自由文字格式），回傳每列的解析結果與統計，成功的列才會實際寫入個案主檔；另外 `ParseScheduleWorkbook` 專門解析「(參考用) 交通車接送班表」這份既有 Excel，抽出單位跟司機資訊。
 
+個案與照護人員匯入目前只接受 `.xlsx`。每筆預覽列都產生 `rowId = sheetName:rowIndex`；正式 commit 的 duplicate selection 使用 `rowId`，`rowIndex` 僅供畫面顯示，避免多工作表同列號碰撞。Excel reader 會在 parser 前檢查 ZIP 項目數、解壓總量、worksheet XML 大小與壓縮倍率，超過限制即拒絕。
+
 ## 6. 通知（`NotificationService`）
 
-`SendNotification` 依 topic（例如未回報告警、月底提醒）撈出啟用中的收件人清單逐一呼叫 `EmailSender`，收件人管理走 `settings/notification-recipients` 系列端點。目前 `cmd/server/main.go` 傳入 nil sender，service 會使用 `LogEmailSender`，只印 simulated email log；`RESEND_API_KEY` 與 `NOTIFY_FROM` 雖存在設定中，尚未接上可證明 delivery 的 Resend adapter。完成 adapter、provider credentials、retry／delivery status 與 runtime check 前，不可把通知成功說成 email 已送達。
+`SendNotification` 依 topic（例如未回報告警、月底提醒）撈出啟用中的收件人清單逐一寄信，寄送介面是 `EmailSender`，正式環境用 Resend（`RESEND_API_KEY`），本機未設定時才使用 `LogEmailSender`（只印 log，不真的寄信）。`SendResult` 會區分實際成功與失敗數量；任一 provider failure 會回傳 error，不再記成永遠成功。收件人管理走 `settings/notification-recipients` 系列端點。
+
+`GET /rides/missing` 只呼叫 `TaskService.ListMissingReports` 查詢資料，不會觸發通知；只有明確執行檢核的 `POST /tasks/check-missing-reports` 才呼叫 `CheckMissingReports` 並派送告警。
+
+個案改名會在同一個 use case 內同步更新 `name` 與 `name_normalized`；明確提交空白姓名會被拒絕。
 
 ## 7. 匯報表範本下載
 
@@ -160,19 +172,6 @@ POST /exports（同步產檔）
 
 ## 8. 稽核留痕（`middleware.RecordAuditLog`）
 
-設計上，會動到個資或關鍵狀態的操作（新增、修改、reveal PII、更正搭乘紀錄、裁決衝突、匯出、設定變更、匯入）應呼叫 audit writer，記錄操作者、角色、動作類型與異動前後快照。靜態 review 發現部分 service 沒有注入 audit、部分 write error 被忽略，且 change-password 的 actor role 可能為空，因此不能把這段設計描述當成所有 mutation 都已留下可靠 audit。`GET /audit` 是現行稽核查詢 route，但完整 coverage 仍待逐 route runtime／DB 驗證。
+凡是會動到個資或關鍵狀態的操作（新增、修改、reveal PII、更正搭乘紀錄、裁決衝突、匯出、設定變更、匯入）都會呼叫 `RecordAuditLog` 寫一筆 `audit_log`，記錄操作者、角色、動作類型、異動前後的資料快照。`reveal_pii` 必須先成功寫入 durable audit，audit DB 不可用時回 503，不能先解密再 best-effort 留痕；匯入略過列的 audit 會遮罩身分證、姓名、地址與聯絡資訊。`GET /audit` 只有 `admin` 能查，是唯一的稽核紀錄查詢入口。
 
-## Failure modes
-
-- 匯入解析錯誤可逐列略過；但 migration、transaction、DB write error 應使整份 operation 回滾，不能混成成功結果。
-- 缺漏檢查若被 GET 呼叫，會把查詢失敗與通知副作用混在同一個 user action；在 command/query 拆分前應視為高風險流程。
-- export query 若部分 vehicle／case 查詢失敗，不能只回傳剩餘資料並標示成功；應明確回報 partial／failed state。
-- notification sender 使用 LogEmailSender 時，log 只代表 application 呼叫 sender，不代表外部信件 delivery。
-- local 沒有 DB 時，部分 module 可能回空資料或假成功，部分 repository 可能失敗；offline 啟動不代表本文件的 DB 流程已驗證。
-
-## Unverified
-
-- 真實 PostgreSQL 上 migration、seed、transaction rollback、soft-delete scope、lock 與 row-level error 行為。
-- 真實 Supabase Auth／Admin API 的 JWT role metadata、user list pagination、password change、permission cache 與 logout 行為。
-- Cloud Scheduler 的 retry／duplicate trigger、notification delivery、政府 holiday provider 與正式 export download。
-- 大資料量下的 report／missing query latency、N+1、前端 stale response 與 timezone 邊界。
+報表與查詢的月份解析使用共用 strict parser；非法月份不會 fallback 到目前月份。`/api/livez` 只檢查 process，`/api/readyz` 與相容的 `/api/health` 會在 DB 不可用時回 503。

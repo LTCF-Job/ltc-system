@@ -1,0 +1,22 @@
+title = "LTC Transport System gitleaks config"
+
+[extend]
+useDefault = true
+
+# CI 以 --no-git 只掃當前工作樹，不掃 git 歷史：歷史裡的舊金鑰無法靠掃描修復，
+# 只能靠輪換（已處理），掃描的職責是擋下新的外洩。
+#
+# 以下放行的都是刻意寫死的開發／測試假值，不是真實憑證。新增例外前請先確認
+# 該值不會出現在任何正式環境。
+[allowlist]
+description = "開發與測試用的固定假金鑰"
+paths = [
+  # 範例檔的佔位值，本來就是給人照著填的樣板
+  '''apps/api/\.env\.example$''',
+  '''apps/web/\.env\.example$''',
+  # local 環境的預設金鑰，config.go 內有 production 防呆會擋下沿用
+  '''apps/api/internal/platform/config/config\.go$''',
+  # CI 與本機 compose 跑測試資料庫用的固定金鑰
+  '''\.github/workflows/ci\.yml$''',
+  '''docker-compose\.local\.yml$''',
+]

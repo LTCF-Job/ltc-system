@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +19,26 @@ type Holiday struct {
 	CreatedAt   time.Time
 }
 
+// HolidayAuditSnapshot 是假日異動的明確稽核快照。
+type HolidayAuditSnapshot struct {
+	HolidayDate time.Time `json:"holidayDate"`
+	Name        string    `json:"name"`
+	Region      *string   `json:"region,omitempty"`
+	Source      string    `json:"source"`
+	IsDayOff    bool      `json:"isDayOff"`
+}
+
+// HolidayImportAuditSnapshot 是政府行事曆批次匯入的摘要，不直接保存來源資料列。
+type HolidayImportAuditSnapshot struct {
+	Year  int `json:"year"`
+	Count int `json:"count"`
+}
+
+// AuditSnapshot 產生假日的明確稽核快照。
+func (h Holiday) AuditSnapshot() HolidayAuditSnapshot {
+	return HolidayAuditSnapshot{HolidayDate: h.HolidayDate, Name: h.Name, Region: h.Region, Source: h.Source, IsDayOff: h.IsDayOff}
+}
+
 // AuditEntry 是本模組寫入稽核日誌的內容。
 type AuditEntry struct {
 	ActorID    *uuid.UUID
@@ -25,6 +46,7 @@ type AuditEntry struct {
 	Action     string
 	EntityType string
 	EntityID   *string
+	BeforeData interface{}
 	AfterData  interface{}
 }
 
@@ -39,6 +61,11 @@ type HolidayStore interface {
 	Upsert(context.Context, *Holiday) error
 	BatchUpsert(context.Context, []Holiday) error
 	Delete(context.Context, time.Time) error
+}
+
+// HolidayReader 是可選的既有假日讀取 port，供 delete／upsert 稽核保存 before snapshot。
+type HolidayReader interface {
+	GetByDate(context.Context, time.Time) (*Holiday, error)
 }
 
 // HolidayRecord 代表政府行事曆來源回傳的單筆假日資料，供 provider port
@@ -83,6 +110,16 @@ type UpsertHolidayInput struct {
 }
 
 func (s *HolidayService) UpsertHoliday(ctx context.Context, in UpsertHolidayInput, actorID uuid.UUID, actorRole string) (*Holiday, error) {
+	var before *Holiday
+	if s.auditRepo != nil {
+		if reader, ok := s.repo.(HolidayReader); ok {
+			var err error
+			before, err = reader.GetByDate(ctx, in.HolidayDate)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	source := in.Source
 	if source == "" {
 		source = "manual"
@@ -99,7 +136,15 @@ func (s *HolidayService) UpsertHoliday(ctx context.Context, in UpsertHolidayInpu
 	}
 	if s.auditRepo != nil {
 		dateStr := h.HolidayDate.Format("2006-01-02")
-		_ = s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: "create", EntityType: "holiday", EntityID: &dateStr, AfterData: h})
+		action := "create"
+		var beforeData interface{}
+		if before != nil {
+			action = "update"
+			beforeData = before.AuditSnapshot()
+		}
+		if err := s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: action, EntityType: "holiday", EntityID: &dateStr, BeforeData: beforeData, AfterData: h.AuditSnapshot()}); err != nil {
+			slog.Error("holiday audit write failed", "action", action, "entity_id", dateStr, "error", err)
+		}
 	}
 	return h, nil
 }
@@ -133,18 +178,36 @@ func (s *HolidayService) ImportTaiwanGovHolidays(ctx context.Context, year int, 
 	}
 	if s.auditRepo != nil {
 		yearID := fmt.Sprintf("%d", year)
-		_ = s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: "import", EntityType: "holiday_calendar", EntityID: &yearID, AfterData: map[string]interface{}{"count": len(holidays), "year": year}})
+		if err := s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: "import", EntityType: "holiday_calendar", EntityID: &yearID, AfterData: HolidayImportAuditSnapshot{Year: year, Count: len(holidays)}}); err != nil {
+			slog.Error("holiday import audit write failed", "year", year, "error", err)
+		}
 	}
 	return len(holidays), nil
 }
 
 func (s *HolidayService) DeleteHoliday(ctx context.Context, date time.Time, actorID uuid.UUID, actorRole string) error {
+	var before *Holiday
+	if s.auditRepo != nil {
+		if reader, ok := s.repo.(HolidayReader); ok {
+			var err error
+			before, err = reader.GetByDate(ctx, date)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	if err := s.repo.Delete(ctx, date); err != nil {
 		return err
 	}
 	if s.auditRepo != nil {
 		dateStr := date.Format("2006-01-02")
-		_ = s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: "delete", EntityType: "holiday", EntityID: &dateStr})
+		var beforeData interface{}
+		if before != nil {
+			beforeData = before.AuditSnapshot()
+		}
+		if err := s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: "delete", EntityType: "holiday", EntityID: &dateStr, BeforeData: beforeData}); err != nil {
+			slog.Error("holiday audit write failed", "action", "delete", "entity_id", dateStr, "error", err)
+		}
 	}
 	return nil
 }

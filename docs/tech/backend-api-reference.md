@@ -5,9 +5,9 @@ covers: ["apps/api/cmd/server/routes.go"]
 
 # 後端 API 路由總覽
 
-Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`）；公開 health endpoint 是 `GET /api/health`。目前沒有 `/api/v1/ingest/google-form` 或 `X-Ingest-Token` route。實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
+Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/health`（不驗證）跟 `/api/v1/ingest/google-form`（走 `X-Ingest-Token`）。實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
 
-下表「角色」欄只作為**內建 role 的預設權限基準**，不是授權機制本身：現行 `/api/v1` 業務 route 一律以 `auth.RequirePermission(module, action)` 查角色的模組權限矩陣（`roles.permissions` 與 user custom permission）。`/auth/me` 與 `/auth/change-password` 只要求已通過 JWT authentication；不存在 `/demo/reset`，也沒有現行 `auth.RequireRoles` route。自訂角色的實際存取範圍以 permission matrix 為準，不受下表文字侷限。機制細節與撤權／cache 邊界見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。
+下表「角色」欄列的是**目前系統五個內建角色（viewer/dispatcher/staff/driver/admin）實際能通過的結果**，不是授權機制本身：所有 API 路由都透過 `auth.RequirePermission(module, action)` 查角色的模組權限矩陣（`roles.permissions`，可在「角色身分管理」頁調整，自訂角色的實際存取範圍以矩陣為準，不受下表侷限）。機制細節見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。
 
 架構背景見 [backend-framework.md](backend-framework.md)，每支端點背後的業務流程見 [backend-flows.md](backend-flows.md)。
 
@@ -35,10 +35,13 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`）；公開 health 
 | GET | `/cases/:id/schedule` | viewer, staff, admin | 取得排班（星期、時段、四趟制設定） |
 | PUT | `/cases/:id/schedule` | staff, admin | 覆寫排班 |
 | POST | `/cases/schedules` | staff, admin | 批次建立排班 |
-| POST | `/cases/import` | staff, admin | 批次匯入個案 Excel |
+| POST | `/cases/import` | staff, admin | 批次匯入個案 Excel；疑似重複個案不建立個案，改建立為待裁決暫存列 |
 | POST | `/masters/import` | staff, admin | 同上，走另一條相容路徑（歷史因素，實際都打 `caseH.ImportExcel`） |
 | GET | `/cases/export?caseIds=` | viewer, staff, admin | 匯出個案彙整表；`caseIds` 為逗號分隔的個案 ID，省略則匯出全部個案 |
-| PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定 |
+| PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定（完整替換語意：`siteId`／`outboundVehicleId`／`inboundVehicleId` 與對應的 `siteNameRaw`／`outboundVehicleNameRaw`／`inboundVehicleNameRaw` 未帶上即視為清空，尚未完成關聯的匯入原始名稱必須原樣回送） |
+| GET | `/cases/import/duplicates` | viewer, staff, admin | 列出待裁決的疑似重複個案暫存列 |
+| POST | `/cases/import/duplicates/:id/reveal` | staff, admin | 解密單筆暫存列身分證字號供裁決比對（會寫 audit log 的 `reveal_pii`） |
+| POST | `/cases/import/duplicates/:id/resolve` | staff, admin | 裁決疑似重複個案（`confirmed_new` 建立新個案／`merged_existing` 合併進既有個案） |
 
 ## 單位主檔 `siteH`
 
@@ -80,15 +83,15 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`）；公開 health 
 | POST | `/driver-reports` | staff, admin | 為一台車建立匯報表；該車已有匯報表時只更新名稱並回傳既有那一份 |
 | DELETE | `/driver-reports/:id` | staff, admin | 刪除匯報表（欄位對應與匯報紀錄一併移除） |
 | GET | `/driver-reports/:id/template` | staff, admin | 下載該車空白匯報範本（`.xlsx`，只有表頭） |
-| POST | `/driver-reports/:id/import?dryRun=&yearMonth=` | staff, admin | 上傳匯報檔；`dryRun=true`（預設）回傳預覽，`dryRun=false` 正式寫入。`yearMonth`（`YYYY-MM`）選填，宣告後整月覆蓋並拒收該月以外的日期 |
+| POST | `/driver-reports/:id/import?dryRun=&yearMonth=` | staff, admin | 上傳匯報檔；`dryRun=true`（預設）回傳預覽，`dryRun=false` 正式寫入，逐列比對既有資料（沒問題直接寫入、值不同進待維護）。`yearMonth`（`YYYY-MM`）選填，宣告後拒收該月以外的日期 |
 | GET | `/driver-reports/imported-months` | viewer, staff, admin | 每份匯報表各月份已匯入的筆數與最後匯入時間 |
-| GET | `/driver-reports/:id/months/:yearMonth` | viewer, staff, admin | 取得指定匯報表月份明細 |
 | GET | `/driver-reports/columns` | viewer, staff, admin | 欄位清單與對應狀態（可帶 `formId`、`mappingStatus`） |
 | GET | `/driver-reports/columns/name-matches?name=` | viewer, staff, admin | 找出目前待維護欄位中姓名與傳入姓名相符（含近似）的欄位 |
 | PATCH | `/driver-reports/columns/:id/mapping` | staff, admin | 設定單一欄位對應到哪個個案的哪一趟；剛從待維護變成已對應時同一交易內立即回填搭乘紀錄 |
 | POST | `/driver-reports/columns/batch-mapping` | staff, admin | 批次設定欄位對應 |
 | GET | `/driver-reports/submissions/review` | viewer, staff, admin | 以匯報表列（一天一筆提交）為單位列出待維護資料，一列可能同時有個案欄位與駕駛人兩種問題 |
 | POST | `/driver-reports/drivers/bind` | staff, admin | 把某個比對不到司機主檔的原始姓名綁定到指定司機，立即回填所有正規化姓名相符的既有回報 |
+| POST | `/driver-reports/row-conflicts/:id/resolve` | staff, admin | 裁決一筆「同車同個案」衝突；body `{useNew}`，`true` 採用這次上傳的新值並重算搭乘紀錄，`false` 保留既有資料 |
 
 匯入檔的欄位順序固定為：民國日期、駕駛人、各個案趟次欄、備註。個案趟次欄只接受
 「有坐」「沒坐」，其餘（含空白）視為未回報不建立紀錄。`dryRun=false` 時可另外以
@@ -101,7 +104,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 |---|---|---|---|
 | GET | `/rides/calendar` | viewer, staff, admin | 月曆矩陣視圖（個案 × 日期 × 趟次的搭乘狀態） |
 | GET | `/rides/issues` | viewer, staff, admin | 異常搭乘集中清單（衝突、待確認等） |
-| GET | `/rides/missing` | viewer, staff, admin | 未回報清單（目前接到 `taskH.GetMissingReports`；query／pagination 與前端 contract 仍有落差，且需注意可能進入 notification-capable path） |
+| GET | `/rides/missing` | viewer, staff, admin | 未回報清單（`taskH.GetMissingReports`） |
 | GET | `/rides/:id` | viewer, staff, admin | 單筆搭乘紀錄詳情 |
 | PATCH | `/rides/:id` | staff, admin | 人工更正搭乘紀錄（寫 audit log） |
 | POST | `/rides/manual-report` | staff, admin | 人工補登整筆回報（月曆空白格填寫） |
@@ -113,8 +116,8 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/exports/precheck` | staff, admin | 執行匯出前置檢核 |
-| POST | `/exports/precheck` | staff, admin | 同上 |
+| GET | `/exports/precheck` | staff, admin | 依 `periodYm`、`region` 與可選 `caseIds` 執行匯出前置檢核 |
+| POST | `/exports/precheck` | staff, admin | 同上；body 可帶 `periodYm`、`region`、`caseIds` |
 | GET | `/exports` | viewer, staff, admin | 匯出工作歷史清單（不含檔案明細與下載連結） |
 | POST | `/exports` | staff, admin | 建立政府申報匯出工作並同步產檔；body 需帶 `periodYm`(民國 5 碼)、`mode`(`direct`\|`zip`)、`caseIds`(至少一筆) |
 | GET | `/exports/:id` | viewer, staff, admin | 單筆匯出工作詳情，含逐案檔案清單 `files` |
@@ -142,7 +145,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | DELETE | `/settings/notification-recipients/:id` | admin | |
 | GET | `/notifications/logs` | viewer, staff, admin | 通知發送歷史 |
 
-`notification_recipients` 除 `email` 型別外，資料庫已加 `recipient_type`/`target_role`/`user_id` 欄位（`role`／`user` 型別），但目前沒有完整的前端建立／更新流程會使用這兩種型別。寄送時若收件人未能解析出 email 會略過並記 log，不讓整批通知失敗；目前 server 預設 sender 是 simulated `LogEmailSender`，不代表 Resend delivery 已完成。
+`notification_recipients` 除 `email` 型別外，資料庫已加 `recipient_type`/`target_role`/`user_id` 欄位（`role`／`user` 型別），但目前沒有任何前端頁面會建立這兩種型別；寄送時若收件人未能解析出 email 會略過並記 log，不讓整批通知失敗。
 
 ## 報表 `reportH`
 
@@ -181,9 +184,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | Method | Path | 角色 |
 |---|---|---|
 | GET | `/dashboard/metrics` | viewer, staff, admin |
-| GET | `/dashboard/stats` | viewer, staff, admin |
-
-`/dashboard/stats` 的 `recentExports` 目前是最近 5 筆申報匯出工作（重用 `exportH` 的 `ExportJobDTO` 形狀）；其餘欄位與 dashboard metrics 的資料來源見 [integration-contract.md](integration-contract.md) 及 review report，部分 KPI 仍需 runtime／業務資料驗證。
+| GET | `/dashboard/stats` | viewer, staff, admin | 回 `recentExports`：最近 5 筆申報匯出工作（重用 `exportH` 的 `ExportJobDTO` 形狀），其餘欄位見 [integration-contract.md](integration-contract.md) |
 
 ## 稽核紀錄 `auditH`
 
@@ -210,13 +211,6 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | DELETE | `/caregivers/:id` | admin | |
 | PUT | `/caregivers/:id/site` | staff, admin | 將單位待關聯的照護人員連結至既有單位，並清空原始單位名稱 |
 
-## 自助身分資訊與密碼
-
-| Method | Path | 角色 | 說明 |
-|---|---|---|---|
-| GET | `/auth/me` | authenticated | 取得目前 JWT actor、built-in role 與 resolved permission |
-| POST | `/auth/change-password` | authenticated | 目前登入者變更自己的密碼；需依 Supabase Auth provider 流程驗證舊密碼 |
-
 ## 角色身分管理 `roleH`
 
 角色資料落在 `roles` 表（`identity` 模組），非 Supabase 端資料，`is_system` 系統角色（`admin`/`dispatcher`/`staff`/`driver`/`viewer`）不可刪除且權限矩陣不可覆寫成別的 `base_role`。
@@ -229,7 +223,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | PATCH | `/roles/:id` | admin | 系統角色不可修改（`ErrSystemRoleImmutable`） |
 | DELETE | `/roles/:id` | admin | 系統角色或仍有使用者的角色不可刪除（`ErrSystemRoleImmutable`／`ErrRoleInUse`） |
 
-目前 role route 也走 `RequirePermission("settings_roles", action)`；`is_system` 角色不可刪除，細節由 identity app service 與 DB contract 決定。仍需補 self-role、last-admin 與跨 instance permission cache 的安全規則，詳見 review report。
+所有路由（包含 `/users`、`/roles`、`/auth/change-password`、`/tasks/*` 與 `/holidays*`）都使用同一套 effective permission resolver；`auth.RequireRoles` 已移除，自訂角色不再被寫死的角色字串額外擋下。
 
 ## 使用者帳號管理 `identityH`
 
@@ -237,11 +231,10 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/users` | admin | 使用者清單（裸陣列），支援 `keyword`／`role` 篩選（app 層過濾；目前沒有完整 server-side pagination） |
+| GET | `/users` | admin | 使用者清單（`{data,meta}`），支援 `q`／`role`／`page`／`pageSize`，由本地 PostgreSQL projection 執行搜尋與分頁 |
 | GET | `/users/:id` | admin | |
 | POST | `/users` | admin | 建立使用者，`role` 須存在於 `roles` 表 |
 | PATCH | `/users/:id` | admin | |
 | PUT | `/users/:id/permissions` | admin | 覆寫個人自訂權限（存於 `app_metadata.custom_permissions`） |
-| POST | `/users/:id/reset-password` | admin | 管理員重設指定使用者密碼 |
 | DELETE | `/users/:id` | admin | 不可刪除自己（`ErrCannotDeleteSelf`，403） |
-| POST | `/auth/change-password` | authenticated | 任何已登入者可改自己的密碼；後端先以舊密碼呼叫 Supabase `grant_type=password` 驗證通過才允許改新密碼 |
+| POST | `/auth/change-password` | viewer, staff, admin | 任何已登入者可改自己的密碼；後端先以舊密碼呼叫 Supabase `grant_type=password` 驗證通過才允許改新密碼 |

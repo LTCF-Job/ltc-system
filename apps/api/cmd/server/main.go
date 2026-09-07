@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	auditapp "ltc-system/apps/api/internal/modules/audit/app"
@@ -48,6 +51,7 @@ import (
 	taskinfra "ltc-system/apps/api/internal/modules/task/infra"
 	tasktransport "ltc-system/apps/api/internal/modules/task/transport"
 	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/config"
 	"ltc-system/apps/api/internal/platform/pgxdb"
 
@@ -74,21 +78,17 @@ func main() {
 	ctx := context.Background()
 	pool, err := connectDatabase(ctx, cfg)
 	if err != nil {
-		// production 下無資料庫連線代表這台伺服器無法提供任何真實資料，
-		// 啟動即失敗比讓所有 repository 帶著 nil pool 悄悄上線更安全。
-		// local 下允許離線啟動，方便前端在沒有本機 DB 時開發。
-		if cfg.AppEnv == "production" {
-			slog.Error("Database connection failed, refusing to start in production", slog.String("error", err.Error()))
-			os.Exit(1)
-		}
-		slog.Warn("Could not connect to database (running in offline mode, local only)", slog.String("error", err.Error()))
-	} else {
-		defer pool.Close()
-		slog.Info("Connected to PostgreSQL database successfully")
+		// API 沒有可安全替代資料庫的離線資料層；任何環境都必須在依賴不可用時
+		// 拒絕啟動，避免 nil pool 讓查詢變成假空結果或在 mutation 路徑 panic。
+		slog.Error("Database connection failed, refusing to start", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
+	defer pool.Close()
+	slog.Info("Connected to PostgreSQL database successfully")
 
 	// 初始化 Repositories
 	caseRepo := caseinfra.NewCaseRepository(pool)
+	caseDuplicateStagingRepo := caseinfra.NewCaseDuplicateStagingRepository(pool)
 	rideRepo := rideinfra.NewRideRepository(pool)
 	holidayRepo := holidayinfra.NewHolidayRepository(pool)
 	notificationRepo := notifyinfra.NewNotificationRepository(pool)
@@ -106,22 +106,37 @@ func main() {
 	dashboardRepo := reportinfra.NewDashboardRepository(pool)
 	precheckRepo := reportinfra.NewPrecheckRepository(pool)
 	govClaimRepo := reportinfra.NewGovClaimRepository(pool)
-	exportJobRepo := reportinfra.NewExportJobRepository(pool)
+	exportStorageAdapter := reportinfra.NewSupabaseObjectStorage(
+		cfg.SupabaseURL,
+		cfg.SupabaseServiceRoleKey,
+		cfg.StorageBucket,
+		&http.Client{Timeout: 30 * time.Second},
+	)
+	if cfg.AppEnv == "production" && !exportStorageAdapter.Configured() {
+		slog.Error("Private export object storage is not configured, refusing to start")
+		os.Exit(1)
+	}
+	var exportStorage reportapp.ObjectStorage
+	if exportStorageAdapter.Configured() {
+		exportStorage = exportStorageAdapter
+	}
+	exportJobRepo := reportinfra.NewExportJobRepository(pool, exportStorage)
 	taskRepo := taskinfra.NewTaskRepository(pool)
 	caregiverRepo := caregiverinfra.NewCaregiverRepository(pool)
 
 	// 初始化 Services
 	mdAudit := masterdataAuditWriter{svc: auditSvc}
-	regionSvc := masterapp.NewRegionService(mdRegionRepo, mdAudit)
-	siteSvc := masterapp.NewSiteService(mdSiteRepo)
-	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo, mdAudit)
-	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg, mdAudit)
 	txRunner := pgxdb.NewTxRunner(pool)
-	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer())
+	regionSvc := masterapp.NewRegionService(mdRegionRepo, mdAudit)
+	siteSvc := masterapp.NewSiteService(mdSiteRepo, mdAudit)
+	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo, mdAudit, txRunner)
+	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg, mdAudit, txRunner)
+	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer(), caseDuplicateStagingRepo, txRunner)
 	excelAdapter := importinfra.NewExcelAdapter()
 	importSvc := importapp.NewImportService(
 		caseRegistrar{svc: caseSvc},
 		caseDuplicateFinder{svc: caseSvc},
+		caseDuplicateStager{svc: caseSvc},
 		importSiteLookup{repo: mdSiteRepo},
 		importVehicleLookup{repo: mdVehicleRepo},
 		caseRepo,
@@ -129,11 +144,31 @@ func main() {
 		excelAdapter,
 		txRunner,
 	)
-	notificationSvc := notifyapp.NewNotificationService(notificationRepo, notificationAuditWriter{svc: auditSvc}, nil)
+	importSvc.SetIdempotencyStore(caseRepo)
+	var emailSender notifyapp.EmailSender
+	if cfg.AppEnv == "production" || cfg.ResendAPIKey != "" {
+		emailSender = notifyinfra.NewResendEmailSender(cfg.ResendAPIKey, cfg.NotifyFrom, &http.Client{Timeout: 10 * time.Second})
+	} else {
+		// LogEmailSender 僅限 local；production 的設定驗證已要求真正的 provider 金鑰。
+		emailSender = &notifyapp.LogEmailSender{}
+	}
+	notificationSvc := notifyapp.NewNotificationService(
+		notificationRepo,
+		notificationAuditWriter{svc: auditSvc},
+		emailSender,
+		notifyapp.WithNotificationClock(clock.NewAsiaTaipei()),
+	)
 	taskSvc := taskapp.NewTaskService(taskRepo, taskScheduleReader{repo: caseRepo}, holidayRepo, notificationSvc)
 	rideSvc := rideapp.NewRideService(rideRepo, rideDriverResolver{repo: mdDriverRepo}, rideScheduleReader{repo: caseRepo}, rideAuditWriter{svc: auditSvc}, rideMissingReportProvider{svc: taskSvc})
 	opsAudit := opsAuditWriter{svc: auditSvc}
-	attendanceSvc := opsapp.NewAttendanceService(attendanceRepo, opsDriverLister{repo: mdDriverRepo}, opsAudit, holidayRepo)
+	attendanceSvc := opsapp.NewAttendanceService(
+		attendanceRepo,
+		opsDriverLister{repo: mdDriverRepo},
+		opsAudit,
+		holidayRepo,
+		opsapp.WithAttendanceTxRunner(txRunner),
+		opsapp.WithAttendanceClock(clock.NewAsiaTaipei()),
+	)
 	driverReportExcel := drinfra.NewExcelAdapter()
 	driverReportSvc := drapp.NewDriverReportService(
 		drinfra.NewDriverReportRepository(pool),
@@ -145,6 +180,7 @@ func main() {
 		driverReportAttendanceRegistrar{svc: attendanceSvc},
 		driverReportAuditWriter{svc: auditSvc},
 		txRunner,
+		drapp.WithDriverReportClock(clock.NewAsiaTaipei()),
 	)
 	excelRenderer := reportinfra.NewExcelRenderer()
 	precheckSvc := reportapp.NewPrecheckService(precheckRepo)
@@ -159,15 +195,29 @@ func main() {
 	fuelSvc := opsapp.NewFuelService(fuelRepo, opsAudit)
 	dashboardSvc := reportapp.NewDashboardService(dashboardRepo, exportJobRepo)
 	caregiverExcelAdapter := caregiverinfra.NewExcelAdapter()
-	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverSiteLookup{repo: mdSiteRepo}, caregiverExcelAdapter, caregiverExcelAdapter)
+	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverSiteLookup{repo: mdSiteRepo}, caregiverExcelAdapter, caregiverExcelAdapter, caregiverAuditWriter{svc: auditSvc})
 
 	roleRepo := identityinfra.NewRoleRepository(pool)
+	securityStateRepo := identityinfra.NewUserSecurityStateRepository(pool)
+	userDirectoryRepo := identityinfra.NewUserDirectoryRepository(pool)
 	permResolver := auth.NewCachedPermissionResolver(rolePermissionResolver{store: roleRepo})
 	identityAudit := identityAuditWriter{svc: auditSvc}
 	adminClient := identityinfra.NewSupabaseAdminClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, &http.Client{Timeout: cfg.SupabaseAdminTimeout})
-	customPermResolver := auth.NewCachedCustomPermissionResolver(userCustomPermissionResolver{admin: adminClient})
+	securityStateResolver := userSecurityStateResolver{store: securityStateRepo, admin: adminClient}
+	customPermResolver := auth.NewCachedCustomPermissionResolver(securityStateResolver)
 	roleSvc := identityapp.NewRoleService(roleRepo, adminClient, identityAudit, txRunner)
 	userSvc := identityapp.NewUserService(adminClient, roleRepo, identityAudit)
+	userSvc.SetUserSecurityStateStore(securityStateRepo)
+	userSvc.SetUserDirectoryStore(userDirectoryRepo)
+	var userState auth.UserStateResolver
+	var userStateCache *auth.CachedUserStateResolver
+	if cfg.AppEnv == "production" && adminClient.Configured() {
+		userStateCache = auth.NewCachedUserStateResolver(securityStateResolver, 5*time.Second)
+		userState = userStateCache
+	}
+	permissionCaches := permissionCacheInvalidator{roles: permResolver, users: customPermResolver, state: userStateCache}
+	roleSvc.SetPermissionCacheInvalidator(permissionCaches)
+	userSvc.SetPermissionCacheInvalidator(permissionCaches)
 
 	// 初始化 Handlers
 	h := handlers{
@@ -194,29 +244,56 @@ func main() {
 		identity:     identitytransport.NewIdentityHandler(userSvc),
 	}
 
-	r := newRouter(cfg, pool, h, permResolver, customPermResolver)
+	r := newRouter(cfg, pool, h, permResolver, customPermResolver, userState)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	slog.Info("Starting LTC API Server", slog.String("addr", addr), slog.String("env", cfg.AppEnv))
-	if err := r.Run(addr); err != nil {
-		slog.Error("Server terminated unexpectedly", slog.String("error", err.Error()))
-		os.Exit(1)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	serverCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("Server terminated unexpectedly", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+	case <-serverCtx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slog.Error("Server graceful shutdown failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
 	}
 }
 
 // connectDatabase 建立連線池並確認可連通；任何一步失敗都回傳 error，交由呼叫端依環境決定是否啟動。
 func connectDatabase(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
-	// Supabase 的連線池網址走 pgbouncer transaction pooling，同一個 pgxpool 連線
-	// 在不同請求間可能被路由到不同後端連線；pgx 預設會快取 prepared statement 名稱，
-	// 在這種環境下會不定期撞名回傳 "prepared statement already exists"，需改用
-	// simple protocol（見 cmd/migrate/main.go 同樣的修法）。
 	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse database config: %w", err)
 	}
+	// Supabase 的連線池網址走 pgbouncer transaction pooling，同一個 pgxpool 連線在不同請求間可能被路由到
+	// 不同後端連線；pgx 預設會快取 prepared statement 名稱，在這種環境下會不定期撞名回傳
+	// "prepared statement already exists"，需改用 simple protocol（見 cmd/migrate/main.go 同樣的修法）。
 	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
-	poolCfg.MaxConns = int32(cfg.DBMaxOpenConns)
-	poolCfg.MinConns = int32(cfg.DBMaxIdleConns)
+	poolCfg.MaxConns = int32(cfg.DBMaxConns)
+	poolCfg.MinConns = int32(cfg.DBMinConns)
+	poolCfg.MaxConnLifetime = cfg.DBMaxConnLifetime
+	poolCfg.MaxConnIdleTime = cfg.DBMaxConnIdleTime
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {

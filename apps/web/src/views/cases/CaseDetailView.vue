@@ -8,7 +8,7 @@
       </el-button>
     </div>
 
-    <!-- 分頁導覽：基本資料 / 排班設定 / 搭乘月曆 -->
+    <!-- 分頁導覽：基本資料 / 排班設定 -->
     <el-tabs v-model="activeTab" type="border-card" class="detail-tabs">
       <!-- 分頁 1：基本資料 -->
       <el-tab-pane label="基本資料" name="basic">
@@ -243,11 +243,10 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import ScheduleEditor from './ScheduleEditor.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { getCase, updateCase, deleteCase, getCaseSchedule, updateCaseTransportPreference } from '@/api/cases'
-import { listSites, listVehicles } from '@/api/masters'
+import { listAllSites, listAllVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
 import { REGION_LABELS } from '@/types/domain'
@@ -295,11 +294,8 @@ async function fetchDetail() {
   try {
     const [rawCase, rawSchedule] = await Promise.all([
       getCase(caseId.value) as Promise<any>,
-      // 404／查無排班是合法的「尚未排班」狀態；其餘錯誤（如伺服器錯誤）需往外拋出，不得一併當成無排班
-      getCaseSchedule(caseId.value).catch((err: any) => {
-        if (err?.response?.status === 404) return null
-        throw err
-      }) as Promise<any>
+      // 個案尚未排班時後端回傳 data: null，屬於正常狀態
+      getCaseSchedule(caseId.value) as Promise<any>
     ])
     const res: any = rawCase?.data ?? rawCase
     const sched: any = rawSchedule?.data ?? rawSchedule
@@ -329,8 +325,8 @@ async function fetchDetail() {
     transportForm.siteId = res.siteId || ''
     transportForm.outboundVehicleId = res.outboundVehicleId || ''
     transportForm.inboundVehicleId = res.inboundVehicleId || ''
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入個案明細失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     loading.value = false
   }
@@ -338,11 +334,11 @@ async function fetchDetail() {
 
 async function loadSitesAndVehicles() {
   const [sitesRes, vehiclesRes] = await Promise.all([
-    listSites({ status: 'active', pageSize: 100 }),
-    listVehicles({ status: 'active', pageSize: 100 })
+    listAllSites({ status: 'active' }),
+    listAllVehicles({ status: 'active' })
   ])
-  availableSites.value = sitesRes.data
-  availableVehicles.value = vehiclesRes.data
+  availableSites.value = sitesRes
+  availableVehicles.value = vehiclesRes
 }
 
 async function handleUpdateCase() {
@@ -359,11 +355,16 @@ async function handleUpdateCase() {
 async function handleUpdateTransportPreference() {
   savingTransportPreference.value = true
   try {
-    // 三個欄位皆選填：只送出有值的欄位，避免把使用者未異動、原本為空的欄位當成「明確清空」送出
-    const payload: UpdateCaseTransportPreferenceRequest = {}
-    if (transportForm.siteId) payload.siteId = transportForm.siteId
-    if (transportForm.outboundVehicleId) payload.outboundVehicleId = transportForm.outboundVehicleId
-    if (transportForm.inboundVehicleId) payload.inboundVehicleId = transportForm.inboundVehicleId
+    // 三個欄位皆選填：只送出有值的欄位，避免把使用者未異動、原本為空的欄位當成「明確清空」送出。
+    // 這支 API 是完整替換，仍未關聯那幾欄的匯入原始名稱必須原樣回送，否則個案會無聲離開待維護清單
+    const payload: UpdateCaseTransportPreferenceRequest = {
+      siteId: transportForm.siteId || null,
+      outboundVehicleId: transportForm.outboundVehicleId || null,
+      inboundVehicleId: transportForm.inboundVehicleId || null,
+      siteNameRaw: transportForm.siteId ? '' : caseData.value?.siteNameRaw || '',
+      outboundVehicleNameRaw: transportForm.outboundVehicleId ? '' : caseData.value?.outboundVehicleNameRaw || '',
+      inboundVehicleNameRaw: transportForm.inboundVehicleId ? '' : caseData.value?.inboundVehicleNameRaw || ''
+    }
     await updateCaseTransportPreference(caseId.value, payload)
     ElMessage.success('交通偏好已更新')
   } finally {
@@ -390,10 +391,8 @@ async function handleDeleteCase() {
     await deleteCase(caseId.value)
     ElMessage.success(`個案「${caseData.value?.name}」已成功刪除`)
     router.push('/cases')
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除個案失敗'))
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 

@@ -55,7 +55,7 @@
           </el-table-column>
           <el-table-column prop="nationalId" label="身分證字號" width="140" align="center">
             <template #default="{ row }">
-              <span class="driver-data font-mono">{{ row.nationalId || '-' }}</span>
+              <span class="driver-data font-mono">{{ row.nationalIdMasked || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="licenseClass" label="駕照類別" min-width="120" align="center" class-name="license-class-col">
@@ -161,9 +161,6 @@
         <el-form-item label="司機姓名" prop="name">
           <el-input v-model="form.name" placeholder="請輸入姓名" />
         </el-form-item>
-        <el-form-item label="身分證字號" prop="nationalId">
-          <el-input v-model="form.nationalId" placeholder="1 碼英文 + 9 碼數字" />
-        </el-form-item>
         <el-form-item label="所屬區域" prop="region">
           <el-select v-model="form.region" placeholder="請選擇區域" filterable style="width: 100%">
             <el-option
@@ -173,9 +170,6 @@
               :value="key"
             />
           </el-select>
-        </el-form-item>
-        <el-form-item label="聯絡電話" prop="phone">
-          <el-input v-model="form.phone" placeholder="如：0912345678" />
         </el-form-item>
         <el-form-item label="電子信箱" prop="email">
           <el-input v-model="form.email" placeholder="通知寄送用信箱" />
@@ -273,7 +267,6 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
@@ -283,13 +276,13 @@ import {
   updateDriver,
   deleteDriver,
   assignDriverVehicle,
-  listVehicles
+  listAllVehicles
 } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
-import { formatDate } from '@/utils/formatters'
+import { formatDate, todayLocal } from '@/utils/formatters'
 import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass, REGION_LABELS } from '@/types/domain'
-import type { DriverDTO, CreateDriverRequest, VehicleDTO } from '@/types/api'
+import type { DriverDTO, CreateDriverRequest, UpdateDriverRequest, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
 const drivers = ref<DriverDTO[]>([])
@@ -306,7 +299,7 @@ const selectedDriverId = ref<string | null>(null)
 const assignFormRef = ref<FormInstance>()
 const assignForm = reactive({
   vehicleId: '',
-  startDate: new Date().toISOString().split('T')[0],
+  startDate: todayLocal(),
   endDate: ''
 })
 
@@ -315,11 +308,10 @@ const assignRules = {
   startDate: [{ required: true, message: '請選擇起始日期', trigger: 'change' }]
 }
 
-const form = reactive<CreateDriverRequest>({
+const form = reactive<CreateDriverRequest & UpdateDriverRequest>({
   name: '',
   nationalId: '',
   region: 'miaoli',
-  phone: '',
   email: '',
   status: 'active',
   licenseClass: null,
@@ -328,7 +320,6 @@ const form = reactive<CreateDriverRequest>({
 
 const rules = {
   name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }],
-  nationalId: [{ required: true, message: '請輸入身分證字號', trigger: 'blur' }],
   region: [{ required: true, message: '請選擇所屬區域', trigger: 'change' }]
 }
 
@@ -370,8 +361,8 @@ async function handleQuickToggleActive(row: DriverDTO, newActive: boolean) {
     await updateDriver(row.id, { status: newStatus })
     row.status = newStatus
     ElMessage.success(`已將司機「${row.name}」狀態更新為 ${newActive ? '啟用' : '停用'}`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新司機狀態失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -386,9 +377,7 @@ function handleDriverCreated() {
 function openEditDialog(row: any) {
   editingId.value = row.id
   form.name = row.name
-  form.nationalId = row.nationalId
   form.region = row.region
-  form.phone = row.phone || ''
   form.email = row.email || ''
   form.status = row.status
   form.licenseClass = row.licenseClass ?? null
@@ -421,7 +410,7 @@ function openAssignDialog(row: any) {
   selectedDriverId.value = row.id
   const assignment = row.assignments?.[row.assignments.length - 1]
   assignForm.vehicleId = assignment?.vehicleId || ''
-  assignForm.startDate = new Date().toISOString().split('T')[0]
+  assignForm.startDate = todayLocal()
   assignForm.endDate = ''
   assignDialogVisible.value = true
 }
@@ -432,7 +421,14 @@ async function handleSubmit() {
     if (!valid) return
     submitting.value = true
     try {
-      await updateDriver(editingId.value!, form)
+      await updateDriver(editingId.value!, {
+        name: form.name,
+        region: form.region,
+        email: form.email,
+        status: form.status,
+        licenseClass: form.licenseClass,
+        licenseExpiryDate: form.licenseExpiryDate
+      })
       ElMessage.success('司機資料已更新')
       editDialogVisible.value = false
       executeFetch()
@@ -473,24 +469,19 @@ async function handleDeleteDriver(row: DriverDTO) {
     await deleteDriver(row.id)
     ElMessage.success(`司機「${row.name}」已成功刪除`)
     executeFetch()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除司機失敗'))
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 
 onMounted(async () => {
-  const vRes = await listVehicles({ status: 'active', pageSize: 100 })
-  allVehicles.value = vRes.data
+  allVehicles.value = await listAllVehicles({ status: 'active' })
 })
 
 executeFetch()
 </script>
 
 <style scoped>
-/* 狀態互動切換按鈕 / 膠囊標籤 */
-/* 對話框內狀態單選群組 */
 .assigned-vehicle-info {
   display: inline-flex;
   align-items: center;

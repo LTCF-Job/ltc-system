@@ -109,6 +109,20 @@ func TestExportHandler_CreateBlockedByPrecheck(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "PRECHECK_FAILED")
 }
 
+func TestExportHandler_PrecheckRejectsUnknownJSONField(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h, _ := newTestExportHandler(t, app.GovClaimModeDirect)
+
+	w := performPrecheckRequest(h, http.MethodPost, map[string]interface{}{
+		"periodYm": "11507",
+		"caseIds":  []string{testCaseID.String()},
+		"caseID":   "typo",
+	})
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "VALIDATION_FAILED")
+}
+
 func TestExportHandler_DownloadCaseFileServesOpenableWorkbook(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h, jobID := newTestExportHandler(t, app.GovClaimModeDirect)
@@ -216,74 +230,6 @@ func TestExportHandler_ListReturnsPagination(t *testing.T) {
 	assert.Empty(t, resp.Data[0].DownloadURL, "歷史列表不提供下載連結")
 }
 
-func TestExportHandler_PrecheckSuccess(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	h, _ := newTestExportHandler(t, app.GovClaimModeDirect)
-
-	w := performRequest(h, http.MethodPost, "/api/v1/exports/precheck", map[string]interface{}{
-		"periodYm": "11507",
-		"region":   "hsinchu",
-	})
-
-	require.Equal(t, http.StatusOK, w.Code)
-	var resp struct {
-		Data precheckResponse `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-
-	assert.True(t, resp.Data.Passed)
-	assert.False(t, resp.Data.HasErrors)
-	assert.False(t, resp.Data.HasWarnings)
-	assert.Equal(t, 0, resp.Data.Summary.TotalErrors)
-	assert.Equal(t, 0, resp.Data.Summary.TotalWarnings)
-	assert.Equal(t, 1, resp.Data.Summary.TotalInfos)
-	require.Len(t, resp.Data.Items, 1)
-	assert.Equal(t, "QUOTA_CHECK_SKIPPED", resp.Data.Items[0].Code)
-	assert.Equal(t, "info", resp.Data.Items[0].Level)
-}
-
-func TestExportHandler_PrecheckWithIssues(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	svcDate := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
-	precheck := app.NewPrecheckService(stubPrecheckRepo{
-		incomplete: []app.IncompleteCase{{ID: testCaseID, Name: "張三"}},
-		conflicts: []app.UnresolvedConflict{
-			{RideID: uuid.New(), CaseName: "張三", ServiceDate: svcDate},
-		},
-	})
-	h := NewExportHandler(precheck, nil)
-
-	w := performRequest(h, http.MethodGet, "/api/v1/exports/precheck?periodYm=11507&region=hsinchu", nil)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	var resp struct {
-		Data precheckResponse `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-
-	assert.False(t, resp.Data.Passed)
-	assert.True(t, resp.Data.HasErrors)
-	assert.True(t, resp.Data.HasWarnings)
-	assert.Equal(t, 1, resp.Data.Summary.TotalErrors)
-	assert.Equal(t, 1, resp.Data.Summary.TotalWarnings)
-	assert.Equal(t, 1, resp.Data.Summary.TotalInfos)
-	require.Len(t, resp.Data.Items, 3)
-
-	// Items 依序包含 Info, Error, Warning
-	assert.Equal(t, "QUOTA_CHECK_SKIPPED", resp.Data.Items[0].Code)
-	assert.Equal(t, "MISSING_CASE_PROFILE", resp.Data.Items[1].Code)
-	assert.Equal(t, "error", resp.Data.Items[1].Level)
-	require.Len(t, resp.Data.Items[1].Details, 1)
-	assert.Equal(t, "張三", resp.Data.Items[1].Details[0].CaseName)
-	assert.Equal(t, testCaseID.String(), resp.Data.Items[1].Details[0].CaseID)
-
-	assert.Equal(t, "UNRESOLVED_CONFLICT", resp.Data.Items[2].Code)
-	assert.Equal(t, "warning", resp.Data.Items[2].Level)
-	require.Len(t, resp.Data.Items[2].Details, 1)
-	assert.Equal(t, "張三", resp.Data.Items[2].Details[0].CaseName)
-	assert.Equal(t, "2026-07-10", resp.Data.Items[2].Details[0].ServiceDate)
-}
-
 // --- 測試組裝 ---
 
 // newTestExportHandler 用真實的 Excel renderer 與 zip archiver 組出 handler，只把資料來源與
@@ -317,8 +263,9 @@ func newTestExportHandler(t *testing.T, mode app.GovClaimMode) (*ExportHandler, 
 
 func newExportHandlerWithPrecheckFailure(t *testing.T) *ExportHandler {
 	t.Helper()
+	// 未裁決的混車衝突是唯一仍會擋下匯出的檢核項目；缺個案資料只會留白匯出。
 	precheck := app.NewPrecheckService(stubPrecheckRepo{
-		incomplete: []app.IncompleteCase{{ID: testCaseID, Name: "蔡曾切"}},
+		conflicts: []app.UnresolvedConflict{{RideID: uuid.New(), CaseName: "蔡曾切", ServiceDate: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)}},
 	})
 	svc := app.NewGovClaimService(
 		&config.Config{EncryptionKey: testKey},
@@ -335,12 +282,12 @@ func newExportHandlerWithPrecheckFailure(t *testing.T) *ExportHandler {
 func performRequest(h *ExportHandler, method, path string, body interface{}) *httptest.ResponseRecorder {
 	r := gin.New()
 	r.POST("/api/v1/exports", h.Create)
+	r.POST("/api/v1/exports/precheck", h.Precheck)
+	r.GET("/api/v1/exports/precheck", h.Precheck)
 	r.GET("/api/v1/exports", h.List)
 	r.GET("/api/v1/exports/:id", h.Get)
 	r.GET("/api/v1/exports/:id/download", h.Download)
 	r.GET("/api/v1/exports/:id/files/:caseId/download", h.DownloadCaseFile)
-	r.GET("/api/v1/exports/precheck", h.Precheck)
-	r.POST("/api/v1/exports/precheck", h.Precheck)
 
 	var reader *bytes.Reader
 	if body != nil {
@@ -358,6 +305,10 @@ func performRequest(h *ExportHandler, method, path string, body interface{}) *ht
 	return w
 }
 
+func performPrecheckRequest(h *ExportHandler, method string, body interface{}) *httptest.ResponseRecorder {
+	return performRequest(h, method, "/api/v1/exports/precheck", body)
+}
+
 // --- 測試替身 ---
 
 type discardAuditWriter struct{}
@@ -368,7 +319,7 @@ type stubSourceReader struct {
 	sources []app.GovClaimSource
 }
 
-func (s *stubSourceReader) QueryGovClaimSources(context.Context, time.Time, time.Time, string, []uuid.UUID) ([]app.GovClaimSource, error) {
+func (s *stubSourceReader) QueryGovClaimSources(context.Context, app.ClaimScope) ([]app.GovClaimSource, error) {
 	return s.sources, nil
 }
 
@@ -377,11 +328,11 @@ type stubPrecheckRepo struct {
 	conflicts  []app.UnresolvedConflict
 }
 
-func (s stubPrecheckRepo) FindIncompleteActiveCases(context.Context, string) ([]app.IncompleteCase, error) {
+func (s stubPrecheckRepo) FindIncompleteActiveCases(context.Context, app.ClaimScope) ([]app.IncompleteCase, error) {
 	return s.incomplete, nil
 }
 
-func (s stubPrecheckRepo) FindUnresolvedConflicts(context.Context, string) ([]app.UnresolvedConflict, error) {
+func (s stubPrecheckRepo) FindUnresolvedConflicts(context.Context, app.ClaimScope) ([]app.UnresolvedConflict, error) {
 	return s.conflicts, nil
 }
 

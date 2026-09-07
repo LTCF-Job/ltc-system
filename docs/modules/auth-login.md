@@ -29,11 +29,13 @@ covers:
 
 ## Invariants and gotchas
 
-- 本機環境（local）未設定 Supabase 時不驗證 password，依輸入帳號是否包含 `viewer` 發出 `mock_jwt_viewer`，其餘發出 `mock_jwt_admin`；這只供 local 開發，不是正式登入證據。
-- 正式環境必須透過真實 Supabase Auth 驗證。
+- 本機環境（local）一律不呼叫 Supabase，使用 `mock_jwt_<role>` 建立本機開發 session；即使 `.env.local` 殘留 Supabase 設定也不會切換登入模式。
+- 本機 API 必須明確設定 `ALLOW_INSECURE_MOCK_AUTH=true` 才接受 mock token；正式環境不得開啟此設定。
+- 非本機環境必須透過真實 Supabase Auth 驗證。
+- `/auth/me` 權限載入失敗時不得顯示登入成功，前端會清除 session 並回到登入頁。
 - 登入頁品牌名稱固定為「好安心關懷協會-後臺系統」。
 
 ## Unverified
 
-- 真實 Supabase Auth 的 password、JWT refresh／expiry、`app_metadata.role` 更新與 provider logout 尚未在本文件建立時以 runtime 驗證。
-- local mock JWT、沒有 DB 的 offline server 與正式 Supabase data plane 的 CRUD／permission 行為不可互相推論。
+none
+

@@ -1,14 +1,18 @@
 package transport
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
-	"strconv"
+	"strings"
 	"time"
 
 	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/ride/app"
 	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/httpx"
 
 	"github.com/gin-gonic/gin"
@@ -25,15 +29,46 @@ func NewRideHandler(rideService *app.RideService) *RideHandler {
 	return &RideHandler{rideService: rideService}
 }
 
-// CorrectDTO 用於寬容接收搭乘更正請求。
+// CorrectDTO 以 RawMessage 保留 JSON 欄位是否出現，才能區分 PATCH 的保留、清除與設定。
 type CorrectDTO struct {
-	EffectiveStatus     *string `json:"effectiveStatus"`
-	VehicleID           *string `json:"vehicleId"`
-	DriverID            *string `json:"driverId"`
-	DepartTimeOverride  *string `json:"departTimeOverride"`
-	DurationMinOverride *int16  `json:"durationMinOverride"`
-	NotClaimedAA09      *bool   `json:"notClaimedAa09"`
-	Reason              *string `json:"reason"`
+	EffectiveStatus     json.RawMessage `json:"effectiveStatus"`
+	VehicleID           json.RawMessage `json:"vehicleId"`
+	DriverID            json.RawMessage `json:"driverId"`
+	DepartTimeOverride  json.RawMessage `json:"departTimeOverride"`
+	DurationMinOverride json.RawMessage `json:"durationMinOverride"`
+	NotClaimedAA09      json.RawMessage `json:"notClaimedAa09"`
+	Reason              json.RawMessage `json:"reason"`
+	BasedOnFingerprint  *string         `json:"basedOnFingerprint"`
+}
+
+func parsePatchValue[T any](raw json.RawMessage, fieldName string) (app.PatchValue[T], error) {
+	if len(raw) == 0 {
+		return app.PatchValue[T]{}, nil
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return app.PatchValue[T]{Present: true}, nil
+	}
+
+	var value T
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return app.PatchValue[T]{}, fmt.Errorf("%s 格式錯誤", fieldName)
+	}
+	return app.PatchValue[T]{Present: true, Value: &value}, nil
+}
+
+func parseUUIDPatch(raw json.RawMessage, fieldName string) (app.PatchValue[uuid.UUID], error) {
+	textValue, err := parsePatchValue[string](raw, fieldName)
+	if err != nil || !textValue.Present || textValue.Value == nil {
+		if err != nil {
+			return app.PatchValue[uuid.UUID]{}, err
+		}
+		return app.PatchValue[uuid.UUID]{Present: textValue.Present}, nil
+	}
+	id, err := uuid.Parse(strings.TrimSpace(*textValue.Value))
+	if err != nil {
+		return app.PatchValue[uuid.UUID]{}, fmt.Errorf("%s ID 格式錯誤", fieldName)
+	}
+	return app.PatchValue[uuid.UUID]{Present: true, Value: &id}, nil
 }
 
 // ManualReportDTO 用於寬容接收人工補登請求。
@@ -57,45 +92,79 @@ func (h *RideHandler) Correct(c *gin.Context) {
 	rideID, rideErr := uuid.Parse(rideIDStr)
 
 	var dto CorrectDTO
-	if err := c.ShouldBindJSON(&dto); err != nil {
+	if err := httpx.BindJSONStrict(c, &dto); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	if rideErr != nil {
-		// 非 UUID 標識符容錯（相容展示與無狀態模式）
-		httpx.RespondSuccess(c, http.StatusOK, gin.H{"updated": true, "id": rideIDStr}, nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的搭乘紀錄 ID", nil)
 		return
 	}
 
-	var vehicleUUID *uuid.UUID
-	if dto.VehicleID != nil && *dto.VehicleID != "" {
-		if v, err := uuid.Parse(*dto.VehicleID); err == nil {
-			vehicleUUID = &v
-		}
+	effectiveStatus, err := parsePatchValue[string](dto.EffectiveStatus, "搭乘狀態")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
 	}
-
-	var driverUUID *uuid.UUID
-	if dto.DriverID != nil && *dto.DriverID != "" {
-		if d, err := uuid.Parse(*dto.DriverID); err == nil {
-			driverUUID = &d
-		}
+	vehicleID, err := parseUUIDPatch(dto.VehicleID, "車輛")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	driverID, err := parseUUIDPatch(dto.DriverID, "司機")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	departTimeOverride, err := parsePatchValue[string](dto.DepartTimeOverride, "出發時間")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	durationMinOverride, err := parsePatchValue[int16](dto.DurationMinOverride, "服務時長")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	notClaimedAA09, err := parsePatchValue[bool](dto.NotClaimedAA09, "AA09 設定")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	reason, err := parsePatchValue[string](dto.Reason, "更正原因")
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+	if dto.BasedOnFingerprint == nil || strings.TrimSpace(*dto.BasedOnFingerprint) == "" {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "缺少來源快照指紋", nil)
+		return
 	}
 
 	req := app.CorrectRideRecordRequest{
-		EffectiveStatus:     dto.EffectiveStatus,
-		VehicleID:           vehicleUUID,
-		DriverID:            driverUUID,
-		DepartTimeOverride:  dto.DepartTimeOverride,
-		DurationMinOverride: dto.DurationMinOverride,
-		NotClaimedAA09:      dto.NotClaimedAA09,
-		Reason:              dto.Reason,
+		EffectiveStatus:     effectiveStatus,
+		VehicleID:           vehicleID,
+		DriverID:            driverID,
+		DepartTimeOverride:  departTimeOverride,
+		DurationMinOverride: durationMinOverride,
+		NotClaimedAA09:      notClaimedAA09,
+		Reason:              reason,
+		BasedOnFingerprint:  dto.BasedOnFingerprint,
 	}
 
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
 
 	if err := h.rideService.CorrectRideRecord(c.Request.Context(), rideID, req, actorID, actorRole, c.ClientIP(), c.Request.UserAgent()); err != nil {
+		if errors.Is(err, app.ErrRideNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrStaleCorrection) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -106,37 +175,35 @@ func (h *RideHandler) Correct(c *gin.Context) {
 // ManualReport 人工輸入回報內容並儲存搭乘紀錄。
 func (h *RideHandler) ManualReport(c *gin.Context) {
 	var dto ManualReportDTO
-	if err := c.ShouldBindJSON(&dto); err != nil {
+	if err := httpx.BindJSONStrict(c, &dto); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
 
 	caseUUID, err := uuid.Parse(dto.CaseID)
 	if err != nil {
-		// 非 UUID CaseID（相容展示與自訂字串模式）
-		httpx.RespondSuccess(c, http.StatusOK, gin.H{
-			"id":              "ride_" + dto.CaseID + "_" + dto.ServiceDate + "_" + string(rune('0'+dto.LegSeq)),
-			"caseId":          dto.CaseID,
-			"serviceDate":     dto.ServiceDate,
-			"legSeq":          dto.LegSeq,
-			"effectiveStatus": dto.EffectiveStatus,
-			"reason":          dto.Reason,
-		}, nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的個案 ID", nil)
 		return
 	}
 
 	var vehicleUUID *uuid.UUID
 	if dto.VehicleID != nil && *dto.VehicleID != "" {
-		if v, err := uuid.Parse(*dto.VehicleID); err == nil {
-			vehicleUUID = &v
+		v, err := uuid.Parse(*dto.VehicleID)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的車輛 ID", nil)
+			return
 		}
+		vehicleUUID = &v
 	}
 
 	var driverUUID *uuid.UUID
 	if dto.DriverID != nil && *dto.DriverID != "" {
-		if d, err := uuid.Parse(*dto.DriverID); err == nil {
-			driverUUID = &d
+		d, err := uuid.Parse(*dto.DriverID)
+		if err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的司機 ID", nil)
+			return
 		}
+		driverUUID = &d
 	}
 
 	req := app.ManualReportRideRequest{
@@ -181,6 +248,13 @@ type rideRecordResponse struct {
 	HasConflict            bool    `json:"hasConflict"`
 	ConflictResolvedAt     *string `json:"conflictResolvedAt"`
 	ConflictResolutionNote *string `json:"conflictResolutionNote"`
+	BasedOnFingerprint     string  `json:"basedOnFingerprint"`
+	DepartTimeOverride     *string `json:"departTimeOverride"`
+	DurationMinOverride    *int16  `json:"durationMinOverride"`
+	NotClaimedAA09         bool    `json:"notClaimedAa09"`
+	CorrectedBy            *string `json:"correctedBy"`
+	CorrectedAt            *string `json:"correctedAt"`
+	CorrectionReason       *string `json:"correctionReason"`
 }
 
 func toRideRecordResponse(rec *app.RideRecord) rideRecordResponse {
@@ -197,10 +271,23 @@ func toRideRecordResponse(rec *app.RideRecord) rideRecordResponse {
 		DriverName:             rec.DriverName,
 		HasConflict:            rec.HasConflict,
 		ConflictResolutionNote: rec.ConflictResolutionNote,
+		BasedOnFingerprint:     rec.BasedOnFingerprint,
+		DepartTimeOverride:     rec.DepartTimeOverride,
+		DurationMinOverride:    rec.DurationMinOverride,
+		NotClaimedAA09:         rec.NotClaimedAA09,
+		CorrectionReason:       rec.CorrectionReason,
 	}
 	if rec.DriverID != nil {
 		s := rec.DriverID.String()
 		resp.DriverID = &s
+	}
+	if rec.CorrectedBy != nil {
+		s := rec.CorrectedBy.String()
+		resp.CorrectedBy = &s
+	}
+	if rec.CorrectedAt != nil {
+		s := rec.CorrectedAt.Format(time.RFC3339)
+		resp.CorrectedAt = &s
 	}
 	if rec.ConflictResolvedAt != nil {
 		s := rec.ConflictResolvedAt.Format(time.RFC3339)
@@ -232,10 +319,14 @@ func (h *RideHandler) GetRecord(c *gin.Context) {
 
 // GetCalendar 取得搭乘月曆矩陣資料。月份接受民國（115-07）與西元（2026-07）兩種寫法。
 func (h *RideHandler) GetCalendar(c *gin.Context) {
-	now := time.Now()
+	now := clock.Now()
 	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(now.Year(), int(now.Month())))
 
-	start, _, _ := rocdate.MonthRange(monthStr)
+	start, _, _, err := rocdate.MonthRangeStrict(monthStr)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "月份格式錯誤，請使用 RRR-MM 或 YYYY-MM", nil)
+		return
+	}
 	matrix, err := h.rideService.GetCalendar(c.Request.Context(), start.Year(), int(start.Month()), c.Query("region"), c.Query("q"))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
@@ -257,6 +348,7 @@ type issueRideResponse struct {
 	LegSeq      int16    `json:"legSeq"`
 	Description string   `json:"description"`
 	Vehicles    []string `json:"vehicles,omitempty"`
+	RawPayload  string   `json:"rawPayload,omitempty"`
 }
 
 func toIssueRideResponse(item app.IssueRide) issueRideResponse {
@@ -268,6 +360,7 @@ func toIssueRideResponse(item app.IssueRide) issueRideResponse {
 		LegSeq:      item.LegSeq,
 		Description: item.Description,
 		Vehicles:    item.Vehicles,
+		RawPayload:  item.RawPayload,
 	}
 }
 
@@ -279,17 +372,18 @@ func (h *RideHandler) ListIssues(c *gin.Context) {
 		return
 	}
 
-	now := time.Now()
+	now := clock.Now()
 	monthStr := c.DefaultQuery("month", rocdate.FormatROCYearMonth(now.Year(), int(now.Month())))
-	start, _, _ := rocdate.MonthRange(monthStr)
-
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if page < 1 {
-		page = 1
+	start, _, _, err := rocdate.MonthRangeStrict(monthStr)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "月份格式錯誤，請使用 RRR-MM 或 YYYY-MM", nil)
+		return
 	}
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
+
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
 	}
 
 	items, total, err := h.rideService.ListIssues(c.Request.Context(), issueType, start.Year(), int(start.Month()), c.Query("region"), c.Query("keyword"), page, pageSize)
@@ -331,7 +425,7 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 	}
 
 	var dto ResolveConflictDTO
-	if err := c.ShouldBindJSON(&dto); err != nil {
+	if err := httpx.BindJSONStrict(c, &dto); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -344,9 +438,12 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 
 	var driverID *uuid.UUID
 	if dto.DriverID != nil && *dto.DriverID != "" {
-		if d, err := uuid.Parse(*dto.DriverID); err == nil {
-			driverID = &d
+		d, parseErr := uuid.Parse(*dto.DriverID)
+		if parseErr != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的司機 ID", nil)
+			return
 		}
+		driverID = &d
 	}
 
 	actorID := auth.GetActorID(c)
@@ -356,7 +453,7 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 		VehicleID: vehicleID,
 		DriverID:  driverID,
 		Reason:    dto.Reason,
-	}, actorID, actorRole)
+	}, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
 		if errors.Is(err, app.ErrRideNotFound) {
 			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)

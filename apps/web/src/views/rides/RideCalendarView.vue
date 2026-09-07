@@ -188,7 +188,7 @@
 
                 <!-- 該趟次尚無紀錄之空白槽位（依趟數顯示，點選直接設定該趟紀錄） -->
                 <el-tooltip
-                  v-else
+                  v-else-if="slot.isExpected"
                   :content="`點選設定 第 ${slot.legSeq} 趟 (${slot.direction}) 搭乘記錄`"
                   placement="top"
                   :show-after="300"
@@ -200,10 +200,19 @@
                     <el-icon class="add-icon"><Plus /></el-icon>
                   </div>
                 </el-tooltip>
+                <div v-else class="calendar-cell status-non-scheduled" aria-label="非排定趟次不可補登">
+                  <span class="non-scheduled-mark">—</span>
+                </div>
               </template>
             </div>
           </template>
         </el-table-column>
+        <template #empty>
+          <div class="calendar-empty-state" role="status">
+            <strong>此月份沒有排班或搭乘紀錄</strong>
+            <span>請切換月份，或先建立個案排班。</span>
+          </div>
+        </template>
       </el-table>
     </el-card>
 
@@ -237,13 +246,18 @@ import RideCorrectionDrawer from './RideCorrectionDrawer.vue'
 import RideManualEntryDialog from './RideManualEntryDialog.vue'
 import { getRideCalendarMatrix } from '@/api/rides'
 import { listHolidays } from '@/api/holidays'
-import { formatDateTime } from '@/utils/formatters'
+import { formatDateTime, currentLocalMonth } from '@/utils/formatters'
 import { useRocMonth } from '@/composables/useRocMonth'
+import { getTripPatternDisplay as formatTripPatternDisplay } from '@/lib/rideCalendarDisplay'
 import type { RideCalendarMatrixDTO, CaseRideCalendarRowDTO, RideRecordDTO } from '@/types/api'
+
+type CalendarRow = Omit<Partial<CaseRideCalendarRowDTO>, 'tripPattern'> & {
+  tripPattern?: CaseRideCalendarRowDTO['tripPattern'] | 0
+}
 
 const { toRocMonth } = useRocMonth()
 
-const selectedDate = ref<string>('2026-07')
+const selectedDate = ref<string>(currentLocalMonth())
 const searchQuery = ref<string>('')
 const loading = ref(false)
 const matrixData = ref<RideCalendarMatrixDTO | null>(null)
@@ -263,7 +277,7 @@ const daysInMonth = computed(() => {
 
 function changeMonth(delta: number) {
   if (!selectedDate.value) {
-    selectedDate.value = '2026-07'
+    selectedDate.value = currentLocalMonth()
   }
   const [yearStr, monthStr] = selectedDate.value.split('-')
   let year = parseInt(yearStr, 10)
@@ -294,10 +308,10 @@ async function fetchMatrix() {
       listHolidays({
         startDate: `${selectedDate.value}-01`,
         endDate: `${selectedDate.value}-${String(daysInMonth.value).padStart(2, '0')}`
-      }).catch(() => ({ data: [] } as any))
+      }).catch(() => [])
     ])
-    matrixData.value = (res as any)?.cases ? res : ((res as any)?.data || res)
-    holidayMap.value = Object.fromEntries(((holidayResponse as any)?.data || []).map((item: any) => [item.holidayDate, item]))
+    matrixData.value = res
+    holidayMap.value = Object.fromEntries(holidayResponse.map((item) => [item.holidayDate, item]))
   } finally {
     loading.value = false
   }
@@ -311,48 +325,22 @@ function getHolidayName(day: number) {
   return holidayMap.value[`${selectedDate.value}-${String(day).padStart(2, '0')}`]?.name || '放假'
 }
 
-function getCell(row: any, day: number) {
+function getCell(row: CalendarRow, day: number) {
   const dayKey = `${selectedDate.value}-${String(day).padStart(2, '0')}`
   return row.days?.[dayKey]
 }
 
-// 取得個案月曆趟數顯示文字：當月應搭日趟數一致時顯示 N 趟，不一致時顯示自訂
-function getTripPatternDisplay(row: any): string {
-  if (row.tripPattern === 'custom' || row.tripPatternText === '自訂') {
-    return '自訂'
-  }
-
-  if (row.days) {
-    const scheduledTripCounts = new Set<number>()
-    for (const dateKey in row.days) {
-      const cell = row.days[dateKey]
-      if (cell && cell.isExpected) {
-        const count = cell.expectedTripCount ?? cell.records?.length ?? 0
-        if (count > 0) {
-          scheduledTripCounts.add(count)
-        }
-      }
-    }
-    if (scheduledTripCounts.size > 1) {
-      return '自訂'
-    } else if (scheduledTripCounts.size === 1) {
-      const count = Array.from(scheduledTripCounts)[0]
-      return `${count} 趟`
-    }
-  }
-
-  if (typeof row.tripPattern === 'number') {
-    return `${row.tripPattern} 趟`
-  }
-  return '2 趟'
+// 計算個案在月曆表格「趟數」欄位應顯示的文字
+function getTripPatternDisplay(row: CalendarRow): string {
+  return formatTripPatternDisplay(row)
 }
 
 // 計算該個案在指定日期的搭乘槽位列表（依該日預期趟數與實際紀錄動態展開）
-function getDaySlots(row: any, day: number) {
+function getDaySlots(row: CalendarRow, day: number) {
   const cell = getCell(row, day)
   const records = cell?.records || []
   const isExpected = cell ? cell.isExpected : false
-  const expectedTripCount = cell?.expectedTripCount ?? (isExpected ? (typeof row.tripPattern === 'number' ? row.tripPattern : 2) : 0)
+  const expectedTripCount = cell?.expectedTripCount ?? (isExpected && typeof row.tripPattern === 'number' ? row.tripPattern : 0)
 
   let maxLegSeq = 0
   for (const r of records) {
@@ -371,7 +359,7 @@ function getDaySlots(row: any, day: number) {
 
   const slots = []
   for (let legSeq = 1; legSeq <= totalSlots; legSeq++) {
-    const record = records.find((r: any) => r.legSeq === legSeq)
+    const record = records.find((r) => r.legSeq === legSeq)
     const direction = legSeq % 2 === 1 ? '去程' : '回程'
     slots.push({
       legSeq,
@@ -387,16 +375,17 @@ function openCorrection(record: RideRecordDTO) {
   drawerRef.value?.open(record)
 }
 
-function openManualEntry(row: any, day: number, targetLegSeq?: number) {
+function openManualEntry(row: CalendarRow, day: number, targetLegSeq?: number) {
   const dayKey = `${selectedDate.value}-${String(day).padStart(2, '0')}`
   const cell = getCell(row, day)
-  const existingLegs = (cell?.records || []).map((r: any) => r.legSeq)
-  const dayTripCount = cell?.expectedTripCount || (typeof row.tripPattern === 'number' ? row.tripPattern : 2)
+  const existingLegs = (cell?.records || []).map((r) => r.legSeq)
+  if (!cell?.isExpected || typeof row.caseId !== 'string' || typeof row.caseName !== 'string') return
+  const dayTripCount = cell.expectedTripCount ?? (typeof row.tripPattern === 'number' ? row.tripPattern : 0)
   manualEntryDialogRef.value?.open({
     caseId: row.caseId,
     caseName: row.caseName,
     serviceDate: dayKey,
-    tripPattern: dayTripCount || 2,
+    tripPattern: dayTripCount,
     targetLegSeq,
     existingLegs
   })
@@ -501,6 +490,21 @@ onMounted(() => {
 
 .matrix-card {
   padding: 0;
+}
+
+.calendar-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 16px;
+  color: var(--app-text-secondary);
+  font-size: 14px;
+}
+
+.calendar-empty-state strong {
+  color: var(--app-text-primary);
+  font-weight: 600;
 }
 
 .calendar-table :deep(.day-col.el-table__cell),

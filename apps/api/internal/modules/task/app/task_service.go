@@ -97,7 +97,10 @@ func (s *TaskService) listMissingReports(ctx context.Context, year, month int, r
 			Legs:          legs,
 		}
 
-		expectedRides := calendar.CalculateExpectedRides(year, month, calInput)
+		expectedRides, err := calendar.CalculateExpectedRides(year, month, calInput)
+		if err != nil {
+			return nil, fmt.Errorf("calculate expected rides for case %s: %w", sch.CaseID, err)
+		}
 		for _, er := range expectedRides {
 			dateStr := er.ServiceDate.Format("2006-01-02")
 			if onlyDateStr != "" && dateStr != onlyDateStr {
@@ -157,11 +160,19 @@ func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.T
 	if len(missingList) > 0 && s.notificationSvc != nil {
 		subject := fmt.Sprintf("【長照接送未回報告警】%s 共有 %d 筆趟次尚未回報", dateStr, len(missingList))
 		body := fmt.Sprintf("日期：%s\n未回報趟數：%d 筆\n請相關人員至系統「異常集中處理」或「未回報清單」確認司機填報狀況。", dateStr, len(missingList))
-		_ = s.notificationSvc.SendNotification(ctx, "missing_report", subject, body)
+		err := s.sendDeduplicatedNotification(ctx, "missing_report", subject, body, "missing_report:"+dateStr+":"+region)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send missing report notification: %w", err)
+		}
 		slog.Info("Missing report notification triggered", slog.String("date", dateStr), slog.Int("missing_count", len(missingList)))
 	}
 
 	return missingList, nil
+}
+
+// ListMissingReports 只查詢指定日期的未回報資料，不觸發通知或其他副作用。
+func (s *TaskService) ListMissingReports(ctx context.Context, targetDate time.Time, region string) ([]MissingRideItem, error) {
+	return s.listMissingReports(ctx, targetDate.Year(), int(targetDate.Month()), region, &targetDate)
 }
 
 // ListMissingReportsForMonth 回傳整月未回報趟次，不觸發告警通知（供「異常集中處理」頁面查詢用）。
@@ -180,12 +191,13 @@ func (s *TaskService) MonthEndReminder(ctx context.Context, year, month int) (*M
 	}
 
 	stats, err := s.taskRepo.GetMonthEndRideStats(ctx, firstDay, lastDay)
-	if err == nil {
-		summary.TotalRides = stats.TotalRides
-		summary.BoardedRides = stats.BoardedRides
-		summary.UnreportedRides = stats.UnreportedRides
-		summary.ConflictCount = stats.ConflictCount
+	if err != nil {
+		return nil, fmt.Errorf("failed to get month-end ride stats: %w", err)
 	}
+	summary.TotalRides = stats.TotalRides
+	summary.BoardedRides = stats.BoardedRides
+	summary.UnreportedRides = stats.UnreportedRides
+	summary.ConflictCount = stats.ConflictCount
 
 	if s.notificationSvc != nil {
 		subject := fmt.Sprintf("【長照申報月底提醒】%s 申報進度與異常檢查", rocYM)
@@ -193,9 +205,21 @@ func (s *TaskService) MonthEndReminder(ctx context.Context, year, month int) (*M
 			"月份：%s\n總搭乘紀錄：%d 筆\n已確認搭乘：%d 筆\n未回報筆數：%d 筆\n混車衝突筆數：%d 筆\n\n申報期限將近，請至系統檢查前置檢核項目並完成 33 欄申報檔案匯出作業。",
 			rocYM, summary.TotalRides, summary.BoardedRides, summary.UnreportedRides, summary.ConflictCount,
 		)
-		_ = s.notificationSvc.SendNotification(ctx, "month_end", subject, body)
+		err := s.sendDeduplicatedNotification(ctx, "month_end", subject, body, "month_end:"+rocYM)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send month-end notification: %w", err)
+		}
 		slog.Info("Month-end reminder notification triggered", slog.String("month", rocYM))
 	}
 
 	return summary, nil
+}
+
+func (s *TaskService) sendDeduplicatedNotification(ctx context.Context, topic, subject, body, dedupKey string) error {
+	if dedup, ok := s.notificationSvc.(interface {
+		SendNotificationDedup(context.Context, string, string, string, string) error
+	}); ok {
+		return dedup.SendNotificationDedup(ctx, topic, subject, body, dedupKey)
+	}
+	return s.notificationSvc.SendNotification(ctx, topic, subject, body)
 }

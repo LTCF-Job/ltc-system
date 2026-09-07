@@ -66,7 +66,9 @@ func (c *SupabaseAdminClient) do(ctx context.Context, method, path string, body 
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("supabase admin request returned %d: %s", resp.StatusCode, string(respBody))
+		// 第三方 response body 可能含 email、request detail 或其他個資，不進入 error
+		// chain，避免被 API log 或 audit snapshot 長期保存。
+		return fmt.Errorf("supabase admin request returned HTTP %d", resp.StatusCode)
 	}
 
 	if out != nil && len(respBody) > 0 {
@@ -83,6 +85,7 @@ type supabaseUserResponse struct {
 	Email        string         `json:"email"`
 	Phone        string         `json:"phone"`
 	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 	LastSignInAt *time.Time     `json:"last_sign_in_at"`
 	BannedUntil  string         `json:"banned_until"`
 	AppMetadata  map[string]any `json:"app_metadata"`
@@ -120,21 +123,28 @@ func toAuthUser(u supabaseUserResponse) app.AuthUser {
 		CustomPermissions: perms,
 		Status:            status,
 		CreatedAt:         u.CreatedAt,
+		UpdatedAt:         u.UpdatedAt,
 		LastSignInAt:      u.LastSignInAt,
 	}
 }
 
 // ListUsers 取得所有使用者帳號。
 func (c *SupabaseAdminClient) ListUsers(ctx context.Context) ([]app.AuthUser, error) {
-	var resp supabaseListUsersResponse
-	if err := c.do(ctx, http.MethodGet, "/auth/v1/admin/users", nil, &resp); err != nil {
-		return nil, err
+	const perPage = 100
+	out := make([]app.AuthUser, 0)
+	for page := 1; ; page++ {
+		var resp supabaseListUsersResponse
+		path := fmt.Sprintf("/auth/v1/admin/users?page=%d&per_page=%d", page, perPage)
+		if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
+			return nil, err
+		}
+		for _, u := range resp.Users {
+			out = append(out, toAuthUser(u))
+		}
+		if len(resp.Users) < perPage {
+			return out, nil
+		}
 	}
-	out := make([]app.AuthUser, 0, len(resp.Users))
-	for _, u := range resp.Users {
-		out = append(out, toAuthUser(u))
-	}
-	return out, nil
 }
 
 // GetUser 取得單一使用者帳號。
@@ -150,18 +160,32 @@ func (c *SupabaseAdminClient) GetUser(ctx context.Context, id uuid.UUID) (*app.A
 // CreateUser 建立新使用者；角色一律寫入 app_metadata，user_metadata 只放非授權的顯示資訊。
 func (c *SupabaseAdminClient) CreateUser(ctx context.Context, in app.CreateAuthUserInput) (*app.AuthUser, error) {
 	baseRole := in.RoleKey
+	status := in.Status
+	if status == "" {
+		status = "active"
+	}
+	if status != "active" && status != "inactive" {
+		return nil, app.ErrInvalidUserStatus
+	}
+	appMetadata := map[string]any{
+		"role":     baseRole,
+		"role_key": in.RoleKey,
+	}
+	if in.CustomPermissions != nil {
+		appMetadata["custom_permissions"] = in.CustomPermissions
+	}
 	body := map[string]any{
 		"email":         in.Email,
 		"password":      in.Password,
 		"email_confirm": true,
-		"app_metadata": map[string]any{
-			"role":     baseRole,
-			"role_key": in.RoleKey,
-		},
+		"app_metadata":  appMetadata,
 		"user_metadata": map[string]any{
 			"display_name": in.DisplayName,
 			"phone":        in.Phone,
 		},
+	}
+	if status == "inactive" {
+		body["ban_duration"] = "876000h"
 	}
 	var resp supabaseUserResponse
 	if err := c.do(ctx, http.MethodPost, "/auth/v1/admin/users", body, &resp); err != nil {
@@ -188,9 +212,12 @@ func (c *SupabaseAdminClient) UpdateUser(ctx context.Context, id uuid.UUID, in a
 		body["app_metadata"] = map[string]any{"role": *in.RoleKey, "role_key": *in.RoleKey}
 	}
 	if in.Status != nil {
+		if *in.Status != "active" && *in.Status != "inactive" {
+			return nil, app.ErrInvalidUserStatus
+		}
 		if *in.Status == "inactive" {
 			body["ban_duration"] = "876000h"
-		} else {
+		} else if *in.Status == "active" {
 			body["ban_duration"] = "none"
 		}
 	}
@@ -231,7 +258,7 @@ func (c *SupabaseAdminClient) SetPassword(ctx context.Context, id uuid.UUID, new
 // CountUsersByRoleKey 統計採用該角色的使用者數。
 func (c *SupabaseAdminClient) CountUsersByRoleKey(ctx context.Context, key string) (int, error) {
 	if !c.Configured() {
-		return 0, nil
+		return 0, app.ErrIdentityProviderUnconfigured
 	}
 	users, err := c.ListUsers(ctx)
 	if err != nil {

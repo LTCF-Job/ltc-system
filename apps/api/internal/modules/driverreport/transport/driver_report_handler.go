@@ -31,6 +31,7 @@ type DriverReportServiceInterface interface {
 	MatchPendingColumnsByName(ctx context.Context, name string) ([]app.ColumnMapping, error)
 	ListSubmissionReview(ctx context.Context) ([]app.SubmissionReview, error)
 	BindPendingDriver(ctx context.Context, driverNameRaw, driverID string) (int, error)
+	ResolveRowConflict(ctx context.Context, conflictID string, useNew bool, actor app.Actor) error
 	TemplateExcel(ctx context.Context, formID uuid.UUID) ([]byte, string, error)
 	ParseDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, yearMonth string) (*app.PreviewResult, error)
 	CommitDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, decisions []app.ColumnDecision, yearMonth string, actor app.Actor) (*app.CommitResult, error)
@@ -159,6 +160,10 @@ func (h *DriverReportHandler) ImportExcel(c *gin.Context) {
 
 	fileHeader, ok := httpx.BindUploadFile(c, "file")
 	if !ok {
+		return
+	}
+	if !strings.HasSuffix(strings.ToLower(fileHeader.Filename), ".xlsx") {
+		respondImportInputError(c, "file", "僅支援 .xlsx 匯入格式")
 		return
 	}
 
@@ -311,6 +316,28 @@ func (h *DriverReportHandler) BindDriver(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, gin.H{"affectedCount": affected}, nil)
 }
 
+// ResolveRowConflict 裁決一筆「同車同個案」衝突：useNew 採用這次上傳的新值，
+// 否則保留既有資料，兩者都只標記這筆衝突已解決。
+func (h *DriverReportHandler) ResolveRowConflict(c *gin.Context) {
+	var req ResolveRowConflictRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	err := h.svc.ResolveRowConflict(c.Request.Context(), c.Param("id"), req.UseNew, app.Actor{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
+	if err != nil {
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
+}
+
 func parseFormID(c *gin.Context) (uuid.UUID, bool) {
 	formID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -336,8 +363,15 @@ func respondReportError(c *gin.Context, err error) {
 		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "", nil)
 		return
 	}
+	reason := "檔案內容無法解析，請確認為符合範本的 .xlsx 檔案"
+	if errors.Is(err, app.ErrInvalidYearMonth) {
+		reason = "匯入月份格式錯誤，請使用 YYYY-MM"
+	}
+	if errors.Is(err, app.ErrImportHasBlockingErrors) {
+		reason = "檔案包含阻斷性錯誤，未寫入資料"
+	}
 	httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeReportImportFailed, err, []httpx.ErrorDetail{
-		{Field: "file", Reason: err.Error()},
+		{Field: "file", Reason: reason},
 	})
 }
 

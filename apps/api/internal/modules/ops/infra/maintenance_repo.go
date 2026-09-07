@@ -2,17 +2,47 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/ops/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // MaintenanceRepository 提供車輛維修保養紀錄之資料存取。
 type MaintenanceRepository struct {
 	db *pgxpool.Pool
+}
+
+// GetByID 取得單筆維修紀錄，供 mutation audit 建立 before snapshot。
+func (r *MaintenanceRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.MaintenanceLog, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("maintenance database is not configured")
+	}
+	var item app.MaintenanceLog
+	err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, `
+		SELECT m.id, m.vehicle_id, v.display_name, v.plate_no, m.service_date,
+		       m.mileage, m.items, m.vendor, m.cost, m.receipt_url, m.note,
+		       m.created_by, m.created_at
+		FROM maintenance_logs m
+		JOIN vehicles v ON v.id = m.vehicle_id
+		WHERE m.id = $1
+	`, id).Scan(
+		&item.ID, &item.VehicleID, &item.VehicleName, &item.PlateNo, &item.ServiceDate,
+		&item.Mileage, &item.Items, &item.Vendor, &item.Cost, &item.ReceiptURL, &item.Note,
+		&item.CreatedBy, &item.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get maintenance log: %w", err)
+	}
+	return &item, nil
 }
 
 // NewMaintenanceRepository 建立 MaintenanceRepository 實例。
@@ -87,6 +117,9 @@ func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, ve
 			return nil, 0, fmt.Errorf("failed to scan maintenance log: %w", err)
 		}
 		list = append(list, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate maintenance logs: %w", err)
 	}
 
 	return list, total, nil

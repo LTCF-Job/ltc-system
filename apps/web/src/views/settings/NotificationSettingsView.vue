@@ -418,7 +418,6 @@ const filteredRecipientList = computed(() => {
   return recipientList.value
 })
 
-// 載入收件信箱清單
 async function fetchRecipients() {
   loading.value = true
   try {
@@ -427,8 +426,8 @@ async function fetchRecipients() {
       q: searchQuery.value || undefined
     })
     recipientList.value = list
-  } catch (error: any) {
-    ElMessage.error(error?.message || '載入收件人失敗')
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     loading.value = false
   }
@@ -468,8 +467,8 @@ async function handleSaveAdd() {
     ElMessage.success(`成功新增 ${payload.length} 筆外部收件信箱！`)
     addDialogVisible.value = false
     fetchRecipients()
-  } catch (error: any) {
-    ElMessage.error(error?.message || '新增收件信箱失敗')
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     addSubmitting.value = false
   }
@@ -501,8 +500,8 @@ async function handleSaveEdit() {
         editDialogVisible.value = false
         fetchRecipients()
       }
-    } catch (error: any) {
-      ElMessage.error(error?.message || '儲存失敗')
+    } catch {
+      // 全域攔截器負責顯示 API 錯誤。
     } finally {
       editSaving.value = false
     }
@@ -525,10 +524,8 @@ async function handleToggleActive(row: any, targetVal: boolean) {
     await updateNotificationRecipient(row.id, { active: targetVal })
     row.active = targetVal
     ElMessage.success(`收件信箱已${targetVal ? '啟用' : '停用'}`)
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(err?.message || '操作失敗')
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 
@@ -547,10 +544,8 @@ async function handleDelete(row: any) {
     await deleteNotificationRecipient(row.id)
     ElMessage.success('收件信箱已成功刪除！')
     fetchRecipients()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(err?.message || '刪除失敗')
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 
@@ -574,10 +569,8 @@ async function handleBatchDelete() {
     ElMessage.success(`已成功批次刪除 ${count} 筆收件信箱！`)
     selectedTableRows.value = []
     fetchRecipients()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(err?.message || '批次刪除失敗')
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 

@@ -1,9 +1,11 @@
 import axios, { type AxiosError } from 'axios'
 import { ElMessage, ElNotification } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { supabase } from '@/lib/supabase'
 import router from '@/router'
 import type { ApiError } from '@/types/api'
 import { resolveErrorMessage } from './errorCodes'
+export { createPaginationMeta, unwrapData, unwrapPaged } from './envelope'
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -15,10 +17,16 @@ export const apiClient = axios.create({
 
 // 請求攔截器：附加 JWT Token
 apiClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const authStore = useAuthStore()
-    if (authStore.token) {
-      config.headers.Authorization = `Bearer ${authStore.token}`
+    let activeToken = authStore.token
+    if (supabase) {
+      // 正式環境每次請求都向 Supabase 取得目前 session，避免沿用過期的舊 access token。
+      const { data } = await supabase.auth.getSession()
+      activeToken = data.session?.access_token || null
+    }
+    if (activeToken) {
+      config.headers.Authorization = `Bearer ${activeToken}`
     }
     return config
   },
@@ -33,7 +41,7 @@ apiClient.interceptors.response.use(
     const status = error.response?.status
     let apiError = error.response?.data?.error
 
-    // 當 responseType 為 'blob' 時，後端返回的 JSON 錯誤會被包在 Blob 內，需讀取轉回物件
+    // 當 responseType 為 'blob' 時，後端回傳的 JSON 錯誤會被包在 Blob 內，需讀取轉回物件
     if (!apiError && error.response?.data instanceof Blob) {
       try {
         const text = await error.response.data.text()

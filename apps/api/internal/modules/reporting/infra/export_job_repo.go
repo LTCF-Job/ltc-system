@@ -5,22 +5,30 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/reporting/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // ExportJobRepository 保存匯出工作、逐案檔案中繼資料與申報列快照。
 // 三張表同屬一次匯出的原子單位，因此完成寫入在本 repository 內自行開啟事務。
 type ExportJobRepository struct {
-	db *pgxpool.Pool
+	db      *pgxpool.Pool
+	storage app.ObjectStorage
 }
 
 // NewExportJobRepository 建立 ExportJobRepository 實例。
-func NewExportJobRepository(db *pgxpool.Pool) *ExportJobRepository {
-	return &ExportJobRepository{db: db}
+func NewExportJobRepository(db *pgxpool.Pool, storages ...app.ObjectStorage) *ExportJobRepository {
+	var storage app.ObjectStorage
+	if len(storages) > 0 {
+		storage = storages[0]
+	}
+	return &ExportJobRepository{db: db, storage: storage}
 }
 
 // CreateJob 以 running 狀態建立匯出工作，回傳工作編號。
@@ -38,17 +46,12 @@ func (r *ExportJobRepository) CreateJob(ctx context.Context, job app.ExportJobCr
 		precheckJSON = string(encoded)
 	}
 
-	caseIDs := job.CaseIDs
-	if caseIDs == nil {
-		caseIDs = []uuid.UUID{}
-	}
-
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO export_jobs (job_type, period_ym, region, format, filter_case_ids, status, precheck, created_by, created_by_name)
 		VALUES ($1, $2, $3, $4, $5::uuid[], 'running', $6::jsonb, $7, $8)
 		RETURNING id
-	`, job.JobType, job.PeriodYM, job.Region, job.Format, caseIDs, precheckJSON, job.CreatedBy, job.CreatedByName).Scan(&id)
+	`, job.JobType, job.PeriodYM, job.Region, job.Format, pgxdb.UUIDStrings(job.CaseIDs), precheckJSON, job.CreatedBy, job.CreatedByName).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("insert export job: %w", err)
 	}
@@ -60,6 +63,21 @@ func (r *ExportJobRepository) CompleteJob(ctx context.Context, jobID uuid.UUID, 
 	if r.db == nil {
 		return errNoDatabase
 	}
+	uploadedPaths := make([]string, 0, len(files))
+	// Storage upload 與 DB transaction 無法跨系統原子化；DB 失敗時清除本次已上傳物件，
+	// 避免 private bucket 留下無法從歷史工作索引到的孤兒檔案。
+	defer func() {
+		if err == nil || r.storage == nil {
+			return
+		}
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		for _, path := range uploadedPaths {
+			if cleanupErr := r.storage.Delete(cleanupCtx, path); cleanupErr != nil {
+				slog.Warn("failed to clean up export object", slog.String("error_type", fmt.Sprintf("%T", cleanupErr)))
+			}
+		}
+	}()
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -85,10 +103,20 @@ func (r *ExportJobRepository) CompleteJob(ctx context.Context, jobID uuid.UUID, 
 		`, jobID, line.LineNo, line.CaseID, line.NationalIDMasked, line.ServiceDateROC, string(payload))
 	}
 	for seq, file := range files {
+		storagePath := exportStoragePath(jobID, file.FileName)
+		fileContent := any(file.Bytes)
+		if r.storage != nil {
+			if err := r.storage.Put(ctx, storagePath, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.Bytes); err != nil {
+				return fmt.Errorf("upload immutable export file: %w", err)
+			}
+			uploadedPaths = append(uploadedPaths, storagePath)
+			fileContent = nil
+		}
 		batch.Queue(`
-			INSERT INTO export_job_files (job_id, case_id, seq, case_name, region, file_name, row_count, file_checksum)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		`, jobID, file.CaseID, seq+1, file.CaseName, file.Region, file.FileName, file.RowCount, file.Checksum)
+			INSERT INTO export_job_files (job_id, case_id, seq, case_name, region, file_name, row_count, file_checksum, storage_path, file_content, file_size)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		`, jobID, file.CaseID, seq+1, file.CaseName, file.Region, file.FileName, file.RowCount, file.Checksum,
+			storagePath, fileContent, len(file.Bytes))
 	}
 	batch.Queue(`UPDATE export_jobs SET status = 'succeeded', finished_at = now() WHERE id = $1`, jobID)
 
@@ -122,7 +150,7 @@ func (r *ExportJobRepository) FailJob(ctx context.Context, jobID uuid.UUID, mess
 // GetJob 取得單筆匯出工作與其逐案檔案清單。
 func (r *ExportJobRepository) GetJob(ctx context.Context, jobID uuid.UUID) (app.GovClaimJob, error) {
 	if r.db == nil {
-		return app.GovClaimJob{}, app.ErrExportJobNotFound
+		return app.GovClaimJob{}, errNoDatabase
 	}
 
 	var row exportJobRow
@@ -157,7 +185,7 @@ func (r *ExportJobRepository) GetJob(ctx context.Context, jobID uuid.UUID) (app.
 // ListJobs 依建立時間新到舊分頁列出匯出工作，不含逐案檔案明細。
 func (r *ExportJobRepository) ListJobs(ctx context.Context, page, pageSize int) ([]app.GovClaimJob, int64, error) {
 	if r.db == nil {
-		return []app.GovClaimJob{}, 0, nil
+		return nil, 0, errNoDatabase
 	}
 
 	var total int64
@@ -203,7 +231,7 @@ func (r *ExportJobRepository) ListJobs(ctx context.Context, page, pageSize int) 
 // LoadCaseLines 依 line_no 順序讀回單一個案的申報列快照，重繪時據此還原原始列序。
 func (r *ExportJobRepository) LoadCaseLines(ctx context.Context, jobID, caseID uuid.UUID) ([]app.ExportLine, error) {
 	if r.db == nil {
-		return []app.ExportLine{}, nil
+		return nil, errNoDatabase
 	}
 
 	rows, err := r.db.Query(ctx, `
@@ -233,11 +261,39 @@ func (r *ExportJobRepository) LoadCaseLines(ctx context.Context, jobID, caseID u
 	return result, nil
 }
 
+// LoadExportFile 讀取匯出成功時保存的原始檔案，不重新依目前主檔產生。
+func (r *ExportJobRepository) LoadExportFile(ctx context.Context, jobID, caseID uuid.UUID) ([]byte, error) {
+	if r.db == nil {
+		return nil, errNoDatabase
+	}
+	var storagePath string
+	var content []byte
+	err := r.db.QueryRow(ctx, `
+		SELECT COALESCE(storage_path, ''), file_content
+		FROM export_job_files
+		WHERE job_id = $1 AND case_id = $2
+	`, jobID, caseID).Scan(&storagePath, &content)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, app.ErrExportFileNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query immutable export file: %w", err)
+	}
+	if r.storage != nil && storagePath != "" {
+		stored, err := r.storage.Get(ctx, storagePath)
+		if err != nil {
+			return nil, fmt.Errorf("download immutable export file: %w", err)
+		}
+		return stored, nil
+	}
+	return content, nil
+}
+
 // LoadNationalIDCiphers 取回重繪快照時補回身分證欄位所需的密文。
 func (r *ExportJobRepository) LoadNationalIDCiphers(ctx context.Context, caseID uuid.UUID, driverIDs []uuid.UUID) (app.NationalIDCiphers, error) {
 	result := app.NationalIDCiphers{Drivers: make(map[uuid.UUID][]byte, len(driverIDs))}
 	if r.db == nil {
-		return result, nil
+		return app.NationalIDCiphers{}, errNoDatabase
 	}
 
 	if err := r.db.QueryRow(ctx, `SELECT national_id_cipher FROM cases WHERE id = $1`, caseID).Scan(&result.Case); err != nil {
@@ -251,7 +307,7 @@ func (r *ExportJobRepository) LoadNationalIDCiphers(ctx context.Context, caseID 
 		return result, nil
 	}
 
-	rows, err := r.db.Query(ctx, `SELECT id, national_id_cipher FROM drivers WHERE id = ANY($1::uuid[])`, driverIDs)
+	rows, err := r.db.Query(ctx, `SELECT id, national_id_cipher FROM drivers WHERE id = ANY($1::uuid[])`, pgxdb.UUIDStrings(driverIDs))
 	if err != nil {
 		return result, fmt.Errorf("query driver national id ciphers: %w", err)
 	}
@@ -299,3 +355,7 @@ func (r *ExportJobRepository) listJobFiles(ctx context.Context, jobID uuid.UUID)
 }
 
 var errNoDatabase = errors.New("database connection is not configured")
+
+func exportStoragePath(jobID uuid.UUID, fileName string) string {
+	return fmt.Sprintf("exports/%s/%s", jobID, fileName)
+}

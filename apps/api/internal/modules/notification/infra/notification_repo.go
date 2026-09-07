@@ -3,11 +3,12 @@ package infra
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/notification/app"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
@@ -24,7 +25,7 @@ func NewNotificationRepository(db *pgxpool.Pool) *NotificationRepository {
 // ListRecipients 依通知主題取得收件人清單。
 func (r *NotificationRepository) ListRecipients(ctx context.Context, topic string, activeOnly bool) ([]app.Recipient, error) {
 	if r.db == nil {
-		return []app.Recipient{}, nil
+		return nil, fmt.Errorf("notification database is not configured")
 	}
 	db := pgxdb.FromContext(ctx, r.db)
 
@@ -48,6 +49,9 @@ func (r *NotificationRepository) ListRecipients(ctx context.Context, topic strin
 			return nil, err
 		}
 		recipients = append(recipients, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate recipients: %w", err)
 	}
 	return recipients, nil
 }
@@ -76,6 +80,9 @@ func (r *NotificationRepository) GetRecipientByID(ctx context.Context, id int64)
 	`
 	item, err := scanRecipient(db.QueryRow(ctx, query, id))
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, app.ErrRecipientNotFound
+		}
 		return nil, err
 	}
 	return &item, nil
@@ -84,7 +91,7 @@ func (r *NotificationRepository) GetRecipientByID(ctx context.Context, id int64)
 // CreateRecipient 新增通知收件人。
 func (r *NotificationRepository) CreateRecipient(ctx context.Context, item *app.Recipient) error {
 	if r.db == nil {
-		return nil
+		return fmt.Errorf("notification database is not configured")
 	}
 	db := pgxdb.FromContext(ctx, r.db)
 
@@ -129,7 +136,7 @@ func (r *NotificationRepository) UpdateRecipient(ctx context.Context, id int64, 
 // DeleteRecipient 刪除通知收件人。
 func (r *NotificationRepository) DeleteRecipient(ctx context.Context, id int64) error {
 	if r.db == nil {
-		return nil
+		return fmt.Errorf("notification database is not configured")
 	}
 	db := pgxdb.FromContext(ctx, r.db)
 
@@ -141,7 +148,7 @@ func (r *NotificationRepository) DeleteRecipient(ctx context.Context, id int64) 
 // InsertLog 寫入通知發送日誌留痕。
 func (r *NotificationRepository) InsertLog(ctx context.Context, log *app.Log) error {
 	if r.db == nil {
-		return nil
+		return fmt.Errorf("notification database is not configured")
 	}
 	db := pgxdb.FromContext(ctx, r.db)
 
@@ -151,7 +158,7 @@ func (r *NotificationRepository) InsertLog(ctx context.Context, log *app.Log) er
 		RETURNING id
 	`
 	if log.SentAt.IsZero() {
-		log.SentAt = time.Now().UTC()
+		log.SentAt = clock.Now()
 	}
 	return db.QueryRow(ctx, query,
 		log.Topic, log.Channel, log.RecipientEmails, log.Subject, log.ContentSummary,
@@ -159,10 +166,124 @@ func (r *NotificationRepository) InsertLog(ctx context.Context, log *app.Log) er
 	).Scan(&log.ID)
 }
 
+func (r *NotificationRepository) ClaimNotificationEvent(ctx context.Context, dedupKey, topic string) (bool, error) {
+	if r.db == nil {
+		return false, fmt.Errorf("notification database is not configured")
+	}
+	db := pgxdb.FromContext(ctx, r.db)
+	var claimed bool
+	err := db.QueryRow(ctx, `
+		INSERT INTO notification_event_dedup (dedup_key, topic, status, claimed_at)
+		VALUES ($1, $2, 'processing', now())
+		ON CONFLICT (dedup_key) DO UPDATE
+		SET status = 'processing', claimed_at = now(), sent_at = NULL
+		WHERE notification_event_dedup.status = 'processing'
+		  AND notification_event_dedup.claimed_at < now() - interval '5 minutes'
+		RETURNING true
+	`, dedupKey, topic).Scan(&claimed)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to claim notification event: %w", err)
+	}
+	return claimed, nil
+}
+
+func (r *NotificationRepository) CompleteNotificationEvent(ctx context.Context, dedupKey string) error {
+	if r.db == nil {
+		return fmt.Errorf("notification database is not configured")
+	}
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `
+		UPDATE notification_event_dedup SET status = 'sent', sent_at = now()
+		WHERE dedup_key = $1
+	`, dedupKey)
+	return err
+}
+
+func (r *NotificationRepository) ReleaseNotificationEvent(ctx context.Context, dedupKey string) error {
+	if r.db == nil {
+		return fmt.Errorf("notification database is not configured")
+	}
+	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `DELETE FROM notification_event_dedup WHERE dedup_key = $1`, dedupKey)
+	return err
+}
+
+// ClaimNotificationDelivery 以事件與收件人為唯一鍵取得一次寄送工作。
+// 已 sent 的收件人永不重新派送；逾時的 processing 或 failed 才能被 retry 取回。
+func (r *NotificationRepository) ClaimNotificationDelivery(ctx context.Context, eventID, recipientKey string) (bool, error) {
+	if r.db == nil {
+		return false, fmt.Errorf("notification database is not configured")
+	}
+	db := pgxdb.FromContext(ctx, r.db)
+	var claimed bool
+	err := db.QueryRow(ctx, `
+		INSERT INTO notification_deliveries (event_id, recipient_key, status, attempt_count, claimed_at, updated_at)
+		VALUES ($1, $2, 'processing', 1, now(), now())
+		ON CONFLICT (event_id, recipient_key) DO UPDATE
+		SET status = 'processing',
+			attempt_count = notification_deliveries.attempt_count + 1,
+			claimed_at = now(),
+			last_error = NULL,
+			updated_at = now()
+		WHERE notification_deliveries.status <> 'sent'
+		  AND (
+			notification_deliveries.status <> 'processing'
+			OR notification_deliveries.claimed_at < now() - interval '5 minutes'
+		  )
+		RETURNING true
+	`, eventID, recipientKey).Scan(&claimed)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to claim notification delivery: %w", err)
+	}
+	return claimed, nil
+}
+
+// CompleteNotificationDelivery 將 provider 已接受的寄送標為 sent。
+func (r *NotificationRepository) CompleteNotificationDelivery(ctx context.Context, eventID, recipientKey, providerMessageID string) error {
+	if r.db == nil {
+		return fmt.Errorf("notification database is not configured")
+	}
+	tag, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `
+		UPDATE notification_deliveries
+		SET status = 'sent', provider_message_id = NULLIF($3, ''), sent_at = now(), updated_at = now(), last_error = NULL
+		WHERE event_id = $1 AND recipient_key = $2
+	`, eventID, recipientKey, providerMessageID)
+	if err != nil {
+		return fmt.Errorf("failed to complete notification delivery: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("notification delivery not found")
+	}
+	return nil
+}
+
+// FailNotificationDelivery 記錄 provider 失敗，供後續 retry 重新取得。
+func (r *NotificationRepository) FailNotificationDelivery(ctx context.Context, eventID, recipientKey, lastError string) error {
+	if r.db == nil {
+		return fmt.Errorf("notification database is not configured")
+	}
+	tag, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `
+		UPDATE notification_deliveries
+		SET status = 'failed', last_error = $3, updated_at = now()
+		WHERE event_id = $1 AND recipient_key = $2 AND status <> 'sent'
+	`, eventID, recipientKey, lastError)
+	if err != nil {
+		return fmt.Errorf("failed to record notification delivery failure: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("notification delivery not found or already sent")
+	}
+	return nil
+}
+
 // ListLogs 取得通知日誌清單（支援主題篩選與分頁）。
 func (r *NotificationRepository) ListLogs(ctx context.Context, topic string, page, pageSize int) ([]app.Log, int64, error) {
 	if r.db == nil {
-		return []app.Log{}, 0, nil
+		return nil, 0, fmt.Errorf("notification database is not configured")
 	}
 	db := pgxdb.FromContext(ctx, r.db)
 
@@ -191,17 +312,25 @@ func (r *NotificationRepository) ListLogs(ctx context.Context, topic string, pag
 		}
 		logs = append(logs, l)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate notification logs: %w", err)
+	}
 
 	var total int64
 	countQuery := `SELECT COUNT(*) FROM notification_log WHERE ($1 = '' OR topic = $1)`
-	_ = db.QueryRow(ctx, countQuery, topic).Scan(&total)
+	if err := db.QueryRow(ctx, countQuery, topic).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count notification logs: %w", err)
+	}
 
 	return logs, total, nil
 }
 
 // BatchCreateRecipients 批次新增收件人；topic+email 重複者靜默略過，回傳只含實際新增的列。
 func (r *NotificationRepository) BatchCreateRecipients(ctx context.Context, items []app.Recipient) ([]app.Recipient, error) {
-	if r.db == nil || len(items) == 0 {
+	if r.db == nil {
+		return nil, fmt.Errorf("notification database is not configured")
+	}
+	if len(items) == 0 {
 		return []app.Recipient{}, nil
 	}
 	db := pgxdb.FromContext(ctx, r.db)
@@ -224,7 +353,7 @@ func (r *NotificationRepository) BatchCreateRecipients(ctx context.Context, item
 		ON CONFLICT (topic, email) WHERE recipient_type = 'email' DO NOTHING
 		RETURNING id, topic, recipient_type, target_role, user_id, COALESCE(email, ''), display_name, active, created_by, created_at
 	`
-	rows, err := db.Query(ctx, query, topics, emails, displayNames, createdBys)
+	rows, err := db.Query(ctx, query, topics, emails, displayNames, pgxdb.UUIDStrings(createdBys))
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch create recipients: %w", err)
 	}
@@ -243,7 +372,10 @@ func (r *NotificationRepository) BatchCreateRecipients(ctx context.Context, item
 
 // BatchDeleteRecipients 批次刪除收件人，回傳實際刪除筆數。
 func (r *NotificationRepository) BatchDeleteRecipients(ctx context.Context, ids []int64) (int64, error) {
-	if r.db == nil || len(ids) == 0 {
+	if r.db == nil {
+		return 0, fmt.Errorf("notification database is not configured")
+	}
+	if len(ids) == 0 {
 		return 0, nil
 	}
 	db := pgxdb.FromContext(ctx, r.db)

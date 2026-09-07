@@ -46,8 +46,15 @@ func (s *stubStore) UpsertColumns(context.Context, uuid.UUID, []ColumnDraft) err
 func (s *stubStore) UpdateColumnMappingByID(context.Context, string, string, *string, *int16) (uuid.UUID, string, int, string, error) {
 	return uuid.Nil, "", 0, "", nil
 }
-func (s *stubStore) UpdateColumnMappingByHeader(context.Context, uuid.UUID, string, string, *string, *int16) error {
-	return nil
+// UpdateColumnMappingByHeader 依 existing 裡的欄位回答更新前狀態，讓測試能用「欄位原本
+// 是 pending 還是 mapped」控制匯入路徑要不要觸發回填。
+func (s *stubStore) UpdateColumnMappingByHeader(_ context.Context, _ uuid.UUID, header, _ string, _ *string, _ *int16) (int, string, error) {
+	for _, c := range s.existing {
+		if c.ColumnHeader == header {
+			return c.ColumnIndex, c.MappingStatus, nil
+		}
+	}
+	return 0, "", nil
 }
 func (s *stubStore) MarkImported(context.Context, uuid.UUID, time.Time) error { return nil }
 
@@ -305,34 +312,6 @@ func TestParseYearMonth(t *testing.T) {
 			if tt.declared {
 				assert.Equal(t, tt.want, got.Format("2006-01-02"))
 			}
-		})
-	}
-}
-
-func TestDaysInMonth(t *testing.T) {
-	tests := []struct {
-		name      string
-		yearMonth string
-		wantCount int
-		wantLast  string
-	}{
-		{name: "閏年二月", yearMonth: "2024-02", wantCount: 29, wantLast: "2024-02-29"},
-		{name: "平年二月", yearMonth: "2026-02", wantCount: 28, wantLast: "2026-02-28"},
-		{name: "三十天的月份", yearMonth: "2026-04", wantCount: 30, wantLast: "2026-04-30"},
-		{name: "十二月不跨年溢位", yearMonth: "2026-12", wantCount: 31, wantLast: "2026-12-31"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			start, declared, err := parseYearMonth(tt.yearMonth)
-			require.NoError(t, err)
-			require.True(t, declared)
-
-			days := daysInMonth(start)
-
-			require.Len(t, days, tt.wantCount)
-			assert.Equal(t, tt.yearMonth+"-01", days[0].Format("2006-01-02"))
-			assert.Equal(t, tt.wantLast, days[len(days)-1].Format("2006-01-02"))
 		})
 	}
 }

@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -48,7 +49,7 @@ func (h *NotificationHandler) ListRecipients(c *gin.Context) {
 // CreateRecipient 新增通知收件人（admin 專屬）。
 func (h *NotificationHandler) CreateRecipient(c *gin.Context) {
 	var req CreateRecipientRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -75,7 +76,7 @@ func (h *NotificationHandler) UpdateRecipient(c *gin.Context) {
 	}
 
 	var req UpdateRecipientRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -85,6 +86,10 @@ func (h *NotificationHandler) UpdateRecipient(c *gin.Context) {
 
 	item, err := h.svc.UpdateRecipient(c.Request.Context(), id, req.Email, req.DisplayName, req.Active, actorID, actorRole)
 	if err != nil {
+		if errors.Is(err, app.ErrRecipientNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無通知收件人", nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -104,7 +109,7 @@ type batchCreateRecipientsRequest struct {
 // BatchCreateRecipients 批次新增通知收件人。
 func (h *NotificationHandler) BatchCreateRecipients(c *gin.Context) {
 	var req batchCreateRecipientsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -134,7 +139,7 @@ type batchDeleteRecipientsRequest struct {
 // BatchDeleteRecipients 批次刪除通知收件人。
 func (h *NotificationHandler) BatchDeleteRecipients(c *gin.Context) {
 	var req batchDeleteRecipientsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -174,6 +179,10 @@ func (h *NotificationHandler) DeleteRecipient(c *gin.Context) {
 	actorRole := auth.GetActorRole(c)
 
 	if err := h.svc.DeleteRecipient(c.Request.Context(), id, actorID, actorRole); err != nil {
+		if errors.Is(err, app.ErrRecipientNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無通知收件人", nil)
+			return
+		}
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "刪除收件人失敗", nil)
 		return
 	}
@@ -183,10 +192,10 @@ func (h *NotificationHandler) DeleteRecipient(c *gin.Context) {
 
 // ListLogs 取得通知發送紀錄歷史。
 func (h *NotificationHandler) ListLogs(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	if pageSize > 100 {
-		pageSize = 100
+	page, pageSize, err := httpx.ParsePagination(c)
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
+		return
 	}
 	topic := c.Query("topic")
 

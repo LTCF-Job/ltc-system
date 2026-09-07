@@ -221,7 +221,7 @@
       :on-download-template="handleDownloadTemplate"
       @success="handleImportSuccess"
     >
-      <template #columns="{ checkedDuplicateRows, toggleDuplicateRow }">
+      <template #columns="{ checkedDuplicateRows, toggleDuplicateRow, getRowId }">
         <el-table-column prop="type" label="類型" width="80" />
         <el-table-column prop="siteName" label="單位" width="140" />
         <el-table-column prop="name" label="姓名" width="110" />
@@ -232,9 +232,9 @@
             <template v-if="row.isDuplicate">
               <el-tooltip :content="`與既有照護人員「${row.duplicateOf?.name ?? '未知'}」疑似重複`" placement="top">
                 <el-checkbox
-                  :model-value="checkedDuplicateRows.has(row.rowIndex ?? $index)"
+                  :model-value="checkedDuplicateRows.has(getRowId(row, $index))"
                   label="仍要匯入"
-                  @change="(val: string | number | boolean) => toggleDuplicateRow(row.rowIndex ?? $index, !!val)"
+                  @change="(val: string | number | boolean) => toggleDuplicateRow(getRowId(row, $index), !!val)"
                 />
               </el-tooltip>
             </template>
@@ -308,7 +308,6 @@
 import { ref, reactive } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
@@ -321,9 +320,10 @@ import {
   linkCaregiverSite,
   downloadCaregiverTemplate,
   dryRunImportCaregivers,
-  commitImportCaregivers
+  commitImportCaregivers,
+  listAllCaregivers
 } from '@/api/caregivers'
-import { listSites, createSite } from '@/api/masters'
+import { listAllSites, createSite } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
@@ -363,18 +363,16 @@ const {
 })
 
 async function loadSites() {
-  const res = await listSites({ status: 'active', pageSize: 100 })
-  availableSites.value = res.data
+  availableSites.value = await listAllSites({ status: 'active' })
 }
 
-// 下載匯入範本
 async function handleDownloadTemplate() {
   try {
     const blob = await downloadCaregiverTemplate()
     downloadBlob(blob, '照護人員批次匯入範本.xlsx')
     ElMessage.success('照護人員匯入範本下載成功')
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '下載範本失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -384,8 +382,10 @@ function openImportDialog() {
 
 // ImportPreviewDialog 是沿用個案匯入的共用元件，其錯誤／警告清單固定以 caseName 顯示
 // 姓名欄位；照護人員後端回應的欄位是 name，這裡轉接成元件既有的欄位形狀，元件本身不需改動。
-function withCaseNameAlias(items: any[] = []): any[] {
-  return items.map((item) => ({ ...item, caseName: item.name }))
+// 後端無錯誤／警告時，Go 的 nil slice 會序列化成 null，預設參數只在 undefined 生效，
+// 必須自行擋掉 null，否則解析預覽會丟出 TypeError，畫面看起來像按鈕沒反應。
+function withCaseNameAlias(items?: any[] | null): any[] {
+  return (items ?? []).map((item) => ({ ...item, caseName: item.name }))
 }
 
 async function handleDryRun(file: File): Promise<any> {
@@ -397,11 +397,11 @@ async function handleDryRun(file: File): Promise<any> {
   }
 }
 
-async function handleCommitImport(file: File, includeDuplicateRows: number[]): Promise<any> {
+async function handleCommitImport(file: File, includeDuplicateRows: string[]): Promise<any> {
   const result: any = await commitImportCaregivers(file, includeDuplicateRows)
   return {
     importedCount: result.importedCount,
-    skippedRows: (result.skippedRows || []).map((row: any) => ({ rowIndex: row.rowIndex, caseName: row.name, reasons: row.reasons })),
+    skippedRows: (result.skippedRows || []).map((row: any) => ({ rowId: row.rowId, rowIndex: row.rowIndex, caseName: row.name, reasons: row.reasons })),
     warnings: withCaseNameAlias(result.warnings)
   }
 }
@@ -481,8 +481,8 @@ async function handleToggleStatus(row: CaregiverDTO, newActive: boolean) {
     await updateCaregiver(row.id, { status: newStatus })
     row.status = newStatus
     ElMessage.success(`已將照護人員「${row.name}」切換為 ${newActive ? '啟用' : '停用'}`)
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新狀態失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -518,8 +518,8 @@ async function handleSave() {
       if (activeTab.value === 'pending') {
         await fetchPending()
       }
-    } catch (err: any) {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '儲存照護人員資料失敗'))
+    } catch {
+      // 全域攔截器負責顯示 API 錯誤。
     } finally {
       saving.value = false
     }
@@ -537,10 +537,8 @@ async function handleDelete(row: any) {
     await deleteCaregiver(row.id)
     ElMessage.success(`照護人員「${row.name}」已成功刪除`)
     executeFetch()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '刪除照護人員失敗'))
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 
@@ -552,16 +550,16 @@ async function fetchPending() {
   pendingLoading.value = true
   try {
     const [unresolvedRes, incompleteRes] = await Promise.all([
-      listCaregivers({ unresolvedLink: true, pageSize: 100 }),
-      listCaregivers({ incomplete: true, pageSize: 100 })
+      listAllCaregivers({ unresolvedLink: true }),
+      listAllCaregivers({ incomplete: true })
     ])
     const merged = new Map<string, CaregiverDTO>()
-    for (const row of [...(unresolvedRes.data ?? []), ...(incompleteRes.data ?? [])]) {
+    for (const row of [...unresolvedRes, ...incompleteRes]) {
       merged.set(row.id, row)
     }
     pendingCaregivers.value = Array.from(merged.values())
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '載入待維護清單失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     pendingLoading.value = false
   }
@@ -576,8 +574,8 @@ async function handleLinkSite(row: CaregiverDTO, siteId: string) {
     if (activeTab.value === 'pending') {
       await fetchPending()
     }
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '更新單位關聯失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   }
 }
 
@@ -604,8 +602,8 @@ async function handleQuickCreateSiteAndLink() {
     availableSites.value.push(site)
     await handleLinkSite(quickCreateTarget.value, site.id)
     quickCreateSiteVisible.value = false
-  } catch (err: any) {
-    ElMessage.error(resolveErrorMessage(err.response?.data?.error?.code, '新增並關聯單位失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     quickCreateSiteSaving.value = false
   }
@@ -620,7 +618,6 @@ async function handleTabChange(name: string | number) {
   }
 }
 
-// 初始載入
 loadSites()
 executeFetch()
 </script>

@@ -16,7 +16,7 @@
           placeholder="搜尋使用者姓名／電子郵件"
           clearable
           style="width: 240px"
-          @keyup.enter="fetchUsers"
+          @keyup.enter="handleSearch"
         />
 
         <el-select
@@ -24,7 +24,7 @@
           placeholder="身分角色"
           clearable
           style="width: 150px"
-          @change="fetchUsers"
+          @change="handleSearch"
         >
           <el-option
             v-for="r in roleList"
@@ -39,7 +39,7 @@
           </el-option>
         </el-select>
 
-        <el-button type="primary" @click="fetchUsers">查詢</el-button>
+        <el-button type="primary" @click="handleSearch">查詢</el-button>
         <el-button @click="handleReset">重設</el-button>
       </template>
 
@@ -90,7 +90,7 @@
                 v-model="(row as any).status"
                 active-value="active"
                 inactive-value="inactive"
-                :disabled="(row as any).role === 'admin' && (row as any).id === currentUserId"
+                :disabled="(row as any).role === 'admin' && (row as any).id === currentUserId || statusUpdating.has((row as any).id)"
                 @change="handleToggleStatus(row as any)"
               />
             </template>
@@ -127,7 +127,7 @@
       </template>
     </DataTablePage>
 
-    <!-- 新增 / 編輯使用者彈窗 -->
+    <!-- 新增 / 編輯使用者對話框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? '編輯使用者基本資料' : '新增系統使用者'"
@@ -177,7 +177,7 @@
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="請輸入初始登入密碼（至少 6 碼）"
+            placeholder="請輸入初始登入密碼（至少 8 碼）"
             show-password
           />
         </el-form-item>
@@ -314,6 +314,7 @@ const pageSize = ref(20)
 
 const queryKeyword = ref('')
 const queryRole = ref<string | undefined>(undefined)
+const statusUpdating = ref<Set<string>>(new Set())
 
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
@@ -339,8 +340,8 @@ const formRules = {
   password: [
     {
       validator: (_rule: any, val: string, callback: any) => {
-        if (!editingId.value && (!val || val.length < 6)) {
-          return callback(new Error('初始密碼長度至少需為 6 個字元'))
+        if (!editingId.value && (!val || val.length < 8)) {
+          return callback(new Error('初始密碼長度至少需為 8 個字元'))
         }
         callback()
       },
@@ -371,38 +372,46 @@ async function fetchRoles() {
     roleList.value = list
   } catch {
     rolesLoadError.value = true
-    ElMessage.error('載入角色清單失敗，個人自訂權限暫時無法設定，請重試')
   }
 }
 
 async function fetchUsers() {
   loading.value = true
   try {
-    const list = await listUsers({
+    const result = await listUsers({
       q: queryKeyword.value || undefined,
-      role: queryRole.value || undefined
+      role: queryRole.value || undefined,
+      page: page.value,
+      pageSize: pageSize.value
     })
-    users.value = list
-    total.value = list.length
+    users.value = result.data
+    total.value = result.meta.total
   } finally {
     loading.value = false
   }
+}
+
+function handleSearch() {
+  page.value = 1
+  void fetchUsers()
 }
 
 function handleReset() {
   queryKeyword.value = ''
   queryRole.value = undefined
   page.value = 1
-  fetchUsers()
+  void fetchUsers()
 }
 
 function onPageChange(p: number) {
   page.value = p
+  void fetchUsers()
 }
 
 function onSizeChange(size: number) {
   pageSize.value = size
   page.value = 1
+  void fetchUsers()
 }
 
 function openCreateDialog() {
@@ -453,7 +462,7 @@ async function handleSubmit() {
         ElMessage.success('使用者建立成功')
       }
       dialogVisible.value = false
-      fetchUsers()
+      void fetchUsers()
     } finally {
       submitting.value = false
     }
@@ -462,6 +471,7 @@ async function handleSubmit() {
 
 async function handleToggleStatus(user: UserDTO) {
   const previousStatus = user.status === 'active' ? 'inactive' : 'active'
+  statusUpdating.value = new Set(statusUpdating.value).add(user.id)
   try {
     await updateUser(user.id, {
       status: user.status
@@ -469,7 +479,9 @@ async function handleToggleStatus(user: UserDTO) {
     ElMessage.success(`已將「${user.displayName}」帳號設定為 ${user.status === 'active' ? '啟用' : '停用'}`)
   } catch {
     user.status = previousStatus
-    ElMessage.error(`更新「${user.displayName}」帳號狀態失敗，請重試`)
+  } finally {
+    statusUpdating.value = new Set([...statusUpdating.value].filter((id) => id !== user.id))
+    await fetchUsers()
   }
 }
 
@@ -486,9 +498,9 @@ async function handleDelete(user: UserDTO) {
     )
     await deleteUser(user.id)
     ElMessage.success(`已成功刪除使用者「${user.displayName}」`)
-    fetchUsers()
+    void fetchUsers()
   } catch {
-    // 使用者取消操作
+    // 使用者取消操作或 API 錯誤已由全域攔截器提示，此處不重複處理
   }
 }
 
@@ -523,7 +535,7 @@ function openPermissionDrawer(user: UserDTO) {
   drawerVisible.value = true
 }
 
-// 三個層級是包含關係：delete 需要 edit，edit 需要 view；同一組聯動規則見 RoleManagementView.vue
+// 取消檢視權限時一併取消編輯與刪除；同一組聯動規則見 RoleManagementView.vue
 function onViewPermChange(modId: string) {
   if (!tempPermissions.value[modId].view) {
     tempPermissions.value[modId].edit = false
@@ -531,6 +543,7 @@ function onViewPermChange(modId: string) {
   }
 }
 
+// 開啟編輯權限時自動補上檢視權限；關閉編輯時一併取消刪除
 function onEditPermChange(modId: string) {
   if (tempPermissions.value[modId].edit) {
     tempPermissions.value[modId].view = true
@@ -539,6 +552,7 @@ function onEditPermChange(modId: string) {
   }
 }
 
+// 開啟刪除權限時往上補齊編輯與檢視權限
 function onDeletePermChange(modId: string) {
   if (tempPermissions.value[modId].delete) {
     tempPermissions.value[modId].edit = true
@@ -569,7 +583,7 @@ async function handleSavePermissions() {
     await updateUserPermissions(selectedUser.value.id, tempPermissions.value)
     ElMessage.success(`已儲存「${selectedUser.value.displayName}」之個人權限設定`)
     drawerVisible.value = false
-    fetchUsers()
+    void fetchUsers()
   } finally {
     savingPerms.value = false
   }

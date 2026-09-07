@@ -22,6 +22,29 @@ type Caregiver struct {
 	UpdatedAt   time.Time
 }
 
+// CaregiverAuditSnapshot 是照護人員主檔的明確稽核快照；聯絡方式與備註屬於
+// 個人資料，不直接寫入 audit_log。
+type CaregiverAuditSnapshot struct {
+	ID          uuid.UUID  `json:"id"`
+	SiteID      *uuid.UUID `json:"siteId,omitempty"`
+	SiteNameRaw string     `json:"siteNameRaw,omitempty"`
+	Name        string     `json:"name"`
+	Type        string     `json:"type"`
+	Status      string     `json:"status"`
+}
+
+// AuditSnapshot 產生照護人員的明確稽核快照。
+func (c Caregiver) AuditSnapshot() CaregiverAuditSnapshot {
+	return CaregiverAuditSnapshot{
+		ID:          c.ID,
+		SiteID:      c.SiteID,
+		SiteNameRaw: c.SiteNameRaw,
+		Name:        c.Name,
+		Type:        c.Type,
+		Status:      c.Status,
+	}
+}
+
 // 照護人員類型為固定二選一，與姓名同為必填。
 const (
 	CaregiverTypeCaseManager = "case_manager"
@@ -35,6 +58,7 @@ func IsValidCaregiverType(t string) bool {
 
 // CaregiverImportErrorItem 代表單筆匯入錯誤明細。
 type CaregiverImportErrorItem struct {
+	RowID    string `json:"rowId,omitempty"`
 	RowIndex int    `json:"rowIndex"`
 	Name     string `json:"name,omitempty"`
 	Field    string `json:"field,omitempty"`
@@ -44,6 +68,7 @@ type CaregiverImportErrorItem struct {
 // CaregiverImportWarningItem 代表單筆匯入警告明細：資料已建立但仍需人工處理。
 // Field 為 "site" 表示單位待關聯既有單位，為 "contact"／"notes" 表示該欄位缺漏待補齊。
 type CaregiverImportWarningItem struct {
+	RowID    string `json:"rowId,omitempty"`
 	RowIndex int    `json:"rowIndex"`
 	Name     string `json:"name,omitempty"`
 	Field    string `json:"field,omitempty"`
@@ -52,6 +77,7 @@ type CaregiverImportWarningItem struct {
 
 // CaregiverImportRowResult 代表照護人員批次匯入單列解析結果。
 type CaregiverImportRowResult struct {
+	RowID                  string            `json:"rowId"`
 	RowIndex               int               `json:"rowIndex"`
 	SiteName               string            `json:"siteName,omitempty"`
 	SiteID                 *uuid.UUID        `json:"siteId,omitempty"`
@@ -74,6 +100,7 @@ type CaregiverDuplicateRef struct {
 
 // CaregiverImportSkippedRow 保留姓名缺漏、未寫入資料庫的來源列。
 type CaregiverImportSkippedRow struct {
+	RowID     string            `json:"rowId"`
 	RowIndex  int               `json:"rowIndex"`
 	Name      string            `json:"name"`
 	Reasons   []string          `json:"reasons"`

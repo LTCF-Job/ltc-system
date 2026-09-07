@@ -72,6 +72,28 @@ func TestToROC(t *testing.T) {
 	}
 }
 
+func TestMonthRangeStrictRejectsInvalidPeriod(t *testing.T) {
+	tests := []string{"abc", "115-99", "115-7", "2026/07", "1911-12"}
+	for _, input := range tests {
+		t.Run(input, func(t *testing.T) {
+			_, _, _, err := MonthRangeStrict(input)
+			assert.ErrorIs(t, err, ErrInvalidYearMonth)
+		})
+	}
+}
+
+func TestMonthRangeStrictSupportsROCAndGregorian(t *testing.T) {
+	start, end, days, err := MonthRangeStrict("2026-07")
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), start)
+	assert.Equal(t, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), end)
+	assert.Equal(t, 31, days)
+
+	start, _, _, err = MonthRangeStrict("11507")
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), start)
+}
+
 func TestFromROC(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -125,6 +147,36 @@ func TestFromROC(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParseDate(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{name: "民國緊湊格式", input: "1150701", want: "2026-07-01"},
+		{name: "民國斜線格式", input: "115/7/1", want: "2026-07-01"},
+		{name: "西元 ISO 格式", input: "2026-07-01", want: "2026-07-01"},
+		{name: "西元點號格式", input: "2026.07.01", want: "2026-07-01"},
+		{name: "不存在日期", input: "115/02/29", wantErr: true},
+		{name: "不完整年份", input: "26-07-01", wantErr: true},
+		{name: "超過合理年份", input: "2101-01-01", wantErr: true},
+		{name: "民國年份超過合理年份", input: "190/01/01", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseDate(tt.input)
+			if tt.wantErr {
+				assert.ErrorIs(t, err, ErrInvalidDate)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.Format("2006-01-02"))
 		})
 	}
 }

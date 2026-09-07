@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	caregiverapp "ltc-system/apps/api/internal/modules/caregiver/app"
 	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
@@ -37,7 +40,13 @@ type rideDriverResolver struct{ repo *masterinfra.DriverRepository }
 func (a rideDriverResolver) GetByNameNormalized(ctx context.Context, nameNorm string) (*rideapp.DriverRef, error) {
 	d, err := a.repo.GetByNameNormalized(ctx, nameNorm)
 	if err != nil {
+		if errors.Is(err, masterapp.ErrDriverNotFound) {
+			return nil, nil
+		}
 		return nil, err
+	}
+	if d == nil {
+		return nil, nil
 	}
 	return &rideapp.DriverRef{ID: d.ID, Name: d.Name}, nil
 }
@@ -66,7 +75,14 @@ func (a rideScheduleReader) GetActiveScheduleForCaseOnDate(ctx context.Context, 
 	for _, l := range s.Legs {
 		legs = append(legs, rideapp.ScheduleLeg{LegSeq: l.LegSeq, Direction: l.Direction, DepartTime: l.DepartTime, VehicleID: l.VehicleID})
 	}
-	return &rideapp.CaseSchedule{ID: s.ID, CaseID: s.CaseID, SiteID: s.SiteID, TripPattern: s.TripPattern, Legs: legs}, nil
+	return &rideapp.CaseSchedule{
+		ID:          s.ID,
+		CaseID:      s.CaseID,
+		SiteID:      s.SiteID,
+		Weekdays:    s.Weekdays,
+		TripPattern: s.TripPattern,
+		Legs:        legs,
+	}, nil
 }
 
 // rideMissingReportProvider 讓 ride 的異常集中清單取得整月未回報趟次，不觸發告警通知。
@@ -79,7 +95,10 @@ func (a rideMissingReportProvider) ListMissingForMonth(ctx context.Context, year
 	}
 	out := make([]rideapp.MissingRide, 0, len(items))
 	for _, item := range items {
-		serviceDate, _ := time.Parse("2006-01-02", item.ServiceDate)
+		serviceDate, err := rocdate.ParseDate(item.ServiceDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse missing ride service date: %w", err)
+		}
 		out = append(out, rideapp.MissingRide{
 			CaseID:      item.CaseID,
 			CaseName:    item.CaseName,
@@ -129,6 +148,30 @@ func (a opsDriverLister) List(ctx context.Context, region, q string, page, pageS
 	return out, total, nil
 }
 
+func (a opsDriverLister) ListAllActive(ctx context.Context) ([]opsapp.DriverRef, error) {
+	list, err := a.repo.ListAllActive(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]opsapp.DriverRef, 0, len(list))
+	for _, d := range list {
+		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name, Region: d.Region})
+	}
+	return out, nil
+}
+
+func (a opsDriverLister) ListAllActiveByQuery(ctx context.Context, q string) ([]opsapp.DriverRef, error) {
+	list, err := a.repo.ListAllActiveByQuery(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]opsapp.DriverRef, 0, len(list))
+	for _, d := range list {
+		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name, Region: d.Region})
+	}
+	return out, nil
+}
+
 // opsVehicleLister 讓 ops 的維修紀錄取得車輛清單。
 type opsVehicleLister struct {
 	repo *masterinfra.VehicleRepository
@@ -146,13 +189,31 @@ func (a opsVehicleLister) List(ctx context.Context, region, q string, page, page
 	return out, total, nil
 }
 
+func (a opsVehicleLister) ListAll(ctx context.Context) ([]opsapp.VehicleRef, error) {
+	list, err := a.repo.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]opsapp.VehicleRef, 0, len(list))
+	for _, v := range list {
+		out = append(out, opsapp.VehicleRef{ID: v.ID, DisplayName: v.DisplayName, PlateNo: v.PlateNo})
+	}
+	return out, nil
+}
+
 // importSiteLookup 讓 caseimport 以名稱或區域比對單位。
 type importSiteLookup struct{ repo *masterinfra.SiteRepository }
 
 func (a importSiteLookup) GetByName(ctx context.Context, name string) (*importapp.SiteRef, error) {
 	s, err := a.repo.GetByName(ctx, name)
 	if err != nil {
+		if errors.Is(err, masterapp.ErrSiteNotFound) {
+			return nil, importapp.ErrLookupNotFound
+		}
 		return nil, err
+	}
+	if s == nil {
+		return nil, nil
 	}
 	return &importapp.SiteRef{ID: s.ID, Name: s.Name}, nil
 }
@@ -177,7 +238,13 @@ type importVehicleLookup struct {
 func (a importVehicleLookup) GetByDisplayName(ctx context.Context, displayName string) (*importapp.VehicleRef, error) {
 	v, err := a.repo.GetByDisplayName(ctx, displayName)
 	if err != nil {
+		if errors.Is(err, masterapp.ErrVehicleNotFound) {
+			return nil, importapp.ErrLookupNotFound
+		}
 		return nil, err
+	}
+	if v == nil {
+		return nil, nil
 	}
 	return &importapp.VehicleRef{ID: v.ID}, nil
 }
@@ -187,8 +254,9 @@ type caseRegistrar struct{ svc *caseapp.CaseService }
 
 func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, actor importapp.Actor) (uuid.UUID, error) {
 	entity, err := a.svc.CreateCase(ctx, caseapp.CreateCaseRequest{
-		Name: in.Name, NationalID: in.NationalID,
-		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
+		ID:   in.ID,
+		Name: in.Name, NationalID: in.NationalID, AllowInvalidNationalID: in.AllowInvalidNationalID,
+		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate, BirthDateRaw: in.BirthDateRaw,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
 		ServiceCategory:  intPointerOrNil(in.ServiceCategory),
@@ -202,8 +270,30 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 
 func (a caseRegistrar) RecordSkipped(ctx context.Context, row importapp.CaseImportSkippedRow, actor importapp.Actor) {
 	a.svc.RecordSkippedCaseImport(ctx, caseapp.CaseImportSkippedRow{
-		RowIndex: row.RowIndex, CaseName: row.CaseName, Reasons: row.Reasons, RawValues: row.RawValues,
+		RowID: row.RowID, RowIndex: row.RowIndex, CaseName: row.CaseName, Reasons: row.Reasons, RawValues: row.RawValues,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
+}
+
+// caseDuplicateStager 讓 caseimport 透過 casemgmt 把疑似重複列存入待裁決暫存，
+// 不直接建立個案；身分證字號加密與明文邊界由 CaseService 內部處理。
+type caseDuplicateStager struct{ svc *caseapp.CaseService }
+
+func (a caseDuplicateStager) StageDuplicateRow(ctx context.Context, fileHash, rowKey string, in importapp.StageDuplicateCandidate) (uuid.UUID, bool, error) {
+	return a.svc.StageDuplicateCandidate(ctx, caseapp.StageDuplicateCandidateInput{
+		FileHash: fileHash, RowKey: rowKey,
+		RowIndex: in.RowIndex, SheetName: in.SheetName,
+		Name: in.Name, NationalID: in.NationalID,
+		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate, BirthDateRaw: in.BirthDateRaw,
+		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
+		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
+		ServiceCategory:  intPointerOrNil(in.ServiceCategory),
+		ServiceUsageType: intPointerOrNil(in.ServiceUsageType),
+		Remarks:          in.Remarks,
+		SiteID:           in.SiteID, SiteNameRaw: in.SiteNameRaw,
+		OutboundVehicleID: in.OutboundVehicleID, OutboundVehicleNameRaw: in.OutboundVehicleNameRaw,
+		InboundVehicleID: in.InboundVehicleID, InboundVehicleNameRaw: in.InboundVehicleNameRaw,
+		DuplicateCaseID: in.DuplicateCaseID,
+	})
 }
 
 // intPointerOrNil 匯入範本目前沒有服務類別／服務使用類型欄位，一律視為未提供；
@@ -221,7 +311,13 @@ type caregiverSiteLookup struct{ repo *masterinfra.SiteRepository }
 func (a caregiverSiteLookup) GetByName(ctx context.Context, name string) (*caregiverapp.SiteRef, error) {
 	s, err := a.repo.GetByName(ctx, name)
 	if err != nil {
+		if errors.Is(err, masterapp.ErrSiteNotFound) {
+			return nil, caregiverapp.ErrCaregiverSiteNotFound
+		}
 		return nil, err
+	}
+	if s == nil {
+		return nil, nil
 	}
 	return &caregiverapp.SiteRef{ID: s.ID, Name: s.Name}, nil
 }
@@ -246,8 +342,14 @@ type driverReportDriverResolver struct{ repo *masterinfra.DriverRepository }
 
 func (a driverReportDriverResolver) GetByNameNormalized(ctx context.Context, nameNorm string) (*drapp.DriverRef, error) {
 	d, err := a.repo.GetByNameNormalized(ctx, nameNorm)
-	if err != nil || d == nil {
+	if err != nil {
+		if errors.Is(err, masterapp.ErrDriverNotFound) {
+			return nil, nil
+		}
 		return nil, err
+	}
+	if d == nil {
+		return nil, nil
 	}
 	return &drapp.DriverRef{ID: d.ID, Name: d.Name}, nil
 }
@@ -262,8 +364,8 @@ func (a driverReportAttendanceRegistrar) SyncFromImport(ctx context.Context, dri
 // driverReportRideIngestor 讓 driverreport 把每日匯報交給 ride 展開為搭乘紀錄。
 type driverReportRideIngestor struct{ svc *rideapp.RideService }
 
-func (a driverReportRideIngestor) IngestSubmission(ctx context.Context, formID, vehicleID uuid.UUID, s drapp.Submission) (int, error) {
-	return a.svc.IngestSubmission(ctx, formID, vehicleID, rideapp.ProcessSubmissionRequest{
+func (a driverReportRideIngestor) IngestSubmission(ctx context.Context, formID, vehicleID uuid.UUID, s drapp.Submission) (drapp.IngestOutcome, error) {
+	result, err := a.svc.IngestSubmission(ctx, formID, vehicleID, rideapp.ProcessSubmissionRequest{
 		ServiceDate: s.ServiceDate,
 		SubmittedAt: s.SubmittedAt,
 		DriverRaw:   s.DriverRaw,
@@ -271,14 +373,44 @@ func (a driverReportRideIngestor) IngestSubmission(ctx context.Context, formID, 
 		Remark:      s.Remark,
 		Answers:     s.Answers,
 	})
+	if err != nil {
+		return drapp.IngestOutcome{}, err
+	}
+	return drapp.IngestOutcome{Written: result.Written, Reaffirmed: result.Reaffirmed, Staged: result.Staged}, nil
 }
 
-func (a driverReportRideIngestor) ClearImportedDates(ctx context.Context, formID uuid.UUID, dates []time.Time) (int, error) {
-	return a.svc.ClearImportedDates(ctx, formID, dates)
+func (a driverReportRideIngestor) ListRowConflicts(ctx context.Context) ([]drapp.RowConflictView, error) {
+	items, err := a.svc.ListRowConflicts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]drapp.RowConflictView, 0, len(items))
+	for _, c := range items {
+		out = append(out, drapp.RowConflictView{
+			ID:                 c.ID.String(),
+			SubmissionID:       c.NewSubmissionID.String(),
+			FormTitle:          c.FormTitle,
+			VehicleName:        c.VehicleName,
+			ServiceDate:        c.ServiceDate.Format("2006-01-02"),
+			CaseID:             c.CaseID.String(),
+			CaseName:           c.CaseName,
+			LegSeq:             c.LegSeq,
+			PreviousReported:   c.PreviousReported,
+			PreviousDriverName: c.PreviousDriverName,
+			NewReported:        c.NewReported,
+			NewDriverName:      c.NewDriverName,
+			DetectedAt:         c.DetectedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+	return out, nil
 }
 
-func (a driverReportRideIngestor) BackfillColumn(ctx context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16) (int, error) {
-	return a.svc.BackfillColumn(ctx, formID, vehicleID, columnHeader, columnIndex, caseID, legSeq)
+func (a driverReportRideIngestor) ResolveRowConflict(ctx context.Context, conflictID uuid.UUID, useNew bool, operatorID uuid.UUID) (*uuid.UUID, *time.Time, error) {
+	return a.svc.ResolveRowConflict(ctx, conflictID, useNew, operatorID)
+}
+
+func (a driverReportRideIngestor) BackfillColumn(ctx context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16, skipDates []time.Time) (int, error) {
+	return a.svc.BackfillColumn(ctx, formID, vehicleID, columnHeader, columnIndex, caseID, legSeq, skipDates)
 }
 
 func (a driverReportRideIngestor) ListSubmissionsForForms(ctx context.Context, formIDs []uuid.UUID) ([]drapp.SubmissionAnswerRow, error) {

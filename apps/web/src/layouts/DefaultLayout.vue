@@ -31,8 +31,7 @@
         <el-menu
           id="primary-navigation"
           :default-active="activeRoute"
-          :collapse="!isMobile && isCollapse"
-          :collapse-transition="false"
+            :collapse="!isMobile && isCollapse"
           router
           class="el-menu-vertical"
         >
@@ -246,6 +245,19 @@
 
       <!-- 主要頁面檢視區 -->
       <el-main id="main-content" class="layout-main" tabindex="-1" aria-label="主要內容">
+        <el-alert
+          v-if="authStore.permissionState === 'error'"
+          class="permission-load-alert"
+          title="權限資料載入失敗"
+          type="error"
+          :closable="false"
+          show-icon
+        >
+          <template #default>
+            <span>目前無法取得最新權限，請重試後再繼續操作。</span>
+            <el-button link type="danger" @click="authStore.loadPermissions()">重新載入</el-button>
+          </template>
+        </el-alert>
         <Transition name="page" mode="out-in">
           <router-view />
         </Transition>
@@ -401,6 +413,7 @@ async function handleCommand(cmd: string) {
   border-right: 1px solid var(--app-nav-border);
   height: 100%;
   min-height: 0;
+  transition: width 0.25s ease;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -497,6 +510,11 @@ async function handleCommand(cmd: string) {
       }
     }
 
+    /* 箭頭的 width: inherit 會吃到 title 的 width: 100%，撐成整列寬後被置中畫在文字上，直接不顯示 */
+    :deep(.el-sub-menu__icon-arrow) {
+      display: none;
+    }
+
     :deep(.el-menu-item > span),
     :deep(.el-sub-menu__title > span:not(.el-sub-menu__icon-arrow)) {
       flex: 0 0 auto;
@@ -529,17 +547,6 @@ async function handleCommand(cmd: string) {
       background-color: var(--app-nav-bg) !important;
       padding: 4px 0 4px 8px;
       border-radius: 8px;
-    }
-
-    /* 移除子選單開啟/摺疊時顯示在文字正中間的箭頭旋轉動畫特效 */
-    :deep(.el-sub-menu__icon-arrow) {
-      display: none !important;
-    }
-
-    :deep(.el-collapse-transition-enter-active),
-    :deep(.el-collapse-transition-leave-active),
-    :deep(.horizontal-collapse-transition) {
-      transition: none !important;
     }
   }
 

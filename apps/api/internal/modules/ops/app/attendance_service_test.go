@@ -13,7 +13,7 @@ import (
 
 func TestAttendanceService_GetMonthAttendance(t *testing.T) {
 	attendanceRepo := stubAttendanceStore{}
-	driverRepo := emptyDriverLister{}
+	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機", Region: "hsinchu"}}}
 	auditRepo := discardAuditWriter{}
 
 	svc := NewAttendanceService(attendanceRepo, driverRepo, auditRepo, stubHolidayReader{})
@@ -26,9 +26,37 @@ func TestAttendanceService_GetMonthAttendance(t *testing.T) {
 	assert.Equal(t, 31, report.DaysInMonth)
 }
 
+func TestAttendanceService_GetMonthAttendance_FiltersDriverName(t *testing.T) {
+	matchingID := uuid.New()
+	svc := NewAttendanceService(
+		stubAttendanceStore{},
+		activeDriverListerStub{drivers: []DriverRef{
+			{ID: matchingID, Name: "王小明", Region: "hsinchu"},
+			{ID: uuid.New(), Name: "陳小華", Region: "hsinchu"},
+		}},
+		discardAuditWriter{},
+		stubHolidayReader{},
+	)
+
+	report, err := svc.GetMonthAttendance(context.Background(), "115-07", nil, "小明")
+
+	require.NoError(t, err)
+	if assert.Len(t, report.Drivers, 1) {
+		assert.Equal(t, matchingID.String(), report.Drivers[0].DriverID)
+	}
+}
+
+func TestAttendanceService_GetMonthAttendance_RejectsInvalidMonth(t *testing.T) {
+	svc := NewAttendanceService(stubAttendanceStore{}, emptyDriverLister{}, discardAuditWriter{}, stubHolidayReader{})
+
+	_, err := svc.GetMonthAttendance(context.Background(), "not-a-month", nil)
+
+	assert.ErrorIs(t, err, ErrInvalidAttendanceMonth)
+}
+
 func TestAttendanceService_GetMonthAttendance_FlagsAbsentForPastWeekdayWithoutRecord(t *testing.T) {
 	attendanceRepo := stubAttendanceStore{}
-	driverRepo := emptyDriverLister{}
+	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機", Region: "hsinchu"}}}
 	auditRepo := discardAuditWriter{}
 
 	svc := NewAttendanceService(attendanceRepo, driverRepo, auditRepo, stubHolidayReader{})
@@ -58,7 +86,7 @@ func TestAttendanceService_GetMonthAttendance_FlagsAbsentForPastWeekdayWithoutRe
 
 func TestAttendanceService_GetMonthAttendance_HolidayWeekdayMarkedOff(t *testing.T) {
 	attendanceRepo := stubAttendanceStore{}
-	driverRepo := emptyDriverLister{}
+	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機", Region: "hsinchu"}}}
 	auditRepo := discardAuditWriter{}
 
 	past := time.Now().UTC().AddDate(0, -2, 0)
@@ -76,6 +104,35 @@ func TestAttendanceService_GetMonthAttendance_HolidayWeekdayMarkedOff(t *testing
 	assert.NoError(t, err)
 	assert.NotEmpty(t, report.Drivers)
 	assert.Equal(t, "off", report.Drivers[0].Days[dateKey].Status, "國定假日的平日應標示為 off（休），而非 absent")
+}
+
+type fixedAttendanceClock struct {
+	now time.Time
+}
+
+func (c fixedAttendanceClock) Now() time.Time { return c.now }
+
+func (c fixedAttendanceClock) Today() time.Time {
+	return time.Date(c.now.Year(), c.now.Month(), c.now.Day(), 0, 0, 0, 0, c.now.Location())
+}
+
+func TestAttendanceService_UsesTaipeiDateAtMidnightBoundary(t *testing.T) {
+	location := time.FixedZone("Asia/Taipei", 8*60*60)
+	clock := fixedAttendanceClock{now: time.Date(2026, time.September, 7, 0, 30, 0, 0, location)}
+	driverID := uuid.New()
+	svc := NewAttendanceService(
+		stubAttendanceStore{},
+		activeDriverListerStub{drivers: []DriverRef{{ID: driverID, Name: "測試司機", Region: "hsinchu"}}},
+		discardAuditWriter{},
+		stubHolidayReader{},
+		WithAttendanceClock(clock),
+	)
+
+	report, err := svc.GetMonthAttendance(context.Background(), "115-09", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "absent", report.Drivers[0].Days["2026-09-07"].Status,
+		"臺灣凌晨 00:30 的當日平日不得因 UTC 午夜偏移而被標成 future work")
 }
 
 func TestAttendanceService_Upsert(t *testing.T) {

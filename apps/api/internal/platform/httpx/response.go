@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -19,7 +20,6 @@ const (
 	CodeMappingRequired    = "MAPPING_REQUIRED"
 	CodeReportImportFailed = "DRIVER_REPORT_IMPORT_FAILED"
 	CodeFormMappingFailed  = "FORM_MAPPING_FAILED"
-	CodeDemoResetFailed    = "DEMO_RESET_FAILED"
 	CodeInternalError      = "INTERNAL_ERROR"
 	CodeServiceUnavailable = "SERVICE_UNAVAILABLE"
 	CodeResourceInUse      = "RESOURCE_IN_USE"
@@ -39,8 +39,8 @@ var codeMessages = map[string]string{
 	CodeMappingRequired:    "尚未完成欄位對應設定",
 	CodeReportImportFailed: "匯入司機接送匯報失敗，請確認檔案格式後再試",
 	CodeFormMappingFailed:  "更新欄位對應設定失敗，請稍後再試",
-	CodeDemoResetFailed:    "重置 Demo 資料集失敗，請稍後再試",
 	CodeInternalError:      "系統發生錯誤，請稍後再試",
+	CodeServiceUnavailable: "服務暫時無法使用，請稍後再試",
 }
 
 // APIResponse 定義 API 成功回應結構。
@@ -102,7 +102,8 @@ func RespondErrorCode(c *gin.Context, httpStatus int, code string, err error, de
 			slog.String("code", code),
 			slog.String("path", c.Request.URL.Path),
 			slog.String("method", c.Request.Method),
-			slog.String("error", err.Error()),
+			slog.String("error_type", fmt.Sprintf("%T", err)),
+			slog.String("error_message", err.Error()),
 		)
 	}
 	message, ok := codeMessages[code]

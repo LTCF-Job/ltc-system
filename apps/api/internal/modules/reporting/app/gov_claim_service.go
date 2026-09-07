@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"sort"
 	"strings"
@@ -33,7 +34,7 @@ type CreateGovClaimInput struct {
 	ActorRole     string
 }
 
-// GovClaimService 產生政府申報工作簿：查詢趟次、組出 33 欄申報列、落地快照並輸出檔案。
+// GovClaimService 產生政府申報工作簿：查詢趟次、組出 33 欄申報列、寫入快照並輸出檔案。
 type GovClaimService struct {
 	cfg      *config.Config
 	reader   GovClaimSourceReader
@@ -65,15 +66,22 @@ func NewGovClaimService(
 	}
 }
 
-// CreateGovClaimJob 前置檢核通過後同步產生逐案申報工作簿，並將申報列快照與檔案中繼資料落地。
+// CreateGovClaimJob 前置檢核通過後同步產生逐案申報工作簿，並將申報列快照與檔案中繼資料寫入。
 // 檢核有阻斷性錯誤時回傳 ErrPrecheckBlocked，且不建立任何工作紀錄。
 func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGovClaimInput) (GovClaimJob, error) {
+	if input.Mode != GovClaimModeDirect && input.Mode != GovClaimModeZip {
+		return GovClaimJob{}, ErrInvalidExportMode
+	}
+	if len(input.CaseIDs) == 0 {
+		return GovClaimJob{}, ErrCaseIDsRequired
+	}
 	periodYM, start, end, err := parsePeriodYM(input.PeriodYM)
 	if err != nil {
 		return GovClaimJob{}, err
 	}
 
-	report, err := s.precheck.RunPrecheck(ctx, periodYM, input.Region)
+	scope := NewClaimScope(start, end, input.Region, input.CaseIDs)
+	report, err := s.precheck.RunPrecheck(ctx, scope)
 	if err != nil {
 		return GovClaimJob{}, fmt.Errorf("run precheck: %w", err)
 	}
@@ -99,32 +107,73 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 	if err != nil {
 		return GovClaimJob{}, fmt.Errorf("create export job: %w", err)
 	}
+	s.recordExportAuditBestEffort(ctx, GovClaimJob{
+		ID:       jobID,
+		PeriodYM: periodYM,
+		Region:   input.Region,
+		Mode:     input.Mode,
+		Status:   ExportStatusRunning,
+	}, input, "export_requested")
 
-	files, lines, skipped, err := s.buildJobContent(ctx, periodYM, input, start, end)
+	files, lines, dataGaps, err := s.buildJobContent(ctx, periodYM, input, scope)
 	if err != nil {
 		// 產檔失敗仍要留下失敗紀錄，讓使用者在歷史清單看得到這次嘗試
 		if failErr := s.store.FailJob(ctx, jobID, exportFailureMessage(err)); failErr != nil {
 			return GovClaimJob{}, fmt.Errorf("mark export job failed: %w", failErr)
 		}
+		s.recordExportAuditBestEffort(ctx, GovClaimJob{
+			ID:           jobID,
+			PeriodYM:     periodYM,
+			Region:       input.Region,
+			Mode:         input.Mode,
+			Status:       ExportStatusFailed,
+			ErrorMessage: exportFailureMessage(err),
+		}, input, "export_failed")
 		return GovClaimJob{}, err
 	}
 
 	if err := s.store.CompleteJob(ctx, jobID, files, lines); err != nil {
+		if failErr := s.store.FailJob(ctx, jobID, exportFailureMessage(err)); failErr != nil {
+			return GovClaimJob{}, fmt.Errorf("mark export job failed: %w", failErr)
+		}
+		s.recordExportAuditBestEffort(ctx, GovClaimJob{
+			ID:           jobID,
+			PeriodYM:     periodYM,
+			Region:       input.Region,
+			Mode:         input.Mode,
+			Status:       ExportStatusFailed,
+			ErrorMessage: exportFailureMessage(err),
+		}, input, "export_failed")
 		return GovClaimJob{}, fmt.Errorf("complete export job: %w", err)
 	}
+
+	// 成功稽核必須在 CompleteJob 成功後寫入；稽核系統短暫故障不得把已完成的
+	// 匯出改報成失敗，背景 log 會保留補寫線索。
+	s.recordExportAuditBestEffort(ctx, GovClaimJob{
+		ID:         jobID,
+		PeriodYM:   periodYM,
+		Region:     input.Region,
+		Mode:       input.Mode,
+		Status:     ExportStatusSucceeded,
+		TotalCases: len(files),
+		TotalRows:  len(lines),
+		Files:      files,
+	}, input, "export_succeeded")
 
 	job, err := s.store.GetJob(ctx, jobID)
 	if err != nil {
 		return GovClaimJob{}, fmt.Errorf("reload export job: %w", err)
 	}
-	job.Skipped = skipped
+	job.DataGaps = dataGaps
 
-	s.recordExportAudit(ctx, job, input)
 	return job, nil
 }
 
-// recordExportAudit 留下一筆匯出稽核紀錄；稽核寫入失敗不影響已完成的匯出結果，僅盡力而為。
-func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob, input CreateGovClaimInput) {
+// recordExportAudit 留下一筆政府申報匯出稽核紀錄。
+func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob, input CreateGovClaimInput, action string) error {
+	if s.audit == nil {
+		return errors.New("export audit is unavailable")
+	}
 	entityID := job.ID.String()
 	var actorID *uuid.UUID
 	if input.CreatedBy != uuid.Nil {
@@ -145,13 +194,14 @@ func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob
 		})
 	}
 
-	_ = s.audit.Write(ctx, AuditEntry{
+	return s.audit.Write(ctx, AuditEntry{
 		ActorID:    actorID,
 		ActorRole:  actorRole,
-		Action:     "export",
+		Action:     action,
 		EntityType: "export_jobs",
 		EntityID:   &entityID,
 		AfterData: ExportJobAuditSnapshot{
+			Status:     job.Status,
 			PeriodYM:   job.PeriodYM,
 			Region:     job.Region,
 			Mode:       string(job.Mode),
@@ -160,6 +210,14 @@ func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob
 			Cases:      cases,
 		},
 	})
+}
+
+func (s *GovClaimService) recordExportAuditBestEffort(ctx context.Context, job GovClaimJob, input CreateGovClaimInput, action string) {
+	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := s.recordExportAudit(auditCtx, job, input, action); err != nil {
+		slog.Warn("export_audit_write_failed", slog.String("action", action), slog.String("job_id", job.ID.String()), slog.Any("error", err))
+	}
 }
 
 // GetGovClaimJob 取得單筆匯出工作與其逐案檔案清單。
@@ -184,7 +242,7 @@ func (s *GovClaimService) RenderCaseFile(ctx context.Context, jobID, caseID uuid
 		return GovClaimCaseFile{}, ErrExportFileNotFound
 	}
 
-	content, err := s.renderSnapshot(ctx, jobID, caseID)
+	content, err := s.loadImmutableFile(ctx, jobID, caseID)
 	if err != nil {
 		return GovClaimCaseFile{}, err
 	}
@@ -204,7 +262,7 @@ func (s *GovClaimService) RenderZip(ctx context.Context, jobID uuid.UUID) (strin
 
 	entries := make([]ZipEntry, 0, len(job.Files))
 	for _, f := range job.Files {
-		content, err := s.renderSnapshot(ctx, jobID, f.CaseID)
+		content, err := s.loadImmutableFile(ctx, jobID, f.CaseID)
 		if err != nil {
 			return "", nil, err
 		}
@@ -231,15 +289,15 @@ func (s *GovClaimService) buildJobContent(
 	ctx context.Context,
 	periodYM string,
 	input CreateGovClaimInput,
-	start, end time.Time,
-) ([]GovClaimCaseFile, []ExportLine, []ClaimSkip, error) {
-	sources, err := s.reader.QueryGovClaimSources(ctx, start, end, input.Region, input.CaseIDs)
+	scope ClaimScope,
+) ([]GovClaimCaseFile, []ExportLine, []ClaimDataGap, error) {
+	sources, err := s.reader.QueryGovClaimSources(ctx, scope)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("query gov claim sources: %w", err)
 	}
 
 	groups := groupByCase(sources)
-	skips := newSkipTally()
+	gaps := newDataGapTally()
 
 	files := make([]GovClaimCaseFile, 0, len(groups))
 	lines := make([]ExportLine, 0, len(sources))
@@ -247,7 +305,7 @@ func (s *GovClaimService) buildJobContent(
 	lineNo := 0
 
 	for _, group := range groups {
-		rows, rowDrivers := s.buildCaseRows(group, skips)
+		rows, rowDrivers := s.buildCaseRows(group, gaps)
 		if len(rows) == 0 {
 			continue
 		}
@@ -271,69 +329,79 @@ func (s *GovClaimService) buildJobContent(
 
 		for _, row := range rows {
 			lineNo++
-			lines = append(lines, newExportLine(lineNo, group, row, rowDrivers[rowKeyOf(row)]))
+			line, err := newExportLine(lineNo, group, row, rowDrivers[rowKeyOf(row)])
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("build export line for case %s: %w", group.caseName, err)
+			}
+			lines = append(lines, line)
 		}
 	}
-
-	if len(files) == 0 {
-		return nil, nil, nil, ErrNoClaimRows
-	}
-	return files, lines, skips.list(), nil
+	// 缺資料的欄位留白後照樣產檔並回報缺漏，不阻擋範圍內其餘資料（含一列都組不出來、
+	// 檔案數為 0 的情況）——申報作業本就逐月執行，使用者需要的是先拿到報得出來的資料，
+	// 而不是被整批擋下後才回頭排查。
+	return files, lines, gaps.list(), nil
 }
 
-// buildCaseRows 逐筆驗證來源資料並轉成 33 欄申報列。
-// 缺欄位的趟次計入跳過清單，不讓 govform.BuildClaimRow 的相容預設值把它補成一列看似正常的申報資料。
-func (s *GovClaimService) buildCaseRows(group caseGroup, skips *skipTally) ([]govform.ClaimRow, map[rowKey]*uuid.UUID) {
+// buildCaseRows 逐筆把來源資料轉成 33 欄申報列。
+// 缺漏的欄位留白並計入資料缺漏清單，該列仍然產出，讓報得出來的資料先進得了申報檔。
+func (s *GovClaimService) buildCaseRows(group caseGroup, gaps *dataGapTally) ([]govform.ClaimRow, map[rowKey]*uuid.UUID) {
 	rowDrivers := make(map[rowKey]*uuid.UUID, len(group.items))
 
 	caseNationalID, err := s.decrypt(group.nationalIDCipher)
 	if err != nil || caseNationalID == "" {
-		skips.add(group, SkipReasonNoNationalID, len(group.items))
-		return nil, rowDrivers
+		gaps.add(group, GapReasonNoNationalID, len(group.items))
+		caseNationalID = ""
 	}
 
 	driverIDCache := make(map[uuid.UUID]string)
 	rows := make([]govform.ClaimRow, 0, len(group.items))
 
 	for _, item := range group.items {
-		reason, ok := validateSource(item)
-		if !ok {
-			skips.add(group, reason, 1)
-			continue
+		for _, reason := range missingFields(item) {
+			gaps.add(group, reason, 1)
 		}
 
-		driverNationalID, err := s.driverNationalID(driverIDCache, *item.DriverID, item.DriverNationalIDCipher)
-		if err != nil || driverNationalID == "" {
-			skips.add(group, SkipReasonNoDriver, 1)
-			continue
+		driverNationalID := ""
+		if item.DriverID != nil {
+			plain, err := s.driverNationalID(driverIDCache, *item.DriverID, item.DriverNationalIDCipher)
+			if err != nil || plain == "" {
+				gaps.add(group, GapReasonNoDriver, 1)
+			} else {
+				driverNationalID = plain
+			}
 		}
 
-		departAt, err := combineDepartTime(item.ServiceDate, *item.DepartTime)
-		if err != nil {
-			skips.add(group, SkipReasonNoDepartTime, 1)
-			continue
+		var departAt time.Time
+		if item.DepartTime != nil && *item.DepartTime != "" {
+			parsed, err := combineDepartTime(item.ServiceDate, *item.DepartTime)
+			if err != nil {
+				gaps.add(group, GapReasonNoDepartTime, 1)
+			} else {
+				departAt = parsed
+			}
 		}
 
 		row, err := govform.BuildClaimRow(govform.ClaimRowInput{
 			NationalIDPlain:  caseNationalID,
 			ServiceDate:      item.ServiceDate,
 			ServiceCode:      item.ServiceCode,
-			ServiceCategory:  *item.ServiceCategory,
+			ServiceCategory:  intOrZero(item.ServiceCategory),
 			UnitPrice:        item.UnitPrice,
 			DriverNationalID: driverNationalID,
 			DepartTime:       departAt,
-			DurationMin:      *item.DurationMin,
+			DurationMin:      intOrZero(item.DurationMin),
 			NotClaimedAA09:   item.NotClaimedAA09,
-			Direction:        *item.Direction,
+			Direction:        stringOrEmpty(item.Direction),
 			LegSeq:           item.LegSeq,
 			HomeAddress:      item.HomeAddress,
 			SiteAddress:      item.SiteAddress,
 			DistanceKM:       item.DistanceKM,
 			PlateNo:          item.PlateNo,
-			ServiceUsageType: *item.ServiceUsageType,
+			ServiceUsageType: intOrZero(item.ServiceUsageType),
 		})
 		if err != nil {
-			skips.add(group, SkipReasonBuildRowFailed, 1)
+			// 只有連留白都組不出列（如服務日期無法換算民國年）才會少掉這一列。
+			gaps.add(group, GapReasonBuildRowFailed, 1)
 			continue
 		}
 
@@ -380,9 +448,11 @@ func (s *GovClaimService) renderSnapshot(ctx context.Context, jobID, caseID uuid
 			}
 			row.Cells[6] = driverNationalID
 		}
-		if serviceDate, err := rocdate.FromROC(line.ServiceDateROC); err == nil {
-			row.ServiceDate = serviceDate
+		serviceDate, err := rocdate.FromROC(line.ServiceDateROC)
+		if err != nil {
+			return nil, fmt.Errorf("convert service date from ROC %d: %w", line.ServiceDateROC, err)
 		}
+		row.ServiceDate = serviceDate
 		rows = append(rows, row)
 	}
 
@@ -413,25 +483,54 @@ func (s *GovClaimService) driverNationalID(cache map[uuid.UUID]string, driverID 
 	return plain, nil
 }
 
-// validateSource 檢查該趟次是否具備組出合法申報列的最小資料集。
-func validateSource(item GovClaimSource) (string, bool) {
-	switch {
-	case item.Direction == nil || *item.Direction == "":
-		return SkipReasonNoScheduleLeg, false
-	case item.DepartTime == nil || *item.DepartTime == "":
-		return SkipReasonNoDepartTime, false
-	case item.DurationMin == nil || *item.DurationMin <= 0:
-		return SkipReasonNoDepartTime, false
-	case item.DriverID == nil || len(item.DriverNationalIDCipher) == 0:
-		return SkipReasonNoDriver, false
-	case item.ServiceCategory == nil || (*item.ServiceCategory != 1 && *item.ServiceCategory != 2):
-		return SkipReasonNoServiceCategory, false
-	case item.ServiceUsageType == nil || *item.ServiceUsageType < 1 || *item.ServiceUsageType > 4:
-		return SkipReasonNoUsageType, false
-	case item.UnitPrice <= 0:
-		return SkipReasonNoUnitPrice, false
+// missingFields 列出該趟次缺漏、將在申報檔留白的欄位；順序即為回報順序。
+func missingFields(item GovClaimSource) []string {
+	var reasons []string
+	if item.Direction == nil || *item.Direction == "" {
+		reasons = append(reasons, GapReasonNoScheduleLeg)
 	}
-	return "", true
+	if item.DepartTime == nil || *item.DepartTime == "" || item.DurationMin == nil || *item.DurationMin <= 0 {
+		reasons = append(reasons, GapReasonNoDepartTime)
+	}
+	if item.DriverID == nil || len(item.DriverNationalIDCipher) == 0 {
+		reasons = append(reasons, GapReasonNoDriver)
+	}
+	if item.ServiceCategory == nil || (*item.ServiceCategory != 1 && *item.ServiceCategory != 2) {
+		reasons = append(reasons, GapReasonNoServiceCategory)
+	}
+	if item.ServiceUsageType == nil || *item.ServiceUsageType < 1 || *item.ServiceUsageType > 4 {
+		reasons = append(reasons, GapReasonNoUsageType)
+	}
+	if item.UnitPrice <= 0 {
+		reasons = append(reasons, GapReasonNoUnitPrice)
+	}
+	if strings.TrimSpace(item.ServiceCode) == "" {
+		reasons = append(reasons, GapReasonNoServiceCode)
+	}
+	if strings.TrimSpace(item.HomeAddress) == "" || strings.TrimSpace(item.SiteAddress) == "" {
+		reasons = append(reasons, GapReasonNoAddress)
+	}
+	if item.DistanceKM <= 0 {
+		reasons = append(reasons, GapReasonNoDistance)
+	}
+	if strings.TrimSpace(item.PlateNo) == "" {
+		reasons = append(reasons, GapReasonNoPlateNo)
+	}
+	return reasons
+}
+
+func intOrZero(v *int) int {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func stringOrEmpty(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
 }
 
 // parsePeriodYM 將民國年月正規化為 5 碼並換算成該月的西元起訖日（左閉右開）。
@@ -451,6 +550,11 @@ func parsePeriodYM(raw string) (string, time.Time, time.Time, error) {
 	return normalized, start, start.AddDate(0, 1, 0), nil
 }
 
+// ParseClaimPeriod 將申報月份轉成標準化月份與日期範圍，供 transport 建立相同 ClaimScope。
+func ParseClaimPeriod(raw string) (string, time.Time, time.Time, error) {
+	return parsePeriodYM(raw)
+}
+
 func combineDepartTime(serviceDate time.Time, hhmm string) (time.Time, error) {
 	parsed, err := time.Parse("15:04", hhmm)
 	if err != nil {
@@ -462,8 +566,8 @@ func combineDepartTime(serviceDate time.Time, hhmm string) (time.Time, error) {
 	), nil
 }
 
-// newExportLine 組出落地用的申報列快照；兩個身分證欄位一律清空，改以 driverId 保留關聯。
-func newExportLine(lineNo int, group caseGroup, row govform.ClaimRow, driverID *uuid.UUID) ExportLine {
+// newExportLine 組出寫入用的申報列快照；兩個身分證欄位一律清空，改以 driverId 保留關聯。
+func newExportLine(lineNo int, group caseGroup, row govform.ClaimRow, driverID *uuid.UUID) (ExportLine, error) {
 	payload := ClaimLinePayload{
 		Cells:     row.Cells,
 		DriverID:  driverID,
@@ -473,14 +577,17 @@ func newExportLine(lineNo int, group caseGroup, row govform.ClaimRow, driverID *
 	payload.Cells[0] = ""
 	payload.Cells[6] = ""
 
-	serviceDateROC, _ := rocdate.ToROC(row.ServiceDate)
+	serviceDateROC, err := rocdate.ToROC(row.ServiceDate)
+	if err != nil {
+		return ExportLine{}, fmt.Errorf("convert service date to ROC: %w", err)
+	}
 	return ExportLine{
 		LineNo:           lineNo,
 		CaseID:           group.caseID,
 		NationalIDMasked: group.nationalIDMasked,
 		ServiceDateROC:   serviceDateROC,
 		Payload:          payload,
-	}
+	}, nil
 }
 
 // uniqueFileName 以「個案姓名＋民國年月」命名，比照政府端收到的範本檔名；同名時補序號。
@@ -497,10 +604,21 @@ func uniqueFileName(used map[string]bool, caseName, periodYM string) string {
 }
 
 func exportFailureMessage(err error) string {
-	if errors.Is(err, ErrNoClaimRows) {
-		return "指定條件下沒有可申報的搭乘紀錄"
-	}
 	return "產生申報檔案失敗"
+}
+
+func (s *GovClaimService) loadImmutableFile(ctx context.Context, jobID, caseID uuid.UUID) ([]byte, error) {
+	if store, ok := s.store.(ImmutableExportFileStore); ok {
+		content, err := store.LoadExportFile(ctx, jobID, caseID)
+		if err != nil {
+			return nil, fmt.Errorf("load immutable export file: %w", err)
+		}
+		if len(content) > 0 {
+			return content, nil
+		}
+	}
+	// 相容尚未具備檔案內容欄位的舊匯出資料；新匯出一律由 immutable store 提供。
+	return s.renderSnapshot(ctx, jobID, caseID)
 }
 
 func findCaseFile(files []GovClaimCaseFile, caseID uuid.UUID) (GovClaimCaseFile, bool) {
@@ -584,27 +702,27 @@ func groupByCase(sources []GovClaimSource) []caseGroup {
 	return groups
 }
 
-type skipTally struct {
+type dataGapTally struct {
 	order []string
-	byKey map[string]*ClaimSkip
+	byKey map[string]*ClaimDataGap
 }
 
-func newSkipTally() *skipTally {
-	return &skipTally{byKey: make(map[string]*ClaimSkip)}
+func newDataGapTally() *dataGapTally {
+	return &dataGapTally{byKey: make(map[string]*ClaimDataGap)}
 }
 
-func (t *skipTally) add(group caseGroup, reason string, count int) {
+func (t *dataGapTally) add(group caseGroup, reason string, count int) {
 	key := group.caseID.String() + "|" + reason
 	if existing, ok := t.byKey[key]; ok {
 		existing.Count += count
 		return
 	}
-	t.byKey[key] = &ClaimSkip{CaseID: group.caseID, CaseName: group.caseName, Reason: reason, Count: count}
+	t.byKey[key] = &ClaimDataGap{CaseID: group.caseID, CaseName: group.caseName, Reason: reason, Count: count}
 	t.order = append(t.order, key)
 }
 
-func (t *skipTally) list() []ClaimSkip {
-	result := make([]ClaimSkip, 0, len(t.order))
+func (t *dataGapTally) list() []ClaimDataGap {
+	result := make([]ClaimDataGap, 0, len(t.order))
 	for _, key := range t.order {
 		result = append(result, *t.byKey[key])
 	}

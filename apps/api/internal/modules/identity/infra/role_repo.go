@@ -41,7 +41,7 @@ func scanRole(row interface{ Scan(dest ...any) error }) (app.Role, error) {
 // List 取得所有角色。
 func (r *RoleRepository) List(ctx context.Context) ([]app.Role, error) {
 	if r.db == nil {
-		return []app.Role{}, nil
+		return nil, fmt.Errorf("role database is not configured")
 	}
 	db := pgxdb.FromContext(ctx, r.db)
 	rows, err := db.Query(ctx, `SELECT `+roleColumns+` FROM roles ORDER BY is_system DESC, name ASC`)
@@ -64,7 +64,7 @@ func (r *RoleRepository) List(ctx context.Context) ([]app.Role, error) {
 // GetByID 依 UUID 取得角色。
 func (r *RoleRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Role, error) {
 	if r.db == nil {
-		return nil, nil
+		return nil, fmt.Errorf("role database is not configured")
 	}
 	db := pgxdb.FromContext(ctx, r.db)
 	role, err := scanRole(db.QueryRow(ctx, `SELECT `+roleColumns+` FROM roles WHERE id = $1`, id))
@@ -80,7 +80,7 @@ func (r *RoleRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Role, 
 // GetByKey 依 key 取得角色。
 func (r *RoleRepository) GetByKey(ctx context.Context, key string) (*app.Role, error) {
 	if r.db == nil {
-		return nil, nil
+		return nil, fmt.Errorf("role database is not configured")
 	}
 	db := pgxdb.FromContext(ctx, r.db)
 	role, err := scanRole(db.QueryRow(ctx, `SELECT `+roleColumns+` FROM roles WHERE key = $1`, key))
@@ -96,7 +96,7 @@ func (r *RoleRepository) GetByKey(ctx context.Context, key string) (*app.Role, e
 // Create 新增角色。
 func (r *RoleRepository) Create(ctx context.Context, role *app.Role) error {
 	if r.db == nil {
-		return nil
+		return fmt.Errorf("role database is not configured")
 	}
 	permBytes, err := json.Marshal(role.Permissions)
 	if err != nil {
@@ -114,7 +114,7 @@ func (r *RoleRepository) Create(ctx context.Context, role *app.Role) error {
 // Update 更新角色。
 func (r *RoleRepository) Update(ctx context.Context, role *app.Role) error {
 	if r.db == nil {
-		return nil
+		return fmt.Errorf("role database is not configured")
 	}
 	permBytes, err := json.Marshal(role.Permissions)
 	if err != nil {
@@ -132,7 +132,7 @@ func (r *RoleRepository) Update(ctx context.Context, role *app.Role) error {
 // Delete 刪除角色。
 func (r *RoleRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	if r.db == nil {
-		return nil
+		return fmt.Errorf("role database is not configured")
 	}
 	db := pgxdb.FromContext(ctx, r.db)
 	_, err := db.Exec(ctx, `DELETE FROM roles WHERE id = $1`, id)

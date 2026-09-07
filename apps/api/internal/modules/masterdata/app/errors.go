@@ -4,11 +4,18 @@ import "errors"
 
 var (
 	// ErrDriverNotFound 代表查無司機資料。
-	ErrDriverNotFound = errors.New("driver not found")
+	ErrDriverNotFound     = errors.New("driver not found")
+	ErrDriverNameRequired = errors.New("driver name is required")
+	// ErrNationalIDNotConfigured 代表資料尚未設定身分證密文。
+	ErrNationalIDNotConfigured = errors.New("national id is not configured")
+	// ErrRevealAuditUnavailable 代表高風險個資揭露無法留下稽核紀錄。
+	ErrRevealAuditUnavailable = errors.New("reveal audit is unavailable")
 	// ErrInvalidDriverNationalID 代表司機身分證檢查碼錯誤。
 	ErrInvalidDriverNationalID = errors.New("invalid driver national id format")
 	// ErrInvalidDriverLicenseClass 代表駕照類別不在允許的代碼清單內。
 	ErrInvalidDriverLicenseClass = errors.New("invalid driver license class")
+	ErrInvalidStatus             = errors.New("invalid status")
+	ErrInvalidAssignmentRange    = errors.New("invalid driver assignment date range")
 	// ErrRegionNameRequired 代表未提供區域名稱。
 	ErrRegionNameRequired = errors.New("region name is required")
 	// ErrDuplicateRegionName 代表區域名稱重複。
@@ -31,4 +38,6 @@ var (
 	ErrDuplicateVehiclePlateNo = errors.New("vehicle plate number already exists")
 	// ErrDuplicateVehicleDisplayName 代表車輛代稱已存在。
 	ErrDuplicateVehicleDisplayName = errors.New("vehicle display name already exists")
+	// ErrVehicleNotFound 代表查無車輛資料。
+	ErrVehicleNotFound = errors.New("vehicle not found")
 )

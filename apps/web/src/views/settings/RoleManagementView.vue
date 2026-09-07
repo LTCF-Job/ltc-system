@@ -299,7 +299,6 @@ import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import { Check, Close, Plus, Search, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { resolveErrorMessage } from '@/api/errorCodes'
 import {
   listRoles,
   createRole,
@@ -387,8 +386,8 @@ async function fetchRoles() {
     } else {
       selectedRole.value = list[0] || null
     }
-  } catch (error: any) {
-    ElMessage.error(resolveErrorMessage(error.response?.data?.error?.code, '載入角色清單失敗'))
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     loading.value = false
   }
@@ -477,8 +476,7 @@ function handleApplyTemplate(roleIdOrKey: string) {
   ElMessage.info(`已套用【${target.name}】之權限配置範本`)
 }
 
-// 三個層級是包含關係：delete 需要 edit，edit 需要 view；勾選較高層級時往下補齊，
-// 取消較低層級時往上一併取消，避免存出「能刪除但不能檢視」這種無意義組合。
+// 取消檢視權限時一併取消編輯與刪除，避免存出無意義的權限組合
 function onViewPermChange(moduleId: string) {
   if (!formPermissions.value[moduleId].view) {
     formPermissions.value[moduleId].edit = false
@@ -486,6 +484,7 @@ function onViewPermChange(moduleId: string) {
   }
 }
 
+// 開啟編輯權限時自動補上檢視權限；關閉編輯時一併取消刪除
 function onEditPermChange(moduleId: string) {
   if (formPermissions.value[moduleId].edit) {
     formPermissions.value[moduleId].view = true
@@ -494,6 +493,7 @@ function onEditPermChange(moduleId: string) {
   }
 }
 
+// 開啟刪除權限時往上補齊編輯與檢視權限
 function onDeletePermChange(moduleId: string) {
   if (formPermissions.value[moduleId].delete) {
     formPermissions.value[moduleId].edit = true
@@ -524,9 +524,8 @@ async function handleSubmit() {
       }
       dialogVisible.value = false
       await fetchRoles()
-    } catch (err: any) {
-      const msg = resolveErrorMessage(err.response?.data?.error?.code, '儲存角色失敗')
-      ElMessage.error(msg)
+    } catch {
+      // 全域攔截器負責顯示 API 錯誤。
     } finally {
       submitting.value = false
     }
@@ -568,11 +567,8 @@ async function handleDeleteRole(role: RoleDTO) {
       selectedRole.value = null
     }
     await fetchRoles()
-  } catch (err: any) {
-    if (err !== 'cancel') {
-      const msg = resolveErrorMessage(err.response?.data?.error?.code, '刪除失敗')
-      ElMessage.error(msg)
-    }
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 

@@ -1,5 +1,13 @@
 import dayjs from 'dayjs'
 
+export function todayLocal(): string {
+  return dayjs().format('YYYY-MM-DD')
+}
+
+export function currentLocalMonth(): string {
+  return dayjs().format('YYYY-MM')
+}
+
 /**
  * 將日期時間格式化為「YYYY-MM-DD HH:mm:ss」（精確至秒，去除毫秒與時區字尾）
  */

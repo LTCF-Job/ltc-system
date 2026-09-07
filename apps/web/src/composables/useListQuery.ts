@@ -32,6 +32,33 @@ export function useListQuery<TFilter extends Record<string, any>>(options: ListQ
     return res
   }
 
+  watch(
+    () => route.query,
+    (query) => {
+      const nextPage = Number(query.page) || 1
+      const nextPageSize = Number(query.pageSize) || options.defaultPageSize || 20
+      let changed = page.value !== nextPage || pageSize.value !== nextPageSize
+      page.value = nextPage
+      pageSize.value = nextPageSize
+
+      for (const key of Object.keys(options.defaultFilters)) {
+        const rawValue = query[key]
+        const nextValue = Array.isArray(rawValue) ? rawValue[0] : rawValue
+        const value = nextValue === undefined || nextValue === '' ? options.defaultFilters[key] : nextValue
+        const currentValue = (filters as Record<string, any>)[key]
+        if (currentValue !== value) {
+          ;(filters as Record<string, any>)[key] = value
+          changed = true
+        }
+      }
+
+      if (changed) {
+        executeFetch()
+      }
+    },
+    { deep: true }
+  )
+
   function syncToQuery() {
     const query: Record<string, any> = {
       page: page.value > 1 ? page.value : undefined,

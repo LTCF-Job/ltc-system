@@ -4,15 +4,27 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/xuri/excelize/v2"
 	"ltc-system/apps/api/internal/modules/reporting/app"
 	"ltc-system/apps/api/internal/modules/reporting/infra"
 )
 
+type emptyReportRepository struct{}
+
+func (emptyReportRepository) QueryTripSummaryData(context.Context, time.Time, time.Time, *string, *uuid.UUID) ([]app.ReportVehicleTripSummary, error) {
+	return []app.ReportVehicleTripSummary{}, nil
+}
+
+func (emptyReportRepository) QueryHsinchuScheduleData(context.Context, *uuid.UUID, *uuid.UUID) ([]app.ReportHsinchuScheduleRow, error) {
+	return []app.ReportHsinchuScheduleRow{}, nil
+}
+
 func TestReportService_GenerateTripSummaryExcel(t *testing.T) {
-	svc := app.NewReportService(infra.NewReportRepository(nil), infra.NewExcelRenderer())
+	svc := app.NewReportService(emptyReportRepository{}, infra.NewExcelRenderer())
 
 	ctx := context.Background()
 	excelBytes, err := svc.GenerateTripSummaryExcel(ctx, "115-07", nil, nil)
@@ -29,7 +41,7 @@ func TestReportService_GenerateTripSummaryExcel(t *testing.T) {
 }
 
 func TestReportService_GenerateHsinchuScheduleExcel(t *testing.T) {
-	svc := app.NewReportService(infra.NewReportRepository(nil), infra.NewExcelRenderer())
+	svc := app.NewReportService(emptyReportRepository{}, infra.NewExcelRenderer())
 
 	ctx := context.Background()
 	excelBytes, err := svc.GenerateHsinchuScheduleExcel(ctx, nil, nil)

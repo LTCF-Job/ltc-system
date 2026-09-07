@@ -159,7 +159,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { submitManualRideReport } from '@/api/rides'
 import DialogFooter from '@/components/DialogFooter.vue'
-import { listVehicles, listDrivers } from '@/api/masters'
+import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import type { VehicleDTO, DriverDTO, ManualReportRideRequest } from '@/types/api'
 
 interface OpenOptions {
@@ -182,7 +182,7 @@ const caseInfo = reactive({
   caseId: '',
   caseName: '',
   serviceDate: '',
-  tripPattern: 2,
+  tripPattern: 0,
   existingLegs: [] as number[]
 })
 
@@ -211,9 +211,9 @@ const form = reactive<ManualReportRideRequest>({
 const isAbsent = computed(() => form.effectiveStatus === 'absent')
 
 const legOptions = computed(() => {
-  const count = Math.max(caseInfo.tripPattern || 2, 2)
+  const count = Math.max(caseInfo.tripPattern, 0)
   const list = []
-  for (let i = 1; i <= Math.max(count, 4); i++) {
+  for (let i = 1; i <= count; i++) {
     let desc = ''
     if (i === 1) desc = ' (去程)'
     else if (i === 2) desc = ' (回程)'
@@ -254,19 +254,17 @@ watch(
 )
 
 async function fetchMasterData() {
-  if (vehicles.value.length === 0 || drivers.value.length === 0) {
-    masterDataError.value = false
-    try {
-      const [vRes, dRes] = await Promise.all([
-        listVehicles({ status: 'active', pageSize: 100 }),
-        listDrivers({ status: 'active', pageSize: 100 })
-      ])
-      vehicles.value = vRes.data
-      drivers.value = dRes.data
-    } catch {
-      // 全域攔截器已彈出錯誤訊息；這裡另外標記狀態，讓下拉選單旁能顯示可重試的空清單原因
-      masterDataError.value = true
-    }
+  masterDataError.value = false
+  try {
+    const [vRes, dRes] = await Promise.all([
+      listAllVehicles({ status: 'active' }),
+      listAllDrivers({ status: 'active' })
+    ])
+    vehicles.value = vRes
+    drivers.value = dRes
+  } catch {
+    // 全域攔截器負責顯示錯誤；此狀態只用來提供下拉選單旁的重試入口。
+    masterDataError.value = true
   }
 }
 
@@ -274,13 +272,13 @@ function open(options: OpenOptions) {
   caseInfo.caseId = options.caseId
   caseInfo.caseName = options.caseName
   caseInfo.serviceDate = options.serviceDate
-  caseInfo.tripPattern = options.tripPattern || 2
+  caseInfo.tripPattern = options.tripPattern ?? 0
   caseInfo.existingLegs = options.existingLegs || []
 
   // 自動推算預設 legSeq：優先使用傳入之 targetLegSeq，否則挑選尚未有紀錄的最小 legSeq
   let defaultLeg = options.targetLegSeq || 1
   if (!options.targetLegSeq) {
-    for (let i = 1; i <= Math.max(caseInfo.tripPattern, 2); i++) {
+    for (let i = 1; i <= caseInfo.tripPattern; i++) {
       if (!caseInfo.existingLegs.includes(i)) {
         defaultLeg = i
         break
@@ -302,14 +300,15 @@ function open(options: OpenOptions) {
   form.notClaimedAa09 = false
   form.reason = '非排定日臨時搭乘'
 
-  visible.value = true
+  visible.value = legOptions.value.length > 0
+  if (!visible.value) return
   fetchMasterData()
 }
 
 async function handleSubmit() {
   if (!form.caseId || !form.serviceDate) return
 
-  // 確認若覆寫既有紀錄
+  // 該趟已有紀錄時先確認，避免誤蓋司機或家屬既有回報資料
   if (caseInfo.existingLegs.includes(form.legSeq)) {
     try {
       await ElMessageBox.confirm(
@@ -345,8 +344,8 @@ async function handleSubmit() {
     ElMessage.success('搭乘紀錄已成功儲存')
     visible.value = false
     emit('saved')
-  } catch (err: any) {
-    ElMessage.error(err?.message || '儲存搭乘紀錄失敗')
+  } catch {
+    // 全域攔截器已處理 API 錯誤提示，這裡只負責保留表單狀態。
   } finally {
     saving.value = false
   }

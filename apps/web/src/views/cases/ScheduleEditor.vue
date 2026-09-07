@@ -518,15 +518,17 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
+import dayjs from 'dayjs'
+import { currentLocalMonth, todayLocal } from '@/utils/formatters'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { Calendar, SetUp, RefreshRight, CircleClose } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { listSites, listVehicles } from '@/api/masters'
+import { listAllSites, listAllVehicles } from '@/api/masters'
 import { saveCaseSchedule } from '@/api/cases'
 import { listHolidays } from '@/api/holidays'
 import type {
   CaseScheduleDTO,
-  CreateScheduleRequest,
+  SaveScheduleRequest,
   SiteDTO,
   VehicleDTO,
   ScheduleMode,
@@ -550,7 +552,7 @@ const saving = ref(false)
 const availableSites = ref<SiteDTO[]>([])
 const availableVehicles = ref<VehicleDTO[]>([])
 const scheduleMode = ref<ScheduleMode>('monthly')
-const selectedMonth = ref<string>('2026-07')
+const selectedMonth = ref<string>(currentLocalMonth())
 const holidayMap = ref<Record<string, { name: string; isDayOff?: boolean }>>({})
 
 const weekdayLabels = ['週一', '週二', '週三', '週四', '週五', '週六', '週日']
@@ -567,9 +569,9 @@ const weekdayConfigs = reactive([
 
 const monthlyConfigs = reactive<Record<string, DayScheduleConfig>>({})
 
-const formData = reactive<CreateScheduleRequest>({
+const formData = reactive<SaveScheduleRequest>({
   siteId: '',
-  effectiveFrom: new Date().toISOString().split('T')[0],
+  effectiveFrom: todayLocal(),
   tripPattern: 2,
   weekdays: [1, 2, 3, 4, 5],
   unitPrice: 115,
@@ -592,7 +594,6 @@ const rules = {
   serviceDurationMin: [{ required: true, message: '請輸入服務時長', trigger: 'blur' }]
 }
 
-// 計算選取月份的天數
 const daysInSelectedMonth = computed(() => {
   if (!selectedMonth.value) return 31
   const [y, m] = selectedMonth.value.split('-').map(Number)
@@ -627,7 +628,7 @@ function buildMonthDaysList() {
   const daysCount = new Date(year, month, 0).getDate()
 
   const list: MonthDayRow[] = []
-  const defaultVehicle = formData.legs[0]?.vehicleId || availableVehicles.value[0]?.id || ''
+  const defaultVehicle = formData.legs[0]?.vehicleId || ''
   const defaultDepart = formData.legs[0]?.departTime || '09:00'
   const defaultReturn = formData.legs[1]?.departTime || '16:00'
 
@@ -636,7 +637,8 @@ function buildMonthDaysList() {
     const dateStr = `${selectedMonth.value}-${dayPad}`
     const d = new Date(year, month - 1, day)
     let goWeekday = d.getDay()
-    if (goWeekday === 0) goWeekday = 7 // 1..7 (週一..週日)
+    // getDay() 回傳 0 代表週日，這裡轉換成 1..7 (週一..週日) 對齊業務排班的星期代碼
+    if (goWeekday === 0) goWeekday = 7
     const isWeekend = goWeekday >= 6
     const holiday = holidayMap.value[dateStr]
     // 只有在 holiday 存在且 holiday.isDayOff !== false (非補班日) 才是國定休假日
@@ -719,7 +721,7 @@ async function loadHolidays() {
     endDate: `${selectedMonth.value}-${String(daysInSelectedMonth.value).padStart(2, '0')}`,
     region: props.region
   })
-  holidayMap.value = Object.fromEntries((response.data || []).map((item) => [item.holidayDate, item]))
+  holidayMap.value = Object.fromEntries(response.map((item) => [item.holidayDate, item]))
   buildMonthDaysList()
 }
 
@@ -749,7 +751,7 @@ function applyWeeklyToMonth() {
       row.tripCount = wConfig.tripCount
       row.departTime = wConfig.departTime || '09:00'
       row.returnTime = wConfig.returnTime || '16:00'
-      row.vehicleId = wConfig.vehicleId || availableVehicles.value[0]?.id || ''
+      row.vehicleId = wConfig.vehicleId || ''
       markDayOverridden(row)
     }
   })
@@ -758,7 +760,7 @@ function applyWeeklyToMonth() {
 
 function applyFixedToMonth() {
   const activeSet = new Set(formData.weekdays)
-  const defaultVehicle = formData.legs[0]?.vehicleId || availableVehicles.value[0]?.id || ''
+  const defaultVehicle = formData.legs[0]?.vehicleId || ''
   monthDaysList.value.forEach((row) => {
     row.tripCount = activeSet.has(row.weekday) ? (formData.tripPattern || 2) : 0
     row.departTime = formData.legs[0]?.departTime || '09:00'
@@ -789,7 +791,7 @@ function setAllMonthAbsent() {
 
 // 趟數切換時調整 legs 陣列
 function handlePatternChange(pattern: any) {
-  const currentVehicle = formData.legs[0]?.vehicleId || availableVehicles.value[0]?.id || ''
+  const currentVehicle = formData.legs[0]?.vehicleId || ''
 
   if (pattern === 1) {
     formData.legs = [
@@ -810,13 +812,14 @@ function handlePatternChange(pattern: any) {
   }
 }
 
+// 依 API 回傳的既有排班資料還原編輯畫面的三種模式設定
 watch(
   () => props.schedule,
   (s) => {
     if (s) {
       scheduleMode.value = s.scheduleMode || 'monthly'
       formData.siteId = s.siteId
-      formData.effectiveFrom = s.effectiveFrom || new Date().toISOString().split('T')[0]
+      formData.effectiveFrom = s.effectiveFrom || todayLocal()
       formData.tripPattern = s.tripPattern || 2
       // 既有排班從 API 載入，欄位缺漏時保持未填，不得用猜測值頂替申報單價、里程與時長
       formData.weekdays = s.weekdays ? [...s.weekdays] : []
@@ -834,7 +837,6 @@ watch(
         }))
       }
 
-      // 同步 weekdayConfigs
       if (s.weeklyConfigs && s.weeklyConfigs.length > 0) {
         s.weeklyConfigs.forEach((wc) => {
           const match = weekdayConfigs.find((c) => c.weekday === wc.weekday)
@@ -860,7 +862,6 @@ watch(
         })
       }
 
-      // 同步 monthlyConfigs
       if (s.monthlyConfigs) {
         Object.assign(monthlyConfigs, s.monthlyConfigs)
       }
@@ -873,27 +874,12 @@ watch(
 
 async function loadSitesAndVehicles() {
   const [sitesRes, vehiclesRes] = await Promise.all([
-    listSites({ region: props.region, status: 'active', pageSize: 100 }),
-    listVehicles({ region: props.region, status: 'active', pageSize: 100 })
+    listAllSites({ status: 'active' }),
+    listAllVehicles({ status: 'active' })
   ])
-  availableSites.value = sitesRes.data
-  availableVehicles.value = vehiclesRes.data
+  availableSites.value = sitesRes
+  availableVehicles.value = vehiclesRes
 
-  if (!formData.siteId && availableSites.value.length > 0) {
-    formData.siteId = availableSites.value[0].id
-  }
-  if (availableVehicles.value.length > 0) {
-    formData.legs.forEach((leg) => {
-      if (!leg.vehicleId) {
-        leg.vehicleId = availableVehicles.value[0].id
-      }
-    })
-    weekdayConfigs.forEach((cfg) => {
-      if (!cfg.vehicleId) {
-        cfg.vehicleId = availableVehicles.value[0].id
-      }
-    })
-  }
   buildMonthDaysList()
 }
 
@@ -913,7 +899,12 @@ onMounted(async () => {
 async function handleSave() {
   if (!formRef.value) return
 
-  // 1. 組裝各模式的相容性 weekdays 與 legs
+  if (!formData.siteId || formData.legs.some((leg) => !leg.vehicleId)) {
+    ElMessage.warning('請明確選擇所屬單位與每一趟車輛')
+    return
+  }
+
+  // by_weekday／monthly 模式送出前需回填 weekdays 與 legs 欄位，以相容後端既有排班格式
   if (scheduleMode.value === 'by_weekday') {
     const activeDays = weekdayConfigs.filter((cfg) => cfg.tripCount > 0)
     if (activeDays.length === 0) {
@@ -945,18 +936,6 @@ async function handleSave() {
       formData.weekdays = activeWeekdays.length > 0 ? activeWeekdays : [1, 2, 3, 4, 5]
     }
   }
-
-  // 2. 附加三層級完整設定
-  formData.scheduleMode = scheduleMode.value
-  formData.weeklyConfigs = weekdayConfigs.map((cfg) => ({
-    weekday: cfg.weekday,
-    label: cfg.label,
-    tripCount: cfg.tripCount,
-    departTime: cfg.departTime,
-    returnTime: cfg.returnTime,
-    vehicleId: cfg.vehicleId
-  }))
-  formData.monthlyConfigs = { ...monthlyConfigs }
 
   await formRef.value.validate(async (valid) => {
     if (!valid) return

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"ltc-system/apps/api/internal/domain/rocdate"
 	"ltc-system/apps/api/internal/modules/reporting/app"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
@@ -21,6 +22,12 @@ func NewDashboardHandler(dashboardSvc *app.DashboardService) *DashboardHandler {
 // GetMetrics 取得全方位儀表板圖表與統計指標。
 func (h *DashboardHandler) GetMetrics(c *gin.Context) {
 	periodYm := c.Query("month")
+	if periodYm != "" {
+		if _, _, err := rocdate.ParseYearMonth(periodYm); err != nil {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "月份格式錯誤，請使用 RRR-MM 或 YYYY-MM", nil)
+			return
+		}
+	}
 	metrics, err := h.dashboardSvc.GetMetrics(c.Request.Context(), periodYm)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)

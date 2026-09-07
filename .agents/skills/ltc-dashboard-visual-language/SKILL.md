@@ -12,7 +12,8 @@ Apply a calm, precise, high-trust operations interface style. Optimize for fast 
 1. Inspect the current route, page, layout, shared components, design tokens, and responsive behavior.
 2. Preserve existing routing, API contracts, state ownership, permissions, and business behavior.
 3. Reuse existing project components and tokens when they provide an equivalent pattern.
-4. Apply this skill to presentation and interaction patterns; keep business logic in its existing boundary.
+4. When changing a shared table, token, or layout pattern, enumerate every affected view before editing and verify each view after the change.
+5. Apply this skill to presentation and interaction patterns; keep business logic in its existing boundary.
 
 For detailed values and component rules, read [visual-tokens.md](references/visual-tokens.md) when implementing or reviewing the visual layer.
 

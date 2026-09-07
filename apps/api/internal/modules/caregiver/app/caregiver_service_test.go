@@ -11,7 +11,8 @@ import (
 
 // fakeCaregiverStore is a deterministic in-memory CaregiverStore test double.
 type fakeCaregiverStore struct {
-	byID map[uuid.UUID]*Caregiver
+	byID    map[uuid.UUID]*Caregiver
+	listErr error
 }
 
 func newFakeCaregiverStore() *fakeCaregiverStore {
@@ -19,6 +20,9 @@ func newFakeCaregiverStore() *fakeCaregiverStore {
 }
 
 func (f *fakeCaregiverStore) List(ctx context.Context, q, status string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
+	if f.listErr != nil {
+		return nil, 0, f.listErr
+	}
 	var out []Caregiver
 	for _, c := range f.byID {
 		out = append(out, *c)
@@ -93,7 +97,6 @@ func TestCaregiverService_Create_NormalizesStatus(t *testing.T) {
 		want  string
 	}{
 		{name: "空字串預設 active", input: "", want: "active"},
-		{name: "非法值預設 active", input: "已離職", want: "active"},
 		{name: "接受 inactive", input: "inactive", want: "inactive"},
 	}
 	for _, tt := range tests {
@@ -120,10 +123,9 @@ func TestCaregiverService_Update_NormalizesStatus(t *testing.T) {
 		assert.Equal(t, "inactive", c.Status)
 	})
 
-	t.Run("非法狀態預設 active", func(t *testing.T) {
-		c, err := svc.Update(context.Background(), existing.ID, UpdateCaregiverInput{Status: strPtr("已離職")})
-		require.NoError(t, err)
-		assert.Equal(t, "active", c.Status)
+	t.Run("拒絕非法狀態", func(t *testing.T) {
+		_, err := svc.Update(context.Background(), existing.ID, UpdateCaregiverInput{Status: strPtr("已離職")})
+		assert.ErrorIs(t, err, ErrCaregiverStatusInvalid)
 	})
 }
 

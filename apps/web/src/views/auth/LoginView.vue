@@ -67,6 +67,7 @@ import { ElMessage, type FormInstance } from 'element-plus'
 import AppLogo from '@/components/AppLogo.vue'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
+import { isLocalEnvironment as resolveLocalEnvironment } from '@/lib/authMode'
 import { type UserRole } from '@/types/domain'
 
 const router = useRouter()
@@ -76,9 +77,13 @@ const authStore = useAuthStore()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 
-// 只有本機環境允許在沒有 Supabase 的情況下發 mock JWT；預覽、正式與雲端容器一律為 false
+// local 一律使用本機 mock JWT；預覽與正式環境才使用 Supabase。
 const isLocalEnvironment = computed(
-  () => import.meta.env.DEV || import.meta.env.VITE_APP_ENV === 'local'
+  () =>
+    resolveLocalEnvironment({
+      isDev: import.meta.env.DEV,
+      appEnv: import.meta.env.VITE_APP_ENV
+    })
 )
 
 const form = reactive({
@@ -110,12 +115,16 @@ async function handleLogin() {
       // 本機不接 Supabase，改發後端 local 分支認得的 mock JWT，讓登入流程與正式環境一致；
       // 帳號含 "viewer" 字樣即以檢視人員身分登入，其餘一律管理員
       const role: UserRole = form.email.includes('viewer') ? 'viewer' : 'admin'
-      await authStore.setSession(`mock_jwt_${role}`, {
+      const permissionsReady = await authStore.setSession(`mock_jwt_${role}`, {
         id: '00000000-0000-0000-0000-000000000001',
         email: form.email,
         displayName: form.email,
         role
       })
+      if (!permissionsReady) {
+        await authStore.logout()
+        return
+      }
       goAfterLogin()
       return
     }
@@ -132,13 +141,13 @@ async function handleLogin() {
         return
       }
 
-      const role = (data.user.app_metadata?.role ?? data.user.user_metadata?.role ?? 'viewer') as UserRole
-      await authStore.setSession(data.session.access_token, {
-        id: data.user.id,
-        email: data.user.email || form.email,
-        displayName: data.user.user_metadata?.display_name || data.user.email || form.email,
-        role
-      })
+      // 角色只接受 Supabase app_metadata；user_metadata 可由使用者自行修改，不可作為授權來源。
+      await authStore.syncSession(data.session)
+      const permissionsReady = await authStore.loadPermissions()
+      if (!permissionsReady) {
+        await authStore.logout()
+        return
+      }
       goAfterLogin()
     } finally {
       loading.value = false

@@ -39,16 +39,30 @@ type AuthUser struct {
 	CustomPermissions map[string]ModulePermission
 	Status            string
 	CreatedAt         time.Time
+	UpdatedAt         time.Time
 	LastSignInAt      *time.Time
+}
+
+// UserSecurityState 是 API 授權所需的最小本地投影；不保存 email、電話或其他身分資料。
+// PermissionVersion 由共享資料庫遞增，供多個 API replica 判斷本機快取是否仍有效。
+type UserSecurityState struct {
+	UserID            uuid.UUID
+	Status            string
+	RoleKey           string
+	CustomPermissions map[string]ModulePermission
+	PermissionVersion int64
+	UpdatedAt         time.Time
 }
 
 // CreateAuthUserInput 是建立使用者所需的欄位。
 type CreateAuthUserInput struct {
-	Email       string
-	Password    string
-	DisplayName string
-	Phone       string
-	RoleKey     string
+	Email             string
+	Password          string
+	DisplayName       string
+	Phone             string
+	RoleKey           string
+	Status            string
+	CustomPermissions map[string]ModulePermission
 }
 
 // UpdateAuthUserInput 是更新使用者所需的欄位。
