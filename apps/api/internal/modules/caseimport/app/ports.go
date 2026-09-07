@@ -37,23 +37,26 @@ type TransportPreferenceWriter interface {
 	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 }
 
-// NewCase 是建立個案所需的輸入，僅 Name 為必要欄位。
+// NewCase 是建立個案所需的輸入，僅 Name 為必要欄位。AllowInvalidNationalID 讓身分證字號
+// 格式錯誤時不擋列，改由 casemgmt 標記待維護；BirthDateRaw 是生日解析失敗時的原始字串。
 type NewCase struct {
-	ID                uuid.UUID
-	Name              string
-	NationalID        string
-	HouseholdType     *string
-	Gender            *string
-	BirthDate         *time.Time
-	CareContactRole   *string
-	CareContactName   *string
-	RegisteredAddress *string
-	HomeAddress       *string
-	Region            *string
-	ServiceCategory   int
-	ServiceUsageType  int
-	Status            string
-	Remarks           *string
+	ID                     uuid.UUID
+	Name                   string
+	NationalID             string
+	AllowInvalidNationalID bool
+	HouseholdType          *string
+	Gender                 *string
+	BirthDate              *time.Time
+	BirthDateRaw           *string
+	CareContactRole        *string
+	CareContactName        *string
+	RegisteredAddress      *string
+	HomeAddress            *string
+	Region                 *string
+	ServiceCategory        int
+	ServiceUsageType       int
+	Status                 string
+	Remarks                *string
 }
 
 // Actor 代表發動匯入的操作者與來源資訊，供稽核留痕使用。
@@ -100,4 +103,38 @@ type TxRunner interface {
 // 實作必須在目前列的 transaction 內以唯一鍵 claim，避免併發匯入穿透。
 type CaseImportIdempotencyStore interface {
 	ClaimCaseImportRow(ctx context.Context, fileHash, rowKey string, caseID uuid.UUID) (bool, error)
+}
+
+// StageDuplicateCandidate 是疑似重複個案暫存所需的完整列輸入。
+type StageDuplicateCandidate struct {
+	RowIndex               int
+	SheetName              string
+	Name                   string
+	NationalID             string
+	HouseholdType          *string
+	Gender                 *string
+	BirthDate              *time.Time
+	BirthDateRaw           *string
+	CareContactRole        *string
+	CareContactName        *string
+	RegisteredAddress      *string
+	HomeAddress            *string
+	Region                 *string
+	ServiceCategory        int
+	ServiceUsageType       int
+	Remarks                *string
+	SiteID                 *uuid.UUID
+	SiteNameRaw            string
+	OutboundVehicleID      *uuid.UUID
+	OutboundVehicleNameRaw string
+	InboundVehicleID       *uuid.UUID
+	InboundVehicleNameRaw  string
+	DuplicateCaseID        uuid.UUID
+}
+
+// DuplicateCandidateStager 讓匯入在偵測到疑似重複個案時，把整列資料交給擁有加密
+// 金鑰與個案能力的模組存入待裁決暫存，不直接建立個案。
+type DuplicateCandidateStager interface {
+	// StageDuplicateRow 寫入一筆暫存列；同一 (fileHash, rowKey) 已存在時回傳 alreadyStaged=true。
+	StageDuplicateRow(ctx context.Context, fileHash, rowKey string, in StageDuplicateCandidate) (id uuid.UUID, alreadyStaged bool, err error)
 }

@@ -37,7 +37,7 @@ src/
 `src/api/client.ts` 是唯一的 axios instance，兩個攔截器做的事：
 
 - **request**：自動帶 `Authorization: Bearer <token>`（從 `stores/auth.ts` 拿）。
-- **response**：直接把 `response.data` 解出來（所以各個 `api/*.ts` 拿到的就是 `{ data, meta }` 那層，不用自己再 `.data.data`）；401 自動登出並導回登入頁；403 跳警告訊息；其他錯誤統一用 `ElMessage` / `ElNotification` 顯示，帶欄位級錯誤的話（後端回傳 `error.details`）會列出每個欄位的錯誤原因。
+- **response**：直接把 `response.data` 解出來（所以各個 `api/*.ts` 拿到的就是 `{ data, meta }` 那層，不用自己再 `.data.data`）；401 自動登出並導回登入頁；403 跳警告訊息；其他錯誤統一用 `ElMessage` / `ElNotification` 顯示，帶欄位級錯誤的話（後端回傳 `error.details`）會列出每個欄位的錯誤原因。「查無資料」這類合法的空狀態（例如個案尚無現行排班）後端一律以 `200` 搭配 `data: null` 表示，不使用錯誤狀態碼，因此不會誤觸這裡的全域錯誤提示；前端只需判斷資料是否為 `null` 來顯示對應的空狀態文案。
 
 新增一支 API 就在 `src/api/` 對應資源的檔案加一個 function，回傳型別盡量用 `src/types/api.d.ts` 產生的型別，不要自己重複定義一份跟後端脫鉤的 interface。後端 API 改了要記得跑 `npm run gen:types` 重新產生型別。
 

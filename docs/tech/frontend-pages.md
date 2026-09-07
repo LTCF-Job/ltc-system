@@ -11,16 +11,16 @@ covers: ["apps/web/src/router/index.ts"]
 |---|---|---|---|
 | `/login` | `views/auth/LoginView.vue` | 公開 | Supabase `signInWithPassword` |
 | `/` | `views/dashboard/DashboardView.vue` | 全部 | `dashboard/*` |
-| `/cases` | `views/cases/CaseListView.vue` | admin/staff/dispatcher/viewer | `cases`、`cases/import`、`cases/template` |
-| `/cases/:id` | `views/cases/CaseDetailView.vue`（含 `ScheduleEditor.vue`） | admin/staff/dispatcher/viewer | `cases/:id`、`cases/:id/reveal`、`cases/:id/schedule` |
+| `/cases` | `views/cases/CaseListView.vue` | admin/staff/dispatcher/viewer | `cases`、`cases/import`、`cases/template`、`cases/import/duplicates`、`cases/import/duplicates/:id/reveal`、`cases/import/duplicates/:id/resolve`、`cases/:id`（待維護補正）、`cases/:id/transport-preference`、`sites`、`vehicles` |
+| `/cases/:id` | `views/cases/CaseDetailView.vue`（含 `ScheduleEditor.vue`） | admin/staff/dispatcher/viewer | `cases/:id`、`cases/:id/reveal`、`cases/:id/schedule`、`cases/:id/transport-preference` |
 | `/masters/regions` | `views/masters/RegionListView.vue` | admin/staff/dispatcher/viewer | `regions/*` |
 | `/masters/sites` | `views/masters/SiteListView.vue` | admin/staff/dispatcher/viewer | `sites/*` |
 | `/masters/vehicles` | `views/masters/VehicleListView.vue` | 全部 | `vehicles/*` |
 | `/masters/drivers` | `views/masters/DriverListView.vue` | 全部 | `drivers/*` |
 | `/masters/caregivers` | `views/masters/CaregiverListView.vue` | admin/staff/dispatcher/viewer | `caregivers/*`、`caregivers/import`、`caregivers/template` |
 | `/driver-reports`（重導向 `/driver-reports/status`） | — | admin/staff/dispatcher/viewer | — |
-| `/driver-reports/status` | `views/driverReports/DriverReportStatusView.vue` | admin/staff/dispatcher/viewer | `driver-reports`、`driver-reports/imported-months`、`driver-reports`（建表） |
-| `/driver-reports/import`（`/driver-reports/batch-import`、`/driver-reports/mappings` 皆重導向於此） | `views/driverReports/DriverReportImportView.vue` | admin/staff/dispatcher/viewer | `vehicles`、`cases`、`driver-reports`、`driver-reports/imported-months`、`driver-reports`（建表）、`driver-reports/:id/import`、`driver-reports/columns*`、`cases`（新增，待維護頁籤快速建立個案） |
+| `/driver-reports/status` | `views/driverReports/DriverReportStatusView.vue` | admin/staff/dispatcher/viewer | `driver-reports`、`driver-reports`（建表） |
+| `/driver-reports/import`（`/driver-reports/batch-import`、`/driver-reports/mappings` 皆重導向於此） | `views/driverReports/DriverReportImportView.vue` | admin/staff/dispatcher/viewer | `vehicles`、`cases`、`driver-reports`、`driver-reports`（建表）、`driver-reports/:id/import`、`driver-reports/columns*`、`cases`（新增，待維護頁籤快速建立個案） |
 | `/rides` | `views/rides/RideCalendarView.vue`（含 `RideManualEntryDialog.vue`） | 全部 | `rides/calendar`、`rides/manual-report` |
 | `/rides/issues` | `views/rides/RideIssuesView.vue`（含 `RideCorrectionDrawer.vue`） | admin/staff/dispatcher/viewer | `rides/issues`、`rides/:id`、`rides/:id/resolve-conflict` |
 | `/rides/missing` | `views/rides/MissingRidesView.vue` | admin/staff/dispatcher/viewer | `rides/missing` |

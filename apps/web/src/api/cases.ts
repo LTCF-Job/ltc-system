@@ -8,7 +8,9 @@ import type {
   CaseScheduleDTO,
   SaveScheduleRequest,
   DryRunImportResultDTO,
-  CaseImportCommitResult
+  CaseImportCommitResult,
+  CaseDuplicateCandidateDTO,
+  ResolveDuplicateCandidateRequest
 } from '@/types/api'
 
 export async function listCases(params?: {
@@ -111,12 +113,26 @@ export async function dryRunImportCases(file: File): Promise<DryRunImportResultD
   return unwrapData<DryRunImportResultDTO>(res)
 }
 
-export async function commitImportCases(file: File, includeDuplicateRows: string[] = []): Promise<CaseImportCommitResult> {
+export async function commitImportCases(file: File): Promise<CaseImportCommitResult> {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('includeDuplicateRows', JSON.stringify(includeDuplicateRows))
   const res = await apiClient.post('/cases/import?dryRun=false', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
   return unwrapData<CaseImportCommitResult>(res)
+}
+
+export async function listCaseDuplicateCandidates(): Promise<CaseDuplicateCandidateDTO[]> {
+  const res = await apiClient.get('/cases/import/duplicates')
+  return unwrapData<CaseDuplicateCandidateDTO[]>(res)
+}
+
+export async function revealCaseDuplicateCandidateNationalId(id: string): Promise<{ nationalId: string }> {
+  const res = await apiClient.post(`/cases/import/duplicates/${id}/reveal`)
+  return unwrapData<{ nationalId: string }>(res)
+}
+
+export async function resolveCaseDuplicateCandidate(id: string, data: ResolveDuplicateCandidateRequest): Promise<CaseDTO> {
+  const res = await apiClient.post(`/cases/import/duplicates/${id}/resolve`, data)
+  return normalizeCase(unwrapData<CaseDTO>(res))
 }

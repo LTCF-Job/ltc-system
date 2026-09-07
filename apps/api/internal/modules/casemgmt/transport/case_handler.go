@@ -221,6 +221,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		HouseholdType     *string      `json:"householdType"`
 		Gender            *string      `json:"gender"`
 		BirthDate         optionalDate `json:"birthDate"`
+		NationalID        *string      `json:"nationalId"`
 		CareContactRole   *string      `json:"careContactRole"`
 		CareContactName   *string      `json:"careContactName"`
 		RegisteredAddress *string      `json:"registeredAddress"`
@@ -243,6 +244,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		Status:              req.Status,
 		HouseholdType:       req.HouseholdType,
 		Gender:              req.Gender,
+		NationalID:          req.NationalID,
 		CareContactRole:     req.CareContactRole,
 		CareContactName:     req.CareContactName,
 		RegisteredAddress:   req.RegisteredAddress,
@@ -257,6 +259,105 @@ func (h *CaseHandler) Update(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, app.ErrCaseNotFound) {
 			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrInvalidNationalIDFormat) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "nationalId", Reason: "身分證字號格式錯誤"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateNationalID) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "nationalId", Reason: "此身分證字號已存在於其他個案"},
+			})
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
+}
+
+// ListDuplicateCandidates 列出所有待裁決的疑似重複個案。
+func (h *CaseHandler) ListDuplicateCandidates(c *gin.Context) {
+	list, err := h.masterService.ListDuplicateCandidates(c.Request.Context())
+	if err != nil {
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢待裁決疑似重複個案失敗", nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusOK, newDuplicateCandidateResponses(list), nil)
+}
+
+// RevealDuplicateCandidateNationalID 解密單筆疑似重複個案暫存列的身分證字號，供裁決頁比對。
+func (h *CaseHandler) RevealDuplicateCandidateNationalID(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的暫存列 ID", nil)
+		return
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+	plainID, err := h.masterService.RevealDuplicateCandidateNationalID(c.Request.Context(), id, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
+	if err != nil {
+		if errors.Is(err, app.ErrDuplicateCandidateNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrNationalIDNotConfigured) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "此列尚未設定身分證資料", nil)
+			return
+		}
+		if errors.Is(err, app.ErrRevealAuditUnavailable) {
+			httpx.RespondErrorCode(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, err, nil)
+			return
+		}
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "解密失敗", nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusOK, gin.H{"nationalId": plainID}, nil)
+}
+
+// ResolveDuplicateCandidate 裁決一筆疑似重複個案。
+func (h *CaseHandler) ResolveDuplicateCandidate(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的暫存列 ID", nil)
+		return
+	}
+
+	var req ResolveDuplicateCandidateRequest
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		return
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+	entity, err := h.masterService.ResolveDuplicateCandidate(
+		c.Request.Context(), id, req.Decision, req.TargetCaseID, req.MergeRemarks, actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
+	)
+	if err != nil {
+		if errors.Is(err, app.ErrInvalidDuplicateDecision) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "decision", Reason: "decision 必須為 confirmed_new 或 merged_existing"},
+			})
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateCandidateNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateCandidateResolved) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateNationalID) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: "nationalId", Reason: "此身分證字號已存在於其他個案"},
+			})
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
@@ -315,14 +416,14 @@ func (h *CaseHandler) GetSchedule(c *gin.Context) {
 		return
 	}
 
-	// TODO: 尚無「無現行排班」的產品規格確認，暫先誠實回傳查無資料而非舊有的寫死假資料。
 	sched, err := h.masterService.GetActiveScheduleForCaseOnDate(c.Request.Context(), id, clock.Today())
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢個案排班失敗", nil)
 		return
 	}
+	// 個案尚未排班是正常狀態而非錯誤，以 200 搭配 null data 呈現，交由前端顯示「尚無現行排班」
 	if sched == nil {
-		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無現行排班", nil)
+		httpx.RespondSuccess(c, http.StatusOK, nil, nil)
 		return
 	}
 

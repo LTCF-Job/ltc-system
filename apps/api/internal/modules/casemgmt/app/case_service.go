@@ -15,32 +15,36 @@ import (
 )
 
 var (
-	ErrSiteRegionMismatch       = errors.New("site region does not match case region")
-	ErrCaseRegionUnset          = errors.New("個案尚未設定所屬區域，無法建立排班")
-	ErrInvalidTripPattern       = errors.New("trip pattern must match schedule legs count")
-	ErrLegTimesNotOrdered       = errors.New("schedule leg departure times must be strictly increasing")
-	ErrInvalidScheduleWeekday   = errors.New("schedule weekdays must be unique values from 1 to 7")
-	ErrInvalidScheduleLegSeq    = errors.New("schedule leg sequence must be unique and within trip pattern")
-	ErrInvalidScheduleDirection = errors.New("schedule leg direction must be outbound or inbound")
-	ErrInvalidScheduleTime      = errors.New("schedule leg departure time must use HH:MM format")
-	ErrInvalidSchedulePrice     = errors.New("schedule unit price must be greater than zero")
-	ErrInvalidScheduleDistance  = errors.New("schedule distance must be greater than zero")
-	ErrInvalidScheduleDuration  = errors.New("schedule service duration must be between 1 and 240 minutes")
-	ErrInvalidScheduleDateRange = errors.New("schedule effective end date must not be before start date")
-	ErrCaseNotFound             = errors.New("case not found")
-	ErrCaseNameRequired         = errors.New("case name is required")
-	ErrNationalIDNotConfigured  = errors.New("national id is not configured")
-	ErrRevealAuditUnavailable   = errors.New("reveal audit is unavailable")
+	ErrInvalidTripPattern         = errors.New("trip pattern must match schedule legs count")
+	ErrLegTimesNotOrdered         = errors.New("schedule leg departure times must be strictly increasing")
+	ErrInvalidScheduleWeekday     = errors.New("schedule weekdays must be unique values from 1 to 7")
+	ErrInvalidScheduleLegSeq      = errors.New("schedule leg sequence must be unique and within trip pattern")
+	ErrInvalidScheduleDirection   = errors.New("schedule leg direction must be outbound or inbound")
+	ErrInvalidScheduleTime        = errors.New("schedule leg departure time must use HH:MM format")
+	ErrInvalidSchedulePrice       = errors.New("schedule unit price must be greater than zero")
+	ErrInvalidScheduleDistance    = errors.New("schedule distance must be greater than zero")
+	ErrInvalidScheduleDuration    = errors.New("schedule service duration must be between 1 and 240 minutes")
+	ErrInvalidScheduleDateRange   = errors.New("schedule effective end date must not be before start date")
+	ErrCaseNotFound               = errors.New("case not found")
+	ErrCaseNameRequired           = errors.New("case name is required")
+	ErrNationalIDNotConfigured    = errors.New("national id is not configured")
+	ErrRevealAuditUnavailable     = errors.New("reveal audit is unavailable")
+	ErrInvalidNationalIDFormat    = errors.New("invalid national id format")
+	ErrDuplicateNationalID        = errors.New("national id already exists")
+	ErrDuplicateCandidateNotFound = errors.New("duplicate candidate not found")
+	ErrDuplicateCandidateResolved = errors.New("duplicate candidate already resolved")
+	ErrInvalidDuplicateDecision   = errors.New("invalid duplicate candidate decision")
 )
 
 // CaseService 封裝個案、單位、車輛、司機與排班之業務邏輯。
 type CaseService struct {
-	cfg       *config.Config
-	caseRepo  CaseStore
-	siteRepo  SiteFinder
-	auditRepo AuditWriter
-	renderer  ProfileRenderer
-	txRunner  TransactionRunner
+	cfg         *config.Config
+	caseRepo    CaseStore
+	siteRepo    SiteFinder
+	auditRepo   AuditWriter
+	renderer    ProfileRenderer
+	txRunner    TransactionRunner
+	stagingRepo DuplicateStagingStore
 }
 
 // NewCaseService 建立 CaseService 實例。
@@ -50,6 +54,7 @@ func NewCaseService(
 	siteRepo SiteFinder,
 	auditRepo AuditWriter,
 	renderer ProfileRenderer,
+	stagingRepo DuplicateStagingStore,
 	txRunners ...TransactionRunner,
 ) *CaseService {
 	var txRunner TransactionRunner
@@ -57,60 +62,69 @@ func NewCaseService(
 		txRunner = txRunners[0]
 	}
 	return &CaseService{
-		cfg:       cfg,
-		caseRepo:  caseRepo,
-		siteRepo:  siteRepo,
-		auditRepo: auditRepo,
-		renderer:  renderer,
-		txRunner:  txRunner,
+		cfg:         cfg,
+		caseRepo:    caseRepo,
+		siteRepo:    siteRepo,
+		auditRepo:   auditRepo,
+		renderer:    renderer,
+		txRunner:    txRunner,
+		stagingRepo: stagingRepo,
 	}
 }
 
 // CreateCaseRequest 代表新增個案之請求參數。
 type CreateCaseRequest struct {
-	ID                uuid.UUID
-	Name              string
-	NationalID        string
-	HouseholdType     *string
-	Gender            *string
-	BirthDate         *time.Time
-	CareContactRole   *string
-	CareContactName   *string
-	RegisteredAddress *string
-	HomeAddress       *string
-	Region            *string
-	LTCLevel          *string
-	ServiceCategory   *int
-	ServiceUsageType  *int
-	ClaimEndDate      *time.Time
-	Status            string
-	Remarks           *string
+	ID                     uuid.UUID
+	Name                   string
+	NationalID             string
+	AllowInvalidNationalID bool
+	HouseholdType          *string
+	Gender                 *string
+	BirthDate              *time.Time
+	BirthDateRaw           *string
+	CareContactRole        *string
+	CareContactName        *string
+	RegisteredAddress      *string
+	HomeAddress            *string
+	Region                 *string
+	LTCLevel               *string
+	ServiceCategory        *int
+	ServiceUsageType       *int
+	ClaimEndDate           *time.Time
+	Status                 string
+	Remarks                *string
 }
 
-// CreateCase 建立個案主檔；僅姓名為必要輸入，身分證字號提供時仍需通過格式檢查與加密雜湊產生，
-// 不再檢查唯一性（個案身分證字號與姓名皆允許重複）。
-func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, actorID uuid.UUID, actorRole, ip, ua string) (*Case, error) {
+// buildCaseEntity 組裝個案實體並套用身分證字號加密與生日 raw 保留規則，供
+// CreateCase 與 ResolveDuplicateCandidate（confirmed_new 分支）共用同一段邏輯。
+// AllowInvalidNationalID 僅供批次匯入路徑使用：格式不合法時不擋列，改標記
+// NationalIDInvalid 並讓三個身分證欄位留空，待使用者於待維護頁重新輸入。
+func (s *CaseService) buildCaseEntity(req CreateCaseRequest) (Case, error) {
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		return nil, ErrCaseNameRequired
+		return Case{}, ErrCaseNameRequired
 	}
 	req.NationalID = strings.TrimSpace(strings.ToUpper(req.NationalID))
 
 	var cipherText, hmacIdx []byte
 	var maskedID string
+	var nationalIDInvalid bool
 	if req.NationalID != "" {
 		if !crypto.ValidateNationalID(req.NationalID) {
-			return nil, errors.New("invalid national ID format")
-		}
+			if !req.AllowInvalidNationalID {
+				return Case{}, ErrInvalidNationalIDFormat
+			}
+			nationalIDInvalid = true
+		} else {
+			hmacIdx = crypto.Index(req.NationalID, s.cfg.HMACKey)
 
-		hmacIdx = crypto.Index(req.NationalID, s.cfg.HMACKey)
-
-		var err error
-		cipherText, err = crypto.Encrypt(req.NationalID, s.cfg.EncryptionKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to encrypt national id: %w", err)
+			var err error
+			cipherText, err = crypto.Encrypt(req.NationalID, s.cfg.EncryptionKey)
+			if err != nil {
+				return Case{}, fmt.Errorf("failed to encrypt national id: %w", err)
+			}
+			maskedID = crypto.Mask(req.NationalID)
 		}
-		maskedID = crypto.Mask(req.NationalID)
 	}
 
 	normName := namenorm.Normalize(req.Name)
@@ -118,16 +132,24 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 		req.Status = "active"
 	}
 
-	entity := Case{
+	birthDate := req.BirthDate
+	birthDateRaw := req.BirthDateRaw
+	if birthDate != nil {
+		birthDateRaw = nil
+	}
+
+	return Case{
 		ID:                req.ID,
 		Name:              req.Name,
 		NameNormalized:    normName,
 		NationalIDCipher:  cipherText,
 		NationalIDHMAC:    hmacIdx,
 		NationalIDMasked:  maskedID,
+		NationalIDInvalid: nationalIDInvalid,
 		HouseholdType:     req.HouseholdType,
 		Gender:            req.Gender,
-		BirthDate:         req.BirthDate,
+		BirthDate:         birthDate,
+		BirthDateRaw:      birthDateRaw,
 		CareContactRole:   req.CareContactRole,
 		CareContactName:   req.CareContactName,
 		RegisteredAddress: req.RegisteredAddress,
@@ -139,6 +161,15 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 		ClaimEndDate:      req.ClaimEndDate,
 		Status:            req.Status,
 		Remarks:           req.Remarks,
+	}, nil
+}
+
+// CreateCase 建立個案主檔；僅姓名為必要輸入，身分證字號提供時仍需通過格式檢查與加密雜湊產生，
+// 不再檢查唯一性（個案身分證字號與姓名皆允許重複）。
+func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, actorID uuid.UUID, actorRole, ip, ua string) (*Case, error) {
+	entity, err := s.buildCaseEntity(req)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := s.caseRepo.Create(ctx, &entity); err != nil {
@@ -192,6 +223,7 @@ type UpdateCaseInput struct {
 	Gender              *string
 	BirthDate           *time.Time
 	BirthDatePresent    bool
+	NationalID          *string
 	CareContactRole     *string
 	CareContactName     *string
 	RegisteredAddress   *string
@@ -214,6 +246,7 @@ type caseAuditSnapshot struct {
 	SiteID            *uuid.UUID `json:"siteId,omitempty"`
 	OutboundVehicleID *uuid.UUID `json:"outboundVehicleId,omitempty"`
 	InboundVehicleID  *uuid.UUID `json:"inboundVehicleId,omitempty"`
+	NationalIDInvalid bool       `json:"nationalIdInvalid,omitempty"`
 }
 
 func newCaseAuditSnapshot(c *Case) caseAuditSnapshot {
@@ -234,6 +267,7 @@ func newCaseAuditSnapshot(c *Case) caseAuditSnapshot {
 		SiteID:            c.SiteID,
 		OutboundVehicleID: c.OutboundVehicleID,
 		InboundVehicleID:  c.InboundVehicleID,
+		NationalIDInvalid: c.NationalIDInvalid,
 	}
 }
 
@@ -282,6 +316,21 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 	}
 	if in.BirthDatePresent {
 		entity.BirthDate = in.BirthDate
+		entity.BirthDateRaw = nil
+	}
+	if in.NationalID != nil {
+		nid := strings.TrimSpace(strings.ToUpper(*in.NationalID))
+		if !crypto.ValidateNationalID(nid) {
+			return nil, ErrInvalidNationalIDFormat
+		}
+		cipherText, err := crypto.Encrypt(nid, s.cfg.EncryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt national id: %w", err)
+		}
+		entity.NationalIDCipher = cipherText
+		entity.NationalIDHMAC = crypto.Index(nid, s.cfg.HMACKey)
+		entity.NationalIDMasked = crypto.Mask(nid)
+		entity.NationalIDInvalid = false
 	}
 	if in.CareContactRole != nil {
 		entity.CareContactRole = in.CareContactRole
@@ -419,7 +468,14 @@ func (s *CaseService) FindPossibleDuplicate(ctx context.Context, nationalID, nam
 	nationalID = strings.TrimSpace(strings.ToUpper(nationalID))
 	if nationalID != "" {
 		hmacIdx := crypto.Index(nationalID, s.cfg.HMACKey)
-		return s.caseRepo.GetByHMAC(ctx, hmacIdx)
+		found, err := s.caseRepo.GetByHMAC(ctx, hmacIdx)
+		if err != nil {
+			if errors.Is(err, ErrCaseNotFound) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return found, nil
 	}
 
 	matches, err := s.caseRepo.GetByNameNormalized(ctx, namenorm.Normalize(name))
@@ -430,6 +486,343 @@ func (s *CaseService) FindPossibleDuplicate(ctx context.Context, nationalID, nam
 		return nil, nil
 	}
 	return &matches[0], nil
+}
+
+// StageDuplicateCandidateInput 代表批次匯入單列疑似重複個案之暫存輸入；NationalID
+// 為明文，僅在本次呼叫內傳遞，寫入前立即加密，不落地、不回傳、不記錄。
+type StageDuplicateCandidateInput struct {
+	FileHash               string
+	RowKey                 string
+	RowIndex               int
+	SheetName              string
+	Name                   string
+	NationalID             string
+	HouseholdType          *string
+	Gender                 *string
+	BirthDate              *time.Time
+	BirthDateRaw           *string
+	CareContactRole        *string
+	CareContactName        *string
+	RegisteredAddress      *string
+	HomeAddress            *string
+	Region                 *string
+	ServiceCategory        *int
+	ServiceUsageType       *int
+	SiteID                 *uuid.UUID
+	SiteNameRaw            string
+	OutboundVehicleID      *uuid.UUID
+	OutboundVehicleNameRaw string
+	InboundVehicleID       *uuid.UUID
+	InboundVehicleNameRaw  string
+	Remarks                *string
+	DuplicateCaseID        uuid.UUID
+}
+
+func emptyToNil(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+// StageDuplicateCandidate 將疑似重複個案的整列資料寫入暫存，不建立 cases 資料列；
+// 身分證字號比照 CreateCase 立即加密，暫存表全程不留明文。
+func (s *CaseService) StageDuplicateCandidate(ctx context.Context, in StageDuplicateCandidateInput) (uuid.UUID, bool, error) {
+	name := strings.TrimSpace(in.Name)
+	nationalID := strings.TrimSpace(strings.ToUpper(in.NationalID))
+
+	var cipherText, hmacIdx []byte
+	var maskedID string
+	var nationalIDInvalid bool
+	if nationalID != "" {
+		if !crypto.ValidateNationalID(nationalID) {
+			nationalIDInvalid = true
+		} else {
+			hmacIdx = crypto.Index(nationalID, s.cfg.HMACKey)
+			var err error
+			cipherText, err = crypto.Encrypt(nationalID, s.cfg.EncryptionKey)
+			if err != nil {
+				return uuid.Nil, false, fmt.Errorf("failed to encrypt national id: %w", err)
+			}
+			maskedID = crypto.Mask(nationalID)
+		}
+	}
+
+	birthDate := in.BirthDate
+	birthDateRaw := in.BirthDateRaw
+	if birthDate != nil {
+		birthDateRaw = nil
+	}
+
+	cand := DuplicateCandidate{
+		FileHash:               in.FileHash,
+		RowKey:                 in.RowKey,
+		RowIndex:               in.RowIndex,
+		SheetName:              in.SheetName,
+		Name:                   name,
+		NameNormalized:         namenorm.Normalize(name),
+		NationalIDCipher:       cipherText,
+		NationalIDHMAC:         hmacIdx,
+		NationalIDMasked:       maskedID,
+		NationalIDInvalid:      nationalIDInvalid,
+		HouseholdType:          in.HouseholdType,
+		Gender:                 in.Gender,
+		BirthDate:              birthDate,
+		BirthDateRaw:           birthDateRaw,
+		CareContactRole:        in.CareContactRole,
+		CareContactName:        in.CareContactName,
+		RegisteredAddress:      in.RegisteredAddress,
+		HomeAddress:            in.HomeAddress,
+		Region:                 in.Region,
+		ServiceCategory:        in.ServiceCategory,
+		ServiceUsageType:       in.ServiceUsageType,
+		SiteID:                 in.SiteID,
+		SiteNameRaw:            emptyToNil(in.SiteNameRaw),
+		OutboundVehicleID:      in.OutboundVehicleID,
+		OutboundVehicleNameRaw: emptyToNil(in.OutboundVehicleNameRaw),
+		InboundVehicleID:       in.InboundVehicleID,
+		InboundVehicleNameRaw:  emptyToNil(in.InboundVehicleNameRaw),
+		Remarks:                in.Remarks,
+		DuplicateCaseID:        in.DuplicateCaseID,
+	}
+
+	return s.stagingRepo.Insert(ctx, cand)
+}
+
+// ListDuplicateCandidates 取得所有待裁決的疑似重複個案暫存列。
+func (s *CaseService) ListDuplicateCandidates(ctx context.Context) ([]DuplicateCandidate, error) {
+	return s.stagingRepo.ListPending(ctx)
+}
+
+// RevealDuplicateCandidateNationalID 解密單筆暫存列的明文身分證字號供裁決頁比對，並留存稽核日誌；
+// 比照 RevealCaseNationalID 的「加密儲存、稽核後解密顯示」模式。
+func (s *CaseService) RevealDuplicateCandidateNationalID(ctx context.Context, id uuid.UUID, actorID uuid.UUID, actorRole, ip, ua string) (string, error) {
+	cand, err := s.stagingRepo.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if cand == nil {
+		return "", ErrDuplicateCandidateNotFound
+	}
+	if len(cand.NationalIDCipher) == 0 {
+		return "", ErrNationalIDNotConfigured
+	}
+	if s.auditRepo == nil {
+		return "", ErrRevealAuditUnavailable
+	}
+
+	entityIDStr := id.String()
+	if err := s.auditRepo.Write(ctx, AuditEntry{
+		ActorID:    &actorID,
+		ActorRole:  &actorRole,
+		Action:     "reveal_pii",
+		EntityType: "case_import_duplicate_rows",
+		EntityID:   &entityIDStr,
+		IPAddress:  &ip,
+		UserAgent:  &ua,
+	}); err != nil {
+		return "", fmt.Errorf("%w: %v", ErrRevealAuditUnavailable, err)
+	}
+
+	plainID, err := crypto.Decrypt(cand.NationalIDCipher, s.cfg.EncryptionKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt national id: %w", err)
+	}
+	return plainID, nil
+}
+
+// ResolveDuplicateCandidate 裁決一筆疑似重複個案：confirmed_new 建立新個案並綁定交通偏好；
+// merged_existing 只在目標既有個案對應欄位為空時才寫入暫存列的值，備註一律 append，不覆蓋既有資料。
+func (s *CaseService) ResolveDuplicateCandidate(ctx context.Context, id uuid.UUID, decision string, targetCaseID *uuid.UUID, mergeRemarks bool, actorID uuid.UUID, actorRole, ip, ua string) (*Case, error) {
+	if decision != "confirmed_new" && decision != "merged_existing" {
+		return nil, ErrInvalidDuplicateDecision
+	}
+
+	var result *Case
+	resolveFn := func(txCtx context.Context) error {
+		cand, err := s.stagingRepo.GetByID(txCtx, id)
+		if err != nil {
+			return err
+		}
+		if cand == nil || cand.Status != "pending" {
+			return ErrDuplicateCandidateNotFound
+		}
+
+		var resultingCaseID uuid.UUID
+		if decision == "confirmed_new" {
+			created, err := s.resolveDuplicateAsNewCase(txCtx, cand, actorID, actorRole, ip, ua)
+			if err != nil {
+				return err
+			}
+			result = created
+			resultingCaseID = created.ID
+		} else {
+			target := cand.DuplicateCaseID
+			if targetCaseID != nil {
+				target = *targetCaseID
+			}
+			merged, err := s.mergeDuplicateIntoExisting(txCtx, target, cand, mergeRemarks, actorID, actorRole, ip, ua)
+			if err != nil {
+				return err
+			}
+			result = merged
+			resultingCaseID = merged.ID
+		}
+
+		rowsAffected, err := s.stagingRepo.Resolve(txCtx, id, decision, actorID, &resultingCaseID)
+		if err != nil {
+			return err
+		}
+		if rowsAffected == 0 {
+			return ErrDuplicateCandidateResolved
+		}
+		return nil
+	}
+
+	if s.txRunner != nil {
+		if err := s.txRunner.WithTx(ctx, resolveFn); err != nil {
+			return nil, err
+		}
+	} else if err := resolveFn(ctx); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (s *CaseService) resolveDuplicateAsNewCase(ctx context.Context, cand *DuplicateCandidate, actorID uuid.UUID, actorRole, ip, ua string) (*Case, error) {
+	entity := Case{
+		ID:                uuid.New(),
+		Name:              cand.Name,
+		NameNormalized:    cand.NameNormalized,
+		NationalIDCipher:  cand.NationalIDCipher,
+		NationalIDHMAC:    cand.NationalIDHMAC,
+		NationalIDMasked:  cand.NationalIDMasked,
+		NationalIDInvalid: cand.NationalIDInvalid,
+		HouseholdType:     cand.HouseholdType,
+		Gender:            cand.Gender,
+		BirthDate:         cand.BirthDate,
+		BirthDateRaw:      cand.BirthDateRaw,
+		CareContactRole:   cand.CareContactRole,
+		CareContactName:   cand.CareContactName,
+		RegisteredAddress: cand.RegisteredAddress,
+		HomeAddress:       cand.HomeAddress,
+		Region:            cand.Region,
+		ServiceCategory:   cand.ServiceCategory,
+		ServiceUsageType:  cand.ServiceUsageType,
+		Status:            "active",
+		Remarks:           cand.Remarks,
+	}
+	if err := s.caseRepo.Create(ctx, &entity); err != nil {
+		return nil, fmt.Errorf("failed to create case from duplicate candidate: %w", err)
+	}
+	if err := s.caseRepo.UpsertTransportPreference(ctx, entity.ID, cand.SiteID, cand.OutboundVehicleID, cand.InboundVehicleID,
+		derefOrEmpty(cand.SiteNameRaw), derefOrEmpty(cand.OutboundVehicleNameRaw), derefOrEmpty(cand.InboundVehicleNameRaw)); err != nil {
+		return nil, fmt.Errorf("failed to set transport preference for confirmed duplicate: %w", err)
+	}
+
+	if s.auditRepo != nil {
+		entityIDStr := entity.ID.String()
+		if err := s.auditRepo.Write(ctx, AuditEntry{
+			ActorID: &actorID, ActorRole: &actorRole, Action: "create", EntityType: "cases", EntityID: &entityIDStr,
+			AfterData: newCaseAuditSnapshot(&entity), IPAddress: &ip, UserAgent: &ua,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to write confirm-duplicate audit: %w", err)
+		}
+	}
+	return &entity, nil
+}
+
+// mergeDuplicateIntoExisting 只補齊既有個案本來是空的欄位，不覆蓋既有值；備註一律
+// append 而非取代，避免裁決動作意外抹掉既有個案已經記錄的資訊。
+func (s *CaseService) mergeDuplicateIntoExisting(ctx context.Context, targetCaseID uuid.UUID, cand *DuplicateCandidate, mergeRemarks bool, actorID uuid.UUID, actorRole, ip, ua string) (*Case, error) {
+	entity, err := s.caseRepo.GetByID(ctx, targetCaseID)
+	if err != nil {
+		return nil, err
+	}
+	if entity == nil {
+		return nil, ErrCaseNotFound
+	}
+	before := newCaseAuditSnapshot(entity)
+
+	if entity.HouseholdType == nil {
+		entity.HouseholdType = cand.HouseholdType
+	}
+	if entity.Gender == nil {
+		entity.Gender = cand.Gender
+	}
+	if entity.BirthDate == nil {
+		entity.BirthDate = cand.BirthDate
+		entity.BirthDateRaw = cand.BirthDateRaw
+	}
+	if entity.CareContactRole == nil {
+		entity.CareContactRole = cand.CareContactRole
+	}
+	if entity.CareContactName == nil {
+		entity.CareContactName = cand.CareContactName
+	}
+	if entity.RegisteredAddress == nil {
+		entity.RegisteredAddress = cand.RegisteredAddress
+	}
+	if entity.HomeAddress == nil {
+		entity.HomeAddress = cand.HomeAddress
+	}
+	if entity.Region == nil {
+		entity.Region = cand.Region
+	}
+	if mergeRemarks && cand.Remarks != nil && strings.TrimSpace(*cand.Remarks) != "" {
+		merged := strings.TrimSpace(derefOrEmpty(entity.Remarks))
+		note := "[匯入合併備註] " + strings.TrimSpace(*cand.Remarks)
+		if merged == "" {
+			merged = note
+		} else {
+			merged = merged + "\n" + note
+		}
+		entity.Remarks = &merged
+	}
+
+	if err := s.caseRepo.Update(ctx, entity); err != nil {
+		return nil, err
+	}
+	if entity.SiteID == nil && cand.SiteID != nil || entity.OutboundVehicleID == nil && cand.OutboundVehicleID != nil || entity.InboundVehicleID == nil && cand.InboundVehicleID != nil {
+		siteID := entity.SiteID
+		if siteID == nil {
+			siteID = cand.SiteID
+		}
+		outboundID := entity.OutboundVehicleID
+		if outboundID == nil {
+			outboundID = cand.OutboundVehicleID
+		}
+		inboundID := entity.InboundVehicleID
+		if inboundID == nil {
+			inboundID = cand.InboundVehicleID
+		}
+		if err := s.caseRepo.UpsertTransportPreference(ctx, entity.ID, siteID, outboundID, inboundID,
+			derefOrEmpty(cand.SiteNameRaw), derefOrEmpty(cand.OutboundVehicleNameRaw), derefOrEmpty(cand.InboundVehicleNameRaw)); err != nil {
+			return nil, fmt.Errorf("failed to backfill transport preference on merge: %w", err)
+		}
+	}
+
+	after, err := s.caseRepo.GetByID(ctx, entity.ID)
+	if err != nil {
+		return nil, err
+	}
+	if s.auditRepo != nil {
+		entityIDStr := entity.ID.String()
+		if err := s.auditRepo.Write(ctx, AuditEntry{
+			ActorID: &actorID, ActorRole: &actorRole, Action: "conflict_resolve", EntityType: "cases", EntityID: &entityIDStr,
+			BeforeData: before, AfterData: newCaseAuditSnapshot(after), IPAddress: &ip, UserAgent: &ua,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to write merge-duplicate audit: %w", err)
+		}
+	}
+	return after, nil
+}
+
+func derefOrEmpty(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
 }
 
 // GetActiveScheduleForCaseOnDate 取得個案於指定日期生效之排班；查無資料時回傳 nil、nil，
@@ -570,21 +963,13 @@ func (s *CaseService) CreateCaseSchedule(ctx context.Context, req CreateSchedule
 		return nil, err
 	}
 
-	caseObj, err := s.caseRepo.GetByID(ctx, req.CaseID)
-	if err != nil {
+	if _, err := s.caseRepo.GetByID(ctx, req.CaseID); err != nil {
 		return nil, fmt.Errorf("case not found: %w", err)
 	}
 
-	siteObj, err := s.siteRepo.GetByID(ctx, req.SiteID)
-	if err != nil {
+	// 排班所屬單位不要求與案主地區一致，允許跨區指派。
+	if _, err := s.siteRepo.GetByID(ctx, req.SiteID); err != nil {
 		return nil, fmt.Errorf("site not found: %w", err)
-	}
-
-	if caseObj.Region == nil {
-		return nil, ErrCaseRegionUnset
-	}
-	if *caseObj.Region != siteObj.Region {
-		return nil, ErrSiteRegionMismatch
 	}
 
 	var legs []ScheduleLeg

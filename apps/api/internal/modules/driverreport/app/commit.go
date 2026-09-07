@@ -68,7 +68,6 @@ func (s *DriverReportService) CommitDriverReport(
 		SkippedRows: []SkippedRow{},
 		Warnings:    []ImportWarningItem{},
 		Status:      "pending",
-		FileHash:    fmt.Sprintf("sha256:%x", sha256.Sum256(data)),
 	}
 	importable := collectImportableRows(preview.PreviewRows, result)
 
@@ -78,18 +77,8 @@ func (s *DriverReportService) CommitDriverReport(
 				return fmt.Errorf("鎖定匯入月份失敗：%w", err)
 			}
 		}
-		if idempotency, ok := s.repo.(DriverReportImportIdempotencyStore); ok && len(importable) > 0 {
-			claimed, err := idempotency.ClaimDriverReportImport(txCtx, formID, yearMonth, result.FileHash)
-			if err != nil {
-				return fmt.Errorf("記錄匯入冪等鍵失敗：%w", err)
-			}
-			if !claimed {
-				result.AlreadyImported = true
-				result.Status = "already_imported"
-				return nil
-			}
-		}
-		if err := s.persistColumnDecisions(txCtx, formID, preview, decisions); err != nil {
+		backfillTargets, err := s.persistColumnDecisions(txCtx, formID, preview, decisions)
+		if err != nil {
 			return err
 		}
 
@@ -152,6 +141,19 @@ func (s *DriverReportService) CommitDriverReport(
 			}
 		}
 
+		// 必須跑在上面的逐列寫入之後：form_submissions 是「一車一天一筆」原地更新，
+		// 先補寫會讀到這幾天更新前的舊答案，再被本次的新值比出一筆並不存在的衝突。
+		// 檔案涵蓋的日期全部排除（不只本次宣告的月份）：跨月檔案是逐月各送一次 commit，
+		// 尚未輪到的那些月份此刻還是上一次上傳的舊值，補進去就會被下一輪比出假衝突。
+		fileDates := collectFileServiceDates(preview.PreviewRows)
+		for _, target := range backfillTargets {
+			written, err := s.rideIngestor.BackfillColumn(txCtx, formID, form.VehicleID, target.columnHeader, target.columnIndex, target.caseID, target.legSeq, fileDates)
+			if err != nil {
+				return fmt.Errorf("欄位「%s」補寫先前搭乘紀錄失敗：%w", target.columnHeader, err)
+			}
+			result.BackfilledRows += written
+		}
+
 		if result.ImportedRows == 0 {
 			// 全部列都被跳過（月份不符或格式錯誤）時代表沒有任何一列真的匯入，
 			// 不更新最後匯入時間，避免使用者誤以為這次上傳已經成功。
@@ -162,13 +164,11 @@ func (s *DriverReportService) CommitDriverReport(
 	if txErr != nil {
 		return nil, txErr
 	}
-	if result.AlreadyImported {
-		s.writeImportAudit(ctx, formID, yearMonth, result, actor)
-		return result, nil
-	}
 	result.Status = "succeeded"
 
-	s.writeImportAudit(ctx, formID, yearMonth, result, actor)
+	// 稽核留下檔案雜湊，事後才追得出某筆搭乘來源出自哪一次上傳；這不是重複判斷的依據
+	fileHash := fmt.Sprintf("sha256:%x", sha256.Sum256(data))
+	s.writeImportAudit(ctx, formID, yearMonth, fileHash, result, actor)
 
 	return result, nil
 }
@@ -177,6 +177,21 @@ func (s *DriverReportService) CommitDriverReport(
 type importableRow struct {
 	preview     RowPreview
 	serviceDate time.Time
+}
+
+// collectFileServiceDates 取出這份檔案解析得出的所有服務日期，含落在宣告月份以外、
+// 這一輪不寫入的列——那些日期會在各自月份的 commit 寫入本次的值，回填不該先用舊值蓋過去。
+func collectFileServiceDates(previewRows []RowPreview) []time.Time {
+	out := make([]time.Time, 0, len(previewRows))
+	for _, row := range previewRows {
+		if row.ServiceDate == "" {
+			continue
+		}
+		if date, err := time.Parse("2006-01-02", row.ServiceDate); err == nil {
+			out = append(out, date)
+		}
+	}
+	return out
 }
 
 // collectImportableRows 挑出可寫入的列，其餘連同原因記入 result.SkippedRows。
@@ -208,7 +223,7 @@ func collectImportableRows(previewRows []RowPreview, result *CommitResult) []imp
 }
 
 // writeImportAudit 留下匯入留痕。稽核寫入失敗不推翻已完成的匯入，只記錄於伺服器日誌。
-func (s *DriverReportService) writeImportAudit(ctx context.Context, formID uuid.UUID, yearMonth string, result *CommitResult, actor Actor) {
+func (s *DriverReportService) writeImportAudit(ctx context.Context, formID uuid.UUID, yearMonth, fileHash string, result *CommitResult, actor Actor) {
 	if s.auditRepo == nil {
 		return
 	}
@@ -219,7 +234,7 @@ func (s *DriverReportService) writeImportAudit(ctx context.Context, formID uuid.
 		Action:     "import",
 		EntityType: "driver_report_forms",
 		EntityID:   &entityID,
-		AfterData:  result.AuditSnapshot(formID, yearMonth),
+		AfterData:  result.AuditSnapshot(formID, yearMonth, fileHash),
 		IPAddress:  &actor.IPAddress,
 		UserAgent:  &actor.UserAgent,
 	}); err != nil {
@@ -229,14 +244,23 @@ func (s *DriverReportService) writeImportAudit(ctx context.Context, formID uuid.
 	}
 }
 
+// backfillTarget 是本次匯入剛從待維護變成已對應的欄位，其先前月份的既有回報需要補寫。
+type backfillTarget struct {
+	columnHeader string
+	columnIndex  int
+	caseID       uuid.UUID
+	legSeq       int16
+}
+
 // persistColumnDecisions 先把檔案中的所有個案欄位登記成 form_columns，再套用使用者
 // 在預覽畫面所做的對應決定；沒有決定的欄位維持既有狀態（首次出現即 pending）。
+// 回傳這次剛完成對應、需要補寫既有回報的欄位。
 func (s *DriverReportService) persistColumnDecisions(
 	ctx context.Context,
 	formID uuid.UUID,
 	preview *PreviewResult,
 	decisions []ColumnDecision,
-) error {
+) ([]backfillTarget, error) {
 	drafts := make([]ColumnDraft, 0, len(preview.Columns))
 	for _, c := range preview.Columns {
 		drafts = append(drafts, ColumnDraft{
@@ -249,22 +273,39 @@ func (s *DriverReportService) persistColumnDecisions(
 		})
 	}
 	if err := s.repo.UpsertColumns(ctx, formID, drafts); err != nil {
-		return err
+		return nil, err
 	}
 
+	var targets []backfillTarget
 	for _, d := range decisions {
 		status := d.MappingStatus
 		if status == "" {
 			status = "pending"
 		}
 		if status == "mapped" && (d.CaseID == nil || d.LegSeq == nil) {
-			return fmt.Errorf("欄位「%s」標記為已對應，但缺少個案或趟次", d.ColumnHeader)
+			return nil, fmt.Errorf("欄位「%s」標記為已對應，但缺少個案或趟次", d.ColumnHeader)
 		}
-		if err := s.repo.UpdateColumnMappingByHeader(ctx, formID, d.ColumnHeader, status, d.CaseID, d.LegSeq); err != nil {
-			return err
+		columnIndex, previousStatus, err := s.repo.UpdateColumnMappingByHeader(ctx, formID, d.ColumnHeader, status, d.CaseID, d.LegSeq)
+		if err != nil {
+			return nil, err
 		}
+		// 只有真的從非 mapped 變成 mapped 才補寫，比照待維護頁手動綁定的同一套條件；
+		// previousStatus 為空代表這個表頭不在這份表單，沒有既有回報可補
+		if status != "mapped" || previousStatus == "mapped" || previousStatus == "" {
+			continue
+		}
+		caseID, err := uuid.Parse(*d.CaseID)
+		if err != nil {
+			return nil, fmt.Errorf("欄位「%s」的個案編號格式錯誤：%w", d.ColumnHeader, err)
+		}
+		targets = append(targets, backfillTarget{
+			columnHeader: d.ColumnHeader,
+			columnIndex:  columnIndex,
+			caseID:       caseID,
+			legSeq:       *d.LegSeq,
+		})
 	}
-	return nil
+	return targets, nil
 }
 
 func parseOptionalUUID(raw string) *uuid.UUID {

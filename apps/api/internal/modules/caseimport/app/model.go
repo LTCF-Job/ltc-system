@@ -29,9 +29,12 @@ type CaseImportRowResult struct {
 	SheetName         string            `json:"sheetName"`
 	Name              string            `json:"name"`
 	NationalID        string            `json:"nationalId,omitempty"`
+	NationalIDInvalid bool              `json:"nationalIdInvalid"`
 	HouseholdType     string            `json:"householdType,omitempty"`
 	Gender            string            `json:"gender,omitempty"`
 	BirthDate         string            `json:"birthDate,omitempty"`
+	BirthDateRaw      string            `json:"birthDateRaw,omitempty"`
+	BirthDateInvalid  bool              `json:"birthDateInvalid"`
 	CareContactRole   string            `json:"careContactRole,omitempty"`
 	CareContactName   string            `json:"careContactName,omitempty"`
 	RegisteredAddress string            `json:"registeredAddress,omitempty"`
@@ -67,6 +70,7 @@ type CaseImportCommitResult struct {
 	ImportedCount        int                     `json:"importedCount"`
 	AlreadyImportedCount int                     `json:"alreadyImportedCount"`
 	FailedCount          int                     `json:"failedCount"`
+	StagedDuplicateCount int                     `json:"stagedDuplicateCount"`
 	SkippedRows          []CaseImportSkippedRow  `json:"skippedRows"`
 	FailedRows           []CaseImportSkippedRow  `json:"failedRows"`
 	Warnings             []CaseImportWarningItem `json:"warnings,omitempty"`

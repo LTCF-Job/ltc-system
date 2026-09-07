@@ -131,6 +131,9 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.POST("/cases/schedules", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.CreateSchedule)
 		apiV1.POST("/cases/import", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.caseImport.ImportExcel)
 		apiV1.POST("/masters/import", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.caseImport.ImportExcel)
+		apiV1.GET("/cases/import/duplicates", auth.RequirePermission(perm, customPerm, "masters_cases", "view"), h.kase.ListDuplicateCandidates)
+		apiV1.POST("/cases/import/duplicates/:id/reveal", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.RevealDuplicateCandidateNationalID)
+		apiV1.POST("/cases/import/duplicates/:id/resolve", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.ResolveDuplicateCandidate)
 
 		// 2. 單位主檔
 		apiV1.GET("/sites", auth.RequirePermission(perm, customPerm, "masters_sites", "view"), h.site.List)

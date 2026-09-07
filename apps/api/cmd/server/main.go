@@ -88,6 +88,7 @@ func main() {
 
 	// 初始化 Repositories
 	caseRepo := caseinfra.NewCaseRepository(pool)
+	caseDuplicateStagingRepo := caseinfra.NewCaseDuplicateStagingRepository(pool)
 	rideRepo := rideinfra.NewRideRepository(pool)
 	holidayRepo := holidayinfra.NewHolidayRepository(pool)
 	notificationRepo := notifyinfra.NewNotificationRepository(pool)
@@ -130,11 +131,12 @@ func main() {
 	siteSvc := masterapp.NewSiteService(mdSiteRepo, mdAudit)
 	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo, mdAudit, txRunner)
 	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg, mdAudit, txRunner)
-	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer(), txRunner)
+	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer(), caseDuplicateStagingRepo, txRunner)
 	excelAdapter := importinfra.NewExcelAdapter()
 	importSvc := importapp.NewImportService(
 		caseRegistrar{svc: caseSvc},
 		caseDuplicateFinder{svc: caseSvc},
+		caseDuplicateStager{svc: caseSvc},
 		importSiteLookup{repo: mdSiteRepo},
 		importVehicleLookup{repo: mdVehicleRepo},
 		caseRepo,

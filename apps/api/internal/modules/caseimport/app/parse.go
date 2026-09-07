@@ -209,24 +209,37 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			hasError := false
 			hasWarning := false
 
+			// 生日格式錯誤不擋列：個案照常建立，birth_date 留空、原始字串存 birth_date_raw，
+			// 由使用者於待維護頁就地補正（比照單位/車輛比對不到主檔的既有待維護模式）。
 			if strings.TrimSpace(getVal("生日")) != "" && birthDate == "" {
-				message := "生日：格式錯誤"
-				rowRes.ErrorMessage = appendMessage(rowRes.ErrorMessage, message)
-				errorsList = append(errorsList, CaseImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "生日", Message: message})
-				hasError = true
+				rowRes.BirthDateInvalid = true
+				rowRes.BirthDateRaw = getVal("生日")
+				message := "生日：格式錯誤，將建立個案並標記待補正"
+				rowRes.WarningMessage = appendMessage(rowRes.WarningMessage, message)
+				warningsList = append(warningsList, CaseImportWarningItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "生日", Message: message})
+				hasWarning = true
 			}
 
 			normalizedNationalID := strings.ToUpper(strings.TrimSpace(nationalID))
+			// 身分證字號格式錯誤同樣不擋列，也不保留原始錯誤字串（未通過格式驗證的字串
+			// 不套用加密管線）；個案標記待補正，使用者需於待維護頁重新完整輸入。
 			if normalizedNationalID != "" && !crypto.ValidateNationalID(normalizedNationalID) {
-				message := "身分證字號：格式錯誤"
-				rowRes.ErrorMessage = appendMessage(rowRes.ErrorMessage, message)
-				errorsList = append(errorsList, CaseImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "身分證字號", Message: message})
-				hasError = true
+				rowRes.NationalIDInvalid = true
+				message := "身分證字號：格式錯誤，將建立個案並標記待補正（需於待維護頁重新輸入）"
+				rowRes.WarningMessage = appendMessage(rowRes.WarningMessage, message)
+				warningsList = append(warningsList, CaseImportWarningItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "身分證字號", Message: message})
+				hasWarning = true
 			}
 
-			// 重複個案不擋匯入，僅提示；使用者需於預覽勾選才會在正式匯入時寫入。
+			// 重複個案不擋匯入；正式匯入時會建立為待裁決暫存列，不會直接建立個案。
+			// 格式錯誤的身分證字號不會被寫入，拿它算 HMAC 必定比不到任何個案，還會蓋掉
+			// 姓名比對；這一列實際上等同「沒有身分證字號」，比對鍵也要一致
+			duplicateLookupNationalID := normalizedNationalID
+			if rowRes.NationalIDInvalid {
+				duplicateLookupNationalID = ""
+			}
 			if !hasError && s.duplicates != nil {
-				dup, err := s.duplicates.FindDuplicate(ctx, normalizedNationalID, name)
+				dup, err := s.duplicates.FindDuplicate(ctx, duplicateLookupNationalID, name)
 				if err != nil {
 					message := "重複個案查詢失敗，請稍後重試"
 					rowRes.ErrorMessage = appendMessage(rowRes.ErrorMessage, message)
@@ -236,7 +249,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 					rowRes.IsDuplicate = true
 					rowRes.DuplicateCaseName = dup.CaseName
 					rowRes.DuplicateCaseID = &dup.CaseID
-					message := fmt.Sprintf("疑似重複個案（既有個案姓名 %s），預設略過，需勾選才會匯入", dup.CaseName)
+					message := fmt.Sprintf("疑似重複個案（既有個案姓名 %s），正式匯入時將建立為待裁決項目，不會直接建立個案", dup.CaseName)
 					rowRes.WarningMessage = appendMessage(rowRes.WarningMessage, message)
 					warningsList = append(warningsList, CaseImportWarningItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "重複個案", Message: message})
 					hasWarning = true
@@ -271,6 +284,8 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 				"homeAddress":       homeAddress,
 				"remarks":           remarks,
 				"isDuplicate":       rowRes.IsDuplicate,
+				"birthDateInvalid":  rowRes.BirthDateInvalid,
+				"nationalIdInvalid": rowRes.NationalIDInvalid,
 				"__hasError":        hasError,
 				"__hasWarning":      hasWarning,
 			}

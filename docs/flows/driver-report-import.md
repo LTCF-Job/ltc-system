@@ -29,9 +29,12 @@ covers:
     主色「選擇檔案」按鈕，再往下是重複上傳提示與每個檔案一列的表格。拖曳或選取多個 `.xlsx` 檔案，
     每個檔案是表格中的一列，不需先選月份，也沒有送出按鈕——整批解析完就自動匯入。
   - 每個檔案一加入就自動 dry run（不帶 `yearMonth`）取得預覽，前端由預覽列的 `serviceDate` 推導
-    該檔案涵蓋的月份（可能不只一個月），顯示在該列的「涵蓋月份」欄；若涵蓋月份已有資料，表格上方
-    跳出提示（比照舊版 Google 表單同步「此月份已同步過」的提醒寫法，但說明的是逐筆比對而非覆蓋），
-    自動匯入停在這裡等使用者勾選確認，勾完才續跑，而不是匯入後才用彈出視窗攔截。
+    該檔案涵蓋的月份（可能不只一個月），顯示在該列的「涵蓋月份」欄；涵蓋月份已有資料時不做任何
+    攔截，解析完就直接匯入——逐列比對本來就不覆蓋，值不同的會進待維護等裁決。
+  - 匯入結果由 `importSummary.ts` 的 `describeImportResult` 把後端回傳的
+    `importedRows`／`rideRecordRows`／`reaffirmedRows`／`pendingConflictRows`／`backfilledRows`
+    組成一行說明。重傳同一份檔案時 `rideRecordRows` 為 0、`reaffirmedRows` 有數字，畫面顯示
+    「內容與既有資料完全相同」，不能顯示成「沒有可寫入的搭乘資料」。
   - 欄位對應不再要求使用者逐欄確認才能匯入：有系統推薦個案的欄位自動視為已對應，完全比對不到
     個案的欄位維持 `pending`，兩者都直接跟著這次 commit 一起送出。
   - commit 時針對推導出的每個月份各自呼叫一次、各帶對應的 `yearMonth`；後端逐列比對既有資料，
@@ -71,16 +74,23 @@ covers:
   > 宣告月份時檢查所有有效列都落在該月，不符即整份拒絕
   > [dryRun] 回傳預覽，使用者就地確認未對應欄位
   > CommitDriverReport（宣告月份時先確認預覽 `CanCommit`；以下寫入全部在同一個 pgxdb.TxRunner 交易內）
-      > persistColumnDecisions 寫回 form_columns（以表頭文字為鍵）
+      > persistColumnDecisions 寫回 form_columns（以表頭文字為鍵），
+        並收集這次真正 pending -> mapped 的欄位供稍後回填
       > collectImportableRows 挑出可寫入的列，其餘記入 SkippedRows
       > 逐列 ride.IngestSubmission（不再先清除既有資料，每次上傳是獨立事件）
           > SaveFormSubmission：一車一天一筆，同一天原地更新 payload／submitted_at，
             driver_id 用 COALESCE 保留既有值，不被這次沒解析出的司機蓋成 NULL
           > 司機比對不到司機主檔時，這一列完全不展開成搭乘來源（留在 payload 待補綁定）
           > 逐欄呼叫 reconcileRideSource（見下方「同車同個案逐列比對」）
+      > 逐個剛完成對應的欄位呼叫 ride.BackfillColumn 補寫先前月份，計入 backfilledRows
+        （必須排在上面的逐列寫入之後，理由見下方「匯入時的欄位回填」）
       > MarkImported
   > writeImportAudit（交易外，失敗只記錄不推翻匯入）
 ```
+
+匯入不再有檔案層級的重複判斷：`driver_report_imports` 與 `ClaimDriverReportImport` 已於
+migration `000036` 移除，冪等單獨由 `reconcileRideSource` 保證。`LockDriverReportImport`
+（advisory lock）與前端 `commitMonthOnce` 的本地去重都保留，防的是併發與重複送出。
 
 模組交界在 `RideIngestor` port，由 `cmd/server/module_adapters.go` 的
 `driverReportRideIngestor` 銜接 driverreport 與 ride。
@@ -196,8 +206,13 @@ POST /attendance/conflicts/:id/resolve { choice }
 ## Failure modes
 
 - **重複匯入**：每次上傳是獨立事件，逐列比對既有資料——值相同視為重複回報，不重新寫入；值不同
-  暫存衝突讓使用者選擇；未被本次上傳觸及的既有資料完全不受影響。決策與替代方案見
+  暫存衝突讓使用者選擇；未被本次上傳觸及的既有資料完全不受影響。沒有檔案層級的重複判斷，重傳
+  同一份檔案照樣完整跑一次比對，結果會是 `rideRecordRows: 0` 但 `reaffirmedRows` 有數字。
+  決策與替代方案見
   [driver-report-import-overwrite.md](../decisions/driver-report-import-overwrite.md)。
+- **裁決後重傳**：使用者對某筆衝突裁決「保留原資料」後，重傳同一份（與既有資料仍不同的）檔案
+  會**重新產生一筆未解決衝突**，因為 `uq_ride_source_row_conflict_open` 只涵蓋
+  `resolved_at IS NULL`。這是刻意行為：每次上傳都重新判斷，不讓比對不上的資料被系統自行吞掉。
 - **解析層級失敗**：未宣告月份時，日期打錯的列逐列略過並記入 `SkippedRows`；宣告整月時，日期無法解析是
   blocking error，整份拒絕不寫入任何資料。
 - **資料庫層級失敗**：整份回滾，`last_imported_at` 不更新。
@@ -252,6 +267,36 @@ commit 展開成 `ride_sources`／`ride_records`——任一條件不成立時�
 `ride_records`——不需要使用者重新上傳原始檔案，回應會帶回本次實際補寫的筆數
 （`backfilledRows`）。只有「這一次是從非 mapped 變成 mapped」才會觸發回填，重複對已經是
 mapped 的欄位送出同樣的更新不會再次回填，避免疊加出重複的搭乘來源。
+
+### 匯入時的欄位回填
+
+匯入路徑走的是同一套觸發條件。某個欄位先前比對不到個案而留在 `pending`，之後個案建好了、
+下一次上傳時 `bestCaseMatch` 比對到並自動送出 `mapped`，`persistColumnDecisions` 會從
+`UpdateColumnMappingByHeader` 回傳的更新前狀態判斷這是「這次才從 `pending` 變 `mapped`」，
+收集起來在逐列寫入後呼叫 `BackfillColumn`，把先前月份留在 `form_submissions.payload` 的原始值
+補寫進去，筆數回傳為 `backfilledRows`。
+
+少了這一步會靜默掉資料：待維護清單是 `mapping_status = 'pending'` 與 payload 的交叉查詢，
+欄位一旦變 `mapped` 就查不到，先前月份的值還在 payload 裡卻再也沒有任何入口撈得出來——待維護
+不顯示、匯入不回頭補、手動綁定也因為 `previousStatus` 已是 `mapped` 而不觸發。
+
+這條路徑有兩個一起才成立的保護，少任何一個都會製造假衝突：
+
+1. **`BackfillColumn` 必須排在逐列 `IngestSubmission` 之後**：`SaveFormSubmission` 以
+   `(form_id, service_date)` 原地更新，先回填會讀到本次涵蓋日期更新前的舊答案並寫入，接著本次的
+   新值再比對一次，就會憑空產生一筆使用者其實沒遇到的衝突。排在之後，本次月份各天都走
+   Reaffirmed 跳過。由 `TestCommitDriverReport_BackfillRunsAfterIngest` 鎖住。
+2. **回填要排除這份檔案涵蓋的所有服務日期，不只本次宣告的月份**：`ListSubmissionAnswersForColumn`
+   沒有日期條件，回填範圍是整份表單的全部歷史；而跨月檔案是逐月各送一次 commit，先 commit 的
+   那個月執行回填時，其他月份的 payload 還是上一次上傳的舊值，補進去就會在下一輪被本次新值比出
+   一批假衝突。因此 `commit.go` 用 `collectFileServiceDates` 從 `preview.PreviewRows` 取出檔案裡
+   每一列的服務日期（含被標成「不屬於宣告月份」的列），整批當作 `BackfillColumn` 的 `skipDates`
+   傳入——這些日期的權威值是使用者手上這份檔案，會在各自月份的 commit 正常寫入。由
+   `TestCommitDriverReport_BackfillSkipsEveryDateInTheFile` 與
+   `TestBackfillColumn_SkipsDatesOwnedByTheCaller` 鎖住。
+
+待維護頁的手動綁定沒有這個問題，`skipDates` 傳 `nil`：那時沒有「另有來源」的日期，該欄位留下的
+既有回報全部都要補寫。
 
 ## Unverified
 

@@ -2,21 +2,23 @@ package app
 
 // ImportService 負責批次 Excel 個案資料之解析、預覽與匯入。
 type ImportService struct {
-	cases       CaseRegistrar
-	duplicates  CaseDuplicateFinder
-	siteRepo    SiteLookup
-	vehicleRepo VehicleLookup
-	prefRepo    TransportPreferenceWriter
-	spreadsheet SpreadsheetReader
-	template    TemplateRenderer
-	txRunner    TxRunner
-	idempotency CaseImportIdempotencyStore
+	cases           CaseRegistrar
+	duplicates      CaseDuplicateFinder
+	duplicateStager DuplicateCandidateStager
+	siteRepo        SiteLookup
+	vehicleRepo     VehicleLookup
+	prefRepo        TransportPreferenceWriter
+	spreadsheet     SpreadsheetReader
+	template        TemplateRenderer
+	txRunner        TxRunner
+	idempotency     CaseImportIdempotencyStore
 }
 
 // NewImportService 建立 ImportService 實例。
 func NewImportService(
 	cases CaseRegistrar,
 	duplicates CaseDuplicateFinder,
+	duplicateStager DuplicateCandidateStager,
 	siteRepo SiteLookup,
 	vehicleRepo VehicleLookup,
 	prefRepo TransportPreferenceWriter,
@@ -25,14 +27,15 @@ func NewImportService(
 	txRunner TxRunner,
 ) *ImportService {
 	return &ImportService{
-		cases:       cases,
-		duplicates:  duplicates,
-		siteRepo:    siteRepo,
-		vehicleRepo: vehicleRepo,
-		prefRepo:    prefRepo,
-		spreadsheet: spreadsheet,
-		template:    template,
-		txRunner:    txRunner,
+		cases:           cases,
+		duplicates:      duplicates,
+		duplicateStager: duplicateStager,
+		siteRepo:        siteRepo,
+		vehicleRepo:     vehicleRepo,
+		prefRepo:        prefRepo,
+		spreadsheet:     spreadsheet,
+		template:        template,
+		txRunner:        txRunner,
 	}
 }
 

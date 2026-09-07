@@ -166,16 +166,16 @@ type MonthDetail struct {
 
 // CommitResult 回傳正式匯入寫入與略過的結果。ImportedRows／RideRecordRows 只算真正
 // 新增的筆數；ReaffirmedRows 是值與既有資料相同的重複回報；PendingConflictRows 是
-// 因為與既有資料不同、已進入待維護等待使用者選擇的筆數——三者分開計算，不能只看單一
-// 數字就以為這次上傳「沒問題」。
+// 因為與既有資料不同、已進入待維護等待使用者選擇的筆數；BackfilledRows 是本次有欄位
+// 從待維護變成已對應而順帶補寫的先前月份筆數——這幾個數字分開計算，不能只看單一數字
+// 就以為這次上傳「沒問題」。
 type CommitResult struct {
 	Status              string              `json:"status"`
-	FileHash            string              `json:"fileHash,omitempty"`
-	AlreadyImported     bool                `json:"alreadyImported"`
 	ImportedRows        int                 `json:"importedRows"`
 	RideRecordRows      int                 `json:"rideRecordRows"`
 	ReaffirmedRows      int                 `json:"reaffirmedRows"`
 	PendingConflictRows int                 `json:"pendingConflictRows"`
+	BackfilledRows      int                 `json:"backfilledRows"`
 	MappedColumns       int                 `json:"mappedColumns"`
 	SkippedRows         []SkippedRow        `json:"skippedRows"`
 	Warnings            []ImportWarningItem `json:"warnings,omitempty"`
@@ -188,23 +188,24 @@ type DriverReportImportAuditSnapshot struct {
 	YearMonth           string    `json:"yearMonth,omitempty"`
 	Status              string    `json:"status"`
 	FileHash            string    `json:"fileHash,omitempty"`
-	AlreadyImported     bool      `json:"alreadyImported"`
 	ImportedRows        int       `json:"importedRows"`
 	RideRecordRows      int       `json:"rideRecordRows"`
 	ReaffirmedRows      int       `json:"reaffirmedRows"`
 	PendingConflictRows int       `json:"pendingConflictRows"`
+	BackfilledRows      int       `json:"backfilledRows"`
 	MappedColumns       int       `json:"mappedColumns"`
 	SkippedRows         int       `json:"skippedRows"`
 	WarningRows         int       `json:"warningRows"`
 }
 
-// AuditSnapshot 產生匯入完成狀態的明確稽核摘要。
-func (r CommitResult) AuditSnapshot(formID uuid.UUID, yearMonth string) DriverReportImportAuditSnapshot {
+// AuditSnapshot 產生匯入完成狀態的明確稽核摘要。fileHash 只用來事後追溯這批資料出自
+// 哪一次上傳，不參與任何重複判斷——重複與否一律由逐列比對決定。
+func (r CommitResult) AuditSnapshot(formID uuid.UUID, yearMonth, fileHash string) DriverReportImportAuditSnapshot {
 	return DriverReportImportAuditSnapshot{
-		FormID: formID, YearMonth: yearMonth, Status: r.Status, FileHash: r.FileHash,
-		AlreadyImported: r.AlreadyImported, ImportedRows: r.ImportedRows,
-		RideRecordRows: r.RideRecordRows, ReaffirmedRows: r.ReaffirmedRows,
-		PendingConflictRows: r.PendingConflictRows, MappedColumns: r.MappedColumns,
+		FormID: formID, YearMonth: yearMonth, Status: r.Status, FileHash: fileHash,
+		ImportedRows: r.ImportedRows, RideRecordRows: r.RideRecordRows,
+		ReaffirmedRows: r.ReaffirmedRows, PendingConflictRows: r.PendingConflictRows,
+		BackfilledRows: r.BackfilledRows, MappedColumns: r.MappedColumns,
 		SkippedRows: len(r.SkippedRows), WarningRows: len(r.Warnings),
 	}
 }
