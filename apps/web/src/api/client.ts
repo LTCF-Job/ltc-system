@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
 import router from '@/router'
 import type { ApiError } from '@/types/api'
-import { resolveErrorMessage } from './errorCodes'
+import { resolveApiErrorMessage, NETWORK_ERROR_MESSAGE, TIMEOUT_ERROR_MESSAGE } from './errorCodes'
 export { createPaginationMeta, unwrapData, unwrapPaged } from './envelope'
 
 export const apiClient = axios.create({
@@ -65,12 +65,22 @@ apiClient.interceptors.response.use(
     }
 
     if (status === 403) {
-      ElMessage.warning('權限不足，無法執行此操作')
+      ElMessage.warning(resolveApiErrorMessage(apiError, '權限不足，無法執行此操作'))
       return Promise.reject(error)
     }
 
-    // 一律依錯誤碼查表顯示非技術性訊息，不直接信任後端或 axios 回傳的原始 message 字串
-    const message = resolveErrorMessage(apiError?.code)
+    // 完全沒有回應代表請求沒走到後端，這與「後端回報錯誤」是兩種不同的處置，
+    // 混成同一句通用訊息會讓使用者以為是系統壞掉而不是自己斷線。
+    if (!error.response) {
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+      const timedOut = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
+      ElMessage.error(timedOut && !offline ? TIMEOUT_ERROR_MESSAGE : NETWORK_ERROR_MESSAGE)
+      return Promise.reject(error)
+    }
+
+    // 後端 message 由 handler 寫死且經 arch test 把關不含技術細節，優先顯示它才能說明
+    // 具體原因；缺漏時才退回錯誤碼字典。
+    const message = resolveApiErrorMessage(apiError)
 
     // 常用欄位代碼轉繁體中文標籤，讓錯誤清單明確告知使用者有問題的欄位
     const FIELD_LABELS: Record<string, string> = {
@@ -94,6 +104,9 @@ apiClient.interceptors.response.use(
       code: '代碼'
     }
 
+    // 伺服器端錯誤才附上請求識別碼；使用者回報時後端能直接用它查 log。
+    const traceSuffix = status && status >= 500 && apiError?.requestId ? `（錯誤編號 ${apiError.requestId}）` : ''
+
     // 若有詳細欄位錯誤清單，以通知元件條列呈現
     if (apiError?.details && apiError.details.length > 0) {
       ElNotification({
@@ -104,11 +117,12 @@ apiClient.interceptors.response.use(
             const label = d.field ? FIELD_LABELS[d.field] || d.field : ''
             return `${label ? `【${label}】` : ''}${d.reason}`
           })
+          .concat(traceSuffix ? [traceSuffix] : [])
           .join('\n'),
         duration: 6000
       })
     } else {
-      ElMessage.error(message)
+      ElMessage.error(`${message}${traceSuffix}`)
     }
 
     return Promise.reject(error)

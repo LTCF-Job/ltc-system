@@ -21,23 +21,23 @@ func NewCaregiverRepository(db *pgxpool.Pool) *CaregiverRepository {
 	return &CaregiverRepository{db: db}
 }
 
-// List 取得照護人員清單，支援關鍵字、狀態、單位待關聯與資料待補齊篩選。excludePending 為 true
-// 時排除單位待關聯（site_name_raw 未關聯既有據點）的資料列，供主列表與「待維護」分頁互斥呈現。
-func (r *CaregiverRepository) List(ctx context.Context, q, status string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]app.Caregiver, int64, error) {
+// List 取得照護人員清單，支援關鍵字、狀態與待維護篩選。待維護的判定是 caregivers.is_pending
+// 這個 generated column（姓名或類型未填寫），pending 只取待維護資料列，excludePending 反之排除，
+// 供主列表與「待維護」分頁互斥呈現。
+func (r *CaregiverRepository) List(ctx context.Context, q, status string, pending, excludePending bool, page, pageSize int) ([]app.Caregiver, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT ` + caregiverColumns + `
 		FROM caregivers c
 		LEFT JOIN sites s ON s.id = c.site_id
 		WHERE ($1 = '' OR c.name ILIKE '%' || $1 || '%')
-		  AND ($2 = false OR (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> ''))
-		  AND ($3 = false OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = '')
-		  AND ($6 = false OR NOT (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> ''))
-		  AND ($7 = '' OR c.status = $7)
+		  AND ($2 = false OR c.is_pending)
+		  AND ($3 = false OR NOT c.is_pending)
+		  AND ($6 = '' OR c.status = $6)
 		ORDER BY c.name ASC
 		LIMIT $4 OFFSET $5
 	`
-	rows, err := r.db.Query(ctx, query, q, unresolvedLink, incomplete, pageSize, offset, excludePending, status)
+	rows, err := r.db.Query(ctx, query, q, pending, excludePending, pageSize, offset, status)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query caregivers: %w", err)
 	}
@@ -56,12 +56,11 @@ func (r *CaregiverRepository) List(ctx context.Context, q, status string, unreso
 	countQuery := `
 		SELECT COUNT(*) FROM caregivers c
 		WHERE ($1 = '' OR c.name ILIKE '%' || $1 || '%')
-		  AND ($2 = false OR (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> ''))
-		  AND ($3 = false OR c.contact IS NULL OR c.contact = '' OR c.notes IS NULL OR c.notes = '')
-		  AND ($4 = false OR NOT (c.site_id IS NULL AND c.site_name_raw IS NOT NULL AND c.site_name_raw <> ''))
-		  AND ($5 = '' OR c.status = $5)
+		  AND ($2 = false OR c.is_pending)
+		  AND ($3 = false OR NOT c.is_pending)
+		  AND ($4 = '' OR c.status = $4)
 	`
-	_ = r.db.QueryRow(ctx, countQuery, q, unresolvedLink, incomplete, excludePending, status).Scan(&total)
+	_ = r.db.QueryRow(ctx, countQuery, q, pending, excludePending, status).Scan(&total)
 
 	return list, total, nil
 }

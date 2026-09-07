@@ -71,6 +71,15 @@ func (s *stubService) BindPendingDriver(context.Context, string, string) (int, e
 func (s *stubService) ResolveRowConflict(context.Context, string, bool, app.Actor) error {
 	return nil
 }
+func (s *stubService) IgnoreColumn(context.Context, string, app.Actor) error {
+	return nil
+}
+func (s *stubService) IgnoreRowConflict(context.Context, string, app.Actor) error {
+	return nil
+}
+func (s *stubService) IgnoreSubmission(context.Context, string, app.Actor) error {
+	return nil
+}
 func (s *stubService) TemplateExcel(context.Context, uuid.UUID) ([]byte, string, error) {
 	data, err := infra.NewExcelAdapter().RenderDriverReportTemplate("竹南2車", []string{"1.吳桂 [去程]"})
 	return data, "竹南2車", err

@@ -212,7 +212,7 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right" align="center" class-name="unresolved-action-col">
+          <el-table-column label="操作" width="180" fixed="right" align="center" class-name="unresolved-action-col">
             <template #default="{ row }">
               <TableRowActions>
                 <el-button v-if="row.kind === 'case'" link type="primary" size="small" @click="openPendingCaseEdit(row as PendingCaseRow)">
@@ -220,6 +220,15 @@
                 </el-button>
                 <el-button v-else link type="primary" size="small" @click="openDuplicateResolve(row as PendingDuplicateRow)">
                   人工裁決
+                </el-button>
+                <el-button
+                  v-if="authStore.hasPermission('masters_cases', 'delete')"
+                  link
+                  type="danger"
+                  size="small"
+                  @click="handleIgnorePendingRow(row as PendingRow)"
+                >
+                  忽略此筆
                 </el-button>
               </TableRowActions>
             </template>
@@ -428,7 +437,8 @@ import {
   updateCaseTransportPreference,
   listCaseDuplicateCandidates,
   revealCaseDuplicateCandidateNationalId,
-  resolveCaseDuplicateCandidate
+  resolveCaseDuplicateCandidate,
+  discardCaseDuplicateCandidate
 } from '@/api/cases'
 import { listAllSites, listAllVehicles, listSites, listVehicles, createSite, createVehicle } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
@@ -491,8 +501,8 @@ const {
       pageSize: pageSize.value,
       q: filters.q,
       region: filters.region,
-      status: filters.status,
-      excludePending: true
+      status: filters.status
+      // 待維護個案由後端預設排除，主清單不需要另外表態
     })
     cases.value = res.data
     total.value = res.meta.total
@@ -539,6 +549,36 @@ async function handleDeleteCase(row: CaseDTO) {
     await deleteCase(row.id)
     ElMessage.success(`個案「${row.name}」已成功刪除`)
     executeFetch()
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
+  }
+}
+
+// 忽略此筆：兩種待維護列的刪除對象不同——個案列刪的是個案本體（軟刪除並收斂排班），
+// 疑似重複列刪的只是尚未建立個案的匯入暫存列，因此文案與 API 都分開處理。
+async function handleIgnorePendingRow(row: PendingRow) {
+  const isCase = row.kind === 'case'
+  const message = isCase
+    ? `確定要忽略待維護個案「${row.name}」？將直接刪除這筆個案並一併移除其關聯排班資料，無法復原。`
+    : `確定要忽略疑似重複個案「${row.name}」？將直接刪除這筆匯入暫存資料，不會建立個案。若之後重新匯入同一份檔案，這筆仍會再次出現。`
+
+  try {
+    await ElMessageBox.confirm(message, '忽略確認', {
+      confirmButtonText: '忽略並刪除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger'
+    })
+
+    if (isCase) {
+      await deleteCase(row.id)
+      unresolvedCases.value = unresolvedCases.value.filter((c) => c.id !== row.id)
+      executeFetch()
+    } else {
+      await discardCaseDuplicateCandidate(row.id)
+      duplicateCandidates.value = duplicateCandidates.value.filter((d) => d.id !== row.id)
+    }
+    ElMessage.success(`已忽略「${row.name}」`)
   } catch {
     // 使用者取消或 API 錯誤皆不在此重複顯示。
   }

@@ -74,7 +74,9 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 			COUNT(r.id) AS total_count
 		FROM cases c
 		JOIN ride_records r ON r.case_id = c.id
+		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE r.vehicle_id = $1
+		  AND NOT ps.is_pending
 		  AND r.service_date >= $2 AND r.service_date < $3
 		  AND r.effective_status = 'boarded'
 		GROUP BY c.id, c.name
@@ -137,8 +139,10 @@ func (r *ReportRepository) QueryHsinchuScheduleDataAsOf(ctx context.Context, asO
 		JOIN cases c ON c.id = cs.case_id
 		JOIN sites s ON s.id = cs.site_id
 		LEFT JOIN vehicles v ON v.id = l.vehicle_id
+		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.region = 'hsinchu'
 		  AND c.status = 'active'
+		  AND NOT ps.is_pending
 		  AND cs.effective_range @> $1::date
 	`
 	var args []interface{}

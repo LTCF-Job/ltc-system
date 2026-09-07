@@ -32,6 +32,9 @@ type DriverReportServiceInterface interface {
 	ListSubmissionReview(ctx context.Context) ([]app.SubmissionReview, error)
 	BindPendingDriver(ctx context.Context, driverNameRaw, driverID string) (int, error)
 	ResolveRowConflict(ctx context.Context, conflictID string, useNew bool, actor app.Actor) error
+	IgnoreColumn(ctx context.Context, colID string, actor app.Actor) error
+	IgnoreRowConflict(ctx context.Context, conflictID string, actor app.Actor) error
+	IgnoreSubmission(ctx context.Context, submissionID string, actor app.Actor) error
 	TemplateExcel(ctx context.Context, formID uuid.UUID) ([]byte, string, error)
 	ParseDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, yearMonth string) (*app.PreviewResult, error)
 	CommitDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, decisions []app.ColumnDecision, yearMonth string, actor app.Actor) (*app.CommitResult, error)
@@ -105,7 +108,7 @@ func (h *DriverReportHandler) GetMonthDetail(c *gin.Context) {
 func (h *DriverReportHandler) CreateForm(c *gin.Context) {
 	var req CreateFormRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -115,7 +118,7 @@ func (h *DriverReportHandler) CreateForm(c *gin.Context) {
 		return
 	}
 	if form == nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "建立匯報表失敗，請稍後再試", nil)
 		return
 	}
 	httpx.RespondSuccess(c, http.StatusCreated, toFormListItemDTO(*form), nil)
@@ -225,7 +228,7 @@ func (h *DriverReportHandler) ListColumns(c *gin.Context) {
 func (h *DriverReportHandler) UpdateColumnMapping(c *gin.Context) {
 	var req UpdateColumnMappingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -249,7 +252,7 @@ func (h *DriverReportHandler) UpdateColumnMapping(c *gin.Context) {
 func (h *DriverReportHandler) BatchMapping(c *gin.Context) {
 	var req BatchMappingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -304,7 +307,7 @@ func (h *DriverReportHandler) ListSubmissionReview(c *gin.Context) {
 func (h *DriverReportHandler) BindDriver(c *gin.Context) {
 	var req BindDriverRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -321,7 +324,7 @@ func (h *DriverReportHandler) BindDriver(c *gin.Context) {
 func (h *DriverReportHandler) ResolveRowConflict(c *gin.Context) {
 	var req ResolveRowConflictRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -336,6 +339,63 @@ func (h *DriverReportHandler) ResolveRowConflict(c *gin.Context) {
 		return
 	}
 	httpx.RespondSuccess(c, http.StatusOK, gin.H{"success": true}, nil)
+}
+
+// IgnoreColumn 忽略一筆欄位對應待維護資料，直接把該列從系統刪除。
+func (h *DriverReportHandler) IgnoreColumn(c *gin.Context) {
+	err := h.svc.IgnoreColumn(c.Request.Context(), c.Param("id"), app.Actor{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
+	if err != nil {
+		if errors.Is(err, app.ErrPendingItemNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
+}
+
+// IgnoreRowConflict 忽略一筆「同車同個案」衝突，直接把該衝突列從系統刪除。
+func (h *DriverReportHandler) IgnoreRowConflict(c *gin.Context) {
+	err := h.svc.IgnoreRowConflict(c.Request.Context(), c.Param("id"), app.Actor{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
+	if err != nil {
+		if errors.Is(err, app.ErrPendingItemNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
+}
+
+// IgnoreSubmission 忽略一筆駕駛人未比對到司機主檔的匯報列，直接把該列從系統刪除。
+func (h *DriverReportHandler) IgnoreSubmission(c *gin.Context) {
+	err := h.svc.IgnoreSubmission(c.Request.Context(), c.Param("id"), app.Actor{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	})
+	if err != nil {
+		if errors.Is(err, app.ErrPendingItemNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeFormMappingFailed, err, nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
 }
 
 func parseFormID(c *gin.Context) (uuid.UUID, bool) {
@@ -360,7 +420,7 @@ func respondImportInputError(c *gin.Context, field, reason string) {
 // 只顯示通用訊息會讓操作人員無從得知該改哪一欄。
 func respondReportError(c *gin.Context, err error) {
 	if errors.Is(err, app.ErrFormNotFound) {
-		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "", nil)
+		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無此匯報表，可能已被刪除，請重新整理後再試", nil)
 		return
 	}
 	reason := "檔案內容無法解析，請確認為符合範本的 .xlsx 檔案"

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -174,6 +175,15 @@ func MiddlewareWithUserState(cfg *config.Config, userState UserStateResolver) gi
 		if userState != nil {
 			active, err := userState.Validate(c.Request.Context(), GetActorID(c), GetActorRole(c))
 			if err != nil {
+				// 這裡是所有已驗證請求的必經路徑，錯誤不記錄就只剩一個沒有成因的 503；
+				// 訊息只進伺服器日誌，回應本身仍維持非技術性字串。
+				slog.Error("user_state_validation_failed",
+					slog.String("request_id", httpx.RequestID(c)),
+					slog.String("path", c.Request.URL.Path),
+					slog.String("actor_id", GetActorID(c).String()),
+					slog.String("error_type", fmt.Sprintf("%T", err)),
+					slog.String("error_message", err.Error()),
+				)
 				httpx.RespondError(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "無法確認使用者狀態", nil)
 				return
 			}

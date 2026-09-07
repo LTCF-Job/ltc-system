@@ -53,7 +53,7 @@ func (h *RoleHandler) GetRole(c *gin.Context) {
 func (h *RoleHandler) CreateRole(c *gin.Context) {
 	var req createRoleRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -81,7 +81,7 @@ func (h *RoleHandler) UpdateRole(c *gin.Context) {
 
 	var req updateRoleRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 

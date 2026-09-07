@@ -36,9 +36,16 @@ func (testExcelReader) ReadTables(data []byte) ([][][]string, []string, error) {
 }
 
 // fakeCaregiverSiteLookup resolves a fixed set of names to sites; anything else is "not found".
-type fakeCaregiverSiteLookup struct{ byName map[string]uuid.UUID }
+// err 模擬查詢本身故障，與「查無單位」是不同的路徑。
+type fakeCaregiverSiteLookup struct {
+	byName map[string]uuid.UUID
+	err    error
+}
 
 func (f fakeCaregiverSiteLookup) GetByName(ctx context.Context, name string) (*SiteRef, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
 	id, ok := f.byName[name]
 	if !ok {
 		return nil, ErrCaregiverSiteNotFound
@@ -74,7 +81,7 @@ func xlsxReader(t *testing.T, header []string, rows ...[]string) *bytes.Reader {
 
 var caregiverHeader = []string{"單位", "姓名", "類型", "聯絡方式", "備註"}
 
-func TestParseCaregivers_SkipsRowMissingName(t *testing.T) {
+func TestParseCaregivers_KeepsRowMissingNameAsPending(t *testing.T) {
 	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
@@ -84,12 +91,14 @@ func TestParseCaregivers_SkipsRowMissingName(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, preview.TotalRows)
-	assert.Equal(t, 1, preview.ValidRows)
-	assert.Equal(t, 1, preview.ErrorRows)
-	require.Len(t, preview.Errors, 1)
-	assert.Equal(t, 2, preview.Errors[0].RowIndex, "姓名缺漏的第 2 列應歸入 Errors 而不進入可匯入列")
-	require.Len(t, preview.Rows, 1)
-	assert.Equal(t, "王大明", preview.Rows[0].Name)
+	assert.Equal(t, 2, preview.ValidRows, "姓名缺漏不再擋列，改以空白建立並列入待維護")
+	assert.Equal(t, 0, preview.ErrorRows)
+	assert.Empty(t, preview.Errors)
+	require.Len(t, preview.Rows, 2)
+	assert.Equal(t, "", preview.Rows[0].Name)
+	assert.Contains(t, preview.Rows[0].WarningMessage, "姓名")
+	assert.Equal(t, "王大明", preview.Rows[1].Name)
+	assert.Empty(t, preview.Rows[1].WarningMessage)
 }
 
 func TestParseCaregivers_IgnoresFullyBlankRow(t *testing.T) {
@@ -107,7 +116,7 @@ func TestParseCaregivers_IgnoresFullyBlankRow(t *testing.T) {
 	assert.Empty(t, preview.Errors)
 }
 
-func TestParseCaregivers_SkipsRowWithMissingOrInvalidType(t *testing.T) {
+func TestParseCaregivers_KeepsRowWithMissingOrInvalidTypeAsPending(t *testing.T) {
 	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
@@ -118,16 +127,18 @@ func TestParseCaregivers_SkipsRowWithMissingOrInvalidType(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 3, preview.TotalRows)
-	assert.Equal(t, 1, preview.ValidRows, "類型缺漏或不是個管／專護的列都應略過")
-	require.Len(t, preview.Errors, 2)
-	assert.Equal(t, "類型", preview.Errors[0].Field)
-	assert.Equal(t, "類型", preview.Errors[1].Field)
-	require.Len(t, preview.Rows, 1)
-	assert.Equal(t, "李美玲", preview.Rows[0].Name)
-	assert.Equal(t, CaregiverTypeCaseManager, preview.Rows[0].Type)
+	assert.Equal(t, 3, preview.ValidRows, "類型缺漏或不是個管／專護都改以空白建立並列入待維護")
+	assert.Empty(t, preview.Errors)
+	require.Len(t, preview.Rows, 3)
+	assert.Equal(t, "", preview.Rows[0].Type)
+	assert.Contains(t, preview.Rows[0].WarningMessage, "類型")
+	assert.Equal(t, "", preview.Rows[1].Type, "「居服員」不是固定選項，同樣存成空白")
+	assert.Contains(t, preview.Rows[1].WarningMessage, "類型")
+	assert.Equal(t, "李美玲", preview.Rows[2].Name)
+	assert.Equal(t, CaregiverTypeCaseManager, preview.Rows[2].Type)
 }
 
-func TestParseCaregivers_KeepsRawSiteNameWhenSiteNotFound(t *testing.T) {
+func TestParseCaregivers_LeavesSiteUnlinkedWhenSiteNotFound(t *testing.T) {
 	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{byName: map[string]uuid.UUID{}}, testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
@@ -138,12 +149,11 @@ func TestParseCaregivers_KeepsRawSiteNameWhenSiteNotFound(t *testing.T) {
 	require.Len(t, preview.Rows, 1)
 	row := preview.Rows[0]
 	assert.Nil(t, row.SiteID, "單位比對不到時應保留 SiteID 為 nil")
-	assert.Equal(t, "查無此單位", row.SiteName)
 	assert.Equal(t, CaregiverTypeSpecialist, row.Type)
-	assert.NotEmpty(t, row.WarningMessage)
+	assert.Empty(t, row.WarningMessage, "單位比對不到只留白，不再列為待維護或產生警告")
 }
 
-func TestParseCaregivers_FlagsMissingContactAndNotesAsWarningNotError(t *testing.T) {
+func TestParseCaregivers_DoesNotWarnOnMissingContactOrNotes(t *testing.T) {
 	siteID := uuid.New()
 	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{byName: map[string]uuid.UUID{"竹南日照單位": siteID}}, testExcelReader{}, nil)
 
@@ -152,11 +162,11 @@ func TestParseCaregivers_FlagsMissingContactAndNotesAsWarningNotError(t *testing
 	), "upload.xlsx")
 
 	require.NoError(t, err)
-	assert.Equal(t, 1, preview.ValidRows, "聯絡方式與備註缺漏仍為合法可匯入列")
+	assert.Equal(t, 1, preview.ValidRows)
 	assert.Equal(t, 0, preview.ErrorRows)
 	require.Len(t, preview.Rows, 1)
-	assert.Contains(t, preview.Rows[0].WarningMessage, "聯絡方式")
-	assert.Contains(t, preview.Rows[0].WarningMessage, "備註")
+	assert.Equal(t, &siteID, preview.Rows[0].SiteID)
+	assert.Empty(t, preview.Rows[0].WarningMessage, "聯絡方式與備註缺漏不再算待維護，不產生警告")
 }
 
 func TestParseCaregivers_RejectsNonExcelUpload(t *testing.T) {
@@ -183,6 +193,34 @@ func TestParseCaregivers_FlagsDuplicateByName(t *testing.T) {
 	assert.True(t, row.IsDuplicate)
 	assert.Equal(t, existingID, *row.DuplicateCaregiverID)
 	assert.Contains(t, row.WarningMessage, "重複照護人員")
+}
+
+// 姓名為空時若仍查重，ILIKE '%%' 會撈回任意資料列，且正規化後的空字串會與既有空姓名
+// 資料互相命中，導致每一列都被判為重複而預設不匯入。
+func TestParseCaregivers_SkipsDuplicateLookupWhenNameEmpty(t *testing.T) {
+	store := newFakeCaregiverStore()
+	existingID := uuid.New()
+	store.byID[existingID] = &Caregiver{ID: existingID, Name: "", Type: CaregiverTypeCaseManager, Status: "active"}
+	svc := NewCaregiverService(store, fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
+
+	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
+		[]string{"竹南日照單位", "", "個管", "0987-000-000", ""},
+	), "upload.xlsx")
+
+	require.NoError(t, err)
+	require.Len(t, preview.Rows, 1)
+	assert.False(t, preview.Rows[0].IsDuplicate, "姓名為空的列不應進行重複比對")
+}
+
+// 單位查詢失敗與「查無單位」是兩件事：前者必須中止預覽，不能被降級成靜默略過。
+func TestParseCaregivers_AbortsWhenSiteLookupFailsWithRealError(t *testing.T) {
+	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{err: assert.AnError}, testExcelReader{}, nil)
+
+	_, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
+		[]string{"竹南日照單位", "王大明", "個管", "0987-000-000", "行動自如"},
+	), "upload.xlsx")
+
+	assert.ErrorIs(t, err, assert.AnError)
 }
 
 func TestParseCaregivers_AbortsWhenDuplicateLookupFails(t *testing.T) {
@@ -225,36 +263,37 @@ func TestCommitCaregivers_ImportsRowsAndReportsWarningsByField(t *testing.T) {
 
 	preview := &CaregiverImportPreviewResult{
 		Rows: []CaregiverImportRowResult{
-			{RowIndex: 2, Name: "查無單位者", SiteName: "查無此單位", WarningMessage: "單位未比對到"},
-			{RowIndex: 3, Name: "缺聯絡方式者"},
-		},
-		Errors: []CaregiverImportErrorItem{
-			{RowIndex: 4, Message: "姓名：未填寫，本列已略過"},
+			// 單位比對不到：SiteName 有值但不得寫入 SiteNameRaw，也不該產生警告
+			{RowIndex: 2, Name: "查無單位者", Type: CaregiverTypeCaseManager, SiteName: "查無此單位"},
+			{RowIndex: 3, Name: "", Type: CaregiverTypeSpecialist},
+			{RowIndex: 4, Name: "缺類型者", Type: ""},
 		},
 	}
 
 	result, err := svc.CommitCaregivers(context.Background(), preview, nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, 2, result.ImportedCount)
-	require.Len(t, result.SkippedRows, 1, "姓名缺漏列應歸入略過清單並回報原因")
-	assert.Equal(t, 4, result.SkippedRows[0].RowIndex)
+	assert.Equal(t, 3, result.ImportedCount, "姓名或類型缺漏的列同樣要建立資料")
+	assert.Empty(t, result.SkippedRows)
 
-	var siteWarning, contactWarning, notesWarning bool
+	var nameWarning, typeWarning bool
 	for _, w := range result.Warnings {
 		switch w.Field {
-		case "site":
-			siteWarning = true
-			assert.Equal(t, 2, w.RowIndex)
-		case "contact":
-			contactWarning = true
-		case "notes":
-			notesWarning = true
+		case "name":
+			nameWarning = true
+			assert.Equal(t, 3, w.RowIndex)
+		case "type":
+			typeWarning = true
+			assert.Equal(t, 4, w.RowIndex)
+		default:
+			t.Fatalf("不應再產生 %q 欄位的警告", w.Field)
 		}
 	}
-	assert.True(t, siteWarning, "單位未比對到的列應標記 field=site")
-	assert.True(t, contactWarning, "聯絡方式缺漏的列應標記 field=contact")
-	assert.True(t, notesWarning, "備註缺漏的列應標記 field=notes")
+	assert.True(t, nameWarning, "姓名缺漏的列應標記 field=name")
+	assert.True(t, typeWarning, "類型缺漏的列應標記 field=type")
 
-	assert.Len(t, store.byID, 2, "兩列都應建立資料，僅姓名缺漏的列才略過")
+	require.Len(t, store.byID, 3)
+	for _, c := range store.byID {
+		assert.Empty(t, c.SiteNameRaw, "單位比對不到時只留白，不得保留原始名稱")
+	}
 }

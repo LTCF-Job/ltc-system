@@ -96,11 +96,13 @@ func (r *UserDirectoryRepository) UpsertDirectoryUser(ctx context.Context, user 
 	if err != nil {
 		return fmt.Errorf("failed to marshal user directory permissions: %w", err)
 	}
+	// 連線走 simple protocol（見 cmd/server/main.go），[]byte 會被編成 bytea 字面值而無法寫入
+	// jsonb 欄位，必須以字串傳入並明確轉型。
 	_, err = pgxdb.FromContext(ctx, r.db).Exec(ctx, `
 		INSERT INTO auth_user_directory (
 			user_id, email, display_name, phone, role_key, status,
 			custom_permissions, created_at, updated_at, last_sign_in_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)
 		ON CONFLICT (user_id) DO UPDATE SET
 			email = EXCLUDED.email,
 			display_name = EXCLUDED.display_name,
@@ -112,7 +114,7 @@ func (r *UserDirectoryRepository) UpsertDirectoryUser(ctx context.Context, user 
 			updated_at = EXCLUDED.updated_at,
 			last_sign_in_at = EXCLUDED.last_sign_in_at
 	`, user.ID, user.Email, user.DisplayName, user.Phone, user.RoleKey, user.Status,
-		permissionBytes, user.CreatedAt, user.UpdatedAt, user.LastSignInAt)
+		string(permissionBytes), user.CreatedAt, user.UpdatedAt, user.LastSignInAt)
 	return err
 }
 

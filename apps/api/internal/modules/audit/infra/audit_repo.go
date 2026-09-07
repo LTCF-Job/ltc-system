@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -34,11 +35,43 @@ func (r *AuditRepository) Insert(ctx context.Context, e app.Entry) error {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at
 	`
+	beforeData, err := marshalAuditPayload(e.BeforeData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal audit before_data: %w", err)
+	}
+	afterData, err := marshalAuditPayload(e.AfterData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal audit after_data: %w", err)
+	}
+
 	var id int64
 	var createdAt time.Time
 	db := pgxdb.FromContext(ctx, r.db)
-	return db.QueryRow(ctx, query, e.ActorID, e.ActorRole, e.Action, e.EntityType, e.EntityID, e.BeforeData, e.AfterData, e.IPAddress, e.UserAgent).
+	return db.QueryRow(ctx, query, e.ActorID, e.ActorRole, e.Action, e.EntityType, e.EntityID, beforeData, afterData, e.IPAddress, e.UserAgent).
 		Scan(&id, &createdAt)
+}
+
+// marshalAuditPayload 把快照序列化成 JSON 字串再交給 pgx。before_data／after_data 是 jsonb，
+// 而連線走 simple protocol（見 cmd/server/main.go），pgx 對任意 struct 或 map 找不到 encode plan，
+// 直接傳值會讓每一筆帶快照的稽核都寫入失敗。回傳 *string 讓 nil 快照仍寫入 SQL NULL。
+func marshalAuditPayload(v interface{}) (*string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	// 已經是 JSON 字串或位元組的快照原樣沿用，不再包一層。
+	switch payload := v.(type) {
+	case string:
+		return &payload, nil
+	case []byte:
+		s := string(payload)
+		return &s, nil
+	}
+	encoded, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	s := string(encoded)
+	return &s, nil
 }
 
 // List 依據多條件篩選並分頁查詢稽核紀錄。

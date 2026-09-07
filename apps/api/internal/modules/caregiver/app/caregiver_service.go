@@ -27,10 +27,10 @@ func NewCaregiverService(store CaregiverStore, sites SiteLookup, reader Spreadsh
 	return &CaregiverService{store: store, sites: sites, reader: reader, renderer: renderer, auditRepo: auditRepo}
 }
 
-// List 查詢照護人員清單。unresolvedLink 篩選單位名稱待關聯單位主檔的資料列，
-// incomplete 篩選聯絡方式或備註缺漏待補齊的資料列，excludePending 排除單位待關聯資料列。
-func (s *CaregiverService) List(ctx context.Context, q, status string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
-	return s.store.List(ctx, q, status, unresolvedLink, incomplete, excludePending, page, pageSize)
+// List 查詢照護人員清單。pending 只取姓名或類型未填寫、待人工補齊的資料列，
+// excludePending 反之排除這些資料列。
+func (s *CaregiverService) List(ctx context.Context, q, status string, pending, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
+	return s.store.List(ctx, q, status, pending, excludePending, page, pageSize)
 }
 
 // GetByID 依 UUID 取得照護人員。

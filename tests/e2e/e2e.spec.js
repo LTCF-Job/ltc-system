@@ -67,8 +67,12 @@ async function runE2ESuite() {
     { name: '個案明細查詢 (GET /cases/:id)', url: `${apiBase}/cases/${testEntities.caseId}`, method: 'GET', expectedStatus: [200] },
     { name: '個案身分證解密 (POST /cases/:id/reveal)', url: `${apiBase}/cases/${testEntities.caseId}/reveal`, method: 'POST', expectedStatus: [200] },
     { name: '個案排班查詢 (GET /cases/:id/schedule)', url: `${apiBase}/cases/${testEntities.caseId}/schedule`, method: 'GET', expectedStatus: [200] },
-    { name: '個案匯入範本 Excel (GET /cases/template?format=xlsx)', url: `${apiBase}/cases/template?format=xlsx`, method: 'GET', expectedStatus: [200] },
-    { name: '個案匯入範本 CSV (GET /cases/template?format=csv)', url: `${apiBase}/cases/template?format=csv`, method: 'GET', expectedStatus: [200] },
+    // 匯入匯出僅支援 .xlsx，不提供 CSV 範本
+    { name: '個案匯入範本 Excel (GET /cases/template)', url: `${apiBase}/cases/template`, method: 'GET', expectedStatus: [200] },
+
+    // 4-1. 個案匯入疑似重複的待維護清單與忽略
+    { name: '疑似重複個案清單 (GET /cases/import/duplicates)', url: `${apiBase}/cases/import/duplicates`, method: 'GET', expectedStatus: [200] },
+    { name: '忽略疑似重複個案 (DELETE /cases/import/duplicates/:id)', url: `${apiBase}/cases/import/duplicates/${testEntities.duplicateCandidateId}`, method: 'DELETE', expectedStatus: [204, 404, 409] },
 
     // 5. 主檔管理（據點、車輛、司機）
     { name: '據點清單查詢 (GET /sites)', url: `${apiBase}/sites?page=1&pageSize=20`, method: 'GET', expectedStatus: [200] },
@@ -76,11 +80,18 @@ async function runE2ESuite() {
     { name: '司機清單查詢 (GET /drivers)', url: `${apiBase}/drivers?page=1&pageSize=20`, method: 'GET', expectedStatus: [200] },
     { name: '司機身分證解密 (POST /drivers/:id/reveal)', url: `${apiBase}/drivers/${testEntities.driverId}/reveal`, method: 'POST', expectedStatus: [200] },
 
-    // 6. 表單同步與欄位對應
-    { name: '表單同步清單 (GET /forms)', url: `${apiBase}/forms`, method: 'GET', expectedStatus: [200] },
-    { name: '手動同步表單 (POST /forms/:id/sync)', url: `${apiBase}/forms/${testEntities.formId}/sync`, method: 'POST', expectedStatus: [200] },
-    { name: '待對應欄位清單 (GET /forms/columns)', url: `${apiBase}/forms/columns`, method: 'GET', expectedStatus: [200] },
-    { name: '單筆欄位對應更新 (PATCH /forms/columns/:id/mapping)', url: `${apiBase}/forms/columns/${testEntities.columnId}/mapping`, method: 'PATCH', body: { mappingStatus: 'mapped', caseId: testEntities.caseId, legSeq: 1 }, expectedStatus: [200] },
+    // 6. 司機接送匯報表與欄位對應（原 /forms 系列已改為 /driver-reports）
+    { name: '匯報表清單 (GET /driver-reports)', url: `${apiBase}/driver-reports`, method: 'GET', expectedStatus: [200] },
+    { name: '已匯入月份 (GET /driver-reports/imported-months)', url: `${apiBase}/driver-reports/imported-months`, method: 'GET', expectedStatus: [200] },
+    { name: '待對應欄位清單 (GET /driver-reports/columns)', url: `${apiBase}/driver-reports/columns`, method: 'GET', expectedStatus: [200] },
+    { name: '待處理匯報列總覽 (GET /driver-reports/submissions/review)', url: `${apiBase}/driver-reports/submissions/review`, method: 'GET', expectedStatus: [200] },
+    { name: '單筆欄位對應更新 (PATCH /driver-reports/columns/:id/mapping)', url: `${apiBase}/driver-reports/columns/${testEntities.columnId}/mapping`, method: 'PATCH', body: { mappingStatus: 'mapped', caseId: testEntities.caseId, legSeq: 1 }, expectedStatus: [200] },
+
+    // 6-1. 待維護資料的「忽略此筆」。這三條 DELETE 與 /driver-reports/:id 在同一層共存，
+    // 逐條打過確認不會誤打到刪除整份匯報表。
+    { name: '忽略欄位對應待維護 (DELETE /driver-reports/columns/:id)', url: `${apiBase}/driver-reports/columns/${testEntities.columnId}`, method: 'DELETE', expectedStatus: [204, 404] },
+    { name: '忽略同車同個案衝突 (DELETE /driver-reports/row-conflicts/:id)', url: `${apiBase}/driver-reports/row-conflicts/${testEntities.rowConflictId}`, method: 'DELETE', expectedStatus: [204, 404] },
+    { name: '忽略未比對司機的匯報列 (DELETE /driver-reports/submissions/:id)', url: `${apiBase}/driver-reports/submissions/${testEntities.submissionId}`, method: 'DELETE', expectedStatus: [204, 404] },
 
     // 7. 搭乘月曆與異常處理
     { name: '搭乘月曆矩陣 (GET /rides/calendar)', url: `${apiBase}/rides/calendar?month=115-07`, method: 'GET', expectedStatus: [200] },
@@ -96,6 +107,8 @@ async function runE2ESuite() {
     // 9. 維修保養、司機出勤、車輛油資
     { name: '車輛保養清單 (GET /vehicles/maintenance)', url: `${apiBase}/vehicles/maintenance?page=1&pageSize=20`, method: 'GET', expectedStatus: [200] },
     { name: '司機月出勤紀錄 (GET /attendance)', url: `${apiBase}/attendance?month=115-07`, method: 'GET', expectedStatus: [200] },
+    { name: '出勤待維護衝突清單 (GET /attendance/conflicts)', url: `${apiBase}/attendance/conflicts`, method: 'GET', expectedStatus: [200] },
+    { name: '忽略出勤待維護衝突 (DELETE /attendance/conflicts/:id)', url: `${apiBase}/attendance/conflicts/${testEntities.attendanceConflictId}`, method: 'DELETE', expectedStatus: [204, 404] },
     { name: '車輛油資紀錄 (GET /fuel-logs)', url: `${apiBase}/fuel-logs?page=1&pageSize=20`, method: 'GET', expectedStatus: [200] },
 
     // 10. 通知設定與催報任務

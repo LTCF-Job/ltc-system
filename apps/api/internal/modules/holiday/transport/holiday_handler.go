@@ -60,7 +60,7 @@ func (h *HolidayHandler) List(c *gin.Context) {
 func (h *HolidayHandler) Create(c *gin.Context) {
 	var req CreateHolidayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 

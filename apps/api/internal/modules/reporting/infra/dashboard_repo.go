@@ -19,13 +19,17 @@ func NewDashboardRepository(db *pgxpool.Pool) *DashboardRepository {
 	return &DashboardRepository{db: db}
 }
 
-// GetActiveCasesCount 查詢有效個案總數。
+// GetActiveCasesCount 查詢有效個案總數，不計入資料待維護的個案。
 func (r *DashboardRepository) GetActiveCasesCount(ctx context.Context) (int, error) {
 	if r.db == nil {
 		return 0, fmt.Errorf("dashboard database is not configured")
 	}
 	var count int
-	err := r.db.QueryRow(ctx, "SELECT COUNT(*) FROM cases WHERE status = 'active'").Scan(&count)
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM cases c
+		JOIN case_pending_status ps ON ps.case_id = c.id
+		WHERE c.status = 'active' AND NOT ps.is_pending
+	`).Scan(&count)
 	return count, err
 }
 

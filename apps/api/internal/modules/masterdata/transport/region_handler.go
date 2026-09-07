@@ -89,7 +89,7 @@ func (h *RegionHandler) Get(c *gin.Context) {
 func (h *RegionHandler) Create(c *gin.Context) {
 	var req CreateRegionRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -129,7 +129,7 @@ func (h *RegionHandler) Update(c *gin.Context) {
 
 	var req UpdateRegionRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 

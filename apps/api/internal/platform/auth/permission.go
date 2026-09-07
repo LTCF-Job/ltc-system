@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -231,6 +233,16 @@ func RequirePermission(resolver PermissionResolver, customResolver CustomPermiss
 
 		effective, err := ResolveEffectivePermissions(c.Request.Context(), resolver, customResolver, roleKey, GetActorID(c))
 		if err != nil {
+			// 與 MiddlewareWithUserState 同理：這是每支受保護 API 的必經路徑，
+			// 不記錄就只剩一個沒有成因的 500。
+			slog.Error("permission_resolution_failed",
+				slog.String("request_id", httpx.RequestID(c)),
+				slog.String("path", c.Request.URL.Path),
+				slog.String("module", module),
+				slog.String("role_key", roleKey),
+				slog.String("error_type", fmt.Sprintf("%T", err)),
+				slog.String("error_message", err.Error()),
+			)
 			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "無法解析權限", nil)
 			return
 		}
