@@ -59,6 +59,10 @@ func (stubAttendanceStore) ResolveConflict(context.Context, uuid.UUID, string, *
 	return nil
 }
 
+func (stubAttendanceStore) DeleteConflict(context.Context, uuid.UUID) error {
+	return nil
+}
+
 // recordingAttendanceStore 是可設定既有紀錄的 fake，供 SyncFromImport／ResolveConflict
 // 的分支邏輯測試斷言實際寫入了什麼。
 type recordingAttendanceStore struct {
@@ -67,6 +71,7 @@ type recordingAttendanceStore struct {
 	upsertCalls   []AttendanceRecord
 	conflictCalls []AttendanceImportConflict
 	resolveCalls  []uuid.UUID
+	deleteCalls   []uuid.UUID
 }
 
 func (s *recordingAttendanceStore) GetMonthRecords(context.Context, time.Time, time.Time, *uuid.UUID) ([]AttendanceRecord, error) {
@@ -111,6 +116,15 @@ func (s *recordingAttendanceStore) ResolveConflict(_ context.Context, id uuid.UU
 		c.Status = "resolved"
 		c.ResolvedChoice = &choice
 	}
+	return nil
+}
+
+func (s *recordingAttendanceStore) DeleteConflict(_ context.Context, id uuid.UUID) error {
+	s.deleteCalls = append(s.deleteCalls, id)
+	if _, ok := s.conflicts[id]; !ok {
+		return ErrAttendanceConflictNotFound
+	}
+	delete(s.conflicts, id)
 	return nil
 }
 

@@ -20,6 +20,18 @@ const (
 	MaxPageSize     = 100
 )
 
+// QueryBool 解析清單 API 的布林 query flag，未提供或無法解析時回傳 false。
+// 集中在這裡是因為同一組待維護旗標散落在多個 handler，各自用 == "true" 或 strconv.ParseBool
+// 會讓 ?flag=1 在某些端點有效、某些端點被靜默忽略。無法解析一律當作未表態，維持
+// 「呼叫端要明確表態才拿得到待維護資料」的預設安全行為。
+func QueryBool(c *gin.Context, key string) bool {
+	value, err := strconv.ParseBool(c.Query(key))
+	if err != nil {
+		return false
+	}
+	return value
+}
+
 // ParsePagination 統一解析清單 API 的 page/pageSize query。
 // 參數未提供時使用預設值；明確提供但格式或範圍錯誤時回傳錯誤，避免
 // pageSize=0 造成除以零，或把呼叫端的 typo 靜默改成另一個查詢。

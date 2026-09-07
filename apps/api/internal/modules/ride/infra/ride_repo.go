@@ -231,6 +231,43 @@ func (r *RideRepository) ListUnmatchedDriverSubmissions(ctx context.Context) ([]
 	return out, rows.Err()
 }
 
+// ListRideSourceSlotsForSubmission 取出某筆提交紀錄目前展開出的所有搭乘來源 slot。
+// form_submissions 被 ride_sources 與 ride_source_row_conflicts 以 ON DELETE CASCADE 參照，
+// 刪除提交紀錄會連帶刪掉這些來源，因此呼叫端必須先取得 slot 清單，刪除後逐一重算搭乘紀錄，
+// 否則會留下對不上任何來源的 ride_records。
+func (r *RideRepository) ListRideSourceSlotsForSubmission(ctx context.Context, submissionID uuid.UUID) ([]app.RideSourceSlot, error) {
+	rows, err := pgxdb.FromContext(ctx, r.db).Query(ctx, `
+		SELECT case_id, service_date, leg_seq, vehicle_id
+		FROM ride_sources
+		WHERE submission_id = $1
+	`, submissionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []app.RideSourceSlot
+	for rows.Next() {
+		var slot app.RideSourceSlot
+		if err := rows.Scan(&slot.CaseID, &slot.ServiceDate, &slot.LegSeq, &slot.VehicleID); err != nil {
+			return nil, err
+		}
+		out = append(out, slot)
+	}
+	return out, rows.Err()
+}
+
+// DeleteSubmission 移除一筆提交紀錄；rowsAffected=0 代表該列不存在。呼叫端負責先確認
+// 沒有搭乘來源掛在這筆提交上。
+func (r *RideRepository) DeleteSubmission(ctx context.Context, submissionID uuid.UUID) (int64, error) {
+	tag, err := pgxdb.FromContext(ctx, r.db).Exec(ctx,
+		`DELETE FROM form_submissions WHERE id = $1`, submissionID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 // UpdateSubmissionDriverID 回填某筆提交紀錄的司機。
 func (r *RideRepository) UpdateSubmissionDriverID(ctx context.Context, submissionID, driverID uuid.UUID) error {
 	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx,
@@ -305,6 +342,17 @@ func (r *RideRepository) ListPendingRowConflicts(ctx context.Context) ([]app.Row
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// DeleteRowConflict 移除一筆尚未裁決的同車同個案衝突，供「忽略此筆」把資料從系統刪除；
+// rowsAffected=0 代表該列不存在或已被裁決。既有搭乘來源與紀錄一律不動，維持既有值。
+func (r *RideRepository) DeleteRowConflict(ctx context.Context, conflictID uuid.UUID) (int64, error) {
+	db := pgxdb.FromContext(ctx, r.db)
+	tag, err := db.Exec(ctx, `DELETE FROM ride_source_row_conflicts WHERE id = $1 AND resolved_at IS NULL`, conflictID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 // ResolveRowConflict 裁決一筆同車同個案衝突；resolved=false 代表已被他人裁決過，

@@ -132,6 +132,20 @@ export async function resolveRowConflict(
   return unwrapData<{ success: boolean }>(res)
 }
 
+// 以下三支「忽略此筆」直接把待維護資料列從系統刪除。重新匯入同一份檔案時該筆會再次出現，
+// 屬預期行為：忽略處理的是目前這一筆，不是永久靜音這個問題。
+export async function ignoreDriverReportColumn(columnId: string): Promise<void> {
+  await apiClient.delete(`/driver-reports/columns/${columnId}`)
+}
+
+export async function ignoreRowConflict(conflictId: string): Promise<void> {
+  await apiClient.delete(`/driver-reports/row-conflicts/${conflictId}`)
+}
+
+export async function ignoreDriverReportSubmission(submissionId: string): Promise<void> {
+  await apiClient.delete(`/driver-reports/submissions/${submissionId}`)
+}
+
 // getDriverReportMonthDetail 取回某份匯報表指定月份（YYYY-MM）已匯入的完整內容，
 // 供總覽頁鑽取單一月份時顯示逐日回報明細與展開後的個案搭乘紀錄。
 export async function getDriverReportMonthDetail(

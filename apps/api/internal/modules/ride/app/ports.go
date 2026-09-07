@@ -197,6 +197,14 @@ type AppliedRowConflict struct {
 	NewSubmittedAt    time.Time
 }
 
+// RideSourceSlot 是一筆搭乘來源所屬的「同車同個案同趟次」位置，供刪除來源後重算搭乘紀錄。
+type RideSourceSlot struct {
+	CaseID      uuid.UUID
+	ServiceDate time.Time
+	LegSeq      int16
+	VehicleID   uuid.UUID
+}
+
 // CalendarLeg 是月曆表需要的排班趟次時段。
 type CalendarLeg struct {
 	LegSeq      int16
@@ -245,6 +253,12 @@ type RideRecordStore interface {
 	// ResolveRowConflict 裁決一筆同車同個案衝突；resolved=false 代表已被他人裁決過。
 	// useNew=true 時回傳需要重放寫入搭乘來源的欄位。
 	ResolveRowConflict(ctx context.Context, conflictID uuid.UUID, useNew bool, operatorID uuid.UUID) (applied *AppliedRowConflict, resolved bool, err error)
+	// ListRideSourceSlotsForSubmission 取出某筆提交紀錄展開出的搭乘來源 slot，供刪除前備妥重算範圍。
+	ListRideSourceSlotsForSubmission(ctx context.Context, submissionID uuid.UUID) ([]RideSourceSlot, error)
+	// DeleteSubmission 移除一筆提交紀錄；rowsAffected=0 代表該列不存在。
+	DeleteSubmission(ctx context.Context, submissionID uuid.UUID) (rowsAffected int64, err error)
+	// DeleteRowConflict 移除一筆尚未裁決的同車同個案衝突；rowsAffected=0 代表該列不存在或已被裁決。
+	DeleteRowConflict(ctx context.Context, conflictID uuid.UUID) (rowsAffected int64, err error)
 	// ListSubmissionsForFormMonth 取出某份匯報表在 [monthStart, monthEnd) 區間內的逐日原始回報，
 	// 供總覽頁鑽取單一月份的完整內容。
 	ListSubmissionsForFormMonth(ctx context.Context, formID uuid.UUID, monthStart, monthEnd time.Time) ([]MonthSubmissionDetail, error)

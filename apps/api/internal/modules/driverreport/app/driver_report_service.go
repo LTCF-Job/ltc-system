@@ -19,6 +19,9 @@ import (
 // ErrVehicleRequired 代表建立匯報表時未指定車輛。
 var ErrVehicleRequired = errors.New("vehicle is required")
 
+// ErrPendingItemNotFound 表示要忽略的待維護資料列不存在，或已被其他人處理掉。
+var ErrPendingItemNotFound = errors.New("pending item not found")
+
 // DriverReportService 負責司機接送匯報表的登記、範本產生、匯入與欄位對應。
 type DriverReportService struct {
 	repo                FormStore
@@ -293,6 +296,93 @@ func (s *DriverReportService) ResolveRowConflict(ctx context.Context, conflictID
 		}
 	}
 	return nil
+}
+
+// IgnoreColumn 忽略一筆欄位對應待維護資料：直接把 form_columns 該列刪除。重新匯入同一份
+// 檔案時該欄位會以 pending 重新建立，屬預期行為——使用者要的是把目前這筆從系統移除。
+func (s *DriverReportService) IgnoreColumn(ctx context.Context, colID string, actor Actor) error {
+	if _, err := uuid.Parse(colID); err != nil {
+		return fmt.Errorf("欄位編號格式錯誤: %w", err)
+	}
+
+	rowsAffected, err := s.repo.DeleteColumn(ctx, colID)
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrPendingItemNotFound
+	}
+
+	s.writePendingIgnoreAudit(ctx, "form_columns", colID, actor)
+	return nil
+}
+
+// IgnoreRowConflict 忽略一筆「同車同個案」衝突：刪除該衝突列，既有搭乘來源與紀錄維持原值。
+// 若之後重新上傳且值仍不同，會重新產生一筆新的衝突，這與「每次上傳都重新判斷」的既有設計一致。
+func (s *DriverReportService) IgnoreRowConflict(ctx context.Context, conflictID string, actor Actor) error {
+	parsedID, err := uuid.Parse(conflictID)
+	if err != nil {
+		return fmt.Errorf("衝突編號格式錯誤: %w", err)
+	}
+
+	rowsAffected, err := s.rideIngestor.DeleteRowConflict(ctx, parsedID)
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrPendingItemNotFound
+	}
+
+	s.writePendingIgnoreAudit(ctx, "ride_source_row_conflicts", conflictID, actor)
+	return nil
+}
+
+// IgnoreSubmission 忽略一筆駕駛人未比對到司機主檔的匯報列：刪除該提交紀錄，並在同一交易內
+// 重算受連帶刪除的搭乘來源所影響的搭乘紀錄，避免留下對不上來源的資料。
+func (s *DriverReportService) IgnoreSubmission(ctx context.Context, submissionID string, actor Actor) error {
+	if s.txRunner == nil {
+		return errors.New("driver report service: transaction runner not configured")
+	}
+	parsedID, err := uuid.Parse(submissionID)
+	if err != nil {
+		return fmt.Errorf("匯報列編號格式錯誤: %w", err)
+	}
+
+	var rowsAffected int64
+	if err := s.txRunner.WithTx(ctx, func(txCtx context.Context) error {
+		rowsAffected, err = s.rideIngestor.DeleteSubmission(txCtx, parsedID)
+		return err
+	}); err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrPendingItemNotFound
+	}
+
+	s.writePendingIgnoreAudit(ctx, "form_submissions", submissionID, actor)
+	return nil
+}
+
+// writePendingIgnoreAudit 記錄一次「忽略此筆」。刪除本身已在上游完成，稽核失敗只降級為
+// 警告日誌，比照同模組既有裁決稽核的非阻斷處理方式。
+func (s *DriverReportService) writePendingIgnoreAudit(ctx context.Context, entityType, entityID string, actor Actor) {
+	if s.auditRepo == nil {
+		return
+	}
+	if err := s.auditRepo.Write(ctx, AuditEntry{
+		ActorID:    &actor.ActorID,
+		ActorRole:  &actor.ActorRole,
+		Action:     "ignore",
+		EntityType: entityType,
+		EntityID:   &entityID,
+		IPAddress:  &actor.IPAddress,
+		UserAgent:  &actor.UserAgent,
+	}); err != nil {
+		slog.Warn("Failed to write pending item ignore audit",
+			slog.String("entityType", entityType),
+			slog.String("entityId", entityID),
+			slog.String("error", err.Error()))
+	}
 }
 
 // rowConflictResolutionAuditSnapshot 是同車同個案衝突裁決後的非敏感固定快照。

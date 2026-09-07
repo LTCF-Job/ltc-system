@@ -134,6 +134,9 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.GET("/cases/import/duplicates", auth.RequirePermission(perm, customPerm, "masters_cases", "view"), h.kase.ListDuplicateCandidates)
 		apiV1.POST("/cases/import/duplicates/:id/reveal", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.RevealDuplicateCandidateNationalID)
 		apiV1.POST("/cases/import/duplicates/:id/resolve", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.ResolveDuplicateCandidate)
+		// 「忽略此筆」刪的是匯入暫存列而非個案本體，門檻沿用同一組裁決端點的 edit 軸；
+		// masters_cases 的 delete 軸僅 admin 為 true（見 000018），改用它會讓 staff 只能裁決不能忽略。
+		apiV1.DELETE("/cases/import/duplicates/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.DiscardDuplicateCandidate)
 
 		// 2. 單位主檔
 		apiV1.GET("/sites", auth.RequirePermission(perm, customPerm, "masters_sites", "view"), h.site.List)
@@ -168,6 +171,11 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.GET("/driver-reports/submissions/review", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "view"), h.driverReport.ListSubmissionReview)
 		apiV1.POST("/driver-reports/drivers/bind", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.BindDriver)
 		apiV1.POST("/driver-reports/row-conflicts/:id/resolve", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.ResolveRowConflict)
+		// 待維護資料的「忽略此筆」直接刪除該列。driver_report_mappings 的 delete 軸在權限矩陣中
+		// 對所有角色皆為 false（見 000018），因此沿用與綁定／裁決相同的 edit 軸。
+		apiV1.DELETE("/driver-reports/columns/:id", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.IgnoreColumn)
+		apiV1.DELETE("/driver-reports/row-conflicts/:id", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.IgnoreRowConflict)
+		apiV1.DELETE("/driver-reports/submissions/:id", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.IgnoreSubmission)
 		apiV1.DELETE("/driver-reports/:id", auth.RequirePermission(perm, customPerm, "driver_reports", "delete"), h.driverReport.DeleteForm)
 		apiV1.GET("/driver-reports/:id/template", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.DownloadTemplate)
 		apiV1.POST("/driver-reports/:id/import", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.ImportExcel)
@@ -224,6 +232,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		// 司機接送匯報匯入自動同步出勤時，與人工登記不一致的待維護衝突
 		apiV1.GET("/attendance/conflicts", auth.RequirePermission(perm, customPerm, "attendance_fuel", "view"), h.attendance.ListConflicts)
 		apiV1.POST("/attendance/conflicts/:id/resolve", auth.RequirePermission(perm, customPerm, "attendance_fuel", "edit"), h.attendance.ResolveConflict)
+		apiV1.DELETE("/attendance/conflicts/:id", auth.RequirePermission(perm, customPerm, "attendance_fuel", "delete"), h.attendance.IgnoreConflict)
 
 		// 13. 車輛油資管理 (B6.3)
 		apiV1.GET("/fuel-logs", auth.RequirePermission(perm, customPerm, "attendance_fuel", "view"), h.fuel.List)

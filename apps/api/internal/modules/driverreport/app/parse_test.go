@@ -20,6 +20,11 @@ const (
 type stubStore struct {
 	existing []ColumnMapping
 	form     *ReportForm
+
+	// deleteColumn* 讓「忽略此筆」的測試控制刪除結果；0 列代表該欄位已被他人處理掉。
+	deleteColumnCalls []string
+	deleteColumnRows  int64
+	deleteColumnErr   error
 }
 
 func (s *stubStore) ListForms(context.Context) ([]ReportForm, error) { return nil, nil }
@@ -57,6 +62,13 @@ func (s *stubStore) UpdateColumnMappingByHeader(_ context.Context, _ uuid.UUID, 
 	return 0, "", nil
 }
 func (s *stubStore) MarkImported(context.Context, uuid.UUID, time.Time) error { return nil }
+func (s *stubStore) DeleteColumn(_ context.Context, colID string) (int64, error) {
+	s.deleteColumnCalls = append(s.deleteColumnCalls, colID)
+	if s.deleteColumnErr != nil {
+		return 0, s.deleteColumnErr
+	}
+	return s.deleteColumnRows, nil
+}
 
 type stubExcel struct{ table [][]string }
 

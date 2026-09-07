@@ -39,8 +39,11 @@ func (h *CaseHandler) List(c *gin.Context) {
 	region := c.Query("region")
 	status := c.Query("status")
 	q := c.Query("q")
-	unresolvedLink := c.Query("unresolvedLink") == "true"
-	excludePending := c.Query("excludePending") == "true"
+	// 待維護個案預設不出現在任何清單，呼叫端要明確表態才拿得到：unresolvedLink 只取待維護，
+	// includePending 取全部。預設排除，避免新增呼叫端忘記帶參數就把待維護資料洩漏出去。
+	unresolvedLink := httpx.QueryBool(c, "unresolvedLink")
+	includePending := httpx.QueryBool(c, "includePending")
+	excludePending := !unresolvedLink && !includePending
 
 	cases, total, err := h.masterService.ListCases(c.Request.Context(), region, status, q, page, pageSize, unresolvedLink, excludePending)
 	if err != nil {
@@ -365,6 +368,34 @@ func (h *CaseHandler) ResolveDuplicateCandidate(c *gin.Context) {
 	}
 
 	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
+}
+
+// DiscardDuplicateCandidate 忽略一筆疑似重複個案，直接把暫存列從系統刪除。
+func (h *CaseHandler) DiscardDuplicateCandidate(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的暫存列 ID", nil)
+		return
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+	if err := h.masterService.DiscardDuplicateCandidate(
+		c.Request.Context(), id, actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
+	); err != nil {
+		if errors.Is(err, app.ErrDuplicateCandidateNotFound) {
+			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateCandidateResolved) {
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
 }
 
 // UpdateTransportPreference 更新個案的交通偏好（所屬單位與去回程車輛）。

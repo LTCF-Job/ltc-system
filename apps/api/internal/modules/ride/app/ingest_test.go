@@ -313,6 +313,58 @@ func (f *fakeRecordStore) ResolveRowConflict(_ context.Context, conflictID uuid.
 	}, true, nil
 }
 
+func (f *fakeRecordStore) DeleteRowConflict(_ context.Context, conflictID uuid.UUID) (int64, error) {
+	c, ok := f.rowConflicts[conflictID]
+	if !ok || c.resolvedAt != nil {
+		return 0, nil
+	}
+	key := rowConflictSlotKey{c.input.VehicleID, c.input.CaseID, c.input.ServiceDate.Format("2006-01-02"), c.input.LegSeq}
+	delete(f.openRowConflicts, key)
+	delete(f.rowConflicts, conflictID)
+	return 1, nil
+}
+
+func (f *fakeRecordStore) ListRideSourceSlotsForSubmission(_ context.Context, submissionID uuid.UUID) ([]RideSourceSlot, error) {
+	var out []RideSourceSlot
+	for key, srcs := range f.sources {
+		for _, src := range srcs {
+			if src.submissionID != submissionID {
+				continue
+			}
+			date, err := time.Parse("2006-01-02", key.date)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, RideSourceSlot{
+				CaseID: key.caseID, ServiceDate: date, LegSeq: key.legSeq, VehicleID: src.row.VehicleID,
+			})
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeRecordStore) DeleteSubmission(_ context.Context, submissionID uuid.UUID) (int64, error) {
+	if _, ok := f.submissions[submissionID]; !ok {
+		return 0, nil
+	}
+	delete(f.submissions, submissionID)
+	// 對齊資料庫的 ON DELETE CASCADE：提交紀錄消失時，其展開出的搭乘來源一併移除。
+	for key, srcs := range f.sources {
+		var kept []fakeSource
+		for _, src := range srcs {
+			if src.submissionID != submissionID {
+				kept = append(kept, src)
+			}
+		}
+		if len(kept) == 0 {
+			delete(f.sources, key)
+			continue
+		}
+		f.sources[key] = kept
+	}
+	return 1, nil
+}
+
 type fakeScheduleReader struct{ tripPattern int16 }
 
 func (f fakeScheduleReader) GetActiveScheduleForCaseOnDate(_ context.Context, caseID uuid.UUID, _ time.Time) (*CaseSchedule, error) {

@@ -202,8 +202,8 @@
                       <el-button link type="primary" size="small" @click="openQuickCreateCase(issue)">
                         新增個案並綁定
                       </el-button>
-                      <el-button link type="primary" size="small" @click="handleIgnoreCase(issue)">
-                        略過此欄
+                      <el-button link type="danger" size="small" @click="handleIgnoreCase(issue)">
+                        忽略此筆
                       </el-button>
                     </TableRowActions>
                   </div>
@@ -224,6 +224,9 @@
                       </el-button>
                       <el-button link type="primary" size="small" @click="openQuickCreateDriver(row as SubmissionReviewRow)">
                         新增司機並綁定
+                      </el-button>
+                      <el-button link type="danger" size="small" @click="handleIgnoreSubmission(row as SubmissionReviewRow)">
+                        忽略此筆
                       </el-button>
                     </TableRowActions>
                   </div>
@@ -247,6 +250,9 @@
                       </el-button>
                       <el-button link size="small" @click="handleResolveRowConflict(conflict, false)">
                         保留原資料
+                      </el-button>
+                      <el-button link type="danger" size="small" @click="handleIgnoreRowConflict(conflict)">
+                        忽略此筆
                       </el-button>
                     </TableRowActions>
                   </div>
@@ -305,6 +311,9 @@
                 </el-button>
                 <el-button link type="warning" size="small" @click="handleResolveAttendanceConflict(row as AttendanceConflictDTO, 'use_import')">
                   改採匯入結果
+                </el-button>
+                <el-button link type="danger" size="small" @click="handleIgnoreAttendanceConflict(row as AttendanceConflictDTO)">
+                  忽略此筆
                 </el-button>
               </TableRowActions>
             </template>
@@ -444,9 +453,12 @@ import {
   matchPendingColumnsByName,
   updateColumnMapping,
   bindPendingDriver,
-  resolveRowConflict
+  resolveRowConflict,
+  ignoreDriverReportColumn,
+  ignoreDriverReportSubmission,
+  ignoreRowConflict
 } from '@/api/driverReports'
-import { listAttendanceConflicts, resolveAttendanceConflict } from '@/api/attendance'
+import { listAttendanceConflicts, resolveAttendanceConflict, ignoreAttendanceConflict } from '@/api/attendance'
 import { listAllCases } from '@/api/cases'
 import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import PageHeader from '@/components/PageHeader.vue'
@@ -1137,11 +1149,62 @@ async function handleBindCase(issue: EditableCaseIssue) {
   }
 }
 
-async function handleIgnoreCase(issue: EditableCaseIssue) {
+// 以下四支「忽略此筆」都是直接刪除待維護資料列。重新匯入同一份檔案時該筆會再次出現，
+// 所以確認文案一律說明這件事，避免使用者以為忽略等於永久靜音。
+async function confirmIgnore(message: string): Promise<boolean> {
   try {
-    await updateColumnMapping(issue.id, { mappingStatus: 'ignored' })
-    ElMessage.info(`已略過「${issue.columnHeader}」`)
+    await ElMessageBox.confirm(`${message}若之後重新匯入同一份檔案，這筆仍會再次出現。`, '忽略確認', {
+      confirmButtonText: '忽略並刪除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger'
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function handleIgnoreCase(issue: EditableCaseIssue) {
+  if (!(await confirmIgnore(`確定要忽略欄位「${issue.columnHeader}」？將直接刪除這筆欄位對應資料。`))) return
+  try {
+    await ignoreDriverReportColumn(issue.id)
+    ElMessage.success(`已忽略「${issue.columnHeader}」`)
     await fetchSubmissionReview()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  }
+}
+
+async function handleIgnoreSubmission(row: SubmissionReviewRow) {
+  const label = row.driverIssue?.driverNameRaw ?? row.serviceDate
+  if (!(await confirmIgnore(`確定要忽略「${label}」這筆匯報列？將直接刪除該筆匯報資料。`))) return
+  try {
+    await ignoreDriverReportSubmission(row.submissionId)
+    ElMessage.success(`已忽略「${label}」`)
+    await fetchSubmissionReview()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  }
+}
+
+async function handleIgnoreRowConflict(conflict: RowConflictDTO) {
+  if (!(await confirmIgnore(`確定要忽略「${conflict.caseName}」第 ${conflict.legSeq} 趟的衝突？既有搭乘資料維持原值不變。`))) return
+  try {
+    await ignoreRowConflict(conflict.id)
+    ElMessage.success('已忽略該筆衝突')
+    await fetchSubmissionReview()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  }
+}
+
+async function handleIgnoreAttendanceConflict(row: AttendanceConflictDTO) {
+  if (!(await confirmIgnore(`確定要忽略「${row.driverName}」${row.recordDate} 的出勤衝突？出勤紀錄維持原本的人工登記。`))) return
+  try {
+    await ignoreAttendanceConflict(row.id)
+    attendanceConflicts.value = attendanceConflicts.value.filter((c) => c.id !== row.id)
+    ElMessage.success('已忽略該筆出勤衝突')
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
   }

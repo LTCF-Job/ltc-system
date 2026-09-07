@@ -14,9 +14,9 @@ export async function listCaregivers(params?: {
   pageSize?: number
   q?: string
   status?: string
-  unresolvedLink?: boolean
-  incomplete?: boolean
-  excludePending?: boolean
+  // 待維護資料預設不會回傳；pending 只取待維護，includePending 取全部。
+  pending?: boolean
+  includePending?: boolean
 }): Promise<Paged<CaregiverDTO>> {
   const res = await apiClient.get('/caregivers', { params })
   return unwrapPaged<CaregiverDTO>(res, createPaginationMeta(params?.page, params?.pageSize))

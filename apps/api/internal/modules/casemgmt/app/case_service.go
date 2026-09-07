@@ -689,6 +689,69 @@ func (s *CaseService) ResolveDuplicateCandidate(ctx context.Context, id uuid.UUI
 	return result, nil
 }
 
+// DiscardDuplicateCandidate 忽略一筆疑似重複個案：直接刪除暫存列，不建立也不合併任何個案。
+// 刪除而非標記終結狀態是刻意的——使用者要的是把資料從系統移除；重新匯入同一份檔案時該筆
+// 會再次進入待維護，屬預期行為。稽核只保留可追溯的非個資欄位，暫存列本身帶有身分證密文
+// 與地址，不寫入 audit_log。
+func (s *CaseService) DiscardDuplicateCandidate(ctx context.Context, id, actorID uuid.UUID, actorRole, ip, ua string) error {
+	cand, err := s.stagingRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if cand == nil {
+		return ErrDuplicateCandidateNotFound
+	}
+	if cand.Status != "pending" {
+		return ErrDuplicateCandidateResolved
+	}
+
+	discardFn := func(txCtx context.Context) error {
+		rowsAffected, err := s.stagingRepo.Delete(txCtx, id)
+		if err != nil {
+			return err
+		}
+		if rowsAffected == 0 {
+			return ErrDuplicateCandidateResolved
+		}
+
+		if s.auditRepo != nil {
+			entityIDStr := id.String()
+			if err := s.auditRepo.Write(txCtx, AuditEntry{
+				ActorID:    &actorID,
+				ActorRole:  &actorRole,
+				Action:     "ignore",
+				EntityType: "case_import_duplicate_rows",
+				EntityID:   &entityIDStr,
+				BeforeData: newDuplicateCandidateAuditSnapshot(cand),
+				IPAddress:  &ip,
+				UserAgent:  &ua,
+			}); err != nil {
+				return fmt.Errorf("failed to write duplicate candidate discard audit: %w", err)
+			}
+		}
+		return nil
+	}
+
+	if s.txRunner != nil {
+		return s.txRunner.WithTx(ctx, discardFn)
+	}
+	return discardFn(ctx)
+}
+
+// newDuplicateCandidateAuditSnapshot 只取足以追溯來源列的非個資欄位；暫存列的身分證密文、
+// HMAC、遮罩值與地址一律不寫入稽核。
+func newDuplicateCandidateAuditSnapshot(cand *DuplicateCandidate) map[string]interface{} {
+	return map[string]interface{}{
+		"id":              cand.ID.String(),
+		"name":            cand.Name,
+		"rowIndex":        cand.RowIndex,
+		"sheetName":       cand.SheetName,
+		"fileHash":        cand.FileHash,
+		"rowKey":          cand.RowKey,
+		"duplicateCaseId": cand.DuplicateCaseID.String(),
+	}
+}
+
 func (s *CaseService) resolveDuplicateAsNewCase(ctx context.Context, cand *DuplicateCandidate, actorID uuid.UUID, actorRole, ip, ua string) (*Case, error) {
 	entity := Case{
 		ID:                uuid.New(),

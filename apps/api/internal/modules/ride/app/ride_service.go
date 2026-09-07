@@ -500,6 +500,46 @@ func (s *RideService) ListRowConflicts(ctx context.Context) ([]RowConflict, erro
 	return items, nil
 }
 
+// DeleteSubmission 移除一筆匯報提交紀錄，供待維護清單的「忽略此筆」使用。
+//
+// form_submissions 被 ride_sources 與 ride_source_row_conflicts 以 ON DELETE CASCADE 參照，
+// 直接刪除會連帶砍掉搭乘來源，而 ride_records 只在寫入路徑重算，會留下對不上任何來源的
+// 搭乘紀錄。因此先取得這筆提交展開出的 slot，刪除後逐一重算，讓搭乘紀錄與剩餘來源一致。
+// 實務上會出現在待維護清單的是 driver_id IS NULL 的提交，IngestSubmission 對這類提交提早
+// 返回、不展開搭乘來源，所以 slot 清單通常是空的；重算路徑是為了不依賴這個假設。
+// 交易由呼叫端（DriverReportService）建立，這裡沿用 context 上的同一連線。
+func (s *RideService) DeleteSubmission(ctx context.Context, submissionID uuid.UUID) (int64, error) {
+	slots, err := s.formRepo.ListRideSourceSlotsForSubmission(ctx, submissionID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list ride source slots for submission: %w", err)
+	}
+
+	rowsAffected, err := s.formRepo.DeleteSubmission(ctx, submissionID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete submission: %w", err)
+	}
+	if rowsAffected == 0 {
+		return 0, nil
+	}
+
+	for _, slot := range slots {
+		if err := s.recalculateRideRecord(ctx, slot.CaseID, slot.ServiceDate, slot.LegSeq, slot.VehicleID, nil); err != nil {
+			return 0, err
+		}
+	}
+	return rowsAffected, nil
+}
+
+// DeleteRowConflict 移除一筆尚未裁決的同車同個案衝突，供待維護清單的「忽略此筆」使用。
+// 既有搭乘來源與搭乘紀錄一律不動，維持衝突發生前的值。
+func (s *RideService) DeleteRowConflict(ctx context.Context, conflictID uuid.UUID) (int64, error) {
+	rowsAffected, err := s.formRepo.DeleteRowConflict(ctx, conflictID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete row conflict: %w", err)
+	}
+	return rowsAffected, nil
+}
+
 // ResolveRowConflict 裁決一筆同車同個案衝突：useNew 時把暫存的新值實際寫入搭乘來源並
 // 重算搭乘紀錄，否則單純標記已解決、保留既有資料不動。回傳值供呼叫端在司機有變更時
 // 同步出勤月曆，比照初次匯入與司機補綁定的既有流程。

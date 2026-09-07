@@ -326,6 +326,40 @@ func (s *AttendanceService) ListConflicts(ctx context.Context) ([]AttendanceConf
 	return out, nil
 }
 
+// IgnoreConflict 忽略一筆出勤待維護衝突：直接刪除衝突列，出勤紀錄維持原本的人工登記值。
+// 下次匯入若仍判斷出同一組差異會重新產生，屬預期行為。
+func (s *AttendanceService) IgnoreConflict(ctx context.Context, id uuid.UUID, actorID *uuid.UUID, actorRole *string, auditContexts ...AuditContext) error {
+	return s.runInTx(ctx, func(txCtx context.Context) error {
+		conflict, err := s.attendanceRepo.GetConflict(txCtx, id)
+		if err != nil {
+			return fmt.Errorf("failed to get attendance import conflict: %w", err)
+		}
+		if conflict == nil {
+			return ErrAttendanceConflictNotFound
+		}
+
+		if err := s.attendanceRepo.DeleteConflict(txCtx, id); err != nil {
+			return err
+		}
+
+		if s.auditRepo != nil {
+			if err := s.auditRepo.Write(txCtx, AuditEntry{
+				ActorID:    actorID,
+				ActorRole:  actorRole,
+				Action:     "ignore",
+				EntityType: "attendance_import_conflicts",
+				EntityID:   strPtr(id.String()),
+				BeforeData: conflict.AuditSnapshot(),
+				IPAddress:  auditContextOrEmpty(auditContexts).IPAddress,
+				UserAgent:  auditContextOrEmpty(auditContexts).UserAgent,
+			}); err != nil {
+				return fmt.Errorf("failed to write attendance conflict ignore audit: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
 // ResolveConflict 依使用者選擇解決一筆出勤待維護衝突：keep_manual 保留原本人工登記，
 // use_import 改採匯入判斷的出勤(work) 覆蓋人工登記。
 func (s *AttendanceService) ResolveConflict(ctx context.Context, id uuid.UUID, choice string, actorID *uuid.UUID, actorRole *string, auditContexts ...AuditContext) (*AttendanceConflictDTO, error) {

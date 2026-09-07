@@ -33,6 +33,8 @@ type DuplicateStagingStore interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*DuplicateCandidate, error)
 	// Resolve 將暫存列標記為裁決結果；rowsAffected=0 代表該列已被裁決過（並發保護）。
 	Resolve(ctx context.Context, id uuid.UUID, status string, resolvedBy uuid.UUID, resultingCaseID *uuid.UUID) (rowsAffected int64, err error)
+	// Delete 移除尚未裁決的暫存列；rowsAffected=0 代表該列不存在或已被裁決過。
+	Delete(ctx context.Context, id uuid.UUID) (rowsAffected int64, err error)
 }
 
 // SiteRef 是驗證個案交通偏好所需的最小單位資訊。

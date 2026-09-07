@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -19,12 +20,19 @@ func newFakeCaregiverStore() *fakeCaregiverStore {
 	return &fakeCaregiverStore{byID: map[uuid.UUID]*Caregiver{}}
 }
 
-func (f *fakeCaregiverStore) List(ctx context.Context, q, status string, unresolvedLink, incomplete, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
+func (f *fakeCaregiverStore) List(ctx context.Context, q, status string, pending, excludePending bool, page, pageSize int) ([]Caregiver, int64, error) {
 	if f.listErr != nil {
 		return nil, 0, f.listErr
 	}
 	var out []Caregiver
 	for _, c := range f.byID {
+		isPending := strings.TrimSpace(c.Name) == "" || strings.TrimSpace(c.Type) == ""
+		if pending && !isPending {
+			continue
+		}
+		if excludePending && isPending {
+			continue
+		}
 		out = append(out, *c)
 	}
 	return out, int64(len(out)), nil

@@ -135,6 +135,17 @@ func (r *CaseDuplicateStagingRepository) GetByID(ctx context.Context, id uuid.UU
 	return c, nil
 }
 
+// Delete 移除尚未裁決的暫存列，供「忽略此筆」直接把資料從系統刪除；
+// rowsAffected=0 代表該列不存在或已被裁決過（並發保護）。
+func (r *CaseDuplicateStagingRepository) Delete(ctx context.Context, id uuid.UUID) (int64, error) {
+	db := pgxdb.FromContext(ctx, r.db)
+	tag, err := db.Exec(ctx, `DELETE FROM case_import_duplicate_rows WHERE id = $1 AND status = 'pending'`, id)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 // Resolve 將暫存列標記為裁決結果；rowsAffected=0 代表該列已被裁決過（並發保護）。
 func (r *CaseDuplicateStagingRepository) Resolve(ctx context.Context, id uuid.UUID, status string, resolvedBy uuid.UUID, resultingCaseID *uuid.UUID) (int64, error) {
 	db := pgxdb.FromContext(ctx, r.db)

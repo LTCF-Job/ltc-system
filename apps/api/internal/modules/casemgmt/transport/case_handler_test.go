@@ -22,6 +22,15 @@ import (
 type fakeCaseStore struct {
 	cases []app.Case
 	sched *app.CaseSchedule
+
+	// listFlags 保留最後一次 List 收到的待維護篩選旗標，供 handler 的預設值測試斷言。
+	listFlags caseListFlags
+}
+
+// caseListFlags 是 CaseStore.List 的兩個待維護篩選參數。
+type caseListFlags struct {
+	unresolvedLink bool
+	excludePending bool
 }
 
 type fakeSiteFinder struct {
@@ -36,6 +45,7 @@ func (f *fakeSiteFinder) GetByID(ctx context.Context, id uuid.UUID) (*app.SiteRe
 }
 
 func (f *fakeCaseStore) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
+	f.listFlags = caseListFlags{unresolvedLink: unresolvedLink, excludePending: excludePending}
 	return f.cases, int64(len(f.cases)), nil
 }
 

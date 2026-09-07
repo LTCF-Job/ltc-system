@@ -88,6 +88,27 @@ func (h *AttendanceHandler) ResolveConflict(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, resolved, nil)
 }
 
+// IgnoreConflict 忽略一筆出勤待維護衝突，直接把該衝突列從系統刪除。
+func (h *AttendanceHandler) IgnoreConflict(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "衝突編號格式錯誤", nil)
+		return
+	}
+
+	actorID := auth.GetActorID(c)
+	actorRole := auth.GetActorRole(c)
+	if err := h.attendanceSvc.IgnoreConflict(c.Request.Context(), id, &actorID, &actorRole, auditContext(c)); err != nil {
+		if errors.Is(err, app.ErrAttendanceConflictNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "", nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
+}
+
 // Upsert 登記單日出勤狀態。
 func (h *AttendanceHandler) Upsert(c *gin.Context) {
 	var req struct {
