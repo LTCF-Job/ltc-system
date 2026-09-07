@@ -14,7 +14,7 @@
       <template #filter>
         <el-input
           v-model="filters.q"
-          placeholder="搜尋區域名稱／說明"
+          placeholder="搜尋區域名稱"
           clearable
           style="width: 240px"
           @keyup.enter="handleSearch"
@@ -97,18 +97,6 @@
           <el-table-column prop="name" label="地區名稱" min-width="150" align="center" class-name="region-name-col">
             <template #default="{ row }">
               <span class="font-bold text-nowrap">{{ row.name }}</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="description" label="說明與備註" min-width="180" show-overflow-tooltip class-name="region-desc-col">
-            <template #default="{ row }">
-              <span>{{ row.description || '-' }}</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center" class-name="region-nowrap-col">
-            <template #default="{ row }">
-              <span>{{ formatDateTime(row.createdAt) }}</span>
             </template>
           </el-table-column>
 
@@ -203,14 +191,6 @@
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="備註說明" prop="description">
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="3"
-            placeholder="請輸入地區備註或涵蓋範圍說明"
-          />
-        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -228,7 +208,6 @@ import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import { listRegions, createRegion, updateRegion, deleteRegion } from '@/api/masters'
-import { formatDateTime } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/auth'
 import type { RegionDTO, CreateRegionRequest, UpdateRegionRequest } from '@/types/api'
 
@@ -259,12 +238,10 @@ const formRef = ref<FormInstance>()
 
 const form = reactive<{
   name: string
-  description: string
   status: 'active' | 'inactive'
   sortOrder: number
 }>({
   name: '',
-  description: '',
   status: 'active',
   sortOrder: 1
 })
@@ -408,7 +385,6 @@ function handleSizeChange(s: number) {
 function openCreateDialog() {
   editingId.value = null
   form.name = ''
-  form.description = ''
   form.status = 'active'
   form.sortOrder = (regions.value.length > 0 ? Math.max(...regions.value.map(r => r.sortOrder || 0)) + 1 : 1)
   dialogVisible.value = true
@@ -417,7 +393,6 @@ function openCreateDialog() {
 function openEditDialog(row: RegionDTO) {
   editingId.value = row.id
   form.name = row.name
-  form.description = row.description || ''
   form.status = row.status
   form.sortOrder = row.sortOrder ?? 1
   dialogVisible.value = true
@@ -443,7 +418,6 @@ async function handleSubmit() {
       if (editingId.value) {
         const updateData: UpdateRegionRequest = {
           name: form.name.trim(),
-          description: form.description.trim(),
           status: form.status,
           sortOrder: form.sortOrder
         }
@@ -452,7 +426,6 @@ async function handleSubmit() {
       } else {
         const createData: CreateRegionRequest = {
           name: form.name.trim(),
-          description: form.description.trim(),
           status: form.status,
           sortOrder: form.sortOrder
         }
@@ -510,19 +483,9 @@ onMounted(() => {
   margin-left: 10px;
 }
 
-:deep(.region-nowrap-col .cell) {
-  white-space: nowrap;
-  min-width: 170px;
-}
-
 :deep(.region-name-col .cell) {
   min-width: 150px;
 }
-
-:deep(.region-desc-col .cell) {
-  min-width: 180px;
-}
-
 
 /* 拖曳排序握把與狀態 */
 .drag-hint-tag {
