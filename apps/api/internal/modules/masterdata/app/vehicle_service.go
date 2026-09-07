@@ -43,7 +43,7 @@ func (s *VehicleService) List(ctx context.Context, filter VehicleFilter, page, p
 	for _, v := range list {
 		ids = append(ids, v.ID)
 	}
-	byVehicle, err := s.drivers.ListByVehicleIDsOnDate(ctx, ids, clock.Now())
+	byVehicle, err := s.drivers.ListByVehicleIDsOnDate(ctx, ids, clock.Today())
 	if err != nil {
 		return nil, 0, err
 	}

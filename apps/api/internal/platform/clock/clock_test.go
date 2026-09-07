@@ -12,7 +12,10 @@ func TestSystemClockUsesAsiaTaipei(t *testing.T) {
 		t.Fatalf("location = %q, want Asia/Taipei", now.Location())
 	}
 	if got := c.Today(); got.Hour() != 0 || got.Minute() != 0 || got.Second() != 0 {
-		t.Fatalf("today = %v, want local midnight", got)
+		t.Fatalf("today = %v, want UTC midnight", got)
+	}
+	if got := c.Today().Location(); got != time.UTC {
+		t.Fatalf("today location = %v, want UTC", got)
 	}
 	if got := gotDate(c.Today()); got != c.Now().Format("2006-01-02") {
 		t.Fatalf("today date = %q, now date = %q", got, c.Now().Format("2006-01-02"))

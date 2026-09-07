@@ -36,10 +36,14 @@ func (c SystemClock) Now() time.Time {
 	return time.Now().In(c.location())
 }
 
-// Today 回傳 Asia/Taipei 當地午夜。
+// Today 回傳 Asia/Taipei 當地曆法日期，正規化為 UTC 午夜。
+// 傳給 PostgreSQL 與 daterange 欄位比對（如 effective_range @> $1::date）時，
+// 若改用 Asia/Taipei 午夜，pgx 編碼成 timestamptz 後經 UTC session timezone
+// 轉換取日期會回退一天；固定用 UTC 表示同一個曆法日期可避免此問題，
+// 不論 DB session timezone 為何都會落在正確日期。
 func (c SystemClock) Today() time.Time {
 	now := c.Now()
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, c.location())
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 var system = NewAsiaTaipei()

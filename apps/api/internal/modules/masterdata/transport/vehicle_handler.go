@@ -150,7 +150,7 @@ func (h *VehicleHandler) SetDrivers(c *gin.Context) {
 		return
 	}
 
-	effectiveFrom := clock.Now()
+	effectiveFrom := clock.Today()
 	if req.EffectiveFrom != nil {
 		effectiveFrom = req.EffectiveFrom.toTime()
 	}
