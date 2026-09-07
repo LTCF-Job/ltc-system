@@ -72,6 +72,8 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 	}
 	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Ingest-Token"}
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	// 讓瀏覽器端讀得到請求識別碼，下載類（blob）回應也能在開發者工具對上伺服器 log。
+	corsConfig.ExposeHeaders = []string{httpx.RequestIDHeader}
 	r.Use(cors.New(corsConfig))
 
 	// liveness 只確認 process 仍能回應，不依賴資料庫。
@@ -288,14 +290,19 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 
 	// gin 預設的 404／405 回應是純文字，前端拿不到 error.code 只能顯示通用訊息；
 	// 改成標準錯誤 envelope，讓「呼叫到不存在的位址」與「後端真的壞掉」可以分辨。
-	r.NoRoute(func(c *gin.Context) {
-		httpx.RespondError(c, http.StatusNotFound, httpx.CodeRouteNotFound, "", nil)
-	})
-	r.NoMethod(func(c *gin.Context) {
-		httpx.RespondError(c, http.StatusMethodNotAllowed, httpx.CodeRouteNotFound, "", nil)
-	})
+	// 預設關閉時，方法不符會落到 NoRoute 而與「路徑不存在」混在一起；打開才分得出 405。
+	r.HandleMethodNotAllowed = true
+	r.NoRoute(routeNotFoundHandler(http.StatusNotFound))
+	r.NoMethod(routeNotFoundHandler(http.StatusMethodNotAllowed))
 
 	return r
+}
+
+// routeNotFoundHandler 產生 404／405 的標準錯誤回應。
+func routeNotFoundHandler(status int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		httpx.RespondError(c, status, httpx.CodeRouteNotFound, "", nil)
+	}
 }
 
 // recoveryMiddleware 取代 gin.Recovery()：預設的 recovery 在 panic 時只寫出空 body 的 500，
