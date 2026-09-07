@@ -224,7 +224,7 @@ func (r *NotificationRepository) BatchCreateRecipients(ctx context.Context, item
 		ON CONFLICT (topic, email) WHERE recipient_type = 'email' DO NOTHING
 		RETURNING id, topic, recipient_type, target_role, user_id, COALESCE(email, ''), display_name, active, created_by, created_at
 	`
-	rows, err := db.Query(ctx, query, topics, emails, displayNames, createdBys)
+	rows, err := db.Query(ctx, query, topics, emails, displayNames, pgxdb.UUIDStrings(createdBys))
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch create recipients: %w", err)
 	}

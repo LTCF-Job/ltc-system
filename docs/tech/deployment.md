@@ -55,6 +55,18 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 
 日後任何新增的入口（例如獨立的 worker、one-off script）只要用同一個 `DATABASE_URL` 連 Supabase pooler，都要照這個寫法，不能直接 `pgxpool.New(ctx, dsn)`。
 
+### 已知坑：simple protocol 下 `[]uuid.UUID` 無法當查詢參數
+
+simple protocol 會在 client 端把所有參數轉成 SQL 字面值，pgx 只能依 Go 型別推導編碼方式（OID 為 0）。`[]uuid.UUID` 沒有對應的編碼計畫，傳給 `::uuid[]` 參數時會在執行期直接回：
+
+```
+unable to encode []uuid.UUID{...} into text format for unknown type (OID 0): cannot find encode plan
+```
+
+空切片 `[]uuid.UUID{}` 一樣會失敗（`nil` 才會被當成 NULL 編碼），所以這種寫法在 compile 與單元測試階段都看不出來，只有真的打到資料庫才會爆。UUID 陣列參數一律先過 [`pgxdb.UUIDStrings`](../../apps/api/internal/platform/pgxdb/uuidarray.go) 轉成 `[]string` 再傳。
+
+同樣走 simple protocol 但實測可以正確編碼的型別：`uuid.UUID` 純量、`[]string`、`[]*string`（`nil` 元素會寫入 NULL）、`[]int64`。
+
 ## `apps/api` 環境變數
 
 | 變數 | 本機 `.env` | Cloud Run | 說明 |
