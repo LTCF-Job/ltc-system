@@ -130,7 +130,7 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		Rows: []importapp.CaseImportRowResult{rowA, rowB, rowC},
 	}
 
-	result, err := importSvc.CommitCases(ctx, preview, nil, importapp.Actor{
+	result, err := importSvc.CommitCases(ctx, preview, importapp.Actor{
 		ActorID: uuid.New(), ActorRole: "admin", IPAddress: "127.0.0.1", UserAgent: "test-agent",
 	})
 	require.NoError(t, err)
