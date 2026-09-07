@@ -14,12 +14,15 @@ jobs:
   dependency-review:
     name: Dependency security review
     runs-on: ubuntu-latest
+    # dependency-review-action 比對兩個 ref 之間的相依差異，push event 沒有 base ref 可比，
+    # 只能在 pull_request 執行；push 時整個 job skip，branch protection 視 skipped 為通過。
+    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Review dependency changes
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
 
@@ -31,7 +34,7 @@ jobs:
         working-directory: apps/api
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate migration filenames and pairs
         shell: bash
@@ -130,13 +133,14 @@ jobs:
       HMAC_KEY: MDkwODAwMDcwNjA1MDQwMzA5MDgwMDA3MDYwNTA0MDM=
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: apps/api/go.mod
           cache: true
+          cache-dependency-path: apps/api/go.sum
 
       - name: Apply all migrations
         run: go run ./cmd/migrate up
@@ -157,17 +161,22 @@ jobs:
         working-directory: apps/api
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: apps/api/go.mod
           cache: true
+          cache-dependency-path: apps/api/go.sum
 
       - name: Go vulnerability check
-        uses: golang/govulncheck-action@v1
+        # 釘 v1.1.0：浮動的 v1 仍指向以 node20 執行內部 action 的舊版。
+        # go-version-input 預設 'stable'，會與 go-version-file 同時傳進 setup-go 而蓋掉 go.mod 版本，
+        # 設為空字串才會真的照 go.mod 的 Go 版本掃描。
+        uses: golang/govulncheck-action@v1.1.0
         with:
+          go-version-input: ''
           go-version-file: apps/api/go.mod
           work-dir: apps/api
           cache-dependency-path: apps/api/go.sum
@@ -192,10 +201,10 @@ jobs:
         working-directory: apps/web
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -221,7 +230,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # 不用 gitleaks-action：它對 organization repo 需要授權金鑰，gitleaks 本體沒有此限制。
       # 以 dir 模式只掃 checkout 出來的工作樹，不掃 git 歷史：歷史裡的舊金鑰無法靠掃描修復，
