@@ -76,6 +76,10 @@ rows, err := db.Query(ctx, query, pgxdb.UUIDStrings(caseIDs))
 
 同樣的限制也適用於自訂 struct：要寫進 `jsonb` 欄位的結構必須自己 `json.Marshal` 成字串再傳，不能直接把 struct 當參數。
 
+空切片 `[]uuid.UUID{}` 一樣會失敗（`nil` 才會被當成 NULL 編碼），所以這種寫法在 compile 與單元測試階段都看不出來，只有真的打到資料庫才會爆。UUID 陣列參數一律先過 [`pgxdb.UUIDStrings`](../../apps/api/internal/platform/pgxdb/uuidarray.go) 轉成 `[]string` 再傳。
+
+同樣走 simple protocol 但實測可以正確編碼的型別：`uuid.UUID` 純量、`[]string`、`[]*string`（`nil` 元素會寫入 NULL）、`[]int64`。
+
 ## `apps/api` 環境變數
 
 | 變數 | 本機 `.env` | Cloud Run | 說明 |
