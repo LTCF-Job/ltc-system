@@ -103,11 +103,13 @@ func (r *RoleRepository) Create(ctx context.Context, role *app.Role) error {
 		return fmt.Errorf("failed to marshal role permissions: %w", err)
 	}
 	db := pgxdb.FromContext(ctx, r.db)
+	// 連線走 simple protocol（見 cmd/server/main.go），[]byte 會被編成 bytea 字面值而無法寫入
+	// jsonb 欄位，必須以字串傳入並明確轉型。
 	return db.QueryRow(ctx, `
 		INSERT INTO roles (id, key, name, description, tag_type, is_system, base_role, permissions)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
 		RETURNING created_at, updated_at
-	`, role.ID, role.Key, role.Name, role.Description, role.TagType, role.IsSystem, role.BaseRole, permBytes).
+	`, role.ID, role.Key, role.Name, role.Description, role.TagType, role.IsSystem, role.BaseRole, string(permBytes)).
 		Scan(&role.CreatedAt, &role.UpdatedAt)
 }
 
@@ -123,10 +125,10 @@ func (r *RoleRepository) Update(ctx context.Context, role *app.Role) error {
 	db := pgxdb.FromContext(ctx, r.db)
 	return db.QueryRow(ctx, `
 		UPDATE roles
-		SET name = $2, description = $3, tag_type = $4, base_role = $5, permissions = $6, updated_at = now()
+		SET name = $2, description = $3, tag_type = $4, base_role = $5, permissions = $6::jsonb, updated_at = now()
 		WHERE id = $1
 		RETURNING updated_at
-	`, role.ID, role.Name, role.Description, role.TagType, role.BaseRole, permBytes).Scan(&role.UpdatedAt)
+	`, role.ID, role.Name, role.Description, role.TagType, role.BaseRole, string(permBytes)).Scan(&role.UpdatedAt)
 }
 
 // Delete 刪除角色。

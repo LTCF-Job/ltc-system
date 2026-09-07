@@ -44,6 +44,8 @@ export interface ApiError {
   code: string;
   message: string;
   details?: ErrorDetail[];
+  // 伺服器端 log 的同一筆請求識別碼；使用者回報問題時可據以查詢。
+  requestId?: string;
 }
 
 export interface ApiResponse<T> {

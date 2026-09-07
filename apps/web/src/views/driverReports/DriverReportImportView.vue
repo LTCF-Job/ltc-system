@@ -467,11 +467,12 @@ import DialogFooter from '@/components/DialogFooter.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import CaseCreateDialog from '@/components/cases/CaseCreateDialog.vue'
 import DriverCreateDialog from '@/components/masters/DriverCreateDialog.vue'
-import { resolveErrorMessage } from '@/api/errorCodes'
+import { resolveApiErrorMessage, NETWORK_ERROR_MESSAGE, TIMEOUT_ERROR_MESSAGE } from '@/api/errorCodes'
 import { toColumnDecisionPayload, type ColumnDecisionMap } from './columnDecisions'
 import { describeImportResult, hasPendingWork } from './importSummary'
 import { LEG_SEQ_OPTIONS } from './legOptions'
 import type {
+  ApiError,
   AttendanceConflictDTO,
   CaseDTO,
   DriverDTO,
@@ -492,10 +493,6 @@ type SubmissionReviewRow = Omit<SubmissionReviewDTO, 'caseIssues'> & {
 
 const router = useRouter()
 const activeTab = ref<'upload' | 'pending'>('upload')
-
-function apiErrorCode(error: unknown): string | undefined {
-  return (error as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code
-}
 
 // ---- 批次上傳 ----
 
@@ -945,17 +942,19 @@ async function retryRow(row: BatchFileRow) {
 }
 
 function rowErrorMessage(error: unknown): string {
-  const detail = (error as { response?: { data?: { error?: { details?: Array<{ field?: string; reason: string }>; message?: string } } } })
-    ?.response?.data?.error
+  const response = (error as { response?: { data?: { error?: ApiError } } })?.response
+  const detail = response?.data?.error
   if (detail?.details?.length) {
     return detail.details
       .map((d) => `${d.field ? `【${IMPORT_FIELD_LABELS[d.field] || d.field}】` : ''}${d.reason}`)
       .join('；')
   }
-  const code = apiErrorCode(error)
-  if (code) return resolveErrorMessage(code, '匯入失敗，請確認檔案內容')
-  if (error instanceof Error && error.message) return `解析發生錯誤：${error.message}`
-  return '匯入失敗，請確認檔案內容'
+  if (detail) return resolveApiErrorMessage(detail, '匯入失敗，請確認檔案內容')
+
+  // 走到這裡代表請求沒拿到後端回應。原始 error.message 是 axios 或瀏覽器的技術字串
+  // （如 "Network Error"、"timeout of 30000ms exceeded"），不能直接顯示給使用者。
+  const timedOut = (error as { code?: string })?.code === 'ECONNABORTED'
+  return timedOut ? TIMEOUT_ERROR_MESSAGE : NETWORK_ERROR_MESSAGE
 }
 
 async function runWithLimit<T>(items: T[], handler: (item: T) => Promise<void>) {

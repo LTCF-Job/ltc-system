@@ -54,6 +54,15 @@
         </template>
       </el-upload>
 
+      <el-alert
+        v-if="fileError"
+        type="error"
+        show-icon
+        :closable="false"
+        :title="fileError"
+        style="margin-top: 12px;"
+      />
+
       <div class="import-footer-spacing">
         <DialogFooter
           confirm-text="開始解析與預覽"
@@ -199,6 +208,7 @@ const emit = defineEmits<{
 
 const visible = ref(false)
 const selectedFile = ref<File | null>(null)
+const fileError = ref('')
 const analyzing = ref(false)
 const submitting = ref(false)
 const downloadingTemplate = ref(false)
@@ -235,14 +245,40 @@ async function handleDownloadTemplate() {
 
 function open() {
   selectedFile.value = null
+  fileError.value = ''
   dryRunResult.value = null
   commitResult.value = null
   checkedDuplicateRows.value = new Set()
   visible.value = true
 }
 
+// 後端上傳上限（apps/api/internal/platform/httpx/upload.go 的 MaxUploadBytes）。
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+
+// accept=".xlsx" 只約束檔案選擇視窗，拖曳進來的檔案不受限制。在本地就把格式與大小擋下來，
+// 使用者才會立刻知道是「檔案選錯」而不是等一次往返後看到伺服器的驗證錯誤。
 function handleFileChange(uploadFile: any) {
-  selectedFile.value = uploadFile.raw
+  const file: File | undefined = uploadFile?.raw
+  selectedFile.value = null
+  fileError.value = ''
+  if (!file) return
+
+  if (!file.name.toLowerCase().endsWith('.xlsx')) {
+    const extension = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '（無副檔名）'
+    fileError.value = `僅支援 .xlsx 檔案，目前選取的是 ${extension} 檔；請用 Excel 另存為「Excel 活頁簿 (.xlsx)」後再上傳。`
+    return
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    const sizeMB = (file.size / 1024 / 1024).toFixed(1)
+    fileError.value = `檔案大小 ${sizeMB} MB 超過 20 MB 上限，請分批匯入。`
+    return
+  }
+  if (file.size === 0) {
+    fileError.value = '檔案內容是空的，請確認檔案是否完整。'
+    return
+  }
+
+  selectedFile.value = file
 }
 
 // API 錯誤已由 axios 攔截器統一提示，這裡只負責補上前端自身的例外（例如回應欄位形狀
@@ -279,6 +315,7 @@ function resetToUpload() {
   dryRunResult.value = null
   commitResult.value = null
   selectedFile.value = null
+  fileError.value = ''
   checkedDuplicateRows.value = new Set()
 }
 
