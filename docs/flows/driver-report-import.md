@@ -357,6 +357,10 @@ mapped 的欄位送出同樣的更新不會再次回填，避免疊加出重複�
 - 所有會寫入相同 ride slot 的 writer（import、webhook、manual correction 及其他來源）必須共用同一個 transaction + slot lock API。多 slot 操作要先收集、去重，再按 `(case_id, service_date, leg_seq)` 排序鎖定，必要時 retry deadlock。
 - `form_columns` 的完整 metadata 應原子更新或版本化；transaction rollback 後的 counters、audit 與 mapping 狀態不得留下半套結果。
 - 無時區來源時間必須明確套用來源時區（目前預期為 `Asia/Taipei`），並在 staging／production 以實際資料驗證。
+- `ride_records` 讀取既有紀錄的每個查詢都必須對可空欄位（如 `based_on_fingerprint`，migration `000026` 新增時未補
+  `NOT NULL DEFAULT`）套用 `COALESCE`：Go 端 `RideRecord.BasedOnFingerprint` 是不可為 nil 的 `string`，直接 `Scan`
+  到 NULL 值會整筆 `reconcileRideSource` 失敗，讓匯入 commit 回滾且只回應通用的
+  `DRIVER_REPORT_IMPORT_FAILED`，錯誤真因（`cannot scan NULL into *string`）只在伺服器端日誌可見。
 
 ## 驗證分層
 

@@ -263,8 +263,9 @@ func newTestExportHandler(t *testing.T, mode app.GovClaimMode) (*ExportHandler, 
 
 func newExportHandlerWithPrecheckFailure(t *testing.T) *ExportHandler {
 	t.Helper()
+	// 未裁決的混車衝突是唯一仍會擋下匯出的檢核項目；缺個案資料只會留白匯出。
 	precheck := app.NewPrecheckService(stubPrecheckRepo{
-		incomplete: []app.IncompleteCase{{ID: testCaseID, Name: "蔡曾切"}},
+		conflicts: []app.UnresolvedConflict{{RideID: uuid.New(), CaseName: "蔡曾切", ServiceDate: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)}},
 	})
 	svc := app.NewGovClaimService(
 		&config.Config{EncryptionKey: testKey},
@@ -324,6 +325,7 @@ func (s *stubSourceReader) QueryGovClaimSources(context.Context, app.ClaimScope)
 
 type stubPrecheckRepo struct {
 	incomplete []app.IncompleteCase
+	conflicts  []app.UnresolvedConflict
 }
 
 func (s stubPrecheckRepo) FindIncompleteActiveCases(context.Context, app.ClaimScope) ([]app.IncompleteCase, error) {
@@ -331,7 +333,7 @@ func (s stubPrecheckRepo) FindIncompleteActiveCases(context.Context, app.ClaimSc
 }
 
 func (s stubPrecheckRepo) FindUnresolvedConflicts(context.Context, app.ClaimScope) ([]app.UnresolvedConflict, error) {
-	return nil, nil
+	return s.conflicts, nil
 }
 
 // memoryExportStore 模擬 export_jobs／export_lines／export_job_files 的往返，

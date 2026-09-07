@@ -60,6 +60,22 @@ pool, _ := pgxpool.NewWithConfig(ctx, poolCfg)
 
 日後任何新增的入口（例如獨立的 worker、one-off script）只要用同一個 `DATABASE_URL` 連 Supabase pooler，都要照這個寫法，不能直接 `pgxpool.New(ctx, dsn)`。
 
+### 連帶限制：simple protocol 下不能直接傳 `[]uuid.UUID` 參數
+
+simple protocol 沒有參數型別協商，pgx 必須自行把每個參數轉成 SQL 文字字面值。`github.com/google/uuid` 的 `uuid.UUID` 沒有註冊型別編碼，切片形式在執行期會直接失敗：
+
+```
+unable to encode []uuid.UUID{...} into text format for unknown type (OID 0): cannot find encode plan
+```
+
+這個錯誤只有在切片非空時才會出現（`nil` 會被當成 NULL），所以「不篩個案時正常、勾選個案就 500」是典型徵狀。傳 `::uuid[]` 參數一律先用 [`pgxdb.UUIDStrings`](../../apps/api/internal/platform/pgxdb/uuidarray.go) 轉成 `[]string`，讓 SQL 端的 `::uuid[]` 完成轉型：
+
+```go
+rows, err := db.Query(ctx, query, pgxdb.UUIDStrings(caseIDs))
+```
+
+同樣的限制也適用於自訂 struct：要寫進 `jsonb` 欄位的結構必須自己 `json.Marshal` 成字串再傳，不能直接把 struct 當參數。
+
 ## `apps/api` 環境變數
 
 | 變數 | 本機 `.env` | Cloud Run | 說明 |

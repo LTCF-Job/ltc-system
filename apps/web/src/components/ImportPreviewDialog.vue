@@ -171,6 +171,7 @@ import { computed, ref } from 'vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { UploadFilled, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import axios from 'axios'
 import type { DryRunImportResultDTO } from '@/types/api'
 
 interface ImportCommitResult {
@@ -244,6 +245,14 @@ function handleFileChange(uploadFile: any) {
   selectedFile.value = uploadFile.raw
 }
 
+// API 錯誤已由 axios 攔截器統一提示，這裡只負責補上前端自身的例外（例如回應欄位形狀
+// 不如預期而丟出的 TypeError）；沒有這層提示，例外會被 finally 吃掉而看起來像按鈕沒反應。
+function notifyUnexpectedFailure(err: unknown, action: string) {
+  if (axios.isAxiosError(err)) return
+  console.error(`[ImportPreviewDialog] ${action}失敗`, err)
+  ElMessage.error(`${action}失敗，請重新嘗試或聯繫系統管理員`)
+}
+
 async function startDryRun() {
   if (!selectedFile.value) return
   analyzing.value = true
@@ -259,6 +268,8 @@ async function startDryRun() {
       errors: rawData.errors || [],
       warnings: rawData.warnings || []
     }
+  } catch (err) {
+    notifyUnexpectedFailure(err, '解析檔案')
   } finally {
     analyzing.value = false
   }
@@ -289,6 +300,8 @@ async function confirmImport() {
       ElMessage.success(`已匯入 ${result.importedCount} 筆有效資料`)
     }
     emit('success')
+  } catch (err) {
+    notifyUnexpectedFailure(err, '匯入資料')
   } finally {
     submitting.value = false
   }

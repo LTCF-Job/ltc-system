@@ -382,8 +382,10 @@ function openImportDialog() {
 
 // ImportPreviewDialog 是沿用個案匯入的共用元件，其錯誤／警告清單固定以 caseName 顯示
 // 姓名欄位；照護人員後端回應的欄位是 name，這裡轉接成元件既有的欄位形狀，元件本身不需改動。
-function withCaseNameAlias(items: any[] = []): any[] {
-  return items.map((item) => ({ ...item, caseName: item.name }))
+// 後端無錯誤／警告時，Go 的 nil slice 會序列化成 null，預設參數只在 undefined 生效，
+// 必須自行擋掉 null，否則解析預覽會丟出 TypeError，畫面看起來像按鈕沒反應。
+function withCaseNameAlias(items?: any[] | null): any[] {
+  return (items ?? []).map((item) => ({ ...item, caseName: item.name }))
 }
 
 async function handleDryRun(file: File): Promise<any> {

@@ -103,6 +103,7 @@ func RespondErrorCode(c *gin.Context, httpStatus int, code string, err error, de
 			slog.String("path", c.Request.URL.Path),
 			slog.String("method", c.Request.Method),
 			slog.String("error_type", fmt.Sprintf("%T", err)),
+			slog.String("error_message", err.Error()),
 		)
 	}
 	message, ok := codeMessages[code]

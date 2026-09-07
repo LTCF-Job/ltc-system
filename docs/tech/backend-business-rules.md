@@ -74,10 +74,10 @@
 | 順序 | Severity | Code | 判斷條件 |
 |---|---|---|---|
 | 1 | `info`（固定出現） | `QUOTA_CHECK_SKIPPED` | 恆常提示：配給額度檢查未執行（規則尚未取得，不影響 `Passed`） |
-| 2 | `error` | `MISSING_CASE_PROFILE` | 該地區有效個案缺身分證、住家地址或服務使用類型任一欄位 |
-| 3 | `warning` | `UNRESOLVED_CONFLICT` | 該地區有 `ride_records` 存在未裁決的混車衝突（`resolve-conflict` 還沒處理） |
+| 2 | `warning` | `MISSING_CASE_PROFILE` | 該地區有效個案缺身分證、住家地址、服務類別或服務使用類型任一欄位 |
+| 3 | `error` | `UNRESOLVED_CONFLICT` | 該地區有 `ride_records` 存在未裁決的混車衝突（`resolve-conflict` 還沒處理） |
 
-`Passed = (errorCount == 0)`——只有 `error` 等級的項目會擋匯出，`warning`／`info` 只是提示不會擋。
+`Passed = (errorCount == 0)`——只有 `error` 等級的項目會擋匯出，`warning`／`info` 只是提示不會擋。**未裁決混車衝突是唯一會擋下匯出的檢核項目**：缺資料只會讓該欄位在申報檔留白，混車卻會讓報出去的資料本身是錯的。
 
 ## 政府申報表排序規則（`domain/govform.SortClaimRows`）
 
@@ -90,7 +90,7 @@
 
 ## 政府申報表目前沒有資料來源的欄位（`domain/govform.BuildClaimRow`）
 
-33 欄申報表裡有 16 欄目前系統沒有任何資料來源，`BuildClaimRow` 一律寫入空字串，不套用任何預設值——缺資料就是留白，不得由程式代填看似合理的內容（見 [`golden_test.go`](../../apps/api/internal/domain/govform/golden_test.go) 的 `TestGovClaim_BlankColumnsMatchGovernmentSample`，鎖定這些欄位必須留白；該測試同時鎖定第 17 欄在條件不成立時也留白，但那是條件式欄位而非資料缺口，不計入這 16 欄）。
+33 欄申報表裡有 16 欄目前系統沒有任何資料來源，`BuildClaimRow` 一律寫入空字串，不套用任何預設值——缺資料就是留白，不得由程式代填看似合理的內容。同一原則也適用於有資料來源但該筆剛好缺漏的欄位（缺司機、缺排班、缺單價等）：`BuildClaimRow` 把該欄留白後仍產出這一列，缺了什麼由 `GovClaimService` 計入 `dataGaps` 回報，不因為單一欄位缺漏就丟掉整列或擋下整批匯出（見 [`golden_test.go`](../../apps/api/internal/domain/govform/golden_test.go) 的 `TestGovClaim_BlankColumnsMatchGovernmentSample`，鎖定這些欄位必須留白；該測試同時鎖定第 17 欄在條件不成立時也留白，但那是條件式欄位而非資料缺口，不計入這 16 欄）。
 
 **結構性不適用（系統只處理交通接送，不處理其他服務類型）**：
 

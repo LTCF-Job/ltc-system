@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,25 +24,25 @@ const (
 	ExportStatusFailed    = "failed"
 )
 
-// 申報列被跳過的原因代碼。缺資料的趟次寧可跳過並回報，也不讓 govform.BuildClaimRow
-// 的預設值把它補成一列看似正常的申報資料。
+// 申報列缺漏資料的代碼。這些欄位在申報檔留白，該列與其餘資料照樣匯出，
+// 只有 GapReasonBuildRowFailed 是真的組不出列（如日期無法換算民國年）才會少一列。
 const (
-	SkipReasonNoScheduleLeg     = "NO_SCHEDULE_LEG"
-	SkipReasonNoDepartTime      = "NO_DEPART_TIME"
-	SkipReasonNoDriver          = "NO_DRIVER"
-	SkipReasonNoServiceCategory = "NO_SERVICE_CATEGORY"
-	SkipReasonNoUsageType       = "NO_SERVICE_USAGE_TYPE"
-	SkipReasonNoUnitPrice       = "NO_UNIT_PRICE"
-	SkipReasonNoNationalID      = "NO_NATIONAL_ID"
-	SkipReasonBuildRowFailed    = "BUILD_ROW_FAILED"
+	GapReasonNoScheduleLeg     = "NO_SCHEDULE_LEG"
+	GapReasonNoDepartTime      = "NO_DEPART_TIME"
+	GapReasonNoDriver          = "NO_DRIVER"
+	GapReasonNoServiceCategory = "NO_SERVICE_CATEGORY"
+	GapReasonNoUsageType       = "NO_SERVICE_USAGE_TYPE"
+	GapReasonNoUnitPrice       = "NO_UNIT_PRICE"
+	GapReasonNoNationalID      = "NO_NATIONAL_ID"
+	GapReasonNoAddress         = "NO_ADDRESS"
+	GapReasonNoDistance        = "NO_DISTANCE"
+	GapReasonNoPlateNo         = "NO_PLATE_NO"
+	GapReasonNoServiceCode     = "NO_SERVICE_CODE"
+	GapReasonBuildRowFailed    = "BUILD_ROW_FAILED"
 )
 
-// ErrInvalidClaimData 代表申報範圍內存在任何無法可靠組成申報列的資料。
-// 政府申報採 all-or-nothing，不允許以跳過錯誤列的方式產生部分檔案。
-var ErrInvalidClaimData = errors.New("government claim contains invalid data")
-
 // GovClaimSource 代表組出單列申報資料所需的原始查詢結果。
-// 指標欄位代表來源可能缺漏，由 service 判斷是否跳過該列。
+// 指標欄位代表來源可能缺漏，由 service 決定該欄在申報檔留白並計入資料缺漏清單。
 type GovClaimSource struct {
 	CaseID               uuid.UUID
 	CaseName             string
@@ -102,8 +101,8 @@ type GovClaimCaseFile struct {
 	Bytes    []byte
 }
 
-// ClaimSkip 代表某個案有幾列因資料缺漏被跳過。
-type ClaimSkip struct {
+// ClaimDataGap 代表某個案有幾列的某個欄位因來源缺漏而在申報檔留白。
+type ClaimDataGap struct {
 	CaseID   uuid.UUID
 	CaseName string
 	Reason   string
@@ -111,7 +110,7 @@ type ClaimSkip struct {
 }
 
 // GovClaimJob 代表一次政府申報匯出工作。
-// Skipped 只在建立當下有值，不會寫入資料庫，因此讀取歷史工作時為空。
+// DataGaps 只在建立當下有值，不會寫入資料庫，因此讀取歷史工作時為空。
 type GovClaimJob struct {
 	ID            uuid.UUID
 	JobType       string
@@ -122,7 +121,7 @@ type GovClaimJob struct {
 	TotalCases    int
 	TotalRows     int
 	Files         []GovClaimCaseFile
-	Skipped       []ClaimSkip
+	DataGaps      []ClaimDataGap
 	ErrorMessage  string
 	CreatedBy     uuid.UUID
 	CreatedByName string

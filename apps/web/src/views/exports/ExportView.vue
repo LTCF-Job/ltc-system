@@ -111,16 +111,16 @@
       </div>
 
       <el-alert
-        v-if="currentJob.skipped?.length"
+        v-if="currentJob.dataGaps?.length"
         type="warning"
         show-icon
         :closable="false"
-        title="部分趟次資料不完整，未納入申報"
+        title="部分欄位資料不完整，該欄位已留白匯出"
         class="skip-alert"
       >
         <ul class="skip-list">
-          <li v-for="(skip, index) in currentJob.skipped" :key="index">
-            {{ skip.caseName }}：{{ skipReasonLabel(skip.reason) }}（{{ skip.count }} 筆）
+          <li v-for="(gap, index) in currentJob.dataGaps" :key="index">
+            {{ gap.caseName }}：{{ dataGapLabel(gap.reason) }}（{{ gap.count }} 筆）
           </li>
         </ul>
       </el-alert>
@@ -288,7 +288,7 @@ import {
   REGION_LABELS,
   EXPORT_STATUS_LABELS,
   EXPORT_MODE_LABELS,
-  EXPORT_SKIP_REASON_LABELS
+  EXPORT_DATA_GAP_LABELS
 } from '@/types/domain'
 import type { Region, ExportMode, ExportJobStatus } from '@/types/domain'
 import type {
@@ -342,8 +342,8 @@ function rocMonthOf(periodYm: string): string {
   return `${periodYm.slice(0, 3)}-${periodYm.slice(3)}`
 }
 
-function skipReasonLabel(reason: string): string {
-  return EXPORT_SKIP_REASON_LABELS[reason] || reason
+function dataGapLabel(reason: string): string {
+  return EXPORT_DATA_GAP_LABELS[reason] || reason
 }
 
 // 地區是個案清單的篩選條件，改地區後既有勾選可能已不在清單內，一律清空重選
@@ -381,13 +381,13 @@ async function handleStartExport() {
   await handleRunPrecheck()
 
   if (precheckResult.value?.hasErrors) {
-    ElMessage.error('前置檢核存在阻斷性錯誤，無法執行匯出，請先修正問題。')
+    ElMessage.error('前置檢核存在未裁決的混車衝突，無法執行匯出，請先完成裁決。')
     return
   }
 
   if (precheckResult.value?.hasWarnings) {
     await ElMessageBox.confirm(
-      '本次匯出含有警告事項未處理，確定仍要繼續執行匯出？',
+      '本次匯出有個案資料不完整，缺少的欄位會留白匯出，確定仍要繼續執行匯出？',
       '匯出警告確認',
       {
         confirmButtonText: '繼續匯出',

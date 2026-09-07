@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/reporting/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // ExportJobRepository 保存匯出工作、逐案檔案中繼資料與申報列快照。
@@ -45,17 +46,12 @@ func (r *ExportJobRepository) CreateJob(ctx context.Context, job app.ExportJobCr
 		precheckJSON = string(encoded)
 	}
 
-	caseIDs := job.CaseIDs
-	if caseIDs == nil {
-		caseIDs = []uuid.UUID{}
-	}
-
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO export_jobs (job_type, period_ym, region, format, filter_case_ids, status, precheck, created_by, created_by_name)
 		VALUES ($1, $2, $3, $4, $5::uuid[], 'running', $6::jsonb, $7, $8)
 		RETURNING id
-	`, job.JobType, job.PeriodYM, job.Region, job.Format, caseIDs, precheckJSON, job.CreatedBy, job.CreatedByName).Scan(&id)
+	`, job.JobType, job.PeriodYM, job.Region, job.Format, pgxdb.UUIDStrings(job.CaseIDs), precheckJSON, job.CreatedBy, job.CreatedByName).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("insert export job: %w", err)
 	}
@@ -311,7 +307,7 @@ func (r *ExportJobRepository) LoadNationalIDCiphers(ctx context.Context, caseID 
 		return result, nil
 	}
 
-	rows, err := r.db.Query(ctx, `SELECT id, national_id_cipher FROM drivers WHERE id = ANY($1::uuid[])`, driverIDs)
+	rows, err := r.db.Query(ctx, `SELECT id, national_id_cipher FROM drivers WHERE id = ANY($1::uuid[])`, pgxdb.UUIDStrings(driverIDs))
 	if err != nil {
 		return result, fmt.Errorf("query driver national id ciphers: %w", err)
 	}

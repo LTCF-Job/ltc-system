@@ -27,8 +27,8 @@ type exportJobFileResponse struct {
 	DownloadURL string `json:"downloadUrl"`
 }
 
-// exportJobSkipResponse 代表因資料缺漏未納入申報的趟次統計。
-type exportJobSkipResponse struct {
+// exportJobDataGapResponse 代表因來源缺漏而在申報檔留白的欄位統計。
+type exportJobDataGapResponse struct {
 	CaseID   string `json:"caseId"`
 	CaseName string `json:"caseName"`
 	Reason   string `json:"reason"`
@@ -36,24 +36,24 @@ type exportJobSkipResponse struct {
 }
 
 // exportJobResponse 代表匯出工作的對外形狀。
-// skipped 只在建立當下有值：跳過統計不落地，歷史查詢不會重現。
+// dataGaps 只在建立當下有值：缺漏統計不落地，歷史查詢不會重現。
 type exportJobResponse struct {
-	ID           string                  `json:"id"`
-	JobType      string                  `json:"jobType"`
-	PeriodYM     string                  `json:"periodYm"`
-	Region       string                  `json:"region"`
-	Mode         string                  `json:"mode"`
-	Status       string                  `json:"status"`
-	TotalCases    int                     `json:"totalCases"`
-	TotalRows     int                     `json:"totalRows"`
-	Files         []exportJobFileResponse `json:"files,omitempty"`
-	Skipped       []exportJobSkipResponse `json:"skipped,omitempty"`
-	ZipFileName   string                  `json:"zipFileName,omitempty"`
-	DownloadURL   string                  `json:"downloadUrl,omitempty"`
-	ErrorMessage  string                  `json:"errorMessage,omitempty"`
-	CreatedByName string                  `json:"createdByName,omitempty"`
-	CreatedAt     string                  `json:"createdAt"`
-	CompletedAt   string                  `json:"completedAt,omitempty"`
+	ID            string                     `json:"id"`
+	JobType       string                     `json:"jobType"`
+	PeriodYM      string                     `json:"periodYm"`
+	Region        string                     `json:"region"`
+	Mode          string                     `json:"mode"`
+	Status        string                     `json:"status"`
+	TotalCases    int                        `json:"totalCases"`
+	TotalRows     int                        `json:"totalRows"`
+	Files         []exportJobFileResponse    `json:"files,omitempty"`
+	DataGaps      []exportJobDataGapResponse `json:"dataGaps,omitempty"`
+	ZipFileName   string                     `json:"zipFileName,omitempty"`
+	DownloadURL   string                     `json:"downloadUrl,omitempty"`
+	ErrorMessage  string                     `json:"errorMessage,omitempty"`
+	CreatedByName string                     `json:"createdByName,omitempty"`
+	CreatedAt     string                     `json:"createdAt"`
+	CompletedAt   string                     `json:"completedAt,omitempty"`
 }
 
 // toExportJobResponse 組出單筆工作的完整回應，含逐案下載連結。
@@ -86,12 +86,12 @@ func toExportJobResponse(job app.GovClaimJob) exportJobResponse {
 		})
 	}
 
-	for _, skip := range job.Skipped {
-		resp.Skipped = append(resp.Skipped, exportJobSkipResponse{
-			CaseID:   skip.CaseID.String(),
-			CaseName: skip.CaseName,
-			Reason:   skip.Reason,
-			Count:    skip.Count,
+	for _, gap := range job.DataGaps {
+		resp.DataGaps = append(resp.DataGaps, exportJobDataGapResponse{
+			CaseID:   gap.CaseID.String(),
+			CaseName: gap.CaseName,
+			Reason:   gap.Reason,
+			Count:    gap.Count,
 		})
 	}
 

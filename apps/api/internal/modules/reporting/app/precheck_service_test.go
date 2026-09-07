@@ -65,3 +65,17 @@ func TestRunPrecheck_UnresolvedConflictBlocksExport(t *testing.T) {
 	assert.Equal(t, app.SeverityError, report.Issues[1].Severity)
 	assert.Equal(t, "UNRESOLVED_CONFLICT", report.Issues[1].Code)
 }
+
+func TestRunPrecheck_IncompleteCaseWarnsWithoutBlockingExport(t *testing.T) {
+	report, err := app.NewPrecheckService(precheckRepoStub{
+		incomplete: []app.IncompleteCase{{ID: uuid.New(), Name: "王小明"}},
+	}).RunPrecheck(context.Background(), app.ClaimScope{})
+
+	require.NoError(t, err)
+	require.NotNil(t, report)
+	assert.True(t, report.Passed, "缺個案資料只留白匯出，不得擋下整批申報")
+	assert.Equal(t, 0, report.TotalErrors)
+	assert.Equal(t, 1, report.TotalWarnings)
+	assert.Equal(t, app.SeverityWarning, report.Issues[1].Severity)
+	assert.Equal(t, "MISSING_CASE_PROFILE", report.Issues[1].Code)
+}

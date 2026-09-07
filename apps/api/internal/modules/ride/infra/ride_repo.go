@@ -345,7 +345,7 @@ func (r *RideRepository) GetRideRecordForSlot(ctx context.Context, caseID uuid.U
 		SELECT id, case_id, service_date, leg_seq, merged_status, effective_status,
 		       vehicle_id, driver_id, has_conflict, conflict_resolved_at, conflict_resolved_by,
 		       to_char(depart_time_override, 'HH24:MI'), duration_min_override, not_claimed_aa09,
-		       corrected_by, corrected_at, correction_reason, based_on_fingerprint, created_at, updated_at
+		       corrected_by, corrected_at, correction_reason, COALESCE(based_on_fingerprint, ''), created_at, updated_at
 		FROM ride_records
 		WHERE case_id = $1 AND service_date = $2 AND leg_seq = $3
 		LIMIT 1
@@ -620,7 +620,7 @@ func (r *RideRepository) GetRideRecordByID(ctx context.Context, id uuid.UUID) (*
 		SELECT id, case_id, service_date, leg_seq, merged_status, effective_status,
 		       vehicle_id, driver_id, has_conflict, conflict_resolved_at, conflict_resolved_by, conflict_resolution_note,
 		       to_char(depart_time_override, 'HH24:MI'), duration_min_override, not_claimed_aa09,
-		       corrected_by, corrected_at, correction_reason, based_on_fingerprint, created_at, updated_at
+		       corrected_by, corrected_at, correction_reason, COALESCE(based_on_fingerprint, ''), created_at, updated_at
 		FROM ride_records
 		WHERE id = $1
 	`

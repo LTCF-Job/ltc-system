@@ -140,6 +140,7 @@ func (s *immutableExportStore) LoadExportFile(context.Context, uuid.UUID, uuid.U
 
 type stubPrecheckRepo struct {
 	incomplete []app.IncompleteCase
+	conflicts  []app.UnresolvedConflict
 }
 
 func (s stubPrecheckRepo) FindIncompleteActiveCases(context.Context, app.ClaimScope) ([]app.IncompleteCase, error) {
@@ -147,7 +148,7 @@ func (s stubPrecheckRepo) FindIncompleteActiveCases(context.Context, app.ClaimSc
 }
 
 func (s stubPrecheckRepo) FindUnresolvedConflicts(context.Context, app.ClaimScope) ([]app.UnresolvedConflict, error) {
-	return nil, nil
+	return s.conflicts, nil
 }
 
 type recordingPrecheckRepo struct {
@@ -262,7 +263,7 @@ func TestCreateGovClaimJob_OneFilePerCase(t *testing.T) {
 	assert.Equal(t, "蔡曾切11507.xlsx", store.completed[1].FileName)
 	assert.Equal(t, 1, store.completed[0].RowCount)
 	assert.Equal(t, 2, store.completed[1].RowCount)
-	assert.Empty(t, job.Skipped)
+	assert.Empty(t, job.DataGaps)
 
 	// 查詢期間須為該民國月份的西元起訖（左閉右開）
 	assert.Equal(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), reader.gotStart)
@@ -362,22 +363,25 @@ func TestCreateGovClaimJob_AuditFailureDoesNotBlockCompletedExport(t *testing.T)
 	assert.Empty(t, store.failed)
 }
 
-func TestCreateGovClaimJob_BlocksIncompleteSources(t *testing.T) {
+func TestCreateGovClaimJob_BlanksMissingFieldsAndKeepsTheRow(t *testing.T) {
 	driver := uuid.New()
 	tests := []struct {
-		name   string
-		mutate sourceOption
-		reason string
+		name      string
+		mutate    sourceOption
+		reason    string
+		blankCell int
 	}{
-		{"排班趟次對不到", func(s *app.GovClaimSource) { s.Direction = nil }, "NO_SCHEDULE_LEG"},
-		{"沒有出發時間", func(s *app.GovClaimSource) { s.DepartTime = nil }, "NO_DEPART_TIME"},
-		{"沒有服務時長", func(s *app.GovClaimSource) { s.DurationMin = intPtr(0) }, "NO_DEPART_TIME"},
-		{"沒有司機", func(s *app.GovClaimSource) { s.DriverID = nil }, "NO_DRIVER"},
-		{"服務類別未設定", func(s *app.GovClaimSource) { s.ServiceCategory = nil }, "NO_SERVICE_CATEGORY"},
-		{"服務類別超出範圍", func(s *app.GovClaimSource) { s.ServiceCategory = intPtr(9) }, "NO_SERVICE_CATEGORY"},
-		{"服務使用類型未設定", func(s *app.GovClaimSource) { s.ServiceUsageType = nil }, "NO_SERVICE_USAGE_TYPE"},
-		{"服務使用類型超出範圍", func(s *app.GovClaimSource) { s.ServiceUsageType = intPtr(0) }, "NO_SERVICE_USAGE_TYPE"},
-		{"單價為零", func(s *app.GovClaimSource) { s.UnitPrice = 0 }, "NO_UNIT_PRICE"},
+		{"排班趟次對不到", func(s *app.GovClaimSource) { s.Direction = nil }, "NO_SCHEDULE_LEG", 24},
+		{"沒有出發時間", func(s *app.GovClaimSource) { s.DepartTime = nil }, "NO_DEPART_TIME", 7},
+		{"沒有服務時長", func(s *app.GovClaimSource) { s.DurationMin = intPtr(0) }, "NO_DEPART_TIME", 9},
+		{"沒有司機", func(s *app.GovClaimSource) { s.DriverID = nil }, "NO_DRIVER", 6},
+		{"服務類別未設定", func(s *app.GovClaimSource) { s.ServiceCategory = nil }, "NO_SERVICE_CATEGORY", 3},
+		{"服務類別超出範圍", func(s *app.GovClaimSource) { s.ServiceCategory = intPtr(9) }, "NO_SERVICE_CATEGORY", 3},
+		{"服務使用類型未設定", func(s *app.GovClaimSource) { s.ServiceUsageType = nil }, "NO_SERVICE_USAGE_TYPE", 32},
+		{"服務使用類型超出範圍", func(s *app.GovClaimSource) { s.ServiceUsageType = intPtr(0) }, "NO_SERVICE_USAGE_TYPE", 32},
+		{"單價為零", func(s *app.GovClaimSource) { s.UnitPrice = 0 }, "NO_UNIT_PRICE", 5},
+		{"沒有車號", func(s *app.GovClaimSource) { s.PlateNo = "" }, "NO_PLATE_NO", 31},
+		{"沒有里程", func(s *app.GovClaimSource) { s.DistanceKM = 0 }, "NO_DISTANCE", 30},
 	}
 
 	for _, tt := range tests {
@@ -386,35 +390,57 @@ func TestCreateGovClaimJob_BlocksIncompleteSources(t *testing.T) {
 			good := newSource(t, caseA, "C001", "蔡曾切", driver, 1, 1, "outbound", "09:40")
 			bad := newSource(t, caseA, "C001", "蔡曾切", driver, 2, 1, "outbound", "09:40", tt.mutate)
 			store := &fakeExportStore{jobID: uuid.New()}
+			renderer := &recordingRenderer{}
 
-			_, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{good, bad}}, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{}).
+			job, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{good, bad}}, store, renderer, &recordingArchiver{}, stubPrecheckRepo{}).
 				CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseA))
-			assert.ErrorIs(t, err, app.ErrInvalidClaimData)
-			assert.Empty(t, store.completed, "存在非法列時不可產生部分申報檔")
-			assert.Len(t, store.failed, 1)
-			assert.Equal(t, "申報資料不完整，請修正後重新匯出", store.failed[0])
+			require.NoError(t, err)
+			assert.Len(t, store.completed, 1)
+			assert.Equal(t, 2, store.completed[0].RowCount, "缺欄位的列留白後仍要一起匯出")
+			assert.Empty(t, store.failed)
+
+			require.Len(t, renderer.batches, 1)
+			require.Len(t, renderer.batches[0], 2)
+			blanks := 0
+			for _, row := range renderer.batches[0] {
+				if row.Cells[tt.blankCell] == "" {
+					blanks++
+				}
+			}
+			assert.Equal(t, 1, blanks, "只有缺資料那一列的第 %d 欄留白", tt.blankCell+1)
+
+			require.Len(t, job.DataGaps, 1)
+			assert.Equal(t, tt.reason, job.DataGaps[0].Reason)
+			assert.Equal(t, 1, job.DataGaps[0].Count)
 		})
 	}
 }
 
-func TestCreateGovClaimJob_CaseWithoutUsableRowsProducesNoFile(t *testing.T) {
+func TestCreateGovClaimJob_CaseWithoutNationalIDStillExportsWithBlankColumn(t *testing.T) {
 	caseA := uuid.New()
 	driver := uuid.New()
-	source := newSource(t, caseA, "C001", "蔡曾切", driver, 1, 1, "outbound", "09:40", func(s *app.GovClaimSource) { s.Direction = nil })
+	source := newSource(t, caseA, "C001", "蔡曾切", driver, 1, 1, "outbound", "09:40", func(s *app.GovClaimSource) { s.CaseNationalIDCipher = nil })
 	store := &fakeExportStore{jobID: uuid.New()}
+	renderer := &recordingRenderer{}
 
-	_, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{source}}, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{}).
+	job, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{source}}, store, renderer, &recordingArchiver{}, stubPrecheckRepo{}).
 		CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseA))
 
-	assert.ErrorIs(t, err, app.ErrInvalidClaimData)
-	assert.Empty(t, store.completed)
-	assert.Len(t, store.failed, 1, "產不出檔案仍要留下失敗紀錄")
+	require.NoError(t, err, "個案缺身分證不阻擋匯出，只把該欄留白")
+	require.Len(t, store.completed, 1)
+	assert.Equal(t, 1, store.completed[0].RowCount)
+	assert.Empty(t, store.failed)
+	require.Len(t, renderer.batches, 1)
+	assert.Equal(t, "", renderer.batches[0][0].Cells[0])
+	require.Len(t, job.DataGaps, 1)
+	assert.Equal(t, "NO_NATIONAL_ID", job.DataGaps[0].Reason)
 }
 
 func TestCreateGovClaimJob_PrecheckErrorBlocksJobCreation(t *testing.T) {
 	caseA := uuid.New()
 	store := &fakeExportStore{jobID: uuid.New()}
-	precheck := stubPrecheckRepo{incomplete: []app.IncompleteCase{{ID: caseA, Name: "蔡曾切"}}}
+	// 未裁決的混車衝突是唯一仍阻擋匯出的檢核項目。
+	precheck := stubPrecheckRepo{conflicts: []app.UnresolvedConflict{{RideID: uuid.New(), CaseName: "蔡曾切", ServiceDate: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)}}}
 
 	_, err := newService(&fakeSourceReader{}, store, &recordingRenderer{}, &recordingArchiver{}, precheck).
 		CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseA))

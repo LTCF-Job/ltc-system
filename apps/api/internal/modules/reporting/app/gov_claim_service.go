@@ -115,7 +115,7 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 		Status:   ExportStatusRunning,
 	}, input, "export_requested")
 
-	files, lines, skipped, err := s.buildJobContent(ctx, periodYM, input, scope)
+	files, lines, dataGaps, err := s.buildJobContent(ctx, periodYM, input, scope)
 	if err != nil {
 		// 產檔失敗仍要留下失敗紀錄，讓使用者在歷史清單看得到這次嘗試
 		if failErr := s.store.FailJob(ctx, jobID, exportFailureMessage(err)); failErr != nil {
@@ -164,7 +164,7 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 	if err != nil {
 		return GovClaimJob{}, fmt.Errorf("reload export job: %w", err)
 	}
-	job.Skipped = skipped
+	job.DataGaps = dataGaps
 
 	return job, nil
 }
@@ -290,14 +290,14 @@ func (s *GovClaimService) buildJobContent(
 	periodYM string,
 	input CreateGovClaimInput,
 	scope ClaimScope,
-) ([]GovClaimCaseFile, []ExportLine, []ClaimSkip, error) {
+) ([]GovClaimCaseFile, []ExportLine, []ClaimDataGap, error) {
 	sources, err := s.reader.QueryGovClaimSources(ctx, scope)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("query gov claim sources: %w", err)
 	}
 
 	groups := groupByCase(sources)
-	skips := newSkipTally()
+	gaps := newDataGapTally()
 
 	files := make([]GovClaimCaseFile, 0, len(groups))
 	lines := make([]ExportLine, 0, len(sources))
@@ -305,7 +305,7 @@ func (s *GovClaimService) buildJobContent(
 	lineNo := 0
 
 	for _, group := range groups {
-		rows, rowDrivers := s.buildCaseRows(group, skips)
+		rows, rowDrivers := s.buildCaseRows(group, gaps)
 		if len(rows) == 0 {
 			continue
 		}
@@ -336,69 +336,72 @@ func (s *GovClaimService) buildJobContent(
 			lines = append(lines, line)
 		}
 	}
-	if skipped := skips.list(); len(skipped) > 0 {
-		return nil, nil, skipped, fmt.Errorf("%w: %s", ErrInvalidClaimData, skipped[0].Reason)
-	}
-
-	if len(files) == 0 {
-		return nil, nil, nil, ErrNoClaimRows
-	}
-	return files, lines, skips.list(), nil
+	// 缺資料的欄位留白後照樣產檔並回報缺漏，不阻擋範圍內其餘資料（含一列都組不出來、
+	// 檔案數為 0 的情況）——申報作業本就逐月執行，使用者需要的是先拿到報得出來的資料，
+	// 而不是被整批擋下後才回頭排查。
+	return files, lines, gaps.list(), nil
 }
 
-// buildCaseRows 逐筆驗證來源資料並轉成 33 欄申報列。
-// 缺欄位的趟次計入跳過清單，不讓 govform.BuildClaimRow 的相容預設值把它補成一列看似正常的申報資料。
-func (s *GovClaimService) buildCaseRows(group caseGroup, skips *skipTally) ([]govform.ClaimRow, map[rowKey]*uuid.UUID) {
+// buildCaseRows 逐筆把來源資料轉成 33 欄申報列。
+// 缺漏的欄位留白並計入資料缺漏清單，該列仍然產出，讓報得出來的資料先進得了申報檔。
+func (s *GovClaimService) buildCaseRows(group caseGroup, gaps *dataGapTally) ([]govform.ClaimRow, map[rowKey]*uuid.UUID) {
 	rowDrivers := make(map[rowKey]*uuid.UUID, len(group.items))
 
 	caseNationalID, err := s.decrypt(group.nationalIDCipher)
 	if err != nil || caseNationalID == "" {
-		skips.add(group, SkipReasonNoNationalID, len(group.items))
-		return nil, rowDrivers
+		gaps.add(group, GapReasonNoNationalID, len(group.items))
+		caseNationalID = ""
 	}
 
 	driverIDCache := make(map[uuid.UUID]string)
 	rows := make([]govform.ClaimRow, 0, len(group.items))
 
 	for _, item := range group.items {
-		reason, ok := validateSource(item)
-		if !ok {
-			skips.add(group, reason, 1)
-			continue
+		for _, reason := range missingFields(item) {
+			gaps.add(group, reason, 1)
 		}
 
-		driverNationalID, err := s.driverNationalID(driverIDCache, *item.DriverID, item.DriverNationalIDCipher)
-		if err != nil || driverNationalID == "" {
-			skips.add(group, SkipReasonNoDriver, 1)
-			continue
+		driverNationalID := ""
+		if item.DriverID != nil {
+			plain, err := s.driverNationalID(driverIDCache, *item.DriverID, item.DriverNationalIDCipher)
+			if err != nil || plain == "" {
+				gaps.add(group, GapReasonNoDriver, 1)
+			} else {
+				driverNationalID = plain
+			}
 		}
 
-		departAt, err := combineDepartTime(item.ServiceDate, *item.DepartTime)
-		if err != nil {
-			skips.add(group, SkipReasonNoDepartTime, 1)
-			continue
+		var departAt time.Time
+		if item.DepartTime != nil && *item.DepartTime != "" {
+			parsed, err := combineDepartTime(item.ServiceDate, *item.DepartTime)
+			if err != nil {
+				gaps.add(group, GapReasonNoDepartTime, 1)
+			} else {
+				departAt = parsed
+			}
 		}
 
 		row, err := govform.BuildClaimRow(govform.ClaimRowInput{
 			NationalIDPlain:  caseNationalID,
 			ServiceDate:      item.ServiceDate,
 			ServiceCode:      item.ServiceCode,
-			ServiceCategory:  *item.ServiceCategory,
+			ServiceCategory:  intOrZero(item.ServiceCategory),
 			UnitPrice:        item.UnitPrice,
 			DriverNationalID: driverNationalID,
 			DepartTime:       departAt,
-			DurationMin:      *item.DurationMin,
+			DurationMin:      intOrZero(item.DurationMin),
 			NotClaimedAA09:   item.NotClaimedAA09,
-			Direction:        *item.Direction,
+			Direction:        stringOrEmpty(item.Direction),
 			LegSeq:           item.LegSeq,
 			HomeAddress:      item.HomeAddress,
 			SiteAddress:      item.SiteAddress,
 			DistanceKM:       item.DistanceKM,
 			PlateNo:          item.PlateNo,
-			ServiceUsageType: *item.ServiceUsageType,
+			ServiceUsageType: intOrZero(item.ServiceUsageType),
 		})
 		if err != nil {
-			skips.add(group, SkipReasonBuildRowFailed, 1)
+			// 只有連留白都組不出列（如服務日期無法換算民國年）才會少掉這一列。
+			gaps.add(group, GapReasonBuildRowFailed, 1)
 			continue
 		}
 
@@ -480,25 +483,54 @@ func (s *GovClaimService) driverNationalID(cache map[uuid.UUID]string, driverID 
 	return plain, nil
 }
 
-// validateSource 檢查該趟次是否具備組出合法申報列的最小資料集。
-func validateSource(item GovClaimSource) (string, bool) {
-	switch {
-	case item.Direction == nil || *item.Direction == "":
-		return SkipReasonNoScheduleLeg, false
-	case item.DepartTime == nil || *item.DepartTime == "":
-		return SkipReasonNoDepartTime, false
-	case item.DurationMin == nil || *item.DurationMin <= 0:
-		return SkipReasonNoDepartTime, false
-	case item.DriverID == nil || len(item.DriverNationalIDCipher) == 0:
-		return SkipReasonNoDriver, false
-	case item.ServiceCategory == nil || (*item.ServiceCategory != 1 && *item.ServiceCategory != 2):
-		return SkipReasonNoServiceCategory, false
-	case item.ServiceUsageType == nil || *item.ServiceUsageType < 1 || *item.ServiceUsageType > 4:
-		return SkipReasonNoUsageType, false
-	case item.UnitPrice <= 0:
-		return SkipReasonNoUnitPrice, false
+// missingFields 列出該趟次缺漏、將在申報檔留白的欄位；順序即為回報順序。
+func missingFields(item GovClaimSource) []string {
+	var reasons []string
+	if item.Direction == nil || *item.Direction == "" {
+		reasons = append(reasons, GapReasonNoScheduleLeg)
 	}
-	return "", true
+	if item.DepartTime == nil || *item.DepartTime == "" || item.DurationMin == nil || *item.DurationMin <= 0 {
+		reasons = append(reasons, GapReasonNoDepartTime)
+	}
+	if item.DriverID == nil || len(item.DriverNationalIDCipher) == 0 {
+		reasons = append(reasons, GapReasonNoDriver)
+	}
+	if item.ServiceCategory == nil || (*item.ServiceCategory != 1 && *item.ServiceCategory != 2) {
+		reasons = append(reasons, GapReasonNoServiceCategory)
+	}
+	if item.ServiceUsageType == nil || *item.ServiceUsageType < 1 || *item.ServiceUsageType > 4 {
+		reasons = append(reasons, GapReasonNoUsageType)
+	}
+	if item.UnitPrice <= 0 {
+		reasons = append(reasons, GapReasonNoUnitPrice)
+	}
+	if strings.TrimSpace(item.ServiceCode) == "" {
+		reasons = append(reasons, GapReasonNoServiceCode)
+	}
+	if strings.TrimSpace(item.HomeAddress) == "" || strings.TrimSpace(item.SiteAddress) == "" {
+		reasons = append(reasons, GapReasonNoAddress)
+	}
+	if item.DistanceKM <= 0 {
+		reasons = append(reasons, GapReasonNoDistance)
+	}
+	if strings.TrimSpace(item.PlateNo) == "" {
+		reasons = append(reasons, GapReasonNoPlateNo)
+	}
+	return reasons
+}
+
+func intOrZero(v *int) int {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func stringOrEmpty(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
 }
 
 // parsePeriodYM 將民國年月正規化為 5 碼並換算成該月的西元起訖日（左閉右開）。
@@ -572,12 +604,6 @@ func uniqueFileName(used map[string]bool, caseName, periodYM string) string {
 }
 
 func exportFailureMessage(err error) string {
-	if errors.Is(err, ErrNoClaimRows) {
-		return "指定條件下沒有可申報的搭乘紀錄"
-	}
-	if errors.Is(err, ErrInvalidClaimData) {
-		return "申報資料不完整，請修正後重新匯出"
-	}
 	return "產生申報檔案失敗"
 }
 
@@ -676,27 +702,27 @@ func groupByCase(sources []GovClaimSource) []caseGroup {
 	return groups
 }
 
-type skipTally struct {
+type dataGapTally struct {
 	order []string
-	byKey map[string]*ClaimSkip
+	byKey map[string]*ClaimDataGap
 }
 
-func newSkipTally() *skipTally {
-	return &skipTally{byKey: make(map[string]*ClaimSkip)}
+func newDataGapTally() *dataGapTally {
+	return &dataGapTally{byKey: make(map[string]*ClaimDataGap)}
 }
 
-func (t *skipTally) add(group caseGroup, reason string, count int) {
+func (t *dataGapTally) add(group caseGroup, reason string, count int) {
 	key := group.caseID.String() + "|" + reason
 	if existing, ok := t.byKey[key]; ok {
 		existing.Count += count
 		return
 	}
-	t.byKey[key] = &ClaimSkip{CaseID: group.caseID, CaseName: group.caseName, Reason: reason, Count: count}
+	t.byKey[key] = &ClaimDataGap{CaseID: group.caseID, CaseName: group.caseName, Reason: reason, Count: count}
 	t.order = append(t.order, key)
 }
 
-func (t *skipTally) list() []ClaimSkip {
-	result := make([]ClaimSkip, 0, len(t.order))
+func (t *dataGapTally) list() []ClaimDataGap {
+	result := make([]ClaimDataGap, 0, len(t.order))
 	for _, key := range t.order {
 		result = append(result, *t.byKey[key])
 	}

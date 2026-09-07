@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/reporting/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // GovClaimRepository 查詢政府申報所需的趟次、排班、個案、司機與車輛資料。
@@ -20,8 +20,9 @@ func NewGovClaimRepository(db *pgxpool.Pool) *GovClaimRepository {
 }
 
 // govClaimSourceQuery 一次撈齊組列所需欄位。
-// schedule_legs 用 LEFT JOIN：對不到排班趟次時 direction 為 NULL，交由 app 明確計入跳過清單，
-// 而不是被 INNER JOIN 靜默濾掉，讓資料缺漏在匯出結果上看不見。
+// case_schedules／sites／schedule_legs 全部改 LEFT JOIN：個案在該服務日沒有排班時，
+// direction 等排班衍生欄位一併變 NULL，交由 app 的 validateSource 計入跳過清單，
+// 而不是被 INNER JOIN 整列濾掉、讓「缺排班」在匯出結果上完全看不見。
 const govClaimSourceQuery = `
 	SELECT
 		c.id, c.name, COALESCE(c.region, ''),
@@ -31,13 +32,13 @@ const govClaimSourceQuery = `
 		l.direction,
 		to_char(COALESCE(r.depart_time_override, l.depart_time), 'HH24:MI'),
 		COALESCE(r.duration_min_override, s.service_duration_min)::int,
-		s.service_code, s.unit_price::float8, s.distance_km::float8,
-		st.address, COALESCE(v.plate_no, ''),
+		COALESCE(s.service_code, ''), COALESCE(s.unit_price, 0)::float8, COALESCE(s.distance_km, 0)::float8,
+		COALESCE(st.address, ''), COALESCE(v.plate_no, ''),
 		d.id, d.national_id_cipher
 	FROM ride_records r
 	JOIN cases c ON c.id = r.case_id
-	JOIN case_schedules s ON s.case_id = c.id AND s.effective_range @> r.service_date
-	JOIN sites st ON st.id = s.site_id
+	LEFT JOIN case_schedules s ON s.case_id = c.id AND s.effective_range @> r.service_date
+	LEFT JOIN sites st ON st.id = s.site_id
 	LEFT JOIN schedule_legs l ON l.schedule_id = s.id AND l.leg_seq = r.leg_seq
 	LEFT JOIN vehicles v ON v.id = r.vehicle_id
 	LEFT JOIN drivers d ON d.id = r.driver_id
@@ -59,11 +60,7 @@ func (r *GovClaimRepository) QueryGovClaimSources(
 	if r.db == nil {
 		return nil, fmt.Errorf("government claim database is not configured")
 	}
-	if scope.CaseIDs == nil {
-		scope.CaseIDs = []uuid.UUID{}
-	}
-
-	rows, err := r.db.Query(ctx, govClaimSourceQuery, scope.StartDate, scope.EndDate, scope.RegionValue(), scope.CaseIDs)
+	rows, err := r.db.Query(ctx, govClaimSourceQuery, scope.StartDate, scope.EndDate, scope.RegionValue(), pgxdb.UUIDStrings(scope.CaseIDs))
 	if err != nil {
 		return nil, fmt.Errorf("query gov claim sources: %w", err)
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/reporting/app"
+	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
 // PrecheckRepository 提供申報前置檢核所需之資料查詢。
@@ -39,7 +40,7 @@ func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, scop
 		  AND (COALESCE(cardinality($4::uuid[]), 0) = 0 OR c.id = ANY($4::uuid[]))
 		  AND (COALESCE(c.home_address, '') = '' OR c.service_category IS NULL OR c.service_usage_type IS NULL OR COALESCE(c.national_id_masked, '') = '')
 	`
-	rows, err := r.db.Query(ctx, query, scope.StartDate, scope.EndDate, scope.Region, scope.CaseIDs)
+	rows, err := r.db.Query(ctx, query, scope.StartDate, scope.EndDate, scope.Region, pgxdb.UUIDStrings(scope.CaseIDs))
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +75,7 @@ func (r *PrecheckRepository) FindUnresolvedConflicts(ctx context.Context, scope 
 		  AND (COALESCE(cardinality($4::uuid[]), 0) = 0 OR c.id = ANY($4::uuid[]))
 		  AND r.has_conflict = true AND r.conflict_resolved_at IS NULL
 	`
-	rows, err := r.db.Query(ctx, query, scope.StartDate, scope.EndDate, scope.Region, scope.CaseIDs)
+	rows, err := r.db.Query(ctx, query, scope.StartDate, scope.EndDate, scope.Region, pgxdb.UUIDStrings(scope.CaseIDs))
 	if err != nil {
 		return nil, err
 	}

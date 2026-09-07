@@ -66,25 +66,27 @@ func (s *PrecheckService) RunPrecheck(ctx context.Context, scope ClaimScope) (*P
 		return nil, fmt.Errorf("precheck repository is not configured")
 	}
 
-	// 2. 檢查是否有個案缺必要欄位 (身分證、住址、使用類型)
+	// 2. 檢查是否有個案缺必要欄位 (身分證、住址、使用類型)。
+	// 缺資料只留白該欄位，不阻擋匯出；擋下整批會讓其餘報得出來的資料一起報不出去。
 	incompleteCases, err := s.repo.FindIncompleteActiveCases(ctx, scope)
 	if err != nil {
 		return nil, fmt.Errorf("find incomplete active cases: %w", err)
 	}
 	for _, c := range incompleteCases {
 		issues = append(issues, PrecheckIssue{
-			Severity: SeverityError,
+			Severity: SeverityWarning,
 			Code:     "MISSING_CASE_PROFILE",
-			Message:  fmt.Sprintf("個案「%s」缺少身分證、住家地址、服務類別或服務使用類型", c.Name),
+			Message:  fmt.Sprintf("個案「%s」缺少身分證、住家地址、服務類別或服務使用類型，該欄位將留白匯出", c.Name),
 			Details: map[string]interface{}{
 				"caseId":   c.ID,
 				"caseName": c.Name,
 			},
 		})
-		errorCount++
+		warningCount++
 	}
 
-	// 3. 未裁決衝突會使申報來源不確定，必須阻擋匯出。
+	// 3. 未裁決衝突（混車）會使申報來源不確定，是唯一仍阻擋匯出的檢核項目：
+	// 缺資料只是欄位留白，混車卻會讓報出去的資料本身是錯的。
 	conflicts, err := s.repo.FindUnresolvedConflicts(ctx, scope)
 	if err != nil {
 		return nil, fmt.Errorf("find unresolved conflicts: %w", err)

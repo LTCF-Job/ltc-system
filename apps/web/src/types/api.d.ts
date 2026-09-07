@@ -799,8 +799,8 @@ export interface ExportJobFileDTO {
   downloadUrl: string;
 }
 
-// 因資料缺漏未納入申報的趟次統計
-export interface ExportJobSkipDTO {
+// 因來源缺漏而在申報檔留白的欄位統計
+export interface ExportJobDataGapDTO {
   caseId: string;
   caseName: string;
   reason: string;
@@ -817,8 +817,8 @@ export interface ExportJobDTO {
   totalCases?: number;
   totalRows?: number;
   files?: ExportJobFileDTO[];
-  // skipped 只在建立當下回傳；跳過統計不寫入儲存，歷史查詢不會重現
-  skipped?: ExportJobSkipDTO[];
+  // dataGaps 只在建立當下回傳；缺漏統計不寫入儲存，歷史查詢不會重現
+  dataGaps?: ExportJobDataGapDTO[];
   zipFileName?: string;
   // 僅壓縮檔模式有值；逐案下載的連結掛在 files 上
   downloadUrl?: string;
