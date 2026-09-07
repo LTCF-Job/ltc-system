@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -30,14 +31,16 @@ func (h *ImportHandler) ImportExcel(c *gin.Context) {
 
 	f, err := fileHeader.Open()
 	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無法開啟檔案", nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeFileUnreadable, err, []httpx.ErrorDetail{
+			{Field: "file", Reason: "檔案無法開啟，請重新選擇檔案後再上傳"},
+		})
 		return
 	}
 	defer f.Close()
 
 	preview, err := h.svc.ParseCases(c.Request.Context(), f, fileHeader.Filename)
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		respondParseError(c, err)
 		return
 	}
 
@@ -70,6 +73,28 @@ func (h *ImportHandler) DownloadTemplate(c *gin.Context) {
 
 	attachAs(c, "case_template.xlsx", "個案批次匯入範本.xlsx")
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
+}
+
+// respondParseError 把解析前置失敗分流到各自的錯誤碼並附上可行動的原因。
+// 全部壓成 VALIDATION_FAILED 只會顯示「輸入資料不符合規則」，使用者無從判斷是檔案格式、
+// 檔案損毀，還是套用了錯誤的範本。
+func respondParseError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, app.ErrUnsupportedFileType):
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeUnsupportedFileType, err, []httpx.ErrorDetail{
+			{Field: "file", Reason: "僅支援 .xlsx 檔案，請另存為 Excel 活頁簿後再上傳"},
+		})
+	case errors.Is(err, app.ErrTemplateMismatch):
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeImportTemplateMismatch, err, []httpx.ErrorDetail{
+			{Field: "file", Reason: "找不到「姓名」欄，請確認是否使用個案批次匯入範本，且標題列在前三列內"},
+		})
+	case errors.Is(err, app.ErrFileUnreadable):
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeFileUnreadable, err, []httpx.ErrorDetail{
+			{Field: "file", Reason: "檔案內容無法讀取，可能已損毀或不是有效的 Excel 檔"},
+		})
+	default:
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+	}
 }
 
 // attachAs 同時給出 ASCII 後備檔名與 UTF-8 檔名，讓舊瀏覽器不致收到亂碼。
