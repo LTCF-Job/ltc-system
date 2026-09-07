@@ -205,66 +205,72 @@ func (r CreateScheduleRequest) ToService() app.CreateScheduleRequest {
 
 // CaseResponse 代表回傳給前端的個案主檔資料。身分證密文與 HMAC 索引不對外輸出。
 type CaseResponse struct {
-	ID                uuid.UUID  `json:"id"`
-	Name              string     `json:"name"`
-	NameNormalized    string     `json:"nameNormalized"`
-	NationalIDMasked  string     `json:"nationalIdMasked"`
-	NationalIDInvalid bool       `json:"nationalIdInvalid"`
-	HouseholdType     *string    `json:"householdType"`
-	Gender            *string    `json:"gender"`
-	BirthDate         *time.Time `json:"birthDate"`
-	BirthDateRaw      *string    `json:"birthDateRaw"`
-	CareContactRole   *string    `json:"careContactRole"`
-	CareContactName   *string    `json:"careContactName"`
-	RegisteredAddress *string    `json:"registeredAddress"`
-	SiteID            *uuid.UUID `json:"siteId"`
-	SiteName          string     `json:"siteName"`
-	OutboundVehicleID *uuid.UUID `json:"outboundVehicleId"`
-	OutboundVehicle   string     `json:"outboundVehicle"`
-	InboundVehicleID  *uuid.UUID `json:"inboundVehicleId"`
-	InboundVehicle    string     `json:"inboundVehicle"`
-	HomeAddress       *string    `json:"homeAddress"`
-	Region            *string    `json:"region"`
-	LTCLevel          *string    `json:"ltcLevel"`
-	ServiceCategory   *int       `json:"serviceCategory"`
-	ServiceUsageType  *int       `json:"serviceUsageType"`
-	ClaimEndDate      *time.Time `json:"claimEndDate"`
-	Status            string     `json:"status"`
-	Remarks           *string    `json:"remarks"`
-	CreatedAt         time.Time  `json:"createdAt"`
-	UpdatedAt         time.Time  `json:"updatedAt"`
+	ID                     uuid.UUID  `json:"id"`
+	Name                   string     `json:"name"`
+	NameNormalized         string     `json:"nameNormalized"`
+	NationalIDMasked       string     `json:"nationalIdMasked"`
+	NationalIDInvalid      bool       `json:"nationalIdInvalid"`
+	HouseholdType          *string    `json:"householdType"`
+	Gender                 *string    `json:"gender"`
+	BirthDate              *time.Time `json:"birthDate"`
+	BirthDateRaw           *string    `json:"birthDateRaw"`
+	CareContactRole        *string    `json:"careContactRole"`
+	CareContactName        *string    `json:"careContactName"`
+	RegisteredAddress      *string    `json:"registeredAddress"`
+	SiteID                 *uuid.UUID `json:"siteId"`
+	SiteName               string     `json:"siteName"`
+	SiteNameRaw            *string    `json:"siteNameRaw"`
+	OutboundVehicleID      *uuid.UUID `json:"outboundVehicleId"`
+	OutboundVehicle        string     `json:"outboundVehicle"`
+	OutboundVehicleNameRaw *string    `json:"outboundVehicleNameRaw"`
+	InboundVehicleID       *uuid.UUID `json:"inboundVehicleId"`
+	InboundVehicle         string     `json:"inboundVehicle"`
+	InboundVehicleNameRaw  *string    `json:"inboundVehicleNameRaw"`
+	HomeAddress            *string    `json:"homeAddress"`
+	Region                 *string    `json:"region"`
+	LTCLevel               *string    `json:"ltcLevel"`
+	ServiceCategory        *int       `json:"serviceCategory"`
+	ServiceUsageType       *int       `json:"serviceUsageType"`
+	ClaimEndDate           *time.Time `json:"claimEndDate"`
+	Status                 string     `json:"status"`
+	Remarks                *string    `json:"remarks"`
+	CreatedAt              time.Time  `json:"createdAt"`
+	UpdatedAt              time.Time  `json:"updatedAt"`
 }
 
 func newCaseResponse(c app.Case) CaseResponse {
 	return CaseResponse{
-		ID:                c.ID,
-		Name:              c.Name,
-		NameNormalized:    c.NameNormalized,
-		NationalIDMasked:  c.NationalIDMasked,
-		NationalIDInvalid: c.NationalIDInvalid,
-		HouseholdType:     c.HouseholdType,
-		Gender:            c.Gender,
-		BirthDate:         c.BirthDate,
-		BirthDateRaw:      c.BirthDateRaw,
-		CareContactRole:   c.CareContactRole,
-		CareContactName:   c.CareContactName,
-		RegisteredAddress: c.RegisteredAddress,
-		SiteID:            c.SiteID,
-		SiteName:          c.SiteName,
-		OutboundVehicleID: c.OutboundVehicleID,
-		OutboundVehicle:   c.OutboundVehicle,
-		InboundVehicleID:  c.InboundVehicleID,
-		InboundVehicle:    c.InboundVehicle,
-		HomeAddress:       c.HomeAddress,
-		Region:            c.Region,
-		LTCLevel:          c.LTCLevel,
-		ServiceCategory:   c.ServiceCategory,
-		ServiceUsageType:  c.ServiceUsageType,
-		ClaimEndDate:      c.ClaimEndDate,
-		Status:            c.Status,
-		Remarks:           c.Remarks,
-		CreatedAt:         c.CreatedAt,
-		UpdatedAt:         c.UpdatedAt,
+		ID:                     c.ID,
+		Name:                   c.Name,
+		NameNormalized:         c.NameNormalized,
+		NationalIDMasked:       c.NationalIDMasked,
+		NationalIDInvalid:      c.NationalIDInvalid,
+		HouseholdType:          c.HouseholdType,
+		Gender:                 c.Gender,
+		BirthDate:              c.BirthDate,
+		BirthDateRaw:           c.BirthDateRaw,
+		CareContactRole:        c.CareContactRole,
+		CareContactName:        c.CareContactName,
+		RegisteredAddress:      c.RegisteredAddress,
+		SiteID:                 c.SiteID,
+		SiteName:               c.SiteName,
+		SiteNameRaw:            c.SiteNameRaw,
+		OutboundVehicleID:      c.OutboundVehicleID,
+		OutboundVehicle:        c.OutboundVehicle,
+		OutboundVehicleNameRaw: c.OutboundVehicleNameRaw,
+		InboundVehicleID:       c.InboundVehicleID,
+		InboundVehicle:         c.InboundVehicle,
+		InboundVehicleNameRaw:  c.InboundVehicleNameRaw,
+		HomeAddress:            c.HomeAddress,
+		Region:                 c.Region,
+		LTCLevel:               c.LTCLevel,
+		ServiceCategory:        c.ServiceCategory,
+		ServiceUsageType:       c.ServiceUsageType,
+		ClaimEndDate:           c.ClaimEndDate,
+		Status:                 c.Status,
+		Remarks:                c.Remarks,
+		CreatedAt:              c.CreatedAt,
+		UpdatedAt:              c.UpdatedAt,
 	}
 }
 

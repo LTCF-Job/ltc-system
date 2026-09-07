@@ -203,7 +203,7 @@
         <el-empty v-if="!unresolvedLoading && pendingRows.length === 0" description="目前沒有待維護的個案" />
         <el-table v-else :data="pendingRows" border stripe table-layout="auto" row-key="key">
           <el-table-column prop="name" label="姓名" min-width="90" class-name="unresolved-name-col" />
-          <el-table-column label="問題" min-width="260">
+          <el-table-column label="問題" min-width="260" class-name="unresolved-issue-col">
             <template #default="{ row }">
               <div class="issue-tags">
                 <el-tag v-for="issue in row.issues" :key="issue" type="warning" size="small" effect="light">
@@ -212,14 +212,16 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right" align="center">
+          <el-table-column label="操作" width="120" fixed="right" align="center" class-name="unresolved-action-col">
             <template #default="{ row }">
-              <el-button v-if="row.kind === 'case'" link type="primary" size="small" @click="openPendingCaseEdit(row as PendingCaseRow)">
-                編輯
-              </el-button>
-              <el-button v-else link type="primary" size="small" @click="openDuplicateResolve(row as PendingDuplicateRow)">
-                人工裁決
-              </el-button>
+              <TableRowActions>
+                <el-button v-if="row.kind === 'case'" link type="primary" size="small" @click="openPendingCaseEdit(row as PendingCaseRow)">
+                  編輯
+                </el-button>
+                <el-button v-else link type="primary" size="small" @click="openDuplicateResolve(row as PendingDuplicateRow)">
+                  人工裁決
+                </el-button>
+              </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
@@ -228,45 +230,62 @@
     </el-tabs>
 
     <!-- 待維護個案編輯彈窗：只顯示該列實際缺漏的欄位（單位/車輛關聯、生日、身分證字號） -->
-    <el-dialog v-model="pendingEditVisible" title="補齊個案資料" width="min(480px, calc(100vw - 32px))">
-      <el-form v-if="pendingEditTarget" label-width="110px">
-        <el-form-item v-if="pendingEditTarget.siteNameRaw" label="單位">
-          <div class="unresolved-slot">
-            <span class="unresolved-raw-name">原始名稱：{{ pendingEditTarget.siteNameRaw }}</span>
-            <el-select v-model="pendingEditForm.siteId" filterable placeholder="選擇既有單位" style="width: 200px">
-              <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
-            </el-select>
-            <el-button link type="primary" size="small" @click="openQuickCreate('site', pendingEditTarget)">新增單位</el-button>
-          </div>
-        </el-form-item>
-        <el-form-item v-if="pendingEditTarget.outboundVehicleNameRaw" label="去程車輛">
-          <div class="unresolved-slot">
-            <span class="unresolved-raw-name">原始名稱：{{ pendingEditTarget.outboundVehicleNameRaw }}</span>
-            <el-select v-model="pendingEditForm.outboundVehicleId" filterable placeholder="選擇既有車輛" style="width: 200px">
-              <el-option v-for="vehicle in availableVehicles" :key="vehicle.id" :value="vehicle.id" :label="vehicle.displayName" />
-            </el-select>
-            <el-button link type="primary" size="small" @click="openQuickCreate('vehicle', pendingEditTarget, 'outboundVehicle')">新增車輛</el-button>
-          </div>
-        </el-form-item>
-        <el-form-item v-if="pendingEditTarget.inboundVehicleNameRaw" label="回程車輛">
-          <div class="unresolved-slot">
-            <span class="unresolved-raw-name">原始名稱：{{ pendingEditTarget.inboundVehicleNameRaw }}</span>
-            <el-select v-model="pendingEditForm.inboundVehicleId" filterable placeholder="選擇既有車輛" style="width: 200px">
-              <el-option v-for="vehicle in availableVehicles" :key="vehicle.id" :value="vehicle.id" :label="vehicle.displayName" />
-            </el-select>
-            <el-button link type="primary" size="small" @click="openQuickCreate('vehicle', pendingEditTarget, 'inboundVehicle')">新增車輛</el-button>
-          </div>
-        </el-form-item>
-        <el-form-item v-if="pendingEditTarget.birthDateRaw" label="生日">
-          <div class="unresolved-slot">
-            <span class="unresolved-raw-name">原始字串：{{ pendingEditTarget.birthDateRaw }}</span>
-            <el-date-picker v-model="pendingEditForm.birthDate" type="date" placeholder="選擇正確生日" value-format="YYYY-MM-DD" style="width: 180px" />
-          </div>
-        </el-form-item>
-        <el-form-item v-if="pendingEditTarget.nationalIdInvalid" label="身分證字號">
-          <el-input v-model="pendingEditForm.nationalId" placeholder="請重新輸入完整身分證字號" style="width: 200px" />
-        </el-form-item>
-      </el-form>
+    <el-dialog v-model="pendingEditVisible" title="補齊個案資料" width="min(600px, calc(100vw - 32px))">
+      <template v-if="pendingEditTarget">
+        <p class="pending-edit-hint">
+          匯入「{{ pendingEditTarget.name }}」時，以下欄位無法對應到既有主檔或格式不正確。補齊並儲存後，這筆個案就會離開待維護清單。
+        </p>
+        <el-form label-width="110px">
+          <el-form-item v-if="pendingEditTarget.siteNameRaw" label="單位">
+            <div class="pending-edit-field">
+              <span class="pending-edit-raw">原始名稱：{{ pendingEditTarget.siteNameRaw }}</span>
+              <div class="pending-edit-control">
+                <el-select v-model="pendingEditForm.siteId" filterable placeholder="選擇既有單位" class="pending-edit-input">
+                  <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
+                </el-select>
+                <el-button link type="primary" size="small" @click="openQuickCreate('site', pendingEditTarget)">新增單位</el-button>
+              </div>
+            </div>
+          </el-form-item>
+          <el-form-item v-if="pendingEditTarget.outboundVehicleNameRaw" label="去程車輛">
+            <div class="pending-edit-field">
+              <span class="pending-edit-raw">原始名稱：{{ pendingEditTarget.outboundVehicleNameRaw }}</span>
+              <div class="pending-edit-control">
+                <el-select v-model="pendingEditForm.outboundVehicleId" filterable placeholder="選擇既有車輛" class="pending-edit-input">
+                  <el-option v-for="vehicle in availableVehicles" :key="vehicle.id" :value="vehicle.id" :label="vehicle.displayName" />
+                </el-select>
+                <el-button link type="primary" size="small" @click="openQuickCreate('vehicle', pendingEditTarget, 'outboundVehicle')">新增車輛</el-button>
+              </div>
+            </div>
+          </el-form-item>
+          <el-form-item v-if="pendingEditTarget.inboundVehicleNameRaw" label="回程車輛">
+            <div class="pending-edit-field">
+              <span class="pending-edit-raw">原始名稱：{{ pendingEditTarget.inboundVehicleNameRaw }}</span>
+              <div class="pending-edit-control">
+                <el-select v-model="pendingEditForm.inboundVehicleId" filterable placeholder="選擇既有車輛" class="pending-edit-input">
+                  <el-option v-for="vehicle in availableVehicles" :key="vehicle.id" :value="vehicle.id" :label="vehicle.displayName" />
+                </el-select>
+                <el-button link type="primary" size="small" @click="openQuickCreate('vehicle', pendingEditTarget, 'inboundVehicle')">新增車輛</el-button>
+              </div>
+            </div>
+          </el-form-item>
+          <el-form-item v-if="pendingEditTarget.birthDateRaw" label="生日">
+            <div class="pending-edit-field">
+              <span class="pending-edit-raw">原始字串：{{ pendingEditTarget.birthDateRaw }}</span>
+              <div class="pending-edit-control">
+                <el-date-picker v-model="pendingEditForm.birthDate" type="date" placeholder="選擇正確生日" value-format="YYYY-MM-DD" class="pending-edit-input" />
+              </div>
+            </div>
+          </el-form-item>
+          <el-form-item v-if="pendingEditTarget.nationalIdInvalid" label="身分證字號">
+            <div class="pending-edit-field">
+              <div class="pending-edit-control">
+                <el-input v-model="pendingEditForm.nationalId" placeholder="請重新輸入完整身分證字號" class="pending-edit-input" />
+              </div>
+            </div>
+          </el-form-item>
+        </el-form>
+      </template>
       <template #footer>
         <DialogFooter
           confirm-text="儲存"
@@ -918,36 +937,69 @@ executeFetch()
   width: max-content;
 }
 
-/* 不用 flex-wrap: wrap，理由同照護人員管理待維護頁籤：欄寬不夠時會把
-   「選擇既有單位/車輛」跟「新增」按鈕擠成第二行，即使頁面還有空間也一樣。
-   改成 nowrap + table-layout="auto"，讓欄位依內容自然撐寬、有空間就單行顯示。 */
-.unresolved-slot {
+.pending-edit-hint {
+  margin: 0 0 var(--app-space-4);
+  color: var(--app-text-secondary);
+  font-size: var(--app-font-sm);
+  line-height: 1.6;
+}
+
+/* 對話框寬度固定，不像表格可以依內容撐寬，所以這裡不套用 component-contract
+   表格欄位那組「原始名稱＋選單＋按鈕」單行 nowrap 寫法——那組靠 flex-shrink: 0
+   維持單行，在固定寬度容器裡會直接溢出對話框、把「新增」按鈕推到看不見。 */
+.pending-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  width: 100%;
+  min-width: 0;
+}
+
+.pending-edit-control {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
+  gap: var(--app-space-2);
+  width: 100%;
+  min-width: 0;
 }
 
-.unresolved-slot > * {
-  flex-shrink: 0;
+/* min-width: 0 解除 flex item 預設的 min-width: auto，否則選單會被內容撐寬
+   而不肯收縮，「新增」按鈕一樣會被擠出容器。 */
+.pending-edit-input {
+  flex: 1;
+  min-width: 0;
 }
 
-/* flex-wrap: nowrap 只防止元素被擠到下一行，這個 span 沒有固定寬度時
-   文字本身還是會自己換行，要另外鎖 white-space: nowrap 才能維持單行。 */
-.unresolved-raw-name {
-  color: var(--app-status-warning-fg);
-  font-size: 13px;
-  white-space: nowrap;
+/* el-date-picker 的根元素吃 Element Plus 的 .el-date-editor { width: 220px }，
+   優先權高於上面那條單一 class 規則，不另外蓋寬度的話只有生日欄會短一截。 */
+.pending-edit-control :deep(.el-date-editor.el-input) {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.pending-edit-raw {
+  color: var(--app-text-secondary);
+  font-size: var(--app-font-sm);
+  line-height: 1.4;
 }
 
 /* el-table-column 的 min-width prop 在 table-layout="auto" 底下只會拿去算
    DataTablePage 外層表格總寬度的預算，不會真的變成該欄的 CSS min-width；
-   欄位當筆若沒有原始名稱（顯示「-」）就會被壓到只剩幾 px，跟其他有內容
-   的欄位比例明顯不一致。要另外用 class-name 補一條 :deep() min-width
-   才是真的鎖住下限（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
+   欄位當筆內容較短就會被壓到只剩幾 px，跟其他有內容的欄位比例明顯不一致。
+   要另外用 class-name 補一條 :deep() min-width 才是真的鎖住下限
+   （見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
 :deep(.unresolved-name-col .cell) {
   white-space: nowrap;
   min-width: 90px;
+}
+
+:deep(.unresolved-issue-col .cell) {
+  min-width: 260px;
+}
+
+:deep(.unresolved-action-col .cell) {
+  min-width: 120px;
 }
 
 .inline-value,
@@ -993,10 +1045,16 @@ executeFetch()
   font-size: 13px;
 }
 
+/* nowrap 才能讓 width: max-content 的表格依標籤總長撐寬；用 wrap 的話一列
+   五個問題標籤在版面還有空間時就先折成三行，欄位反而擠在左側。 */
 .issue-tags {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: var(--app-space-2);
+}
+
+.issue-tags .el-tag {
+  flex-shrink: 0;
 }
 
 .duplicate-resolve-actions {
