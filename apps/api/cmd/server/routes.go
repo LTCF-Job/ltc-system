@@ -1,7 +1,9 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -20,6 +22,7 @@ import (
 	tasktransport "ltc-system/apps/api/internal/modules/task/transport"
 	"ltc-system/apps/api/internal/platform/auth"
 	"ltc-system/apps/api/internal/platform/config"
+	"ltc-system/apps/api/internal/platform/httpx"
 	"ltc-system/apps/api/internal/platform/logging"
 
 	"github.com/gin-contrib/cors"
@@ -55,7 +58,9 @@ type handlers struct {
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
 func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.PermissionResolver, customPerm auth.CustomPermissionResolver, userState auth.UserStateResolver) *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Recovery())
+	// 識別碼要先於其他 middleware 產生，panic 與 404 的錯誤回應才帶得到它。
+	r.Use(httpx.RequestIDMiddleware())
+	r.Use(recoveryMiddleware())
 	r.Use(logging.Middleware())
 
 	// CORS 設定：正式環境限制為白名單網域，本機開發維持全放行以配合任意 port 測試
@@ -67,6 +72,8 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 	}
 	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-Ingest-Token"}
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	// 讓瀏覽器端讀得到請求識別碼，下載類（blob）回應也能在開發者工具對上伺服器 log。
+	corsConfig.ExposeHeaders = []string{httpx.RequestIDHeader}
 	r.Use(cors.New(corsConfig))
 
 	// liveness 只確認 process 仍能回應，不依賴資料庫。
@@ -134,6 +141,9 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.GET("/cases/import/duplicates", auth.RequirePermission(perm, customPerm, "masters_cases", "view"), h.kase.ListDuplicateCandidates)
 		apiV1.POST("/cases/import/duplicates/:id/reveal", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.RevealDuplicateCandidateNationalID)
 		apiV1.POST("/cases/import/duplicates/:id/resolve", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.ResolveDuplicateCandidate)
+		// 「忽略此筆」刪的是匯入暫存列而非個案本體，門檻沿用同一組裁決端點的 edit 軸；
+		// masters_cases 的 delete 軸僅 admin 為 true（見 000018），改用它會讓 staff 只能裁決不能忽略。
+		apiV1.DELETE("/cases/import/duplicates/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.DiscardDuplicateCandidate)
 
 		// 2. 單位主檔
 		apiV1.GET("/sites", auth.RequirePermission(perm, customPerm, "masters_sites", "view"), h.site.List)
@@ -168,6 +178,11 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.GET("/driver-reports/submissions/review", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "view"), h.driverReport.ListSubmissionReview)
 		apiV1.POST("/driver-reports/drivers/bind", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.BindDriver)
 		apiV1.POST("/driver-reports/row-conflicts/:id/resolve", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.ResolveRowConflict)
+		// 待維護資料的「忽略此筆」直接刪除該列。driver_report_mappings 的 delete 軸在權限矩陣中
+		// 對所有角色皆為 false（見 000018），因此沿用與綁定／裁決相同的 edit 軸。
+		apiV1.DELETE("/driver-reports/columns/:id", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.IgnoreColumn)
+		apiV1.DELETE("/driver-reports/row-conflicts/:id", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.IgnoreRowConflict)
+		apiV1.DELETE("/driver-reports/submissions/:id", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.IgnoreSubmission)
 		apiV1.DELETE("/driver-reports/:id", auth.RequirePermission(perm, customPerm, "driver_reports", "delete"), h.driverReport.DeleteForm)
 		apiV1.GET("/driver-reports/:id/template", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.DownloadTemplate)
 		apiV1.POST("/driver-reports/:id/import", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.ImportExcel)
@@ -224,6 +239,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		// 司機接送匯報匯入自動同步出勤時，與人工登記不一致的待維護衝突
 		apiV1.GET("/attendance/conflicts", auth.RequirePermission(perm, customPerm, "attendance_fuel", "view"), h.attendance.ListConflicts)
 		apiV1.POST("/attendance/conflicts/:id/resolve", auth.RequirePermission(perm, customPerm, "attendance_fuel", "edit"), h.attendance.ResolveConflict)
+		apiV1.DELETE("/attendance/conflicts/:id", auth.RequirePermission(perm, customPerm, "attendance_fuel", "delete"), h.attendance.IgnoreConflict)
 
 		// 13. 車輛油資管理 (B6.3)
 		apiV1.GET("/fuel-logs", auth.RequirePermission(perm, customPerm, "attendance_fuel", "view"), h.fuel.List)
@@ -272,5 +288,35 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.POST("/auth/change-password", h.identity.ChangeSelfPassword)
 	}
 
+	// gin 預設的 404／405 回應是純文字，前端拿不到 error.code 只能顯示通用訊息；
+	// 改成標準錯誤 envelope，讓「呼叫到不存在的位址」與「後端真的壞掉」可以分辨。
+	// 預設關閉時，方法不符會落到 NoRoute 而與「路徑不存在」混在一起；打開才分得出 405。
+	r.HandleMethodNotAllowed = true
+	r.NoRoute(routeNotFoundHandler(http.StatusNotFound))
+	r.NoMethod(routeNotFoundHandler(http.StatusMethodNotAllowed))
+
 	return r
+}
+
+// routeNotFoundHandler 產生 404／405 的標準錯誤回應。
+func routeNotFoundHandler(status int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		httpx.RespondError(c, status, httpx.CodeRouteNotFound, "", nil)
+	}
+}
+
+// recoveryMiddleware 取代 gin.Recovery()：預設的 recovery 在 panic 時只寫出空 body 的 500，
+// 前端解不到 error.code，使用者會看到毫無線索的通用錯誤。這裡改為回傳標準錯誤 envelope，
+// 並把 panic 內容與請求識別碼一起記在伺服器端。
+func recoveryMiddleware() gin.HandlerFunc {
+	return gin.CustomRecoveryWithWriter(nil, func(c *gin.Context, recovered any) {
+		slog.Error("panic_recovered",
+			slog.String("request_id", httpx.RequestID(c)),
+			slog.String("path", c.Request.URL.Path),
+			slog.String("method", c.Request.Method),
+			slog.Any("panic", recovered),
+			slog.String("stack", string(debug.Stack())),
+		)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "", nil)
+	})
 }

@@ -89,10 +89,19 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 { "data": ..., "meta": {...可省略，通常是分頁資訊...} }
 
 // 失敗
-{ "error": { "code": "VALIDATION_FAILED", "message": "...", "details": [{"field":"...", "reason":"..."}] } }
+{ "error": { "code": "VALIDATION_FAILED", "message": "...", "details": [{"field":"...", "reason":"..."}], "requestId": "9F2C1A4B7E0D" } }
 ```
 
-錯誤碼是 `httpx` 的常數：`VALIDATION_FAILED`、`UNAUTHENTICATED`、`FORBIDDEN`、`NOT_FOUND`、`DUPLICATE_NATIONAL_ID`、`ASSIGNMENT_OVERLAP`、`EXPORT_IN_PROGRESS`、`PRECHECK_FAILED`、`MAPPING_REQUIRED`、`INGEST_TOKEN_INVALID`、`FORM_SOURCE_FAILED`、`FORM_SYNC_FAILED`、`FORM_MAPPING_FAILED`、`INTERNAL_ERROR`。新增錯誤情境優先看有沒有現成碼可以用，真的沒有再加新常數，不要在 handler 裡面手打字串。
+錯誤碼常數的權威清單在 `httpx`，可由 `httpx.ErrorCodes()` 取得；目前為 `VALIDATION_FAILED`、`UNAUTHENTICATED`、`FORBIDDEN`、`NOT_FOUND`、`ASSIGNMENT_OVERLAP`、`EXPORT_IN_PROGRESS`、`PRECHECK_FAILED`、`NO_EXPORT_DATA`、`MAPPING_REQUIRED`、`DRIVER_REPORT_IMPORT_FAILED`、`FORM_MAPPING_FAILED`、`INTERNAL_ERROR`、`SERVICE_UNAVAILABLE`、`RESOURCE_IN_USE`、`UNSUPPORTED_FILE_TYPE`、`FILE_TOO_LARGE`、`FILE_UNREADABLE`、`IMPORT_TEMPLATE_MISMATCH`、`ROUTE_NOT_FOUND`。新增錯誤情境優先看有沒有現成碼可以用，真的沒有再加新常數，不要在 handler 裡面手打字串。
+
+### 三個欄位的分工
+
+- `code`：機器可讀的分類，決定前端的處置（例如 401 導回登入、`RESOURCE_IN_USE` 不重試）。新增常數時 `codeMessages` 必須同步登記，否則 `internal/platform/httpx` 的測試會失敗。
+- `message`：直接顯示給使用者的具體原因，由 handler 寫死。`internal/arch` 的 `TestErrorMessagesAreStaticText` 禁止把函式呼叫結果（例如 `err.Error()`）當成 message，因此前端可以原樣顯示；傳空字串時 `RespondError` 會自動填入該錯誤碼的預設文字。`RespondErrorCode` 則只寫預設文字，底層錯誤僅進 slog。
+- `details`：欄位層級原因。request body 綁定失敗一律附 `httpx.ExtractValidationDetails(err)`，前端才說得出是哪一欄不合規則。
+- `requestId`：`httpx.RequestIDMiddleware()` 產生，同時寫入 `X-Request-Id` header 與 slog 的 `request_id`。前端在 5xx 時把它一起顯示為「錯誤編號」，供反查伺服器 log。
+
+前端字典在 `apps/web/src/api/errorCodes.ts`，由 `apps/web/tests/unit/error-codes.test.ts` 直接讀本檔對應的 Go 原始碼比對，漏改會在測試階段被擋下。
 
 ## 設定（環境變數）
 

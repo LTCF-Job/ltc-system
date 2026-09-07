@@ -14,8 +14,8 @@ jobs:
   dependency-review:
     name: Dependency security review
     runs-on: ubuntu-latest
-    # dependency-review-action 比對兩個 ref 之間的相依差異，push event 沒有 base ref 可比，
-    # 只能在 pull_request 執行；push 時整個 job skip，branch protection 視 skipped 為通過。
+    # dependency-review-action 以 PR 的 base／head 兩個 ref 比對相依套件差異，push 事件沒有這組
+    # ref，跑起來一定以「Both a base ref and head ref must be provided」失敗，因此限定 PR 才執行。
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout

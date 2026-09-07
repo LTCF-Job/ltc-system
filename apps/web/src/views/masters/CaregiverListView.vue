@@ -55,7 +55,9 @@
             <el-table :data="caregivers" border stripe table-layout="auto" style="width: 100%">
               <el-table-column label="類型" width="90" align="center">
                 <template #default="{ row }">
-                  <span>{{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type }}</span>
+                  <span :class="{ 'empty-value': !row.type }">
+                    {{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type || '（未填）' }}
+                  </span>
                 </template>
               </el-table-column>
               <el-table-column label="單位" min-width="220" class-name="site-col">
@@ -140,27 +142,26 @@
         </DataTablePage>
       </el-tab-pane>
 
-      <!-- 待維護：單位名稱比對不到單位主檔、或聯絡方式／備註缺漏的照護人員資料，統一用「缺少欄位」欄提示，不再分組 -->
+      <!-- 待維護：匯入時姓名或類型未填寫的照護人員資料，統一用「缺少欄位」欄提示 -->
       <el-tab-pane label="待維護" name="pending">
         <div v-loading="pendingLoading" class="pending-panel">
           <el-empty v-if="!pendingLoading && pendingCaregivers.length === 0" description="目前沒有待維護的照護人員" />
           <el-table v-else :data="pendingCaregivers" border stripe table-layout="auto">
-            <el-table-column prop="name" label="姓名" min-width="120" class-name="name-col" />
-            <el-table-column label="單位" min-width="220" class-name="pending-site-col">
+            <el-table-column label="姓名" min-width="120" class-name="name-col">
+              <template #default="{ row }">
+                <span :class="{ 'empty-value': !row.name }">{{ row.name || '（未填寫）' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="類型" width="90" align="center">
+              <template #default="{ row }">
+                <span :class="{ 'empty-value': !row.type }">
+                  {{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type || '（未填）' }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="單位" min-width="140" class-name="pending-site-col">
               <template #default="{ row }">
                 <span v-if="row.siteName">{{ row.siteName }}</span>
-                <div v-else-if="row.siteNameRaw" class="unresolved-slot">
-                  <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
-                  <el-select
-                    filterable
-                    placeholder="選擇既有單位"
-                    style="width: 150px"
-                    @change="(val: string) => handleLinkSite(row as CaregiverDTO, val)"
-                  >
-                    <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
-                  </el-select>
-                  <el-button link type="primary" size="small" @click="openQuickCreateSite(row as CaregiverDTO)">新增單位</el-button>
-                </div>
                 <span v-else class="empty-value">-</span>
               </template>
             </el-table-column>
@@ -179,10 +180,19 @@
                 <span class="missing-fields">缺少：{{ missingFields(row as CaregiverDTO).join('、') }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="100" align="center" class-name="pending-action-col">
+            <el-table-column label="操作" width="150" align="center" class-name="pending-action-col">
               <template #default="{ row }">
                 <TableRowActions>
                   <el-button link type="primary" size="small" @click="openEditDialog(row)">編輯</el-button>
+                  <el-button
+                    v-if="authStore.hasPermission('masters_caregivers', 'delete')"
+                    link
+                    type="danger"
+                    size="small"
+                    @click="handleIgnorePending(row as CaregiverDTO)"
+                  >
+                    忽略此筆
+                  </el-button>
                 </TableRowActions>
               </template>
             </el-table-column>
@@ -354,8 +364,8 @@ const {
       page: page.value,
       pageSize: pageSize.value,
       q: filters.q,
-      status: filters.status || undefined,
-      excludePending: true
+      status: filters.status || undefined
+      // 待維護資料由後端預設排除，主清單不需要另外表態
     })
     caregivers.value = res.data
     total.value = res.meta.total
@@ -411,7 +421,7 @@ async function handleCommitImport(file: File, includeDuplicateRows: string[]): P
 function handleImportSuccess() {
   executeFetch()
   ElMessageBox.confirm(
-    '本次匯入若有單位名稱未比對到單位主檔，或聯絡方式／備註未填寫，已建立資料並列入「待維護」頁籤，是否立即前往查看？',
+    '本次匯入若有姓名或類型未填寫，已以空白建立資料並列入「待維護」頁籤，是否立即前往查看？',
     '匯入完成',
     { confirmButtonText: '前往待維護', cancelButtonText: '稍後再說', type: 'info' }
   )
@@ -426,12 +436,11 @@ function handleImportSuccess() {
     })
 }
 
-// 依 siteId／contact／notes 是否有值，列出該筆照護人員缺少的欄位
+// 待維護的判定條件只有姓名與類型，兩者也是編輯時的必填欄位
 function missingFields(row: CaregiverDTO): string[] {
   const missing: string[] = []
-  if (!row.siteId) missing.push('單位')
-  if (!row.contact) missing.push('聯絡方式')
-  if (!row.notes) missing.push('備註')
+  if (!row.name) missing.push('姓名')
+  if (!row.type) missing.push('類型')
   return missing
 }
 
@@ -542,26 +551,36 @@ async function handleDelete(row: any) {
   }
 }
 
-// 待維護頁籤：單位名稱未比對到單位主檔與資料缺漏的照護人員合併為單一清單，用「缺少欄位」呈現而非分組
+// 待維護頁籤：匯入時姓名或類型未填寫、待人工補齊的照護人員
 const pendingLoading = ref(false)
 const pendingCaregivers = ref<CaregiverDTO[]>([])
 
 async function fetchPending() {
   pendingLoading.value = true
   try {
-    const [unresolvedRes, incompleteRes] = await Promise.all([
-      listAllCaregivers({ unresolvedLink: true }),
-      listAllCaregivers({ incomplete: true })
-    ])
-    const merged = new Map<string, CaregiverDTO>()
-    for (const row of [...unresolvedRes, ...incompleteRes]) {
-      merged.set(row.id, row)
-    }
-    pendingCaregivers.value = Array.from(merged.values())
+    pendingCaregivers.value = await listAllCaregivers({ pending: true })
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
   } finally {
     pendingLoading.value = false
+  }
+}
+
+// 忽略此筆：使用者判斷這筆本來就不該匯入時，直接把資料從系統刪除。
+async function handleIgnorePending(row: CaregiverDTO) {
+  const label = row.name || '（未填寫姓名）'
+  try {
+    await ElMessageBox.confirm(
+      `確定要忽略待維護資料「${label}」？將直接刪除這筆照護人員資料，無法復原。若之後重新匯入同一份檔案，這筆仍會再次出現。`,
+      '忽略確認',
+      { confirmButtonText: '忽略並刪除', cancelButtonText: '取消', type: 'warning' }
+    )
+    await deleteCaregiver(row.id)
+    pendingCaregivers.value = pendingCaregivers.value.filter((c) => c.id !== row.id)
+    ElMessage.success('已忽略該筆待維護資料')
+    executeFetch()
+  } catch {
+    // 使用者取消或 API 錯誤皆不在此重複顯示。
   }
 }
 

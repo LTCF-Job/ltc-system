@@ -254,6 +254,72 @@ func TestRequestBodiesUseTransportDTOs(t *testing.T) {
 	reportRetired(t, "persistenceBindBaseline", persistenceBindBaseline, seen)
 }
 
+// errorMessageBaseline freezes RespondError call sites whose message argument is
+// still computed at runtime.
+var errorMessageBaseline = map[string]string{}
+
+// TestErrorMessagesAreStaticText keeps the frontend safe to display the message a
+// handler writes. A computed message can carry err.Error(), an SQL string or any
+// other internal text; a literal or constant cannot. See
+// api-contract-guidelines.md and platform/httpx/response.go.
+func TestErrorMessagesAreStaticText(t *testing.T) {
+	seen := map[string]bool{}
+
+	forEachSourceFile(t, func(rel string, z zone, f *ast.File) {
+		// platform/httpx owns codeMessages, so it is the one place allowed to
+		// derive a message from the error code.
+		if z == "platform/httpx" {
+			return
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok || !isRespondErrorCall(call) || len(call.Args) < 4 {
+				return true
+			}
+			if !containsCall(call.Args[3]) {
+				return true
+			}
+
+			key := rel
+			seen[key] = true
+			if _, frozen := errorMessageBaseline[key]; frozen {
+				return true
+			}
+			t.Errorf("%s passes a computed message to RespondError -- use a literal or a constant so the frontend can display it verbatim", rel)
+			return true
+		})
+	})
+
+	reportRetired(t, "errorMessageBaseline", errorMessageBaseline, seen)
+}
+
+// isRespondErrorCall matches both httpx.RespondError from a module and the
+// unqualified RespondError inside platform/httpx itself.
+func isRespondErrorCall(call *ast.CallExpr) bool {
+	switch fun := call.Fun.(type) {
+	case *ast.SelectorExpr:
+		pkg, ok := fun.X.(*ast.Ident)
+		return ok && pkg.Name == "httpx" && fun.Sel.Name == "RespondError"
+	case *ast.Ident:
+		return fun.Name == "RespondError"
+	}
+	return false
+}
+
+// containsCall reports whether an expression evaluates any function call, which
+// is how runtime error text reaches a message argument.
+func containsCall(expr ast.Expr) bool {
+	found := false
+	ast.Inspect(expr, func(n ast.Node) bool {
+		if _, ok := n.(*ast.CallExpr); ok {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
 // reportRetired fails when a frozen entry no longer occurs, so that fixing a
 // violation and shrinking the baseline happen in the same commit.
 func reportRetired(t *testing.T, name string, frozen map[string]string, seen map[string]bool) {

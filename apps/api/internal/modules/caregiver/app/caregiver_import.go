@@ -48,7 +48,8 @@ var caregiverTypeLabels = map[string]string{
 	CaregiverTypeSpecialist:  "專護",
 }
 
-// caregiverTypeFromLabel 依中文標籤比對類型代碼，找不到對應標籤視為未填寫或格式錯誤。
+// caregiverTypeFromLabel 依中文標籤比對類型代碼，找不到對應標籤回傳空字串，
+// 由呼叫端以「未填寫」處理並列入待維護。
 func caregiverTypeFromLabel(label string) (code string, ok bool) {
 	for c, l := range caregiverTypeLabels {
 		if l == label {
@@ -123,55 +124,41 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 			rowID := fmt.Sprintf("%s:%d", sheetName, actualRowIndex)
 			rawValues := map[string]string{"單位": siteName, "姓名": name, "類型": typeLabel, "聯絡方式": contact, "備註": notes}
 
-			// 姓名與類型為必填欄位，缺漏或類型不是「個管」／「專護」即整列略過，不進入可匯入的預覽列。
-			if name == "" {
-				message := "姓名：未填寫，本列已略過"
-				errorsList = append(errorsList, CaregiverImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, Field: "姓名", Message: message})
-				previewRows = append(previewRows, map[string]interface{}{
-					"rowId": rowID, "rowIndex": actualRowIndex, "siteName": siteName, "name": name, "type": typeLabel, "contact": contact, "notes": notes,
-					"__hasError": true, "__hasWarning": false,
-				})
-				continue
-			}
-			typeCode, validType := caregiverTypeFromLabel(typeLabel)
-			if !validType {
-				message := "類型：未填寫或不是「個管」／「專護」，本列已略過"
-				errorsList = append(errorsList, CaregiverImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, Name: name, Field: "類型", Message: message})
-				previewRows = append(previewRows, map[string]interface{}{
-					"rowId": rowID, "rowIndex": actualRowIndex, "siteName": siteName, "name": name, "type": typeLabel, "contact": contact, "notes": notes,
-					"__hasError": true, "__hasWarning": false,
-				})
-				continue
-			}
+			// 姓名與類型缺漏不再擋列：以空白建立並列入待維護，讓使用者在待維護頁籤補齊，
+			// 避免整列連同其他已填欄位一起被丟棄。類型比對不到固定選項時同樣存成空字串。
+			typeCode, _ := caregiverTypeFromLabel(typeLabel)
 
 			rowRes := CaregiverImportRowResult{RowID: rowID, RowIndex: actualRowIndex, SiteName: siteName, Name: name, Type: typeCode, Contact: contact, Notes: notes, RawValues: rawValues}
 
-			// 單位、聯絡方式、備註缺漏或比對不到都不擋匯入，僅提示待後續維護。
+			if name == "" {
+				rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, "姓名未填寫，將以空白建立並列入待維護")
+			}
+			if typeCode == "" {
+				rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, "類型未填寫或不是「個管」／「專護」，將以空白建立並列入待維護")
+			}
+			// 單位比對到就自動關聯，比對不到只留白，不寫入原始名稱也不列入待維護；
+			// 查詢本身失敗仍要中止，避免把「查詢故障」誤判成「查無單位」。
 			if siteName != "" {
 				if site, err := s.sites.GetByName(ctx, siteName); err == nil && site != nil {
 					rowRes.SiteID = &site.ID
-				} else if errors.Is(err, ErrCaregiverSiteNotFound) || site == nil {
-					rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, fmt.Sprintf("單位「%s」未於單位管理中找到，已建立資料並保留原始名稱待人工關聯", siteName))
-				} else {
+				} else if !errors.Is(err, ErrCaregiverSiteNotFound) && err != nil {
 					return nil, fmt.Errorf("查詢單位「%s」失敗：%w", siteName, err)
 				}
 			}
-			if contact == "" {
-				rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, "聯絡方式未填寫，已建立資料待後續補齊")
-			}
-			if notes == "" {
-				rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, "備註未填寫，已建立資料待後續補齊")
-			}
-			// 重複人員不擋匯入，僅提示；使用者需於預覽勾選才會在正式匯入時寫入。
-			dup, err := s.findDuplicateCaregiver(ctx, name)
-			if err != nil {
-				return nil, err
-			}
-			if dup != nil {
-				rowRes.IsDuplicate = true
-				rowRes.DuplicateCaregiverID = &dup.ID
-				rowRes.DuplicateCaregiverName = dup.Name
-				rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, fmt.Sprintf("疑似重複照護人員（既有資料「%s」），預設略過，需勾選才會匯入", dup.Name))
+			// 姓名為空時不查重：ILIKE '%%' 會撈回任意資料列，且正規化後的空字串會與既有
+			// 空姓名資料互相命中，導致每一列都被誤判為重複而預設不匯入。
+			if name != "" {
+				// 重複人員不擋匯入，僅提示；使用者需於預覽勾選才會在正式匯入時寫入。
+				dup, err := s.findDuplicateCaregiver(ctx, name)
+				if err != nil {
+					return nil, err
+				}
+				if dup != nil {
+					rowRes.IsDuplicate = true
+					rowRes.DuplicateCaregiverID = &dup.ID
+					rowRes.DuplicateCaregiverName = dup.Name
+					rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, fmt.Sprintf("疑似重複照護人員（既有資料「%s」），預設略過，需勾選才會匯入", dup.Name))
+				}
 			}
 
 			validRows++
@@ -210,7 +197,7 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 // findDuplicateCaregiver 以正規化姓名比對既有照護人員；資料庫查詢失敗時中止預覽，
 // 避免把「查詢故障」誤判成「沒有重複」而放行匯入。
 func (s *CaregiverService) findDuplicateCaregiver(ctx context.Context, name string) (*CaregiverDuplicateRef, error) {
-	matches, _, err := s.store.List(ctx, name, "", false, false, false, 1, 5)
+	matches, _, err := s.store.List(ctx, name, "", false, false, 1, 5)
 	if err != nil {
 		return nil, fmt.Errorf("查詢照護人員重複資料失敗：%w", err)
 	}
@@ -230,10 +217,10 @@ func appendCaregiverMessage(existing, next string) string {
 	return existing + "；" + next
 }
 
-// CommitCaregivers 將通過檢核的照護人員資料正式寫入資料庫。姓名缺漏的列已於
-// dry-run 階段排除在 preview.Rows 之外；每一列各自獨立寫入，某列失敗只記為
-// 略過列，不影響其餘列的匯入。includeDuplicateRows 是使用者於預覽階段勾選
-// 「仍要匯入」的列號集合；標記為重複的列若未在此集合中，直接記為略過。
+// CommitCaregivers 將解析出的照護人員資料正式寫入資料庫。姓名或類型缺漏的列同樣會寫入，
+// 以空白值列入待維護供人工補齊；每一列各自獨立寫入，某列失敗只記為略過列，不影響其餘列。
+// includeDuplicateRows 是使用者於預覽階段勾選「仍要匯入」的列號集合；標記為重複的列若未在
+// 此集合中，直接記為略過。
 func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *CaregiverImportPreviewResult, includeDuplicateRows map[string]bool, actors ...ActorContext) (*CaregiverImportCommitResult, error) {
 	if preview == nil {
 		return &CaregiverImportCommitResult{}, nil
@@ -254,10 +241,8 @@ func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *Caregi
 			continue
 		}
 
+		// 單位比對不到時保持空白，不保留原始名稱：單位已不是待維護的判定條件。
 		c := Caregiver{Name: row.Name, Type: row.Type, Contact: row.Contact, Notes: row.Notes, SiteID: row.SiteID, Status: "active"}
-		if row.SiteID == nil {
-			c.SiteNameRaw = row.SiteName
-		}
 
 		if err := s.store.Create(ctx, &c); err != nil {
 			slog.Error("caregiver import row failed", "row_index", row.RowIndex, "error", err)
@@ -270,20 +255,14 @@ func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *Caregi
 		result.ImportedCount++
 		s.writeAudit(ctx, "import", c.ID, actorOrEmpty(actors), nil, c.AuditSnapshot())
 		// 逐一依實際欄位狀態產生警告，而非拆解合併過的訊息字串，避免單列多項缺漏時遺漏分類。
-		if row.SiteID == nil && row.SiteName != "" {
+		if row.Name == "" {
 			result.Warnings = append(result.Warnings, CaregiverImportWarningItem{
-				RowIndex: row.RowIndex, Name: row.Name, Field: "site",
-				Message: fmt.Sprintf("單位「%s」未於單位管理中找到，已建立資料並保留原始名稱待人工關聯", row.SiteName),
+				RowIndex: row.RowIndex, Name: row.Name, Field: "name", Message: "姓名未填寫，已以空白建立並列入待維護",
 			})
 		}
-		if row.Contact == "" {
+		if row.Type == "" {
 			result.Warnings = append(result.Warnings, CaregiverImportWarningItem{
-				RowIndex: row.RowIndex, Name: row.Name, Field: "contact", Message: "聯絡方式未填寫，已建立資料待後續補齊",
-			})
-		}
-		if row.Notes == "" {
-			result.Warnings = append(result.Warnings, CaregiverImportWarningItem{
-				RowIndex: row.RowIndex, Name: row.Name, Field: "notes", Message: "備註未填寫，已建立資料待後續補齊",
+				RowIndex: row.RowIndex, Name: row.Name, Field: "type", Message: "類型未填寫或不是「個管」／「專護」，已以空白建立並列入待維護",
 			})
 		}
 	}

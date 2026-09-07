@@ -235,6 +235,8 @@ type AttendanceStore interface {
 	GetConflict(ctx context.Context, id uuid.UUID) (*AttendanceImportConflict, error)
 	// ResolveConflict 把一筆待維護衝突標記為已解決；choice 為 keep_manual 或 use_import。
 	ResolveConflict(ctx context.Context, id uuid.UUID, choice string, actorID *uuid.UUID) error
+	// DeleteConflict 移除一筆待維護衝突；查無資料回傳 ErrAttendanceConflictNotFound。
+	DeleteConflict(ctx context.Context, id uuid.UUID) error
 }
 
 // HolidayReader 提供出勤月曆判斷休假日所需之最小介面。

@@ -24,6 +24,10 @@ func (s *recordingStore) MarkImported(context.Context, uuid.UUID, time.Time) err
 	return nil
 }
 
+func (s *recordingStore) DeleteColumn(context.Context, string) (int64, error) {
+	return 0, nil
+}
+
 func (s *recordingStore) UpsertColumns(_ context.Context, _ uuid.UUID, drafts []ColumnDraft) error {
 	s.upsertedColumns = append([]ColumnDraft(nil), drafts...)
 	return nil
@@ -59,6 +63,14 @@ type fakeIngestor struct {
 	monthSubmissions []MonthSubmissionDetail
 	monthRideEntries []MonthRideEntry
 	monthDetailErr   error
+
+	// delete* 讓「忽略此筆」的測試控制刪除結果；0 列代表該筆已被他人處理掉。
+	deleteRowConflictCalls []uuid.UUID
+	deleteRowConflictRows  int64
+	deleteRowConflictErr   error
+	deleteSubmissionCalls  []uuid.UUID
+	deleteSubmissionRows   int64
+	deleteSubmissionErr    error
 }
 
 // backfillDriverCall 保留一次司機回填的參數，供測試斷言傳入值。
@@ -105,6 +117,22 @@ func (f *fakeIngestor) ResolveRowConflict(_ context.Context, conflictID uuid.UUI
 		return nil, nil, f.resolveErr
 	}
 	return f.resolveAppliedDriver, f.resolveAppliedDate, nil
+}
+
+func (f *fakeIngestor) DeleteRowConflict(_ context.Context, conflictID uuid.UUID) (int64, error) {
+	f.deleteRowConflictCalls = append(f.deleteRowConflictCalls, conflictID)
+	if f.deleteRowConflictErr != nil {
+		return 0, f.deleteRowConflictErr
+	}
+	return f.deleteRowConflictRows, nil
+}
+
+func (f *fakeIngestor) DeleteSubmission(_ context.Context, submissionID uuid.UUID) (int64, error) {
+	f.deleteSubmissionCalls = append(f.deleteSubmissionCalls, submissionID)
+	if f.deleteSubmissionErr != nil {
+		return 0, f.deleteSubmissionErr
+	}
+	return f.deleteSubmissionRows, nil
 }
 
 func (f *fakeIngestor) BackfillColumn(_ context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16, skipDates []time.Time) (int, error) {

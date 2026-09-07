@@ -68,16 +68,18 @@ func (r *UserSecurityStateRepository) UpsertSecurityState(ctx context.Context, s
 		return fmt.Errorf("failed to marshal user security permissions: %w", err)
 	}
 	db := pgxdb.FromContext(ctx, r.db)
+	// 連線走 simple protocol（見 cmd/server/main.go），[]byte 會被編成 bytea 字面值而無法寫入
+	// jsonb 欄位，必須以字串傳入並明確轉型。
 	_, err = db.Exec(ctx, `
 		INSERT INTO auth_user_security_states (user_id, status, role_key, custom_permissions)
-		VALUES ($1, $2, $3, $4)
+		VALUES ($1, $2, $3, $4::jsonb)
 		ON CONFLICT (user_id) DO UPDATE SET
 			status = EXCLUDED.status,
 			role_key = EXCLUDED.role_key,
 			custom_permissions = EXCLUDED.custom_permissions,
 			permission_version = auth_user_security_states.permission_version + 1,
 			updated_at = now()
-	`, state.UserID, state.Status, state.RoleKey, permissionBytes)
+	`, state.UserID, state.Status, state.RoleKey, string(permissionBytes))
 	return err
 }
 
@@ -93,12 +95,12 @@ func (r *UserSecurityStateRepository) UpdateCustomPermissions(ctx context.Contex
 	db := pgxdb.FromContext(ctx, r.db)
 	_, err = db.Exec(ctx, `
 		INSERT INTO auth_user_security_states (user_id, status, role_key, custom_permissions)
-		VALUES ($1, 'active', '', $2)
+		VALUES ($1, 'active', '', $2::jsonb)
 		ON CONFLICT (user_id) DO UPDATE SET
 			custom_permissions = EXCLUDED.custom_permissions,
 			permission_version = auth_user_security_states.permission_version + 1,
 			updated_at = now()
-	`, id, permissionBytes)
+	`, id, string(permissionBytes))
 	return err
 }
 

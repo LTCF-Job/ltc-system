@@ -93,7 +93,7 @@ func (h *RideHandler) Correct(c *gin.Context) {
 
 	var dto CorrectDTO
 	if err := httpx.BindJSONStrict(c, &dto); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -176,7 +176,7 @@ func (h *RideHandler) Correct(c *gin.Context) {
 func (h *RideHandler) ManualReport(c *gin.Context) {
 	var dto ManualReportDTO
 	if err := httpx.BindJSONStrict(c, &dto); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -426,7 +426,7 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 
 	var dto ResolveConflictDTO
 	if err := httpx.BindJSONStrict(c, &dto); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 

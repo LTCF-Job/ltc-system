@@ -195,11 +195,13 @@ func TestCaseService_CreateCaseSchedule_ValidatesRequest(t *testing.T) {
 
 type fakeCaseAuditWriter struct {
 	entries []AuditEntry
+	// err 讓測試模擬稽核寫入失敗，驗證呼叫端是否讓整筆操作一起失敗而非只留下資料異動。
+	err error
 }
 
 func (f *fakeCaseAuditWriter) Write(_ context.Context, e AuditEntry) error {
 	f.entries = append(f.entries, e)
-	return nil
+	return f.err
 }
 
 type fakeCaseTransactionRunner struct {

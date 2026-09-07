@@ -37,12 +37,14 @@ const govClaimSourceQuery = `
 		d.id, d.national_id_cipher
 	FROM ride_records r
 	JOIN cases c ON c.id = r.case_id
+	JOIN case_pending_status ps ON ps.case_id = c.id
 	LEFT JOIN case_schedules s ON s.case_id = c.id AND s.effective_range @> r.service_date
 	LEFT JOIN sites st ON st.id = s.site_id
 	LEFT JOIN schedule_legs l ON l.schedule_id = s.id AND l.leg_seq = r.leg_seq
 	LEFT JOIN vehicles v ON v.id = r.vehicle_id
 	LEFT JOIN drivers d ON d.id = r.driver_id
 	WHERE r.service_date >= $1 AND r.service_date < $2
+	  AND NOT ps.is_pending
 	  AND r.effective_status = 'boarded'
 	  AND (r.has_conflict = false OR r.conflict_resolved_at IS NOT NULL)
 	  AND ($3 = '' OR c.region = $3)

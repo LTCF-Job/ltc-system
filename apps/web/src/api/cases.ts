@@ -19,8 +19,9 @@ export async function listCases(params?: {
   region?: string
   status?: string
   q?: string
+  // 待維護個案預設不會回傳；unresolvedLink 只取待維護，includePending 取全部。
   unresolvedLink?: boolean
-  excludePending?: boolean
+  includePending?: boolean
 }): Promise<Paged<CaseDTO>> {
   const res = await apiClient.get('/cases', { params })
   const fallback = createPaginationMeta(params?.page, params?.pageSize)
@@ -135,4 +136,9 @@ export async function revealCaseDuplicateCandidateNationalId(id: string): Promis
 export async function resolveCaseDuplicateCandidate(id: string, data: ResolveDuplicateCandidateRequest): Promise<CaseDTO> {
   const res = await apiClient.post(`/cases/import/duplicates/${id}/resolve`, data)
   return normalizeCase(unwrapData<CaseDTO>(res))
+}
+
+// discardCaseDuplicateCandidate 忽略一筆疑似重複個案，直接把暫存列從系統刪除，不建立個案。
+export async function discardCaseDuplicateCandidate(id: string): Promise<void> {
+  await apiClient.delete(`/cases/import/duplicates/${id}`)
 }

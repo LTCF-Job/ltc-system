@@ -409,6 +409,14 @@ func (a driverReportRideIngestor) ResolveRowConflict(ctx context.Context, confli
 	return a.svc.ResolveRowConflict(ctx, conflictID, useNew, operatorID)
 }
 
+func (a driverReportRideIngestor) DeleteRowConflict(ctx context.Context, conflictID uuid.UUID) (int64, error) {
+	return a.svc.DeleteRowConflict(ctx, conflictID)
+}
+
+func (a driverReportRideIngestor) DeleteSubmission(ctx context.Context, submissionID uuid.UUID) (int64, error) {
+	return a.svc.DeleteSubmission(ctx, submissionID)
+}
+
 func (a driverReportRideIngestor) BackfillColumn(ctx context.Context, formID, vehicleID uuid.UUID, columnHeader string, columnIndex int, caseID uuid.UUID, legSeq int16, skipDates []time.Time) (int, error) {
 	return a.svc.BackfillColumn(ctx, formID, vehicleID, columnHeader, columnIndex, caseID, legSeq, skipDates)
 }

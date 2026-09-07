@@ -337,10 +337,36 @@ func TestParseCases_EmptyAndCorruptedFiles(t *testing.T) {
 	_, err := svc.ParseCases(context.Background(), strings.NewReader(""), "empty.csv")
 	assert.Error(t, err, "非 .xlsx 副檔名應回傳錯誤")
 
+	assert.ErrorIs(t, err, ErrUnsupportedFileType, "副檔名不符要能被分辨成檔案格式錯誤")
+
 	// 測試損毀的 Excel 檔案
 	corrupted := []byte{0x50, 0x4B, 0x03, 0x04, 0x00, 0x00, 0x00}
 	_, err = svc.ParseCases(context.Background(), bytes.NewReader(corrupted), "bad.xlsx")
 	assert.Error(t, err, "損毀的 Excel 應回傳錯誤")
+	assert.ErrorIs(t, err, ErrFileUnreadable, "損毀檔案要能被分辨成無法讀取")
+}
+
+// TestParseCases_TemplateMismatchIsAnError 鎖住「範本用錯」的回饋：找不到姓名欄時
+// 必須回傳可辨識的錯誤，而不是靜默回傳零列讓畫面顯示「總筆數 0」卻沒有原因。
+func TestParseCases_TemplateMismatchIsAnError(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	sheetName := "工作表1"
+	f.SetSheetName("Sheet1", sheetName)
+	for i, header := range []string{"編號", "備註", "金額"} {
+		cell, err := excelize.CoordinatesToCellName(i+1, 1)
+		require.NoError(t, err)
+		require.NoError(t, f.SetCellValue(sheetName, cell, header))
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, f.Write(&buf))
+
+	svc := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	_, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "wrong.xlsx")
+
+	require.ErrorIs(t, err, ErrTemplateMismatch)
+	assert.Contains(t, err.Error(), sheetName, "錯誤訊息要指出是哪個工作表對不上範本")
 }
 
 func TestParseCasesFromExcel_RealFile(t *testing.T) {

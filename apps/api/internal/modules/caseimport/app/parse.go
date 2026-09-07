@@ -13,6 +13,14 @@ import (
 	"ltc-system/apps/api/internal/domain/crypto"
 )
 
+// 匯入前置失敗的 sentinel：transport layer 靠它們把「檔案類型不對」「檔案讀不出來」
+// 「欄位跟範本不合」對應到各自的錯誤碼，使用者才知道該換檔案還是改欄位。
+var (
+	ErrUnsupportedFileType = errors.New("caseimport: unsupported file type")
+	ErrFileUnreadable      = errors.New("caseimport: file unreadable")
+	ErrTemplateMismatch    = errors.New("caseimport: template header mismatch")
+)
+
 // ParseCasesFromExcel 保留相容介面，實作通用串流解析。
 func (s *ImportService) ParseCasesFromExcel(ctx context.Context, r io.Reader) (*CaseImportPreviewResult, error) {
 	return s.ParseCases(ctx, r, "upload.xlsx")
@@ -22,19 +30,19 @@ func (s *ImportService) ParseCasesFromExcel(ctx context.Context, r io.Reader) (*
 func (s *ImportService) ParseCases(ctx context.Context, r io.Reader, fileName string) (*CaseImportPreviewResult, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file data: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrFileUnreadable, err)
 	}
 
 	// 檢查是否為 Excel ZIP 格式 (Magic Number: PK\x03\x04)
 	isExcel := len(data) >= 4 && data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x03 && data[3] == 0x04
 	if !isExcel || !strings.HasSuffix(strings.ToLower(fileName), ".xlsx") {
-		return nil, errors.New("僅支援 .xlsx 匯入格式")
+		return nil, ErrUnsupportedFileType
 	}
 	fileHash := fmt.Sprintf("sha256:%x", sha256.Sum256(data))
 
 	tables, sheetNames, err := s.spreadsheet.ReadTables(data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFileUnreadable, err)
 	}
 	preview, err := s.processRawTables(ctx, tables, sheetNames)
 	if err != nil {
@@ -121,6 +129,11 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 	errorRows := 0
 	warningRows := 0
 
+	// 沒有任何工作表找得到「姓名」欄時，整份檔案會解析出零列。靜默回傳空結果會讓畫面
+	// 顯示「總筆數 0」而說不出原因，因此記下曾檢查過哪些工作表，最後改回傳範本不符。
+	var inspectedSheets []string
+	headerFound := false
+
 	for tableIdx, rows := range tables {
 		sheetName := sheetNames[tableIdx]
 		if len(rows) < 1 {
@@ -129,8 +142,10 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 
 		headerRowIdx, colMap, caseNameIdx, careContactNameIdx := findHeader(rows)
 		if caseNameIdx < 0 {
+			inspectedSheets = append(inspectedSheets, sheetName)
 			continue
 		}
+		headerFound = true
 
 		for rIdx := headerRowIdx + 1; rIdx < len(rows); rIdx++ {
 			row := rows[rIdx]
@@ -296,6 +311,10 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			}
 			previewRows = append(previewRows, previewRow)
 		}
+	}
+
+	if !headerFound {
+		return nil, fmt.Errorf("%w: 工作表 %s 找不到「姓名」欄", ErrTemplateMismatch, strings.Join(inspectedSheets, "、"))
 	}
 
 	return &CaseImportPreviewResult{

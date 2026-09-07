@@ -46,7 +46,7 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 			CaseIDs  []string `json:"caseIds"`
 		}
 		if err := httpx.BindJSONStrict(c, &req); err != nil {
-			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 			return
 		}
 		if req.PeriodYM != "" {
@@ -115,7 +115,7 @@ func (h *ExportHandler) List(c *gin.Context) {
 func (h *ExportHandler) Create(c *gin.Context) {
 	var req createExportJobRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 

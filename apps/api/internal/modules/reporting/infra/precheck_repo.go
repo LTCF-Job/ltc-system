@@ -29,6 +29,7 @@ func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, scop
 	query := `
 		SELECT c.id, c.name
 		FROM cases c
+		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.status = 'active'
 		  AND EXISTS (
 			SELECT 1 FROM ride_records r
@@ -38,7 +39,7 @@ func (r *PrecheckRepository) FindIncompleteActiveCases(ctx context.Context, scop
 		  )
 		  AND ($3::text IS NULL OR c.region = $3)
 		  AND (COALESCE(cardinality($4::uuid[]), 0) = 0 OR c.id = ANY($4::uuid[]))
-		  AND (COALESCE(c.home_address, '') = '' OR c.service_category IS NULL OR c.service_usage_type IS NULL OR COALESCE(c.national_id_masked, '') = '')
+		  AND (ps.is_pending OR COALESCE(c.home_address, '') = '' OR c.service_category IS NULL OR c.service_usage_type IS NULL OR COALESCE(c.national_id_masked, '') = '')
 	`
 	rows, err := r.db.Query(ctx, query, scope.StartDate, scope.EndDate, scope.Region, pgxdb.UUIDStrings(scope.CaseIDs))
 	if err != nil {
@@ -70,7 +71,9 @@ func (r *PrecheckRepository) FindUnresolvedConflicts(ctx context.Context, scope 
 		SELECT r.id, c.name, r.service_date
 		FROM ride_records r
 		JOIN cases c ON r.case_id = c.id
+		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE r.service_date >= $1::date AND r.service_date < $2::date
+		  AND NOT ps.is_pending
 		  AND ($3::text IS NULL OR c.region = $3)
 		  AND (COALESCE(cardinality($4::uuid[]), 0) = 0 OR c.id = ANY($4::uuid[]))
 		  AND r.has_conflict = true AND r.conflict_resolved_at IS NULL

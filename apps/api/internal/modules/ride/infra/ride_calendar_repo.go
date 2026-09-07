@@ -67,7 +67,9 @@ func (r *RideRepository) ListCalendarCases(
 		FROM cases c
 		JOIN case_schedules cs ON cs.case_id = c.id AND cs.effective_range && daterange($1::date, $2::date, '[)')
 		JOIN sites s ON cs.site_id = s.id
+		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.status = 'active'
+		  AND NOT ps.is_pending
 		  AND ($3 = '' OR c.region = $3)
 		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
 
@@ -78,7 +80,9 @@ func (r *RideRepository) ListCalendarCases(
 		       ARRAY[]::smallint[], ARRAY[]::smallint[],
 		       $1::date, NULL::date
 		FROM cases c
+		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.status = 'active'
+		  AND NOT ps.is_pending
 		  AND ($3 = '' OR c.region = $3)
 		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
 		  AND NOT EXISTS (

@@ -50,7 +50,7 @@ func (h *NotificationHandler) ListRecipients(c *gin.Context) {
 func (h *NotificationHandler) CreateRecipient(c *gin.Context) {
 	var req CreateRecipientRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -77,7 +77,7 @@ func (h *NotificationHandler) UpdateRecipient(c *gin.Context) {
 
 	var req UpdateRecipientRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -110,7 +110,7 @@ type batchCreateRecipientsRequest struct {
 func (h *NotificationHandler) BatchCreateRecipients(c *gin.Context) {
 	var req batchCreateRecipientsRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -140,7 +140,7 @@ type batchDeleteRecipientsRequest struct {
 func (h *NotificationHandler) BatchDeleteRecipients(c *gin.Context) {
 	var req batchDeleteRecipientsRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 

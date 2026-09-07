@@ -101,6 +101,21 @@ function goAfterLogin() {
   router.push((route.query.redirect as string) || '/')
 }
 
+// describeSignInFailure 把 Supabase 的登入失敗分成使用者能處理的幾類。
+// 全部說成「帳號密碼錯誤」會讓斷線、帳號未啟用或服務異常的人一直重打密碼；
+// 這裡只依 Supabase 的錯誤分類決定顯示文字，不把原始錯誤字串帶到畫面上。
+function describeSignInFailure(error: { status?: number; code?: string; message?: string } | null): string {
+  if (!error) return '登入失敗，請稍後再試'
+  if (error.status === 400 || error.status === 401) {
+    if (error.code === 'email_not_confirmed') return '此帳號尚未完成信箱驗證，請先完成驗證再登入'
+    return '帳號或密碼錯誤，請確認後再試'
+  }
+  if (error.status === 429) return '登入嘗試次數過多，請稍候幾分鐘後再試'
+  if (error.status && error.status >= 500) return '認證服務暫時無法使用，請稍後再試'
+  if (!error.status) return '無法連線到認證服務，請確認網路狀態後再試'
+  return '登入失敗，請稍後再試'
+}
+
 async function handleLogin() {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
@@ -137,7 +152,7 @@ async function handleLogin() {
         password: form.password
       })
       if (error || !data.session || !data.user) {
-        ElMessage.error('帳號密碼錯誤或無此使用者')
+        ElMessage.error(describeSignInFailure(error))
         return
       }
 

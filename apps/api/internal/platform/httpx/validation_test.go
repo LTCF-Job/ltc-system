@@ -13,6 +13,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestQueryBool 鎖住待維護旗標的解析行為：strconv 認得的寫法一律成立，其餘一律當作未表態。
+// 兩邊 handler 共用這個函式，這裡是唯一需要驗證解析規則的地方。
+func TestQueryBool(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cases := []struct {
+		query string
+		want  bool
+	}{
+		{"?flag=true", true},
+		{"?flag=TRUE", true},
+		{"?flag=True", true},
+		{"?flag=1", true},
+		{"?flag=t", true},
+		{"?flag=false", false},
+		{"?flag=0", false},
+		{"?flag=", false},
+		{"", false},
+		{"?flag=yes", false},
+		{"?flag=on", false},
+		{"?other=true", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, "/probe"+tc.query, nil)
+
+			assert.Equal(t, tc.want, QueryBool(c, "flag"))
+		})
+	}
+}
+
 type sampleRequest struct {
 	Name    string `json:"name" binding:"required"`
 	Address string `json:"address" binding:"required"`

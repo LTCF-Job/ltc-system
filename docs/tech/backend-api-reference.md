@@ -25,7 +25,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/cases` | viewer, staff, admin | 個案清單（回傳遮罩身分證） |
+| GET | `/cases` | viewer, staff, admin | 個案清單（回傳遮罩身分證）。**待維護個案預設不回傳**：`unresolvedLink=true` 只取待維護，`includePending=true` 取全部 |
 | POST | `/cases` | staff, admin | 新增個案 |
 | GET | `/cases/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
 | GET | `/cases/:id` | viewer, staff, admin | |
@@ -42,6 +42,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/cases/import/duplicates` | viewer, staff, admin | 列出待裁決的疑似重複個案暫存列 |
 | POST | `/cases/import/duplicates/:id/reveal` | staff, admin | 解密單筆暫存列身分證字號供裁決比對（會寫 audit log 的 `reveal_pii`） |
 | POST | `/cases/import/duplicates/:id/resolve` | staff, admin | 裁決疑似重複個案（`confirmed_new` 建立新個案／`merged_existing` 合併進既有個案） |
+| DELETE | `/cases/import/duplicates/:id` | admin | 忽略疑似重複個案：刪除暫存列，不建立也不合併個案。重新匯入同一份檔案時該筆會再次出現 |
 
 ## 單位主檔 `siteH`
 
@@ -92,6 +93,9 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/driver-reports/submissions/review` | viewer, staff, admin | 以匯報表列（一天一筆提交）為單位列出待維護資料，一列可能同時有個案欄位與駕駛人兩種問題 |
 | POST | `/driver-reports/drivers/bind` | staff, admin | 把某個比對不到司機主檔的原始姓名綁定到指定司機，立即回填所有正規化姓名相符的既有回報 |
 | POST | `/driver-reports/row-conflicts/:id/resolve` | staff, admin | 裁決一筆「同車同個案」衝突；body `{useNew}`，`true` 採用這次上傳的新值並重算搭乘紀錄，`false` 保留既有資料 |
+| DELETE | `/driver-reports/columns/:id` | staff, admin | 忽略一筆欄位對應待維護資料，直接刪除該列 |
+| DELETE | `/driver-reports/row-conflicts/:id` | staff, admin | 忽略一筆「同車同個案」衝突，直接刪除該衝突列；既有搭乘資料維持原值 |
+| DELETE | `/driver-reports/submissions/:id` | staff, admin | 忽略一筆駕駛人未比對到司機主檔的匯報列；刪除提交紀錄並重算受連帶刪除的搭乘來源所影響的搭乘紀錄 |
 
 匯入檔的欄位順序固定為：民國日期、駕駛人、各個案趟次欄、備註。個案趟次欄只接受
 「有坐」「沒坐」，其餘（含空白）視為未回報不建立紀錄。`dryRun=false` 時可另外以
@@ -174,6 +178,7 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | POST | `/attendance` | staff, admin |
 | GET | `/attendance/conflicts` | viewer, staff, admin |
 | POST | `/attendance/conflicts/:id/resolve` | staff, admin |
+| DELETE | `/attendance/conflicts/:id` | staff, admin |
 | GET | `/fuel-logs` | viewer, staff, admin |
 | POST | `/fuel-logs` | staff, admin |
 | PATCH | `/fuel-logs/:id` | staff, admin |
@@ -203,12 +208,12 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）、`unresolvedLink`（單位待關聯既有單位）、`incomplete`（聯絡方式或備註缺漏）篩選 |
+| GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）篩選。**待維護資料（姓名或類型未填寫）預設不回傳**：`pending=true` 只取待維護，`includePending=true` 取全部 |
 | POST | `/caregivers` | staff, admin | 新增照護人員，姓名與類型（`case_manager`＝個管／`specialist`＝專護）皆為必填；`status` 非 `active`／`inactive` 一律預設 `active` |
 | GET | `/caregivers/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
-| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx）；姓名或類型缺漏（或類型不是個管／專護）略過，單位比對不到或聯絡方式／備註缺漏仍建立資料並附警告 |
+| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx）；姓名或類型缺漏（或類型不是個管／專護）改以空白建立並列入待維護，單位比對不到則留白、不列入待維護，聯絡方式與備註缺漏不再產生警告 |
 | PATCH | `/caregivers/:id` | staff, admin | |
-| DELETE | `/caregivers/:id` | admin | |
+| DELETE | `/caregivers/:id` | admin | 刪除照護人員；待維護清單的「忽略此筆」也走這支 |
 | PUT | `/caregivers/:id/site` | staff, admin | 將單位待關聯的照護人員連結至既有單位，並清空原始單位名稱 |
 
 ## 角色身分管理 `roleH`

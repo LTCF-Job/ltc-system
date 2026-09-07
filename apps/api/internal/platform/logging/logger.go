@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"ltc-system/apps/api/internal/platform/httpx"
 )
 
 // Middleware 以 JSON 結構化日誌記錄傳入請求與執行耗時。
@@ -24,6 +25,7 @@ func Middleware() gin.HandlerFunc {
 		method := c.Request.Method
 
 		slog.Info("HTTP Request",
+			slog.String("request_id", httpx.RequestID(c)),
 			slog.Int("status", status),
 			slog.String("method", method),
 			slog.String("path", path),

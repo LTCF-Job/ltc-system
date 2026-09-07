@@ -202,8 +202,8 @@
                       <el-button link type="primary" size="small" @click="openQuickCreateCase(issue)">
                         新增個案並綁定
                       </el-button>
-                      <el-button link type="primary" size="small" @click="handleIgnoreCase(issue)">
-                        略過此欄
+                      <el-button link type="danger" size="small" @click="handleIgnoreCase(issue)">
+                        忽略此筆
                       </el-button>
                     </TableRowActions>
                   </div>
@@ -224,6 +224,35 @@
                       </el-button>
                       <el-button link type="primary" size="small" @click="openQuickCreateDriver(row as SubmissionReviewRow)">
                         新增司機並綁定
+                      </el-button>
+                      <el-button link type="danger" size="small" @click="handleIgnoreSubmission(row as SubmissionReviewRow)">
+                        忽略此筆
+                      </el-button>
+                    </TableRowActions>
+                  </div>
+                </div>
+
+                <div v-for="conflict in row.rowConflicts" :key="conflict.id" class="review-issue-row">
+                  <div class="review-issue-desc">
+                    <el-tag size="small" type="danger">與既有資料衝突</el-tag>
+                    <span class="raw-name">{{ conflict.caseName }}（第 {{ conflict.legSeq }} 趟）</span>
+                    <span class="text-secondary small">
+                      既有：{{ conflict.previousReported === 'boarded' ? '有坐' : '沒坐' }}
+                      / {{ conflict.previousDriverName || '無司機' }}
+                      　新上傳：{{ conflict.newReported === 'boarded' ? '有坐' : '沒坐' }}
+                      / {{ conflict.newDriverName || '無司機' }}
+                    </span>
+                  </div>
+                  <div class="target-binding-box">
+                    <TableRowActions>
+                      <el-button link type="primary" size="small" @click="handleResolveRowConflict(conflict, true)">
+                        採用新資料
+                      </el-button>
+                      <el-button link size="small" @click="handleResolveRowConflict(conflict, false)">
+                        保留原資料
+                      </el-button>
+                      <el-button link type="danger" size="small" @click="handleIgnoreRowConflict(conflict)">
+                        忽略此筆
                       </el-button>
                     </TableRowActions>
                   </div>
@@ -305,6 +334,9 @@
                 </el-button>
                 <el-button link type="warning" size="small" @click="handleResolveAttendanceConflict(row as AttendanceConflictDTO, 'use_import')">
                   改採匯入結果
+                </el-button>
+                <el-button link type="danger" size="small" @click="handleIgnoreAttendanceConflict(row as AttendanceConflictDTO)">
+                  忽略此筆
                 </el-button>
               </TableRowActions>
             </template>
@@ -444,9 +476,12 @@ import {
   matchPendingColumnsByName,
   updateColumnMapping,
   bindPendingDriver,
-  resolveRowConflict
+  resolveRowConflict,
+  ignoreDriverReportColumn,
+  ignoreDriverReportSubmission,
+  ignoreRowConflict
 } from '@/api/driverReports'
-import { listAttendanceConflicts, resolveAttendanceConflict } from '@/api/attendance'
+import { listAttendanceConflicts, resolveAttendanceConflict, ignoreAttendanceConflict } from '@/api/attendance'
 import { listAllCases } from '@/api/cases'
 import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import PageHeader from '@/components/PageHeader.vue'
@@ -455,11 +490,12 @@ import DialogFooter from '@/components/DialogFooter.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import CaseCreateDialog from '@/components/cases/CaseCreateDialog.vue'
 import DriverCreateDialog from '@/components/masters/DriverCreateDialog.vue'
-import { resolveErrorMessage } from '@/api/errorCodes'
+import { resolveApiErrorMessage, NETWORK_ERROR_MESSAGE, TIMEOUT_ERROR_MESSAGE } from '@/api/errorCodes'
 import { toColumnDecisionPayload, type ColumnDecisionMap } from './columnDecisions'
 import { describeImportResult, hasPendingWork } from './importSummary'
 import { LEG_SEQ_OPTIONS } from './legOptions'
 import type {
+  ApiError,
   AttendanceConflictDTO,
   CaseDTO,
   DriverDTO,
@@ -480,10 +516,6 @@ type SubmissionReviewRow = Omit<SubmissionReviewDTO, 'caseIssues'> & {
 
 const router = useRouter()
 const activeTab = ref<'upload' | 'pending'>('upload')
-
-function apiErrorCode(error: unknown): string | undefined {
-  return (error as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code
-}
 
 // ---- 批次上傳 ----
 
@@ -933,17 +965,19 @@ async function retryRow(row: BatchFileRow) {
 }
 
 function rowErrorMessage(error: unknown): string {
-  const detail = (error as { response?: { data?: { error?: { details?: Array<{ field?: string; reason: string }>; message?: string } } } })
-    ?.response?.data?.error
+  const response = (error as { response?: { data?: { error?: ApiError } } })?.response
+  const detail = response?.data?.error
   if (detail?.details?.length) {
     return detail.details
       .map((d) => `${d.field ? `【${IMPORT_FIELD_LABELS[d.field] || d.field}】` : ''}${d.reason}`)
       .join('；')
   }
-  const code = apiErrorCode(error)
-  if (code) return resolveErrorMessage(code, '匯入失敗，請確認檔案內容')
-  if (error instanceof Error && error.message) return `解析發生錯誤：${error.message}`
-  return '匯入失敗，請確認檔案內容'
+  if (detail) return resolveApiErrorMessage(detail, '匯入失敗，請確認檔案內容')
+
+  // 走到這裡代表請求沒拿到後端回應。原始 error.message 是 axios 或瀏覽器的技術字串
+  // （如 "Network Error"、"timeout of 30000ms exceeded"），不能直接顯示給使用者。
+  const timedOut = (error as { code?: string })?.code === 'ECONNABORTED'
+  return timedOut ? TIMEOUT_ERROR_MESSAGE : NETWORK_ERROR_MESSAGE
 }
 
 async function runWithLimit<T>(items: T[], handler: (item: T) => Promise<void>) {
@@ -1137,11 +1171,62 @@ async function handleBindCase(issue: EditableCaseIssue) {
   }
 }
 
-async function handleIgnoreCase(issue: EditableCaseIssue) {
+// 以下四支「忽略此筆」都是直接刪除待維護資料列。重新匯入同一份檔案時該筆會再次出現，
+// 所以確認文案一律說明這件事，避免使用者以為忽略等於永久靜音。
+async function confirmIgnore(message: string): Promise<boolean> {
   try {
-    await updateColumnMapping(issue.id, { mappingStatus: 'ignored' })
-    ElMessage.info(`已略過「${issue.columnHeader}」`)
+    await ElMessageBox.confirm(`${message}若之後重新匯入同一份檔案，這筆仍會再次出現。`, '忽略確認', {
+      confirmButtonText: '忽略並刪除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger'
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function handleIgnoreCase(issue: EditableCaseIssue) {
+  if (!(await confirmIgnore(`確定要忽略欄位「${issue.columnHeader}」？將直接刪除這筆欄位對應資料。`))) return
+  try {
+    await ignoreDriverReportColumn(issue.id)
+    ElMessage.success(`已忽略「${issue.columnHeader}」`)
     await fetchSubmissionReview()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  }
+}
+
+async function handleIgnoreSubmission(row: SubmissionReviewRow) {
+  const label = row.driverIssue?.driverNameRaw ?? row.serviceDate
+  if (!(await confirmIgnore(`確定要忽略「${label}」這筆匯報列？將直接刪除該筆匯報資料。`))) return
+  try {
+    await ignoreDriverReportSubmission(row.submissionId)
+    ElMessage.success(`已忽略「${label}」`)
+    await fetchSubmissionReview()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  }
+}
+
+async function handleIgnoreRowConflict(conflict: RowConflictDTO) {
+  if (!(await confirmIgnore(`確定要忽略「${conflict.caseName}」第 ${conflict.legSeq} 趟的衝突？既有搭乘資料維持原值不變。`))) return
+  try {
+    await ignoreRowConflict(conflict.id)
+    ElMessage.success('已忽略該筆衝突')
+    await fetchSubmissionReview()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  }
+}
+
+async function handleIgnoreAttendanceConflict(row: AttendanceConflictDTO) {
+  if (!(await confirmIgnore(`確定要忽略「${row.driverName}」${row.recordDate} 的出勤衝突？出勤紀錄維持原本的人工登記。`))) return
+  try {
+    await ignoreAttendanceConflict(row.id)
+    attendanceConflicts.value = attendanceConflicts.value.filter((c) => c.id !== row.id)
+    ElMessage.success('已忽略該筆出勤衝突')
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
   }

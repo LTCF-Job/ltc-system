@@ -258,6 +258,24 @@ func (r *AttendanceRepository) GetConflict(ctx context.Context, id uuid.UUID) (*
 	return &item, nil
 }
 
+// DeleteConflict 移除一筆待維護衝突，供「忽略此筆」把資料從系統刪除。出勤紀錄本身不動，
+// 維持原本的人工登記值。
+func (r *AttendanceRepository) DeleteConflict(ctx context.Context, id uuid.UUID) error {
+	if r.db == nil {
+		return nil
+	}
+
+	db := pgxdb.FromContext(ctx, r.db)
+	tag, err := db.Exec(ctx, `DELETE FROM attendance_import_conflicts WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete attendance import conflict: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return app.ErrAttendanceConflictNotFound
+	}
+	return nil
+}
+
 // ResolveConflict 把一筆待維護衝突標記為已解決。
 func (r *AttendanceRepository) ResolveConflict(ctx context.Context, id uuid.UUID, choice string, actorID *uuid.UUID) error {
 	if r.db == nil {

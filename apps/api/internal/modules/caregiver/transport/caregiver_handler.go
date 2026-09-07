@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -41,11 +40,13 @@ func (h *CaregiverHandler) List(c *gin.Context) {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
-	unresolvedLink, _ := strconv.ParseBool(c.DefaultQuery("unresolvedLink", "false"))
-	incomplete, _ := strconv.ParseBool(c.DefaultQuery("incomplete", "false"))
-	excludePending, _ := strconv.ParseBool(c.DefaultQuery("excludePending", "false"))
+	// 待維護資料預設不出現在任何清單，呼叫端要明確表態才拿得到：pending 只取待維護，
+	// includePending 取全部。預設排除，避免新增呼叫端忘記帶參數就把待維護資料洩漏出去。
+	pending := httpx.QueryBool(c, "pending")
+	includePending := httpx.QueryBool(c, "includePending")
+	excludePending := !pending && !includePending
 
-	list, total, err := h.svc.List(c.Request.Context(), c.Query("q"), c.Query("status"), unresolvedLink, incomplete, excludePending, page, pageSize)
+	list, total, err := h.svc.List(c.Request.Context(), c.Query("q"), c.Query("status"), pending, excludePending, page, pageSize)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢照護人員失敗", nil)
 		return
@@ -62,7 +63,7 @@ func (h *CaregiverHandler) List(c *gin.Context) {
 func (h *CaregiverHandler) Create(c *gin.Context) {
 	var req CreateCaregiverRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -92,7 +93,7 @@ func (h *CaregiverHandler) Update(c *gin.Context) {
 
 	var req UpdateCaregiverRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 
@@ -138,7 +139,7 @@ func (h *CaregiverHandler) LinkSite(c *gin.Context) {
 
 	var req LinkCaregiverSiteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
 		return
 	}
 

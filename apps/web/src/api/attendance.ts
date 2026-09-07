@@ -36,6 +36,11 @@ export async function resolveAttendanceConflict(
   return unwrapData<AttendanceConflictDTO>(res)
 }
 
+// ignoreAttendanceConflict 忽略一筆出勤待維護衝突，直接刪除該衝突列，出勤紀錄維持人工登記值。
+export async function ignoreAttendanceConflict(id: string): Promise<void> {
+  await apiClient.delete(`/attendance/conflicts/${id}`)
+}
+
 export async function listFuelLogs(params?: {
   page?: number
   pageSize?: number

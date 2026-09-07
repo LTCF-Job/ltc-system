@@ -22,6 +22,8 @@ type FormStore interface {
 	// UpdateColumnMappingByID 相同的條件判斷是否要回填。
 	UpdateColumnMappingByHeader(ctx context.Context, formID uuid.UUID, header, status string, caseID *string, legSeq *int16) (columnIndex int, previousStatus string, err error)
 	MarkImported(ctx context.Context, formID uuid.UUID, importedAt time.Time) error
+	// DeleteColumn 移除一筆欄位對應資料列；rowsAffected=0 代表該列不存在。
+	DeleteColumn(ctx context.Context, colID string) (rowsAffected int64, err error)
 }
 
 // DriverReportImportLocker 以共享資料庫交易鎖序列化同一表單月份的覆蓋匯入。
@@ -158,6 +160,10 @@ type RideIngestor interface {
 	ListRowConflicts(ctx context.Context) ([]RowConflictView, error)
 	// ResolveRowConflict 裁決一筆同車同個案衝突；useNew 選擇採用新資料。
 	ResolveRowConflict(ctx context.Context, conflictID uuid.UUID, useNew bool, operatorID uuid.UUID) (appliedDriverID *uuid.UUID, appliedServiceDate *time.Time, err error)
+	// DeleteRowConflict 移除一筆尚未裁決的同車同個案衝突；rowsAffected=0 代表該列不存在或已被裁決。
+	DeleteRowConflict(ctx context.Context, conflictID uuid.UUID) (rowsAffected int64, err error)
+	// DeleteSubmission 移除一筆匯報提交紀錄，並重算受影響的搭乘紀錄；rowsAffected=0 代表該列不存在。
+	DeleteSubmission(ctx context.Context, submissionID uuid.UUID) (rowsAffected int64, err error)
 	// BackfillColumn 用某欄位既有回報中已存的原始儲存格文字補寫搭乘紀錄，回傳補寫筆數。
 	// 用於欄位從待維護變成已對應時，不需要使用者重新上傳原始檔案。
 	// skipDates 排除「值另有來源」的服務日期：匯入路徑要傳入本次檔案涵蓋的所有日期，

@@ -240,6 +240,19 @@ func (r *DriverReportRepository) UpdateColumnMappingByID(ctx context.Context, co
 	return
 }
 
+// DeleteColumn 移除一筆欄位對應資料列，供「忽略此筆」把資料從系統刪除；
+// rowsAffected=0 代表該列不存在。form_columns 沒有被其他資料表以外鍵參照，可直接刪除。
+func (r *DriverReportRepository) DeleteColumn(ctx context.Context, colID string) (int64, error) {
+	if r.db == nil {
+		return 0, ErrNoDatabase
+	}
+	tag, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `DELETE FROM form_columns WHERE id = $1::uuid`, colID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 // UpdateColumnMappingByHeader 以表頭文字定位欄位並更新對應，回傳更新前的狀態與欄號，
 // 供匯入路徑判斷是否為「剛從待維護變成已對應」以觸發回填。
 func (r *DriverReportRepository) UpdateColumnMappingByHeader(ctx context.Context, formID uuid.UUID, header, status string, caseID *string, legSeq *int16) (columnIndex int, previousStatus string, err error) {

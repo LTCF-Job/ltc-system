@@ -27,9 +27,9 @@ func NewCaseRepository(db *pgxpool.Pool) *CaseRepository {
 	return &CaseRepository{db: db}
 }
 
-// List 取得個案清單（預設回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳單位／去回程車輛
-// 比對不到主檔、生日格式錯誤或身分證字號格式錯誤任一成立的個案；excludePending 為 true 時
-// 排除這類待維護個案，供主列表與「待維護」分頁互斥呈現。
+// List 取得個案清單（預設回傳遮罩身分證）。待維護的判定由 case_pending_status view 提供，
+// 是全專案唯一一份定義；unresolvedLink 為 true 時只回傳待維護個案，excludePending 為 true 時
+// 排除待維護個案，供主列表與「待維護」分頁互斥呈現。
 func (r *CaseRepository) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
@@ -44,24 +44,13 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		LEFT JOIN sites st ON st.id = p.site_id
 		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
 		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
+		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.deleted_at IS NULL
 		  AND ($1 = '' OR c.region = $1)
 		  AND ($2 = '' OR c.status = $2)
 		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
-		  AND ($6 = false OR (
-		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
-		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
-		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL) OR
-		        c.birth_date_raw IS NOT NULL OR
-		        c.national_id_invalid = true
-		      ))
-		  AND ($7 = false OR NOT (
-		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
-		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
-		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL) OR
-		        c.birth_date_raw IS NOT NULL OR
-		        c.national_id_invalid = true
-		      ))
+		  AND ($6 = false OR ps.is_pending)
+		  AND ($7 = false OR NOT ps.is_pending)
 		ORDER BY c.created_at DESC, c.name ASC
 		LIMIT $4 OFFSET $5
 	`
@@ -93,25 +82,13 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 	var total int64
 	countQuery := `
 		SELECT COUNT(*) FROM cases c
-		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
+		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.deleted_at IS NULL
 		  AND ($1 = '' OR c.region = $1)
 		  AND ($2 = '' OR c.status = $2)
 		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%' OR c.home_address ILIKE '%' || $3 || '%')
-		  AND ($4 = false OR (
-		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
-		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
-		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL) OR
-		        c.birth_date_raw IS NOT NULL OR
-		        c.national_id_invalid = true
-		      ))
-		  AND ($5 = false OR NOT (
-		        (p.site_id IS NULL AND p.site_name_raw IS NOT NULL) OR
-		        (p.outbound_vehicle_id IS NULL AND p.outbound_vehicle_name_raw IS NOT NULL) OR
-		        (p.inbound_vehicle_id IS NULL AND p.inbound_vehicle_name_raw IS NOT NULL) OR
-		        c.birth_date_raw IS NOT NULL OR
-		        c.national_id_invalid = true
-		      ))
+		  AND ($4 = false OR ps.is_pending)
+		  AND ($5 = false OR NOT ps.is_pending)
 	`
 	if err := r.db.QueryRow(ctx, countQuery, region, status, q, unresolvedLink, excludePending).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count cases: %w", err)
@@ -120,7 +97,7 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 	return list, total, nil
 }
 
-// ListAll 取得完整的未刪除個案資料集，供個案主檔匯出使用，不受 UI 分頁上限影響。
+// ListAll 取得完整的未刪除且非待維護個案資料集，供個案主檔匯出使用，不受 UI 分頁上限影響。
 func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
@@ -134,7 +111,9 @@ func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 		LEFT JOIN sites st ON st.id = p.site_id
 		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
 		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
+		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.deleted_at IS NULL
+		  AND NOT ps.is_pending
 		ORDER BY c.created_at DESC, c.name ASC
 	`
 	rows, err := r.db.Query(ctx, query)
@@ -509,7 +488,8 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 		FROM cases c
 		JOIN case_schedules s ON c.id = s.case_id
 		JOIN sites st ON s.site_id = st.id
-		WHERE c.status = 'active' AND c.deleted_at IS NULL
+		JOIN case_pending_status ps ON ps.case_id = c.id
+		WHERE c.status = 'active' AND c.deleted_at IS NULL AND NOT ps.is_pending
 		  AND ($1 = '' OR c.region = $1)
 		  AND s.effective_range && daterange($2, $3, '[)')
 		ORDER BY c.created_at DESC, c.name ASC
@@ -596,10 +576,11 @@ func (r *CaseRepository) ListNameIndex(ctx context.Context) ([]app.CaseNameRef, 
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT id, name, name_normalized
-		FROM cases
-		WHERE status = 'active' AND deleted_at IS NULL
-		ORDER BY name ASC
+		SELECT c.id, c.name, c.name_normalized
+		FROM cases c
+		JOIN case_pending_status ps ON ps.case_id = c.id
+		WHERE c.status = 'active' AND c.deleted_at IS NULL AND NOT ps.is_pending
+		ORDER BY c.name ASC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query case name index: %w", err)
