@@ -75,11 +75,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		txRunner,
 	)
 
-	region := "hsinchu-" + uuid.NewString()[:8]
-	// region 自 000043 起以外鍵參照 regions(code)，測試用的隨機地區碼須先寫入地區主檔。
-	_, err = pool.Exec(ctx, `INSERT INTO regions (name, code) VALUES ($1, $2)`, "測試地區-"+region, region)
-	require.NoError(t, err)
-
 	site := masterapp.Site{
 		Name:    "測試單位-" + uuid.NewString()[:8],
 		Address: "測試地址",
@@ -87,15 +82,15 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	}
 	require.NoError(t, siteRepo.Create(ctx, &site))
 
+	// 個案的申報區域已隨地區主檔一併移除，改以本測試自建的據點界定要清掉的資料範圍。
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
-		_, _ = pool.Exec(cleanupCtx, `DELETE FROM schedule_legs WHERE schedule_id IN (SELECT id FROM case_schedules WHERE case_id IN (SELECT id FROM cases WHERE region = $1))`, region)
-		_, _ = pool.Exec(cleanupCtx, `DELETE FROM case_schedules WHERE case_id IN (SELECT id FROM cases WHERE region = $1)`, region)
-		_, _ = pool.Exec(cleanupCtx, `DELETE FROM case_transport_preferences WHERE case_id IN (SELECT id FROM cases WHERE region = $1)`, region)
-		_, _ = pool.Exec(cleanupCtx, `DELETE FROM audit_log WHERE entity_type = 'cases' AND entity_id IN (SELECT id::text FROM cases WHERE region = $1)`, region)
-		_, _ = pool.Exec(cleanupCtx, `DELETE FROM cases WHERE region = $1`, region)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM schedule_legs WHERE schedule_id IN (SELECT id FROM case_schedules WHERE case_id IN (SELECT id FROM cases WHERE site_id = $1))`, site.ID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM case_schedules WHERE case_id IN (SELECT id FROM cases WHERE site_id = $1)`, site.ID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM case_transport_preferences WHERE case_id IN (SELECT id FROM cases WHERE site_id = $1)`, site.ID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM audit_log WHERE entity_type = 'cases' AND entity_id IN (SELECT id::text FROM cases WHERE site_id = $1)`, site.ID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM cases WHERE site_id = $1`, site.ID)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM sites WHERE id = $1`, site.ID)
-		_, _ = pool.Exec(cleanupCtx, `DELETE FROM regions WHERE code = $1`, region)
 	})
 
 	// Row A：正常成功列。
