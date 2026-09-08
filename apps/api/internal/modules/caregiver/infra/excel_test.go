@@ -34,7 +34,7 @@ func TestRenderCaregiverImportTemplate_ReopensCleanly(t *testing.T) {
 	assert.Equal(t, "單位", headerRow[1])
 	assert.Equal(t, "姓名*", headerRow[2])
 	assert.Contains(t, rows[1], "個管")
-	assert.Contains(t, rows[2], "專護")
+	assert.Contains(t, rows[2], "照專")
 }
 
 // TestReadTables_Limits 驗證解析規模上限確實接在 ReadTables 的讀取路徑上：

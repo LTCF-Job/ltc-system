@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="modelValue"
     title="新增司機"
-    width="min(480px, calc(100vw - 32px))"
+    width="min(560px, calc(100vw - 32px))"
     @update:model-value="(val: boolean) => emit('update:modelValue', val)"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
@@ -12,16 +12,42 @@
       <el-form-item label="身分證字號" prop="nationalId">
         <el-input v-model="form.nationalId" placeholder="1 碼英文 + 9 碼數字" />
       </el-form-item>
+      <el-form-item label="性別" prop="gender">
+        <el-select v-model="form.gender" placeholder="請選擇性別（選填）" clearable style="width: 100%">
+          <el-option value="男" label="男" />
+          <el-option value="女" label="女" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="生日" prop="birthDate">
+        <el-date-picker
+          v-model="form.birthDate"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="請選擇出生日期（選填）"
+          clearable
+          style="width: 100%"
+        />
+      </el-form-item>
       <el-form-item label="所屬區域" prop="region">
-        <el-select v-model="form.region" placeholder="請選擇區域" filterable style="width: 100%">
+        <el-select v-model="form.region" placeholder="請選擇區域（選填）" clearable filterable style="width: 100%">
           <el-option v-for="(label, key) in REGION_LABELS" :key="key" :label="label" :value="key" />
         </el-select>
       </el-form-item>
       <el-form-item label="電子信箱" prop="email">
-        <el-input v-model="form.email" placeholder="通知寄送用信箱" />
+        <el-input v-model="form.email" placeholder="通知寄送用信箱（選填）" clearable />
+      </el-form-item>
+      <el-form-item label="到職日" prop="employmentDate">
+        <el-date-picker
+          v-model="form.employmentDate"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="請選擇到職日（選填）"
+          clearable
+          style="width: 100%"
+        />
       </el-form-item>
       <el-form-item label="駕照類別" prop="licenseClass">
-        <el-select v-model="form.licenseClass" placeholder="請選擇駕照類別" clearable style="width: 100%">
+        <el-select v-model="form.licenseClass" placeholder="請選擇駕照類別（選填）" clearable style="width: 100%">
           <el-option
             v-for="(label, value) in DRIVER_LICENSE_CLASS_LABELS"
             :key="value"
@@ -35,9 +61,27 @@
           v-model="form.licenseExpiryDate"
           type="date"
           value-format="YYYY-MM-DD"
-          placeholder="請選擇駕照有效日期"
+          placeholder="請選擇駕照有效日期（選填）"
+          clearable
           style="width: 100%"
         />
+      </el-form-item>
+      <el-form-item label="證照證明">
+        <el-checkbox v-model="form.hasProfessionalLicense">職業駕照</el-checkbox>
+        <el-checkbox v-model="form.hasTransferCert">異動登記書</el-checkbox>
+      </el-form-item>
+      <el-form-item label="驗車日" prop="inspectionDate">
+        <el-date-picker
+          v-model="form.inspectionDate"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="請選擇驗車日（選填）"
+          clearable
+          style="width: 100%"
+        />
+      </el-form-item>
+      <el-form-item label="備註" prop="remarks">
+        <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -72,8 +116,15 @@ const saving = ref(false)
 const form = reactive<CreateDriverRequest>({
   name: '',
   nationalId: '',
-  region: 'miaoli',
-    email: '',
+  region: '',
+  email: '',
+  gender: '',
+  birthDate: null,
+  hasProfessionalLicense: false,
+  employmentDate: null,
+  hasTransferCert: false,
+  inspectionDate: null,
+  remarks: '',
   licenseClass: null,
   licenseExpiryDate: null
 })
@@ -92,8 +143,7 @@ const rules = {
       },
       trigger: 'blur'
     }
-  ],
-  region: [{ required: true, message: '請選擇所屬區域', trigger: 'change' }]
+  ]
 }
 
 watch(
@@ -102,8 +152,15 @@ watch(
     if (!visible) return
     form.name = props.prefillName || ''
     form.nationalId = ''
-    form.region = 'miaoli'
+    form.region = ''
     form.email = ''
+    form.gender = ''
+    form.birthDate = null
+    form.hasProfessionalLicense = false
+    form.employmentDate = null
+    form.hasTransferCert = false
+    form.inspectionDate = null
+    form.remarks = ''
     form.licenseClass = null
     form.licenseExpiryDate = null
     formRef.value?.clearValidate()

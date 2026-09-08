@@ -408,3 +408,80 @@ func TestDriverService_Delete(t *testing.T) {
 		assert.ErrorIs(t, err, ErrDriverNotFound)
 	})
 }
+
+func TestDriverService_CreateAndUpdate_ExtendedFields(t *testing.T) {
+	cfg := testConfig()
+	store := newFakeDriverStore()
+	svc := NewDriverService(store, cfg, nil)
+
+	birthDate := time.Date(1998, 8, 29, 0, 0, 0, 0, time.UTC)
+	employmentDate := time.Date(2024, 11, 1, 0, 0, 0, 0, time.UTC)
+	inspectionDate := time.Date(2025, 5, 1, 0, 0, 0, 0, time.UTC)
+	gender := "男"
+	remarks := "優良駕駛"
+
+	t.Run("成功新增包含擴充欄位且無區域之司機", func(t *testing.T) {
+		d, err := svc.Create(context.Background(), CreateDriverInput{
+			Name:                   "黃駿凱",
+			NationalID:             "A123456789",
+			Region:                 "",
+			Gender:                 &gender,
+			BirthDate:              &birthDate,
+			HasProfessionalLicense: true,
+			EmploymentDate:         &employmentDate,
+			HasTransferCert:        true,
+			InspectionDate:         &inspectionDate,
+			Remarks:                &remarks,
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, d)
+		assert.Equal(t, "黃駿凱", d.Name)
+		assert.Equal(t, "", d.Region)
+		assert.Equal(t, &gender, d.Gender)
+		assert.Equal(t, &birthDate, d.BirthDate)
+		assert.True(t, d.HasProfessionalLicense)
+		assert.Equal(t, &employmentDate, d.EmploymentDate)
+		assert.True(t, d.HasTransferCert)
+		assert.Equal(t, &inspectionDate, d.InspectionDate)
+		assert.Equal(t, &remarks, d.Remarks)
+	})
+
+	t.Run("成功更新擴充欄位與清空日期", func(t *testing.T) {
+		driverID := uuid.New()
+		store.byID[driverID] = &Driver{
+			ID:                     driverID,
+			Name:                   "鄧運政",
+			Status:                 "active",
+			BirthDate:              &birthDate,
+			EmploymentDate:         &employmentDate,
+			InspectionDate:         &inspectionDate,
+			HasProfessionalLicense: true,
+			HasTransferCert:        true,
+		}
+
+		newGender := "女"
+		newRemarks := "轉調後勤"
+		hasProf := false
+		hasTrans := false
+
+		updated, err := svc.Update(context.Background(), driverID, UpdateDriverInput{
+			Gender:                 &newGender,
+			ClearBirthDate:         true,
+			HasProfessionalLicense: &hasProf,
+			ClearEmploymentDate:    true,
+			HasTransferCert:        &hasTrans,
+			ClearInspectionDate:    true,
+			Remarks:                &newRemarks,
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, &newGender, updated.Gender)
+		assert.Nil(t, updated.BirthDate)
+		assert.False(t, updated.HasProfessionalLicense)
+		assert.Nil(t, updated.EmploymentDate)
+		assert.False(t, updated.HasTransferCert)
+		assert.Nil(t, updated.InspectionDate)
+		assert.Equal(t, &newRemarks, updated.Remarks)
+	})
+}

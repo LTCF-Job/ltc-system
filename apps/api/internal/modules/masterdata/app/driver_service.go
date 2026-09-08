@@ -61,12 +61,19 @@ func normalizeLicenseClass(in *string) (*string, error) {
 
 // CreateDriverInput 代表新增司機所需之輸入。
 type CreateDriverInput struct {
-	Name              string
-	NationalID        string
-	Email             *string
-	Region            string
-	LicenseClass      *string
-	LicenseExpiryDate *time.Time
+	Name                   string
+	NationalID             string
+	Email                  *string
+	Region                 string
+	LicenseClass           *string
+	LicenseExpiryDate      *time.Time
+	Gender                 *string
+	BirthDate              *time.Time
+	HasProfessionalLicense bool
+	EmploymentDate         *time.Time
+	HasTransferCert        bool
+	InspectionDate         *time.Time
+	Remarks                *string
 }
 
 // Create 新增司機：驗證身分證檢查碼，寫入加密密文與 HMAC 索引。actors 是可選的
@@ -100,11 +107,18 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors
 		NationalIDHMAC:   hmacIdx,
 		NationalIDMasked: crypto.Mask(nationalID),
 		Email:            in.Email,
-		Region:           in.Region,
+		Region:           strings.TrimSpace(in.Region),
 		Status:           "active",
 
-		LicenseClass:      licenseClass,
-		LicenseExpiryDate: in.LicenseExpiryDate,
+		LicenseClass:           licenseClass,
+		LicenseExpiryDate:      in.LicenseExpiryDate,
+		Gender:                 in.Gender,
+		BirthDate:              in.BirthDate,
+		HasProfessionalLicense: in.HasProfessionalLicense,
+		EmploymentDate:         in.EmploymentDate,
+		HasTransferCert:        in.HasTransferCert,
+		InspectionDate:         in.InspectionDate,
+		Remarks:                in.Remarks,
 	}
 
 	if err := s.store.Create(ctx, &d); err != nil {
@@ -116,14 +130,23 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors
 
 // UpdateDriverInput 代表更新司機基本資料所需之輸入，欄位為 nil 表示不變更。
 type UpdateDriverInput struct {
-	Name              *string
-	Email             *string
-	Region            *string
-	Status            *string
-	LicenseClass      *string
-	LicenseExpiryDate *time.Time
-	// ClearLicenseExpiryDate 為 true 時把駕照有效日期清空；沒有這個旗標無法區分「不變更」與「清空」。
+	Name                   *string
+	Email                  *string
+	Region                 *string
+	Status                 *string
+	LicenseClass           *string
+	LicenseExpiryDate      *time.Time
 	ClearLicenseExpiryDate bool
+	Gender                 *string
+	BirthDate              *time.Time
+	ClearBirthDate         bool
+	HasProfessionalLicense *bool
+	EmploymentDate         *time.Time
+	ClearEmploymentDate    bool
+	HasTransferCert        *bool
+	InspectionDate         *time.Time
+	ClearInspectionDate    bool
+	Remarks                *string
 }
 
 // Update 更新司機基本資料。
@@ -149,7 +172,7 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 		existing.Email = in.Email
 	}
 	if in.Region != nil {
-		existing.Region = *in.Region
+		existing.Region = strings.TrimSpace(*in.Region)
 	}
 	if in.Status != nil {
 		if *in.Status != "active" && *in.Status != "inactive" {
@@ -168,6 +191,33 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 		existing.LicenseExpiryDate = in.LicenseExpiryDate
 	} else if in.ClearLicenseExpiryDate {
 		existing.LicenseExpiryDate = nil
+	}
+	if in.Gender != nil {
+		existing.Gender = in.Gender
+	}
+	if in.BirthDate != nil {
+		existing.BirthDate = in.BirthDate
+	} else if in.ClearBirthDate {
+		existing.BirthDate = nil
+	}
+	if in.HasProfessionalLicense != nil {
+		existing.HasProfessionalLicense = *in.HasProfessionalLicense
+	}
+	if in.EmploymentDate != nil {
+		existing.EmploymentDate = in.EmploymentDate
+	} else if in.ClearEmploymentDate {
+		existing.EmploymentDate = nil
+	}
+	if in.HasTransferCert != nil {
+		existing.HasTransferCert = *in.HasTransferCert
+	}
+	if in.InspectionDate != nil {
+		existing.InspectionDate = in.InspectionDate
+	} else if in.ClearInspectionDate {
+		existing.InspectionDate = nil
+	}
+	if in.Remarks != nil {
+		existing.Remarks = in.Remarks
 	}
 
 	if err := s.store.Update(ctx, existing); err != nil {

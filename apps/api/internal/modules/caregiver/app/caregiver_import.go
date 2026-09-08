@@ -45,12 +45,16 @@ var caregiverColumns = map[string][]string{
 // caregiverTypeLabels 是類型固定選項的中文標籤，供匯入比對與範本顯示使用。
 var caregiverTypeLabels = map[string]string{
 	CaregiverTypeCaseManager: "個管",
-	CaregiverTypeSpecialist:  "專護",
+	CaregiverTypeSpecialist:  "照專",
 }
 
 // caregiverTypeFromLabel 依中文標籤比對類型代碼，找不到對應標籤回傳空字串，
 // 由呼叫端以「未填寫」處理並列入待維護。
+// 同時相容「照專」與舊稱「專護」。
 func caregiverTypeFromLabel(label string) (code string, ok bool) {
+	if label == "專護" {
+		return CaregiverTypeSpecialist, true
+	}
 	for c, l := range caregiverTypeLabels {
 		if l == label {
 			return c, true
@@ -134,7 +138,7 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 				rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, "姓名未填寫，將以空白建立並列入待維護")
 			}
 			if typeCode == "" {
-				rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, "類型未填寫或不是「個管」／「專護」，將以空白建立並列入待維護")
+				rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, "類型未填寫或不是「個管」／「照專」，將以空白建立並列入待維護")
 			}
 			// 單位比對到就自動關聯，比對不到只留白，不寫入原始名稱也不列入待維護；
 			// 查詢本身失敗仍要中止，避免把「查詢故障」誤判成「查無單位」。
@@ -262,7 +266,7 @@ func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *Caregi
 		}
 		if row.Type == "" {
 			result.Warnings = append(result.Warnings, CaregiverImportWarningItem{
-				RowIndex: row.RowIndex, Name: row.Name, Field: "type", Message: "類型未填寫或不是「個管」／「專護」，已以空白建立並列入待維護",
+				RowIndex: row.RowIndex, Name: row.Name, Field: "type", Message: "類型未填寫或不是「個管」／「照專」，已以空白建立並列入待維護",
 			})
 		}
 	}

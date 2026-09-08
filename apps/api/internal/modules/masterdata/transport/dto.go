@@ -53,8 +53,8 @@ func newSiteResponses(list []app.Site) []SiteResponse {
 // CreateSiteRequest 代表新增單位請求。
 type CreateSiteRequest struct {
 	Name     string  `json:"name" binding:"required"`
-	Address  string  `json:"address" binding:"required"`
-	Region   string  `json:"region" binding:"required"`
+	Address  string  `json:"address"`
+	Region   string  `json:"region"`
 	OpenDays []int16 `json:"openDays"`
 	Status   string  `json:"status"`
 }
@@ -62,8 +62,8 @@ type CreateSiteRequest struct {
 // UpdateSiteRequest 代表更新單位請求。
 type UpdateSiteRequest struct {
 	Name     string  `json:"name" binding:"required"`
-	Address  string  `json:"address" binding:"required"`
-	Region   string  `json:"region" binding:"required"`
+	Address  string  `json:"address"`
+	Region   string  `json:"region"`
 	OpenDays []int16 `json:"openDays"`
 	Status   string  `json:"status"`
 }
@@ -145,7 +145,7 @@ type UpdateVehicleRequest struct {
 }
 
 // VehicleWriteFields 是新增與更新車輛共用的可寫欄位。區域不在其中：車輛的區域由所屬單位決定。
-// 車號、代稱與所屬單位為必填。
+// 車號、車別與所屬單位為必填。
 type VehicleWriteFields struct {
 	PlateNo                   string     `json:"plateNo" binding:"required"`
 	DisplayName               string     `json:"displayName" binding:"required"`
@@ -180,13 +180,20 @@ func (f VehicleWriteFields) toInput() app.VehicleInput {
 
 // DriverResponse 代表回傳給前端的司機資料。身分證密文與 HMAC 索引不對外輸出。
 type DriverResponse struct {
-	ID               uuid.UUID `json:"id"`
-	Name             string    `json:"name"`
-	NameNormalized   string    `json:"nameNormalized"`
-	NationalIDMasked string    `json:"nationalIdMasked"`
-	Email            *string   `json:"email,omitempty"`
-	Region           string    `json:"region"`
-	Status           string    `json:"status"`
+	ID                     uuid.UUID  `json:"id"`
+	Name                   string     `json:"name"`
+	NameNormalized         string     `json:"nameNormalized"`
+	NationalIDMasked       string     `json:"nationalIdMasked"`
+	Gender                 *string    `json:"gender,omitempty"`
+	BirthDate              *time.Time `json:"birthDate,omitempty"`
+	HasProfessionalLicense bool       `json:"hasProfessionalLicense"`
+	EmploymentDate         *time.Time `json:"employmentDate,omitempty"`
+	HasTransferCert        bool       `json:"hasTransferCert"`
+	InspectionDate         *time.Time `json:"inspectionDate,omitempty"`
+	Remarks                *string    `json:"remarks,omitempty"`
+	Email                  *string    `json:"email,omitempty"`
+	Region                 string     `json:"region"`
+	Status                 string     `json:"status"`
 	// LicenseClass 為駕照類別代碼（sedan／truck／bus／trailer），未補登時為 null。
 	LicenseClass      *string    `json:"licenseClass"`
 	LicenseExpiryDate *time.Time `json:"licenseExpiryDate"`
@@ -196,17 +203,24 @@ type DriverResponse struct {
 
 func newDriverResponse(d app.Driver) DriverResponse {
 	return DriverResponse{
-		ID:                d.ID,
-		Name:              d.Name,
-		NameNormalized:    d.NameNormalized,
-		NationalIDMasked:  d.NationalIDMasked,
-		Email:             d.Email,
-		Region:            d.Region,
-		Status:            d.Status,
-		LicenseClass:      d.LicenseClass,
-		LicenseExpiryDate: d.LicenseExpiryDate,
-		CreatedAt:         d.CreatedAt,
-		UpdatedAt:         d.UpdatedAt,
+		ID:                     d.ID,
+		Name:                   d.Name,
+		NameNormalized:         d.NameNormalized,
+		NationalIDMasked:       d.NationalIDMasked,
+		Gender:                 d.Gender,
+		BirthDate:              d.BirthDate,
+		HasProfessionalLicense: d.HasProfessionalLicense,
+		EmploymentDate:         d.EmploymentDate,
+		HasTransferCert:        d.HasTransferCert,
+		InspectionDate:         d.InspectionDate,
+		Remarks:                d.Remarks,
+		Email:                  d.Email,
+		Region:                 d.Region,
+		Status:                 d.Status,
+		LicenseClass:           d.LicenseClass,
+		LicenseExpiryDate:      d.LicenseExpiryDate,
+		CreatedAt:              d.CreatedAt,
+		UpdatedAt:              d.UpdatedAt,
 	}
 }
 
@@ -250,22 +264,36 @@ func newDriverAssignmentResponse(a app.DriverAssignment) DriverAssignmentRespons
 
 // CreateDriverRequest 代表新增司機請求。
 type CreateDriverRequest struct {
-	Name              string    `json:"name" binding:"required"`
-	NationalID        string    `json:"nationalId" binding:"required"`
-	Email             *string   `json:"email"`
-	Region            string    `json:"region" binding:"required"`
-	LicenseClass      *string   `json:"licenseClass"`
-	LicenseExpiryDate *wireDate `json:"licenseExpiryDate"`
+	Name                   string    `json:"name" binding:"required"`
+	NationalID             string    `json:"nationalId" binding:"required"`
+	Email                  *string   `json:"email"`
+	Region                 string    `json:"region"`
+	LicenseClass           *string   `json:"licenseClass"`
+	LicenseExpiryDate      *wireDate `json:"licenseExpiryDate"`
+	Gender                 *string   `json:"gender"`
+	BirthDate              *wireDate `json:"birthDate"`
+	HasProfessionalLicense *bool     `json:"hasProfessionalLicense"`
+	EmploymentDate         *wireDate `json:"employmentDate"`
+	HasTransferCert        *bool     `json:"hasTransferCert"`
+	InspectionDate         *wireDate `json:"inspectionDate"`
+	Remarks                *string   `json:"remarks"`
 }
 
 // UpdateDriverRequest 代表更新司機請求，欄位為 nil 表示不變更。
 type UpdateDriverRequest struct {
-	Name              *string      `json:"name"`
-	Email             *string      `json:"email"`
-	Region            *string      `json:"region"`
-	Status            *string      `json:"status"`
-	LicenseClass      *string      `json:"licenseClass"`
-	LicenseExpiryDate nullableTime `json:"licenseExpiryDate"`
+	Name                   *string      `json:"name"`
+	Email                  *string      `json:"email"`
+	Region                 *string      `json:"region"`
+	Status                 *string      `json:"status"`
+	LicenseClass           *string      `json:"licenseClass"`
+	LicenseExpiryDate      nullableTime `json:"licenseExpiryDate"`
+	Gender                 *string      `json:"gender"`
+	BirthDate              nullableTime `json:"birthDate"`
+	HasProfessionalLicense *bool        `json:"hasProfessionalLicense"`
+	EmploymentDate         nullableTime `json:"employmentDate"`
+	HasTransferCert        *bool        `json:"hasTransferCert"`
+	InspectionDate         nullableTime `json:"inspectionDate"`
+	Remarks                *string      `json:"remarks"`
 }
 
 // nullableTime 用來區分 JSON 欄位「未提供」與「明確給 null」，後者代表要把日期清空。

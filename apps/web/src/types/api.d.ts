@@ -298,8 +298,8 @@ export interface UpdateRegionRequest {
 export interface SiteDTO {
   id: string;
   name: string;
-  region: Region;
-  address: string;
+  region?: Region | "";
+  address?: string;
   openDays: number[];
   status: "active" | "inactive";
   createdAt: string;
@@ -307,8 +307,8 @@ export interface SiteDTO {
 
 export interface CreateSiteRequest {
   name: string;
-  region: Region;
-  address: string;
+  region?: Region | "";
+  address?: string;
   openDays: number[];
   status?: "active" | "inactive";
 }
@@ -377,8 +377,15 @@ export interface DriverDTO {
   name: string;
   nameNormalized?: string;
   nationalIdMasked: string;
-  region: string;
+  region?: string;
   email?: string;
+  gender?: string;
+  birthDate?: string | null;
+  hasProfessionalLicense?: boolean;
+  employmentDate?: string | null;
+  hasTransferCert?: boolean;
+  inspectionDate?: string | null;
+  remarks?: string;
   status: "active" | "inactive";
   // 駕照類別與有效日期為選填，未補登時為 null
   licenseClass?: DriverLicenseClass | null;
@@ -390,8 +397,15 @@ export interface DriverDTO {
 export interface CreateDriverRequest {
   name: string;
   nationalId: string;
-  region: string;
+  region?: string;
   email?: string;
+  gender?: string;
+  birthDate?: string | null;
+  hasProfessionalLicense?: boolean;
+  employmentDate?: string | null;
+  hasTransferCert?: boolean;
+  inspectionDate?: string | null;
+  remarks?: string;
   licenseClass?: DriverLicenseClass | null;
   licenseExpiryDate?: string | null;
 }
@@ -400,6 +414,13 @@ export interface UpdateDriverRequest {
   name?: string;
   region?: string;
   email?: string;
+  gender?: string;
+  birthDate?: string | null;
+  hasProfessionalLicense?: boolean;
+  employmentDate?: string | null;
+  hasTransferCert?: boolean;
+  inspectionDate?: string | null;
+  remarks?: string;
   status?: "active" | "inactive";
   licenseClass?: DriverLicenseClass | null;
   licenseExpiryDate?: string | null;

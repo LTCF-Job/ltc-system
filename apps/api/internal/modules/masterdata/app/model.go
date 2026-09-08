@@ -137,34 +137,55 @@ type Driver struct {
 	Region           string
 	Status           string
 	// LicenseClass 為駕照類別代碼，LicenseExpiryDate 為駕照有效日期；兩者皆可為空，代表尚未補登。
-	LicenseClass      *string
-	LicenseExpiryDate *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	LicenseClass           *string
+	LicenseExpiryDate      *time.Time
+	Gender                 *string
+	BirthDate              *time.Time
+	HasProfessionalLicense bool
+	EmploymentDate         *time.Time
+	HasTransferCert        bool
+	InspectionDate         *time.Time
+	Remarks                *string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 // DriverAuditSnapshot 是司機主檔稽核快照；身分證只保留已遮罩值，不保存密文、HMAC
 // 或明文。
 type DriverAuditSnapshot struct {
-	ID                uuid.UUID  `json:"id"`
-	Name              string     `json:"name"`
-	NationalIDMasked  string     `json:"nationalIdMasked,omitempty"`
-	Region            string     `json:"region"`
-	Status            string     `json:"status"`
-	LicenseClass      *string    `json:"licenseClass,omitempty"`
-	LicenseExpiryDate *time.Time `json:"licenseExpiryDate,omitempty"`
+	ID                     uuid.UUID  `json:"id"`
+	Name                   string     `json:"name"`
+	NationalIDMasked       string     `json:"nationalIdMasked,omitempty"`
+	Region                 string     `json:"region"`
+	Status                 string     `json:"status"`
+	LicenseClass           *string    `json:"licenseClass,omitempty"`
+	LicenseExpiryDate      *time.Time `json:"licenseExpiryDate,omitempty"`
+	Gender                 *string    `json:"gender,omitempty"`
+	BirthDate              *time.Time `json:"birthDate,omitempty"`
+	HasProfessionalLicense bool       `json:"hasProfessionalLicense"`
+	EmploymentDate         *time.Time `json:"employmentDate,omitempty"`
+	HasTransferCert        bool       `json:"hasTransferCert"`
+	InspectionDate         *time.Time `json:"inspectionDate,omitempty"`
+	Remarks                *string    `json:"remarks,omitempty"`
 }
 
 // AuditSnapshot 產生司機主檔的明確稽核快照。
 func (d Driver) AuditSnapshot() DriverAuditSnapshot {
 	return DriverAuditSnapshot{
-		ID:                d.ID,
-		Name:              d.Name,
-		NationalIDMasked:  d.NationalIDMasked,
-		Region:            d.Region,
-		Status:            d.Status,
-		LicenseClass:      d.LicenseClass,
-		LicenseExpiryDate: d.LicenseExpiryDate,
+		ID:                     d.ID,
+		Name:                   d.Name,
+		NationalIDMasked:       d.NationalIDMasked,
+		Region:                 d.Region,
+		Status:                 d.Status,
+		LicenseClass:           d.LicenseClass,
+		LicenseExpiryDate:      d.LicenseExpiryDate,
+		Gender:                 d.Gender,
+		BirthDate:              d.BirthDate,
+		HasProfessionalLicense: d.HasProfessionalLicense,
+		EmploymentDate:         d.EmploymentDate,
+		HasTransferCert:        d.HasTransferCert,
+		InspectionDate:         d.InspectionDate,
+		Remarks:                d.Remarks,
 	}
 }
 

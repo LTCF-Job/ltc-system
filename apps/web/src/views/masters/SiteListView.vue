@@ -70,10 +70,14 @@
           <el-table-column prop="name" label="單位名稱" min-width="140" class-name="site-name-col" />
           <el-table-column prop="region" label="區域" width="120" align="center">
             <template #default="{ row }">
-              <span>{{ REGION_LABELS[row.region as Region] || row.region }}</span>
+              <span>{{ (row.region && REGION_LABELS[row.region as Region]) ? REGION_LABELS[row.region as Region] : (row.region || '-') }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="address" label="單位地址" min-width="180" class-name="site-address-col" show-overflow-tooltip />
+          <el-table-column prop="address" label="單位地址" min-width="180" class-name="site-address-col" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.address || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="開放時間" width="260" class-name="open-days-column">
             <template #default="{ row }">
               {{ row.openDays?.map((d: number) => `週${'一二三四五六日'[d-1]}`).join('、') || '未設定' }}
@@ -158,7 +162,8 @@
         <el-form-item label="所屬區域" prop="region">
           <el-select
             v-model="form.region"
-            placeholder="請選擇區域"
+            placeholder="請選擇區域（選填）"
+            clearable
             filterable
             style="width: 100%"
           >
@@ -171,7 +176,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="單位地址" prop="address">
-          <el-input v-model="form.address" placeholder="請輸入完整地址" />
+          <el-input v-model="form.address" placeholder="請輸入完整地址（選填）" clearable />
         </el-form-item>
         <el-form-item label="開放星期" prop="openDays">
           <el-checkbox-group v-model="form.openDays">
@@ -259,9 +264,7 @@ async function handleToggleStatus(row: SiteDTO, newActive: boolean) {
 }
 
 const rules = {
-  name: [{ required: true, message: '請輸入單位名稱', trigger: 'blur' }],
-  region: [{ required: true, message: '請選擇區域', trigger: 'change' }],
-  address: [{ required: true, message: '請輸入單位地址', trigger: 'blur' }]
+  name: [{ required: true, message: '請輸入單位名稱', trigger: 'blur' }]
 }
 
 const {
@@ -297,7 +300,7 @@ const {
 function openCreateDialog() {
   editingId.value = null
   form.name = ''
-  form.region = 'miaoli'
+  form.region = '' as any
   form.address = ''
   form.openDays = [1, 2, 3, 4, 5]
   form.status = 'active'
@@ -307,8 +310,8 @@ function openCreateDialog() {
 function openEditDialog(row: any) {
   editingId.value = row.id
   form.name = row.name
-  form.region = row.region
-  form.address = row.address
+  form.region = row.region || ''
+  form.address = row.address || ''
   form.openDays = [...row.openDays]
   form.status = row.status || 'active'
   dialogVisible.value = true

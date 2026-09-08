@@ -50,13 +50,29 @@ func (h *DriverHandler) Create(c *gin.Context) {
 		return
 	}
 
+	var hasProf bool
+	if req.HasProfessionalLicense != nil {
+		hasProf = *req.HasProfessionalLicense
+	}
+	var hasTrans bool
+	if req.HasTransferCert != nil {
+		hasTrans = *req.HasTransferCert
+	}
+
 	d, err := h.svc.Create(c.Request.Context(), app.CreateDriverInput{
-		Name:              req.Name,
-		NationalID:        req.NationalID,
-		Email:             req.Email,
-		Region:            req.Region,
-		LicenseClass:      req.LicenseClass,
-		LicenseExpiryDate: req.LicenseExpiryDate.toTimePtr(),
+		Name:                   req.Name,
+		NationalID:             req.NationalID,
+		Email:                  req.Email,
+		Region:                 req.Region,
+		LicenseClass:           req.LicenseClass,
+		LicenseExpiryDate:      req.LicenseExpiryDate.toTimePtr(),
+		Gender:                 req.Gender,
+		BirthDate:              req.BirthDate.toTimePtr(),
+		HasProfessionalLicense: hasProf,
+		EmploymentDate:         req.EmploymentDate.toTimePtr(),
+		HasTransferCert:        hasTrans,
+		InspectionDate:         req.InspectionDate.toTimePtr(),
+		Remarks:                req.Remarks,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
 		ActorRole: auth.GetActorRole(c),
@@ -105,6 +121,16 @@ func (h *DriverHandler) Update(c *gin.Context) {
 		LicenseClass:           req.LicenseClass,
 		LicenseExpiryDate:      req.LicenseExpiryDate.Value,
 		ClearLicenseExpiryDate: req.LicenseExpiryDate.Present && req.LicenseExpiryDate.Value == nil,
+		Gender:                 req.Gender,
+		BirthDate:              req.BirthDate.Value,
+		ClearBirthDate:         req.BirthDate.Present && req.BirthDate.Value == nil,
+		HasProfessionalLicense: req.HasProfessionalLicense,
+		EmploymentDate:         req.EmploymentDate.Value,
+		ClearEmploymentDate:    req.EmploymentDate.Present && req.EmploymentDate.Value == nil,
+		HasTransferCert:        req.HasTransferCert,
+		InspectionDate:         req.InspectionDate.Value,
+		ClearInspectionDate:    req.InspectionDate.Present && req.InspectionDate.Value == nil,
+		Remarks:                req.Remarks,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
 		ActorRole: auth.GetActorRole(c),

@@ -88,7 +88,7 @@ export type CaregiverType = 'case_manager' | 'specialist'
 
 export const CAREGIVER_TYPE_LABELS: Record<CaregiverType, string> = {
   case_manager: '個管',
-  specialist: '專護'
+  specialist: '照專'
 }
 
 // 職業駕照類別，對應政府「服務駕駛清冊」的駕照執照類別欄位
