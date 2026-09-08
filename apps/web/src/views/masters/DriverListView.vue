@@ -374,7 +374,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { formatDate, todayLocal } from '@/utils/formatters'
-import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass, REGION_LABELS, type Region } from '@/types/domain'
+import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass } from '@/types/domain'
 import type { DriverDTO, CreateDriverRequest, UpdateDriverRequest, VehicleDTO } from '@/types/api'
 
 import { fetchRegionOptions, regionLabel, type RegionOption } from '@/api/regionOptions'

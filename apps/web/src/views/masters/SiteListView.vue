@@ -227,7 +227,6 @@ import TableRowActions from '@/components/TableRowActions.vue'
 import { listSites, createSite, updateSite, deleteSite } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
-import { REGION_LABELS, type Region } from '@/types/domain'
 import type { SiteDTO, CreateSiteRequest } from '@/types/api'
 
 import { fetchRegionOptions, regionLabel, type RegionOption } from '@/api/regionOptions'

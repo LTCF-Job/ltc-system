@@ -257,6 +257,29 @@
                     </TableRowActions>
                   </div>
                 </div>
+
+                <div v-for="conflict in row.rowConflicts" :key="conflict.id" class="review-issue-row">
+                  <div class="review-issue-desc">
+                    <el-tag size="small" type="danger">與既有資料衝突</el-tag>
+                    <span class="raw-name">{{ conflict.caseName }}（第 {{ conflict.legSeq }} 趟）</span>
+                    <span class="text-secondary small">
+                      既有：{{ conflict.previousReported === 'boarded' ? '有坐' : '沒坐' }}
+                      / {{ conflict.previousDriverName || '無司機' }}
+                      　新上傳：{{ conflict.newReported === 'boarded' ? '有坐' : '沒坐' }}
+                      / {{ conflict.newDriverName || '無司機' }}
+                    </span>
+                  </div>
+                  <div class="target-binding-box">
+                    <TableRowActions>
+                      <el-button link type="primary" size="small" @click="handleResolveRowConflict(conflict, true)">
+                        採用新資料
+                      </el-button>
+                      <el-button link size="small" @click="handleResolveRowConflict(conflict, false)">
+                        保留原資料
+                      </el-button>
+                    </TableRowActions>
+                  </div>
+                </div>
               </div>
             </template>
           </el-table-column>

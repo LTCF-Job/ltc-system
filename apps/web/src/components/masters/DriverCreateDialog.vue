@@ -95,7 +95,7 @@ import { reactive, ref, watch } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { createDriver } from '@/api/masters'
-import { DRIVER_LICENSE_CLASS_LABELS, REGION_LABELS } from '@/types/domain'
+import { DRIVER_LICENSE_CLASS_LABELS } from '@/types/domain'
 import type { CreateDriverRequest, DriverDTO } from '@/types/api'
 import { isValidNationalID } from '@/utils/nationalId'
 
