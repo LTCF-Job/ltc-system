@@ -36,7 +36,7 @@ BEGIN
 END $$;
 
 -- 3. 移除不再使用的 region 欄位。sites.region 保留。
---    sites 的 (name, region) 唯一鍵維持不變：單位名稱仍可在不同區域重複。
+--    sites 的 (name, region) 唯一鍵維持不變：據點名稱仍可在不同區域重複。
 ALTER TABLE drivers DROP COLUMN IF EXISTS region;
 ALTER TABLE cases DROP COLUMN IF EXISTS region;
 ALTER TABLE holidays DROP COLUMN IF EXISTS region;

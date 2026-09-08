@@ -128,8 +128,8 @@ type ScheduleLeg struct {
 	CreatedAt   time.Time
 }
 
-// ActiveCaseScheduleInfo 代表個案於指定月份之有效排班與關聯基本資訊。SiteOpenDays
-// 現由個案的據點帶出（見 GetActiveSchedulesForMonth 的 JOIN 路徑）。
+// ActiveCaseScheduleInfo 代表個案於指定月份之有效排班與關聯基本資訊。據點不再設定
+// 開放星期，排班只由個案自己的 Weekdays 決定。
 type ActiveCaseScheduleInfo struct {
 	CaseID        uuid.UUID
 	CaseName      string
