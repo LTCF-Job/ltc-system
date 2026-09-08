@@ -17,7 +17,7 @@ description: Read before every development, fix, refactor, or test change in thi
                          -> repository / adapter -> database / provider
    ```
 
-3. 依入口檔案與變更效果讀取專項 skill；不要因為同一功能同時存在前後端，就載入與本次範圍無關的規範。
+3. 依入口檔案與變更效果，對照 `AGENTS.md` 讀取對應的專項 skill 與 `docs/tech/` 規範文件（涉及全系統主檔 CRUD、啟用停用、匯入匯出檢核非阻擋、待維護隔離、錯誤代碼或 E2E 測試，必讀 `docs/tech/system-logic-specification.md`）；嚴禁在未閱讀對應規範文件前盲目修改程式碼。
 4. 把 `static inspection`、`hypothesis`、`automated test` 與 `runtime proof` 分開記錄；規劃或設定檔不等同於實際執行證據。
 
 ## 變更規範
@@ -29,8 +29,8 @@ description: Read before every development, fix, refactor, or test change in thi
 
 ## 完成條件
 
-- 已列出受影響的入口、上下游消費者與適用專項 skill。
-- 已依專項 skill 完成契約、資料、權限、部署或介面檢查。
+- 已列出受影響的入口、上下游消費者與適用專項 skill 及 `docs/tech/` 規範文件。
+- 已依專項 skill 與規範文件完成契約、資料、權限、部署或介面檢查。
 - 驗證結果可對應到實際指令、測試或靜態證據。
 
 ## 歷史依據

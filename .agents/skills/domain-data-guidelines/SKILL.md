@@ -5,6 +5,8 @@ description: Use when changing business dates, ROC dates, time zones, schedules,
 
 # Domain data guidelines
 
+> 權威規格依據：請優先參閱 [docs/tech/backend-business-rules.md](../../../docs/tech/backend-business-rules.md) 與 [docs/tech/system-logic-specification.md](../../../docs/tech/system-logic-specification.md)。
+
 ## 語意來源
 
 - 對 blank、zero、unknown、未提供、無限期與非法值分別定義語意；只有契約明定的未提供值才使用預設值。

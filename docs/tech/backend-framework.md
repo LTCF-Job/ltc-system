@@ -1,3 +1,9 @@
+---
+doc_type: architecture
+covers:
+  - apps/api/
+---
+
 # 後端框架與分層架構
 
 給要動 `apps/api` 程式碼的人看。技術棧、分層邊界、domain 套件、Auth 機制、response 格式。API 完整路由表另見 [backend-api-reference.md](backend-api-reference.md)，業務流程另見 [backend-flows.md](backend-flows.md)。

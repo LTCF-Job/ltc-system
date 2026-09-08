@@ -1,3 +1,11 @@
+---
+doc_type: flow
+covers:
+  - apps/web/src/router/
+  - apps/web/src/stores/auth.ts
+  - apps/web/src/api/auth.ts
+---
+
 # 前端權限判斷邏輯
 
 前端不再自行維護任何角色到權限的對照表。所有畫面顯示與操作限制都依據登入時向後端 `GET /api/v1/auth/me` 取得的 effective permissions，這份資料就是後端 `RequirePermission` 實際查詢並合併（角色矩陣＋個人 `customPermissions` 覆蓋）後的同一份結果——前端看到的能不能做，跟 API 實際放不放行必然一致，不會有兩套規則分歧的問題。

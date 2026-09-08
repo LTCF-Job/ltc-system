@@ -1,3 +1,11 @@
+---
+doc_type: flow
+covers:
+  - apps/web/src/views/
+  - apps/web/src/features/
+  - apps/web/src/components/
+---
+
 # 前端核心功能流程
 
 幾個橫跨多個元件、多支 API 的操作流程，從前端視角描述使用者實際會怎麼操作、畫面之間怎麼串。對應的後端邏輯見 [backend-flows.md](backend-flows.md)；頁面與路由對照見 [frontend-pages.md](frontend-pages.md)。

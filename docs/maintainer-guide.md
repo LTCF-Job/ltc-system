@@ -12,10 +12,11 @@ covers: []
 建議依下列順序閱讀：
 
 1. 本文件：先建立系統與模組地圖。
-2. [維護 Runbook](tech/maintainer-runbook.md)：啟動、migration、health check 與故障排查。
-3. [Backend API Reference](tech/backend-api-reference.md)：確認現行 route、request、response 與權限。
-4. [Backend Flows](tech/backend-flows.md) 與 [Frontend Flows](tech/frontend-flows.md)：追蹤跨層業務流程。
-5. [Full-stack Review](reviews/2026-09-04-full-stack-review.md)：查看已發現的 bug、契約落差與未驗證項目。
+2. [系統核心業務邏輯規範](tech/system-logic-specification.md) 與 [後端演算法規則](tech/backend-business-rules.md)：掌握 7 大核心準則（CRUD、匯出非阻擋、待維護隔離、錯誤代碼）與核心計算邏輯。
+3. [前後端整合契約](tech/integration-contract.md) 與 [API 設計規範](tech/api-design-specification.md)：掌握通訊封裝、狀態碼與錯誤轉譯。
+4. [維護 Runbook](tech/maintainer-runbook.md)：啟動、migration、health check 與故障排查。
+5. [Backend API Reference](tech/backend-api-reference.md) 與 [Frontend Pages](tech/frontend-pages.md)：確認現行 route、頁面與權限對照。
+6. [Backend Flows](tech/backend-flows.md) 與 [Frontend Flows](tech/frontend-flows.md)：追蹤跨層業務流程。
 
 文件中的證據分成兩種：
 
