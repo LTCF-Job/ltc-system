@@ -43,13 +43,7 @@ func (s *SiteService) Create(ctx context.Context, in CreateSiteInput, actors ...
 		return nil, ErrSiteNameRequired
 	}
 	address := strings.TrimSpace(in.Address)
-	if address == "" {
-		return nil, ErrSiteAddressRequired
-	}
 	region := strings.TrimSpace(in.Region)
-	if region == "" {
-		return nil, ErrSiteRegionRequired
-	}
 
 	// 未提供狀態時預設 active；非法值不可靜默改寫。
 	status := strings.TrimSpace(in.Status)
@@ -94,13 +88,7 @@ func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInp
 		return nil, ErrSiteNameRequired
 	}
 	address := strings.TrimSpace(in.Address)
-	if address == "" {
-		return nil, ErrSiteAddressRequired
-	}
 	region := strings.TrimSpace(in.Region)
-	if region == "" {
-		return nil, ErrSiteRegionRequired
-	}
 
 	status := strings.TrimSpace(in.Status)
 	if status == "" {

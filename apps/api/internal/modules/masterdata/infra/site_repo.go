@@ -38,7 +38,7 @@ func (r siteRow) toApp() app.Site {
 	}
 }
 
-const siteColumns = `id, name, address, region, open_days, status, created_at, updated_at`
+const siteColumns = `id, name, COALESCE(address, ''), COALESCE(region, ''), open_days, status, created_at, updated_at`
 
 // SiteRepository 提供 sites 資料表之存取操作。
 type SiteRepository struct {
@@ -57,7 +57,7 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 		SELECT ` + siteColumns + `
 		FROM sites
 		WHERE ($1 = '' OR region = $1)
-		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR address ILIKE '%' || $2 || '%')
+		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR COALESCE(address, '') ILIKE '%' || $2 || '%')
 		  AND ($3 = '' OR status = $3)
 		ORDER BY name ASC
 		LIMIT $4 OFFSET $5
@@ -84,7 +84,7 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 	countQuery := `
 		SELECT COUNT(*) FROM sites
 		WHERE ($1 = '' OR region = $1)
-		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR address ILIKE '%' || $2 || '%')
+		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR COALESCE(address, '') ILIKE '%' || $2 || '%')
 		  AND ($3 = '' OR status = $3)
 	`
 	if err := r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total); err != nil {

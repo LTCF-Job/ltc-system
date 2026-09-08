@@ -53,7 +53,7 @@ func TestVehicleHandler_Create_RequiresDisplayName(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	siteID := uuid.New()
 
-	t.Run("未提供代稱時驗證失敗回傳 400", func(t *testing.T) {
+	t.Run("未提供車別時驗證失敗回傳 400", func(t *testing.T) {
 		store := &fakeVehicleStore{}
 		h := newTestVehicleHandler(store)
 
@@ -70,7 +70,7 @@ func TestVehicleHandler_Create_RequiresDisplayName(t *testing.T) {
 		assert.Nil(t, store.created)
 	})
 
-	t.Run("代稱為空字串時驗證失敗回傳 400", func(t *testing.T) {
+	t.Run("車別為空字串時驗證失敗回傳 400", func(t *testing.T) {
 		store := &fakeVehicleStore{}
 		h := newTestVehicleHandler(store)
 
@@ -87,7 +87,7 @@ func TestVehicleHandler_Create_RequiresDisplayName(t *testing.T) {
 		assert.Nil(t, store.created)
 	})
 
-	t.Run("提供代稱時建立成功並寫入代稱", func(t *testing.T) {
+	t.Run("提供車別時建立成功並寫入車別", func(t *testing.T) {
 		store := &fakeVehicleStore{}
 		h := newTestVehicleHandler(store)
 
@@ -112,7 +112,7 @@ func TestVehicleHandler_Update_RequiresDisplayName(t *testing.T) {
 	vehicleID := uuid.New()
 	siteID := uuid.New()
 
-	t.Run("更新時未提供代稱回傳 400", func(t *testing.T) {
+	t.Run("更新時未提供車別回傳 400", func(t *testing.T) {
 		store := &fakeVehicleStore{}
 		h := newTestVehicleHandler(store)
 
@@ -130,7 +130,7 @@ func TestVehicleHandler_Update_RequiresDisplayName(t *testing.T) {
 		assert.Nil(t, store.updated)
 	})
 
-	t.Run("更新時提供代稱更新成功", func(t *testing.T) {
+	t.Run("更新時提供車別更新成功", func(t *testing.T) {
 		store := &fakeVehicleStore{}
 		h := newTestVehicleHandler(store)
 

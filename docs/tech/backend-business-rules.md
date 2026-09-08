@@ -1,3 +1,10 @@
+---
+doc_type: flow
+covers:
+  - apps/api/internal/domain/
+  - apps/api/internal/modules/
+---
+
 # 後端核心演算法與驗證規則
 
 `docs/tech/backend-flows.md` 講的是「資料怎麼流過哪些模組」，這份文件講的是那些模組**裡面實際的判斷邏輯**——條件式怎麼寫的、順序為什麼是這樣、邊界情況怎麼處理。改這些邏輯前一定要先讀對應的單元測試（`*_test.go`），這些規則大多有明確的規格書條號依據（程式碼註解會標，例如「規格書 4.6」），改動要連測試一起改。

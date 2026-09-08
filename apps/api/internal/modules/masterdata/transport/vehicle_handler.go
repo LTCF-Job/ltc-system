@@ -80,7 +80,7 @@ func (h *VehicleHandler) Create(c *gin.Context) {
 		}
 		if errors.Is(err, app.ErrDuplicateVehicleDisplayName) {
 			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "displayName", Reason: "車輛代稱已存在"},
+				{Field: "displayName", Reason: "車別已存在"},
 			})
 			return
 		}
@@ -124,7 +124,7 @@ func (h *VehicleHandler) Update(c *gin.Context) {
 		}
 		if errors.Is(err, app.ErrDuplicateVehicleDisplayName) {
 			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "displayName", Reason: "車輛代稱已存在"},
+				{Field: "displayName", Reason: "車別已存在"},
 			})
 			return
 		}

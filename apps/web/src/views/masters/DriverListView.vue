@@ -2,7 +2,7 @@
   <div class="driver-list-view">
     <DataTablePage
       title="司機管理"
-      :max-width="1520"
+      :max-width="1680"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -58,6 +58,35 @@
               <span class="driver-data font-mono">{{ row.nationalIdMasked || '-' }}</span>
             </template>
           </el-table-column>
+          <el-table-column prop="gender" label="性別" width="70" align="center">
+            <template #default="{ row }">
+              <span class="driver-data">{{ row.gender || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="birthDate" label="生日" width="120" align="center">
+            <template #default="{ row }">
+              <span class="driver-data">{{ formatDate(row.birthDate) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="歲數" width="70" align="center">
+            <template #default="{ row }">
+              <span class="driver-data font-mono">{{ calcAge(row.birthDate) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="hasProfessionalLicense" label="職業駕照" width="90" align="center">
+            <template #default="{ row }">
+              <span class="driver-data font-semibold text-emerald-600">
+                {{ row.hasProfessionalLicense ? 'V' : '-' }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="hasTransferCert" label="異動登記書" width="105" align="center">
+            <template #default="{ row }">
+              <span class="driver-data font-semibold text-emerald-600">
+                {{ row.hasTransferCert ? 'V' : '-' }}
+              </span>
+            </template>
+          </el-table-column>
           <el-table-column prop="licenseClass" label="駕照類別" min-width="120" align="center" class-name="license-class-col">
             <template #default="{ row }">
               <span class="driver-data license-value">
@@ -70,12 +99,27 @@
               <span class="driver-data license-value">{{ formatDate(row.licenseExpiryDate) }}</span>
             </template>
           </el-table-column>
+          <el-table-column prop="employmentDate" label="到職日" width="120" align="center">
+            <template #default="{ row }">
+              <span class="driver-data">{{ formatDate(row.employmentDate) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="inspectionDate" label="驗車日" width="120" align="center">
+            <template #default="{ row }">
+              <span class="driver-data">{{ formatDate(row.inspectionDate) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="region" label="區域" width="100" align="center">
+            <template #default="{ row }">
+              <span class="driver-data">{{ (row.region && REGION_LABELS[row.region as Region]) ? REGION_LABELS[row.region as Region] : (row.region || '-') }}</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="phone" label="聯絡電話" width="130" align="center">
             <template #default="{ row }">
               <span class="driver-data">{{ row.phone || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="email" label="電子信箱" min-width="200" show-overflow-tooltip class-name="email-col">
+          <el-table-column prop="email" label="電子信箱" min-width="180" show-overflow-tooltip class-name="email-col">
             <template #default="{ row }"><span class="driver-data">{{ row.email || '-' }}</span></template>
           </el-table-column>
           <el-table-column label="目前指派車輛" min-width="180" class-name="assigned-vehicle-col">
@@ -87,6 +131,11 @@
                 </span>
               </div>
               <span v-else class="assignment-empty">尚未指派</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="driver-data">{{ row.remarks || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="status" label="狀態" width="130" align="center">
@@ -156,13 +205,29 @@
     <DriverCreateDialog v-model="createDialogVisible" @created="handleDriverCreated" />
 
     <!-- 編輯司機對話框 -->
-    <el-dialog v-model="editDialogVisible" title="編輯司機資料" width="min(480px, calc(100vw - 32px))">
+    <el-dialog v-model="editDialogVisible" title="編輯司機資料" width="min(560px, calc(100vw - 32px))">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
         <el-form-item label="司機姓名" prop="name">
           <el-input v-model="form.name" placeholder="請輸入姓名" />
         </el-form-item>
+        <el-form-item label="性別" prop="gender">
+          <el-select v-model="form.gender" placeholder="請選擇性別（選填）" clearable style="width: 100%">
+            <el-option value="男" label="男" />
+            <el-option value="女" label="女" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="生日" prop="birthDate">
+          <el-date-picker
+            v-model="form.birthDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="請選擇出生日期（選填）"
+            clearable
+            style="width: 100%"
+          />
+        </el-form-item>
         <el-form-item label="所屬區域" prop="region">
-          <el-select v-model="form.region" placeholder="請選擇區域" filterable style="width: 100%">
+          <el-select v-model="form.region" placeholder="請選擇區域（選填）" clearable filterable style="width: 100%">
             <el-option
               v-for="(label, key) in REGION_LABELS"
               :key="key"
@@ -172,12 +237,22 @@
           </el-select>
         </el-form-item>
         <el-form-item label="電子信箱" prop="email">
-          <el-input v-model="form.email" placeholder="通知寄送用信箱" />
+          <el-input v-model="form.email" placeholder="通知寄送用信箱（選填）" clearable />
+        </el-form-item>
+        <el-form-item label="到職日" prop="employmentDate">
+          <el-date-picker
+            v-model="form.employmentDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="請選擇到職日（選填）"
+            clearable
+            style="width: 100%"
+          />
         </el-form-item>
         <el-form-item label="駕照類別" prop="licenseClass">
           <el-select
             v-model="form.licenseClass"
-            placeholder="請選擇駕照類別"
+            placeholder="請選擇駕照類別（選填）"
             clearable
             style="width: 100%"
           >
@@ -194,9 +269,27 @@
             v-model="form.licenseExpiryDate"
             type="date"
             value-format="YYYY-MM-DD"
-            placeholder="請選擇駕照有效日期"
+            placeholder="請選擇駕照有效日期（選填）"
+            clearable
             style="width: 100%"
           />
+        </el-form-item>
+        <el-form-item label="證照證明">
+          <el-checkbox v-model="form.hasProfessionalLicense">職業駕照</el-checkbox>
+          <el-checkbox v-model="form.hasTransferCert">異動登記書</el-checkbox>
+        </el-form-item>
+        <el-form-item label="驗車日" prop="inspectionDate">
+          <el-date-picker
+            v-model="form.inspectionDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="請選擇驗車日（選填）"
+            clearable
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="備註" prop="remarks">
+          <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
         </el-form-item>
         <el-form-item label="狀態" prop="status">
           <el-radio-group v-model="form.status" class="status-radio-group">
@@ -281,7 +374,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { formatDate, todayLocal } from '@/utils/formatters'
-import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass, REGION_LABELS } from '@/types/domain'
+import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass, REGION_LABELS, type Region } from '@/types/domain'
 import type { DriverDTO, CreateDriverRequest, UpdateDriverRequest, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
@@ -311,16 +404,22 @@ const assignRules = {
 const form = reactive<CreateDriverRequest & UpdateDriverRequest>({
   name: '',
   nationalId: '',
-  region: 'miaoli',
+  region: '',
   email: '',
+  gender: '',
+  birthDate: null,
+  hasProfessionalLicense: false,
+  employmentDate: null,
+  hasTransferCert: false,
+  inspectionDate: null,
+  remarks: '',
   status: 'active',
   licenseClass: null,
   licenseExpiryDate: null
 })
 
 const rules = {
-  name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }],
-  region: [{ required: true, message: '請選擇所屬區域', trigger: 'change' }]
+  name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }]
 }
 
 const {
@@ -355,6 +454,19 @@ function licenseClassLabel(value?: DriverLicenseClass | null): string {
   return value ? DRIVER_LICENSE_CLASS_LABELS[value] : '未補登'
 }
 
+function calcAge(birthDate?: string | null): number | string {
+  if (!birthDate) return '-'
+  const birth = new Date(birthDate)
+  if (isNaN(birth.getTime())) return '-'
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const m = today.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--
+  }
+  return age >= 0 ? age : '-'
+}
+
 async function handleQuickToggleActive(row: DriverDTO, newActive: boolean) {
   const newStatus = newActive ? 'active' : 'inactive'
   try {
@@ -377,11 +489,18 @@ function handleDriverCreated() {
 function openEditDialog(row: any) {
   editingId.value = row.id
   form.name = row.name
-  form.region = row.region
+  form.region = row.region || ''
   form.email = row.email || ''
+  form.gender = row.gender || ''
+  form.birthDate = row.birthDate ? row.birthDate.substring(0, 10) : null
+  form.hasProfessionalLicense = !!row.hasProfessionalLicense
+  form.employmentDate = row.employmentDate ? row.employmentDate.substring(0, 10) : null
+  form.hasTransferCert = !!row.hasTransferCert
+  form.inspectionDate = row.inspectionDate ? row.inspectionDate.substring(0, 10) : null
+  form.remarks = row.remarks || ''
   form.status = row.status
   form.licenseClass = row.licenseClass ?? null
-  form.licenseExpiryDate = row.licenseExpiryDate ?? null
+  form.licenseExpiryDate = row.licenseExpiryDate ? row.licenseExpiryDate.substring(0, 10) : null
   editDialogVisible.value = true
 }
 
@@ -425,6 +544,13 @@ async function handleSubmit() {
         name: form.name,
         region: form.region,
         email: form.email,
+        gender: form.gender,
+        birthDate: form.birthDate,
+        hasProfessionalLicense: form.hasProfessionalLicense,
+        employmentDate: form.employmentDate,
+        hasTransferCert: form.hasTransferCert,
+        inspectionDate: form.inspectionDate,
+        remarks: form.remarks,
         status: form.status,
         licenseClass: form.licenseClass,
         licenseExpiryDate: form.licenseExpiryDate

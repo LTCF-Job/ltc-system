@@ -1,3 +1,10 @@
+---
+doc_type: flow
+covers:
+  - apps/api/internal/modules/
+  - apps/api/cmd/server/
+---
+
 # 後端核心業務流程
 
 這份文件拆解幾條橫跨多個 handler／service／domain 套件的完整流程，比單看某一個檔案更容易看懂系統在幹嘛。分層架構背景見 [backend-framework.md](backend-framework.md)，逐支端點清單見 [backend-api-reference.md](backend-api-reference.md)。

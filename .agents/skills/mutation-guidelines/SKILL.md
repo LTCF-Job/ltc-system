@@ -5,6 +5,8 @@ description: Use when changing create, update, delete, import, transaction, audi
 
 # Mutation guidelines
 
+> 權威規格依據：請優先參閱 [docs/tech/mutation-audit-specification.md](../../../docs/tech/mutation-audit-specification.md) 與 [docs/tech/system-logic-specification.md](../../../docs/tech/system-logic-specification.md)。
+
 ## 寫入邊界
 
 - 先定義一次使用者可觀察的 mutation 包含哪些主資料、關聯資料與稽核事件，以及全有或全無的原子性需求。

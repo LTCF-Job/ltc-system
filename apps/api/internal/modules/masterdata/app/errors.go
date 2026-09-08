@@ -36,7 +36,7 @@ var (
 
 	// ErrDuplicateVehiclePlateNo 代表車號已存在。
 	ErrDuplicateVehiclePlateNo = errors.New("vehicle plate number already exists")
-	// ErrDuplicateVehicleDisplayName 代表車輛代稱已存在。
+	// ErrDuplicateVehicleDisplayName 代表車輛車別已存在。
 	ErrDuplicateVehicleDisplayName = errors.New("vehicle display name already exists")
 	// ErrVehicleNotFound 代表查無車輛資料。
 	ErrVehicleNotFound = errors.New("vehicle not found")

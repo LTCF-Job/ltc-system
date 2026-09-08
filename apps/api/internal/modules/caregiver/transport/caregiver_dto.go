@@ -51,7 +51,7 @@ func newCaregiverResponses(list []app.Caregiver) []CaregiverResponse {
 }
 
 // CreateCaregiverRequest 代表新增照護人員請求。Type 僅接受 case_manager（個管）或
-// specialist（專護）。
+// specialist（照專）。
 type CreateCaregiverRequest struct {
 	SiteID  *uuid.UUID `json:"siteId"`
 	Name    string     `json:"name" binding:"required"`

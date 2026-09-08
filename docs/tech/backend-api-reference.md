@@ -46,20 +46,20 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 ## 單位主檔 `siteH`
 
-| Method | Path | 角色 |
-|---|---|---|
-| GET | `/sites` | viewer, staff, admin |
-| POST | `/sites` | staff, admin |
-| PATCH | `/sites/:id` | staff, admin |
-| DELETE | `/sites/:id` | admin |
+| Method | Path | 角色 | 說明 |
+|---|---|---|---|
+| GET | `/sites` | viewer, staff, admin | 支援 `q`、`region`、`status`（`active`／`inactive`）篩選 |
+| POST | `/sites` | staff, admin | 僅 `name` 為必填，`region` 與 `address` 為選填 |
+| PATCH | `/sites/:id` | staff, admin | 整筆覆寫，必填與選填欄位同 POST |
+| DELETE | `/sites/:id` | admin | 刪除單位 |
 
 ## 車輛主檔 `vehicleH`
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
 | GET | `/vehicles` | viewer, staff, admin | 支援 `siteId`、`region`、`q`、`status`（`active`／`inactive`）篩選；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位），以及所屬單位帶出的 `siteName` 與唯讀 `region` |
-| POST | `/vehicles` | staff, admin | `siteId`、`plateNo` 與 `displayName`（代稱）為必填，其餘車籍欄位皆為選填（支援 `null` 與空值）；`status` 非 `active`／`inactive` 一律預設 `active`；車號或代稱重複時回 409 並帶 `details` |
-| PATCH | `/vehicles/:id` | staff, admin | 整筆覆寫，必填欄位同 POST；車號或代稱重複時回 409 並帶 `details` |
+| POST | `/vehicles` | staff, admin | `siteId`、`plateNo` 與 `displayName`（車別）為必填，其餘車籍欄位皆為選填（支援 `null` 與空值）；`status` 非 `active`／`inactive` 一律預設 `active`；車號或車別重複時回 409 並帶 `details` |
+| PATCH | `/vehicles/:id` | staff, admin | 整筆覆寫，必填欄位同 POST；車號或車別重複時回 409 並帶 `details` |
 | DELETE | `/vehicles/:id` | admin | 軟刪除（僅標記 `deleted_at`，不影響 `status` 啟用/停用狀態）；仍有生效中司機指派或排班趟次綁定時回 409（`CodeResourceInUse`） |
 | PUT | `/vehicles/:id/drivers` | staff, admin | 整批設定本車司機：`{ driverIds: string[], effectiveFrom?: date }`；`driverIds` 為空代表清空 |
 
@@ -67,9 +67,9 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/drivers` | viewer, staff, admin | 支援 `region`、`q`、`status`（`active`／`inactive`）篩選；每筆帶 `licenseClass`（駕照類別代碼）與 `licenseExpiryDate`（駕照有效日期），未補登為 `null` |
-| POST | `/drivers` | staff, admin | `licenseClass`／`licenseExpiryDate` 選填，新增一律為 `active` |
-| PATCH | `/drivers/:id` | staff, admin | 欄位未提供代表不變更；`licenseExpiryDate` 明確給 `null` 才會清空；`status` 非 `active`／`inactive` 時保留原值不變更 |
+| GET | `/drivers` | viewer, staff, admin | 支援 `region`、`q`、`status`（`active`／`inactive`）篩選；回傳欄位含 `gender`、`birthDate`、`hasProfessionalLicense`、`employmentDate`、`hasTransferCert`、`inspectionDate`、`remarks`、`licenseClass`、`licenseExpiryDate` |
+| POST | `/drivers` | staff, admin | `name` 與 `nationalId` 為必填，`region` 及擴充欄位（`gender`, `birthDate`, `hasProfessionalLicense`, `employmentDate`, `hasTransferCert`, `inspectionDate`, `remarks`, `licenseClass`, `licenseExpiryDate`）皆為選填，新增一律為 `active` |
+| PATCH | `/drivers/:id` | staff, admin | 欄位未提供代表不變更；日期欄位明確給 `null` 才會清空；`status` 非 `active`／`inactive` 時保留原值不變更 |
 | DELETE | `/drivers/:id` | admin | 軟刪除（僅標記 `deleted_at`，不影響 `status` 啟用/停用狀態），同交易內收斂生效中的司機指派區間 |
 | POST | `/drivers/:id/reveal` | staff, admin | 明文顯示司機個資 |
 | POST | `/drivers/:id/assignments` | staff, admin | 指派車輛給司機；一位司機同期只會有一台車，指派新車即取代原本的指派 |
@@ -209,9 +209,9 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
 | GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）篩選。**待維護資料（姓名或類型未填寫）預設不回傳**：`pending=true` 只取待維護，`includePending=true` 取全部 |
-| POST | `/caregivers` | staff, admin | 新增照護人員，姓名與類型（`case_manager`＝個管／`specialist`＝專護）皆為必填；`status` 非 `active`／`inactive` 一律預設 `active` |
+| POST | `/caregivers` | staff, admin | 新增照護人員，姓名與類型（`case_manager`＝個管／`specialist`＝照專）皆為必填；`status` 非 `active`／`inactive` 一律預設 `active` |
 | GET | `/caregivers/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
-| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx）；姓名或類型缺漏（或類型不是個管／專護）改以空白建立並列入待維護，單位比對不到則留白、不列入待維護，聯絡方式與備註缺漏不再產生警告 |
+| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx）；姓名或類型缺漏（或類型不是個管／照專，向後相容專護）改以空白建立並列入待維護，單位比對不到則留白、不列入待維護，聯絡方式與備註缺漏不再產生警告 |
 | PATCH | `/caregivers/:id` | staff, admin | |
 | DELETE | `/caregivers/:id` | admin | 刪除照護人員；待維護清單的「忽略此筆」也走這支 |
 | PUT | `/caregivers/:id/site` | staff, admin | 將單位待關聯的照護人員連結至既有單位，並清空原始單位名稱 |

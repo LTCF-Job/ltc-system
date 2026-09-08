@@ -123,19 +123,25 @@ func TestParseCaregivers_KeepsRowWithMissingOrInvalidTypeAsPending(t *testing.T)
 		[]string{"竹南日照單位", "王大明", "", "0987-000-000", "行動自如"},
 		[]string{"竹南日照單位", "陳小華", "居服員", "0987-000-000", ""},
 		[]string{"竹南日照單位", "李美玲", "個管", "0987-000-000", ""},
+		[]string{"竹南日照單位", "張大千", "照專", "0987-000-000", ""},
+		[]string{"竹南日照單位", "何專護", "專護", "0987-000-000", ""},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
-	assert.Equal(t, 3, preview.TotalRows)
-	assert.Equal(t, 3, preview.ValidRows, "類型缺漏或不是個管／專護都改以空白建立並列入待維護")
+	assert.Equal(t, 5, preview.TotalRows)
+	assert.Equal(t, 5, preview.ValidRows, "類型缺漏或不是個管／照專都改以空白建立並列入待維護")
 	assert.Empty(t, preview.Errors)
-	require.Len(t, preview.Rows, 3)
+	require.Len(t, preview.Rows, 5)
 	assert.Equal(t, "", preview.Rows[0].Type)
 	assert.Contains(t, preview.Rows[0].WarningMessage, "類型")
 	assert.Equal(t, "", preview.Rows[1].Type, "「居服員」不是固定選項，同樣存成空白")
 	assert.Contains(t, preview.Rows[1].WarningMessage, "類型")
 	assert.Equal(t, "李美玲", preview.Rows[2].Name)
 	assert.Equal(t, CaregiverTypeCaseManager, preview.Rows[2].Type)
+	assert.Equal(t, "張大千", preview.Rows[3].Name)
+	assert.Equal(t, CaregiverTypeSpecialist, preview.Rows[3].Type)
+	assert.Equal(t, "何專護", preview.Rows[4].Name)
+	assert.Equal(t, CaregiverTypeSpecialist, preview.Rows[4].Type, "向後相容舊稱專護")
 }
 
 func TestParseCaregivers_LeavesSiteUnlinkedWhenSiteNotFound(t *testing.T) {

@@ -15,51 +15,70 @@ import (
 
 // driverRow 是 drivers 資料表的一列。
 type driverRow struct {
-	ID                uuid.UUID
-	Name              string
-	NameNormalized    string
-	NationalIDCipher  []byte
-	NationalIDHMAC    []byte
-	NationalIDMasked  string
-	Email             *string
-	Region            string
-	Status            string
-	LicenseClass      *string
-	LicenseExpiryDate *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                     uuid.UUID
+	Name                   string
+	NameNormalized         string
+	NationalIDCipher       []byte
+	NationalIDHMAC         []byte
+	NationalIDMasked       string
+	Email                  *string
+	Region                 string
+	Status                 string
+	LicenseClass           *string
+	LicenseExpiryDate      *time.Time
+	Gender                 *string
+	BirthDate              *time.Time
+	HasProfessionalLicense bool
+	EmploymentDate         *time.Time
+	HasTransferCert        bool
+	InspectionDate         *time.Time
+	Remarks                *string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 func (r driverRow) toApp() app.Driver {
 	return app.Driver{
-		ID:                r.ID,
-		Name:              r.Name,
-		NameNormalized:    r.NameNormalized,
-		NationalIDCipher:  r.NationalIDCipher,
-		NationalIDHMAC:    r.NationalIDHMAC,
-		NationalIDMasked:  r.NationalIDMasked,
-		Email:             r.Email,
-		Region:            r.Region,
-		Status:            r.Status,
-		LicenseClass:      r.LicenseClass,
-		LicenseExpiryDate: r.LicenseExpiryDate,
-		CreatedAt:         r.CreatedAt,
-		UpdatedAt:         r.UpdatedAt,
+		ID:                     r.ID,
+		Name:                   r.Name,
+		NameNormalized:         r.NameNormalized,
+		NationalIDCipher:       r.NationalIDCipher,
+		NationalIDHMAC:         r.NationalIDHMAC,
+		NationalIDMasked:       r.NationalIDMasked,
+		Email:                  r.Email,
+		Region:                 r.Region,
+		Status:                 r.Status,
+		LicenseClass:           r.LicenseClass,
+		LicenseExpiryDate:      r.LicenseExpiryDate,
+		Gender:                 r.Gender,
+		BirthDate:              r.BirthDate,
+		HasProfessionalLicense: r.HasProfessionalLicense,
+		EmploymentDate:         r.EmploymentDate,
+		HasTransferCert:        r.HasTransferCert,
+		InspectionDate:         r.InspectionDate,
+		Remarks:                r.Remarks,
+		CreatedAt:              r.CreatedAt,
+		UpdatedAt:              r.UpdatedAt,
 	}
 }
 
 func (r *driverRow) scanTargets() []interface{} {
 	return []interface{}{
 		&r.ID, &r.Name, &r.NameNormalized, &r.NationalIDCipher, &r.NationalIDHMAC, &r.NationalIDMasked,
-		&r.Email, &r.Region, &r.Status, &r.LicenseClass, &r.LicenseExpiryDate, &r.CreatedAt, &r.UpdatedAt,
+		&r.Email, &r.Region, &r.Status, &r.LicenseClass, &r.LicenseExpiryDate,
+		&r.Gender, &r.BirthDate, &r.HasProfessionalLicense, &r.EmploymentDate, &r.HasTransferCert, &r.InspectionDate, &r.Remarks,
+		&r.CreatedAt, &r.UpdatedAt,
 	}
 }
 
 const driverColumns = `id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-	       email, region, status, license_class, license_expiry_date, created_at, updated_at`
+	       email, COALESCE(region, ''), status, license_class, license_expiry_date,
+	       gender, birth_date, has_professional_license, employment_date, has_transfer_cert, inspection_date, remarks,
+	       created_at, updated_at`
 
 const driverColumnsWithAlias = `d.id, d.name, d.name_normalized, d.national_id_cipher, d.national_id_hmac,
-	       d.national_id_masked, d.email, d.region, d.status, d.license_class, d.license_expiry_date,
+	       d.national_id_masked, d.email, COALESCE(d.region, ''), d.status, d.license_class, d.license_expiry_date,
+	       d.gender, d.birth_date, d.has_professional_license, d.employment_date, d.has_transfer_cert, d.inspection_date, d.remarks,
 	       d.created_at, d.updated_at`
 
 // DriverRepository 提供 drivers 與 driver_assignments 資料表之存取操作。
@@ -198,8 +217,9 @@ func (r *DriverRepository) Create(ctx context.Context, d *app.Driver) error {
 	query := `
 		INSERT INTO drivers (
 			id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-			email, region, status, license_class, license_expiry_date
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			email, region, status, license_class, license_expiry_date,
+			gender, birth_date, has_professional_license, employment_date, has_transfer_cert, inspection_date, remarks
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		RETURNING created_at, updated_at
 	`
 	if d.ID == uuid.Nil {
@@ -208,6 +228,7 @@ func (r *DriverRepository) Create(ctx context.Context, d *app.Driver) error {
 	return r.db.QueryRow(ctx, query,
 		d.ID, d.Name, d.NameNormalized, d.NationalIDCipher, d.NationalIDHMAC, d.NationalIDMasked,
 		d.Email, d.Region, d.Status, d.LicenseClass, d.LicenseExpiryDate,
+		d.Gender, d.BirthDate, d.HasProfessionalLicense, d.EmploymentDate, d.HasTransferCert, d.InspectionDate, d.Remarks,
 	).Scan(&d.CreatedAt, &d.UpdatedAt)
 }
 
@@ -216,12 +237,16 @@ func (r *DriverRepository) Update(ctx context.Context, d *app.Driver) error {
 	query := `
 		UPDATE drivers
 		SET name = $2, name_normalized = $3, email = $4, region = $5, status = $6,
-		    license_class = $7, license_expiry_date = $8, updated_at = now()
+		    license_class = $7, license_expiry_date = $8,
+		    gender = $9, birth_date = $10, has_professional_license = $11, employment_date = $12,
+		    has_transfer_cert = $13, inspection_date = $14, remarks = $15,
+		    updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING updated_at
 	`
 	return r.db.QueryRow(ctx, query, d.ID, d.Name, d.NameNormalized, d.Email, d.Region, d.Status,
-		d.LicenseClass, d.LicenseExpiryDate).
+		d.LicenseClass, d.LicenseExpiryDate,
+		d.Gender, d.BirthDate, d.HasProfessionalLicense, d.EmploymentDate, d.HasTransferCert, d.InspectionDate, d.Remarks).
 		Scan(&d.UpdatedAt)
 }
 

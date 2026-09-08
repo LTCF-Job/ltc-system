@@ -206,11 +206,11 @@
       <el-form label-width="90px">
         <el-form-item label="單位名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
         <el-form-item label="區域">
-          <el-select v-model="quickCreateSiteForm.region" style="width: 100%">
+          <el-select v-model="quickCreateSiteForm.region" clearable placeholder="請選擇區域（選填）" style="width: 100%">
             <el-option v-for="(label, key) in REGION_LABELS" :key="key" :value="key" :label="label" />
           </el-select>
         </el-form-item>
-        <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
+        <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" placeholder="選填" clearable /></el-form-item>
       </el-form>
       <template #footer>
         <DialogFooter
@@ -602,13 +602,13 @@ async function handleLinkSite(row: CaregiverDTO, siteId: string) {
 const quickCreateSiteVisible = ref(false)
 const quickCreateSiteSaving = ref(false)
 const quickCreateTarget = ref<CaregiverDTO | null>(null)
-const quickCreateSiteForm = reactive({ name: '', region: 'miaoli' as Region, address: '', openDays: [1, 2, 3, 4, 5] })
+const quickCreateSiteForm = reactive({ name: '', region: '' as Region | '', address: '', openDays: [1, 2, 3, 4, 5] })
 
 // 單位名稱預先帶入匯入時的原始名稱，使用者只需確認區域與地址即可送出，不必重打一次名稱
 function openQuickCreateSite(row: CaregiverDTO) {
   quickCreateTarget.value = row
   quickCreateSiteForm.name = row.siteNameRaw || ''
-  quickCreateSiteForm.region = 'miaoli'
+  quickCreateSiteForm.region = ''
   quickCreateSiteForm.address = ''
   quickCreateSiteVisible.value = true
 }

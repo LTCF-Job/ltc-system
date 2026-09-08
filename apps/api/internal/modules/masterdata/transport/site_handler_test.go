@@ -175,8 +175,8 @@ func TestSiteHandler_Create_MissingRequiredFields_ReturnsValidationDetails(t *te
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	// 故意缺少 name 與 region
-	body := `{"address":"竹北市光明六路1號"}`
+	// 故意缺少必填的 name（address 與 region 已改為選填）
+	body := `{"openDays":[1,2,3]}`
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/sites", strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
@@ -203,5 +203,24 @@ func TestSiteHandler_Create_MissingRequiredFields_ReturnsValidationDetails(t *te
 		fieldMap[d.Field] = d.Reason
 	}
 	assert.Contains(t, fieldMap, "name", "必須指名 name 欄位錯誤")
-	assert.Contains(t, fieldMap, "region", "必須指名 region 欄位錯誤")
+}
+
+func TestSiteHandler_Create_WithoutAddressAndRegion_Succeeds(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &fakeSiteStore{}
+	h := newTestSiteHandler(store)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	body := `{"name":"無地址單位"}`
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/sites", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	h.Create(c)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	require.NotNil(t, store.created)
+	assert.Equal(t, "無地址單位", store.created.Name)
+	assert.Equal(t, "", store.created.Address)
+	assert.Equal(t, "", store.created.Region)
 }

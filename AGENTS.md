@@ -1,34 +1,36 @@
 # ltc-system agent instructions
 
-## Source of truth
+## Source of truth 與三層架構
 
-本文件是專案層級的 agent 入口。具體架構規則放在 `.agents/skills/`，修改規則時以該目錄的 skill 為唯一來源；本文件只負責說明何時讀取它們。
+專案規則由 **常駐守則 (`.agents/rules/`)**、**業務與技術規格 (`docs/tech/`)** 與 **按需技能 (`.agents/skills/`)** 三層構成。**Agent 在每次修改對應功能前，必須同時讀取專案專項 Skill 與對應的技術／業務規範文件（docs/tech/）**。嚴禁在未讀取相關規範與文件前盲目變更程式碼。
+
+1. **常駐守則 (`.agents/rules/`)**：Agent 每次開工必自動載入遵守（`testing-rules.md`、`development-rules.md`、`code-style-rules.md`）。
+2. **系統規格 (`docs/tech/`)**：系統業務與工程單一真理（`system-logic-specification.md`、`backend-business-rules.md`、`api-design-specification.md`、`mutation-audit-specification.md`、`integration-contract.md`）。
+3. **按需技能 (`.agents/skills/`)**：特定任務實作 SOP（Excel 驗證、單元測試編寫、無障礙檢查、架構診斷、Supabase 排查等）。
 
 每次開始工作時，先確認目前分支、工作樹狀態與實際專案結構。保留使用者既有修改，將目前程式碼與文件視為現況證據；規劃文件只代表目標，不取代原始碼證據。
 
-## Skill routing
+## Skill and document routing
 
-先依任務讀取對應的完整 `SKILL.md`：
+開始修改任何功能前，依變更範圍同時讀取對應的專項 Skill 與相關技術／業務規範文件：
 
-- 所有開發、修正、重構或測試工作：先讀 `.agents/skills/development-guidelines/SKILL.md`，再依實際範圍讀專項規範。
-- API endpoint、route、DTO、request／response、API client、query parameter 或 error mapping：讀 `.agents/skills/api-contract-guidelines/SKILL.md`。
-- 資料寫入、transaction、刪除、稽核、stale protection 或併發處理：讀 `.agents/skills/mutation-guidelines/SKILL.md`。
-- JWT、登入、actor、角色、權限矩陣、權限 cache 或使用者管理：讀 `.agents/skills/auth-permission-guidelines/SKILL.md`。
-- migration、schema、index、constraint、seed 或資料庫版本：讀 `.agents/skills/migration-guidelines/SKILL.md`。
-- CI/CD、Docker、Vercel、Cloud Run、環境變數、secret 或部署檢查：讀 `.agents/skills/deployment-guidelines/SKILL.md`。
-- 業務日期、民國日期、時區、排班、搭乘、假日、狀態、合併或 UUID array filter：讀 `.agents/skills/domain-data-guidelines/SKILL.md`。
-- 後端架構、Go 分層、use case、repository、SQL 或 adapter：讀 `.agents/skills/backend-architecture/SKILL.md`。
-- Go backend 程式碼風格、錯誤處理、pgx、transaction、API response 或 dependency wiring：讀 `.agents/skills/go-backend-code-style/SKILL.md`。
-- Go unit test、table-driven test、domain rule、parser 或 service test：讀 `.agents/skills/golang-unit-testing/SKILL.md`。
-- 前端架構、Vue 3、頁面拆分、composable、Pinia、API client 或 TypeScript contract：讀 `.agents/skills/frontend-architecture/SKILL.md`。
-- 後台 UI 資訊架構、CRUD 工作台、表格、篩選、批次操作、審核流程或稽核頁面：讀 `.agents/skills/admin-ui-design/SKILL.md`。
-- LTC dashboard 視覺語言、後台 Dashboard、KPI 卡片、Sidebar、alerts、charts 或資料面板 UI：讀 `.agents/skills/ltc-dashboard-visual-language/SKILL.md`。
-- 前端 accessibility、鍵盤操作、focus、ARIA、表單錯誤、dialog／drawer、表格或圖表語意：讀 `.agents/skills/accessibility/SKILL.md`。
-- demo、seed、fixture 或 offline mode：讀 `.agents/skills/mock-and-demo-boundaries/SKILL.md`。
-- 架構盤點、跨層依賴、模組過大、契約漂移或重構建議：讀 `.agents/skills/architecture-review/SKILL.md`。
-- Excel 匯入、範本下載或匯出功能（本專案僅支援 .xlsx，不支援 CSV）：讀 `.agents/skills/excel-import-export-integrity/SKILL.md`。
+- **所有開發、修正、重構或測試工作**：先讀 `.agents/skills/development-guidelines/SKILL.md`，並必讀 `docs/tech/system-logic-specification.md`（系統核心業務邏輯手冊：包含主檔 CRUD、啟用停用、匯出前置檢核非阻擋、匯入檢核、待維護全站隔離、錯誤代碼與 E2E 測試規範）。
+- **API endpoint、route、DTO、request／response、API client、query parameter 或 error mapping**：讀 `docs/tech/api-design-specification.md`、`docs/tech/integration-contract.md` 與 `docs/tech/backend-api-reference.md`。
+- **資料寫入、transaction、刪除、稽核、stale protection 或併發處理**：讀 `docs/tech/mutation-audit-specification.md`、`docs/tech/system-logic-specification.md`（主檔 CRUD 與狀態管理）與 `docs/decisions/mutation-audit-policy.md`。
+- **JWT、登入、actor、角色、權限矩陣、權限 cache 或使用者管理**：讀 `.agents/skills/auth-permission-guidelines/SKILL.md`，並參閱 `docs/tech/frontend-permission-logic.md`、`docs/decisions/role-permission-api-authorization.md`。
+- **migration、schema、index、constraint、seed 或資料庫版本**：讀 `.agents/skills/migration-guidelines/SKILL.md`、`.agents/skills/supabase-postgres-best-practices/SKILL.md`，並參閱 `docs/tech/maintainer-runbook.md`。
+- **業務日期、民國日期、時區、排班、搭乘、假日、狀態、合併或待維護隔離**：讀 `docs/tech/backend-business-rules.md`、`docs/decisions/pending-data-visibility.md`、`docs/tech/system-logic-specification.md`（待維護全站隔離）。
+- **後端架構、Go 分層、use case、repository、SQL、演算法或流程**：讀 `.agents/skills/backend-architecture/SKILL.md` 與 `.agents/skills/go-backend-code-style/SKILL.md`，並參閱 `docs/tech/backend-flows.md`、`docs/tech/backend-framework.md`。
+- **Go unit test、table-driven test、domain rule、parser 或 service test**：讀 `.agents/skills/golang-unit-testing/SKILL.md`，並參閱 `docs/tech/backend-business-rules.md`。
+- **前端架構、Vue 3、頁面拆分、composable、Pinia、API client 或 TypeScript contract**：讀 `.agents/skills/frontend-architecture/SKILL.md`，並參閱 `docs/tech/frontend-flows.md`、`docs/tech/frontend-pages.md`、`docs/tech/frontend-framework.md`。
+- **後台 UI 資訊架構、CRUD 工作台、表格、篩選、批次操作、審核流程或稽核頁面**：讀 `.agents/skills/admin-ui-design/SKILL.md`、`.agents/skills/ltc-dashboard-visual-language/SKILL.md`，並遵守 `docs/tech/system-logic-specification.md`（主檔 CRUD、錯誤代碼友善呈現）。
+- **前端 accessibility、鍵盤操作、focus、ARIA、表單錯誤、dialog／drawer、表格或圖表語意**：讀 `.agents/skills/accessibility/SKILL.md`。
+- **demo、seed、fixture 或 offline mode**：讀 `.agents/skills/mock-and-demo-boundaries/SKILL.md`。
+- **架構盤點、跨層依賴、模組過大、契約漂移或重構建議**：讀 `.agents/skills/architecture-review/SKILL.md`。
+- **Excel 匯入、範本下載或匯出功能（本專案僅支援 .xlsx，不支援 CSV）**：讀 `.agents/skills/excel-import-export-integrity/SKILL.md`，並嚴格遵守 `docs/tech/system-logic-specification.md`（準則二、三：匯出前置檢核、缺漏標示、非阻擋原則、匯入比照辦理）。
+- **前端 E2E 測試編寫與流程驗證**：參閱 `docs/tech/system-logic-specification.md`（準則七：模擬真實操作情境、四大流程覆蓋）與 `docs/flows/e2e-local-backend-migration.md`。
 
-若同一任務跨越多個範圍，依「審查 → 後端／前端 → mock 邊界」順序讀取；只讀與當前任務有關的 skill。新增或修改 agent 文件時，遵守 `.agents/skills` 既有 skill 的 progressive disclosure、single source of truth 與最小必要內容原則。
+若同一任務跨越多個範圍，依「審查 → 後端／前端 → mock 邊界」順序讀取；只讀與當前任務有關的 skill 與文件。新增或修改 agent 文件時，遵守 `.agents/skills` 既有 skill 的 progressive disclosure、single source of truth 與最小必要內容原則。
 
 ## Architecture direction
 

@@ -5,6 +5,8 @@ description: Use when changing an API endpoint, route, DTO, request or response 
 
 # API contract guidelines
 
+> 權威規格依據：請優先參閱 [docs/tech/api-design-specification.md](../../../docs/tech/api-design-specification.md) 與 [docs/tech/integration-contract.md](../../../docs/tech/integration-contract.md)。
+
 ## 契約定義
 
 - 每個公開入口先列出 method、URL、path parameter、query、request body、response envelope、錯誤狀態與 mock 對應。
