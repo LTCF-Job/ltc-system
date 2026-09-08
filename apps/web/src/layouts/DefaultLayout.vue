@@ -194,19 +194,21 @@
       <!-- 頂部導覽列 -->
       <el-header class="layout-header">
         <div class="header-left">
-          <el-button
-            link
-            class="toggle-btn"
-            :aria-label="isNavigationOpen ? '收合側邊導覽' : '展開側邊導覽'"
-            :aria-expanded="isNavigationOpen"
-            aria-controls="primary-navigation"
-            @click="toggleNavigation"
-          >
-            <el-icon :size="18">
-              <Fold v-if="isNavigationOpen" />
-              <Expand v-else />
-            </el-icon>
-          </el-button>
+          <el-tooltip :content="isNavigationOpen ? '收合側邊導覽' : '展開側邊導覽'" placement="bottom">
+            <el-button
+              link
+              class="toggle-btn"
+              :class="{ 'is-collapsed': !isNavigationOpen }"
+              :aria-label="isNavigationOpen ? '收合側邊導覽' : '展開側邊導覽'"
+              :aria-expanded="isNavigationOpen"
+              aria-controls="primary-navigation"
+              @click="toggleNavigation"
+            >
+              <el-icon :size="18">
+                <Fold />
+              </el-icon>
+            </el-button>
+          </el-tooltip>
           <el-breadcrumb separator="/">
             <el-breadcrumb-item :to="{ path: '/' }">首頁</el-breadcrumb-item>
             <el-breadcrumb-item v-if="currentRouteTitle">
@@ -287,7 +289,6 @@ import {
   Warning,
   Download,
   Fold,
-  Expand,
   ArrowDown,
   Bell,
   DataAnalysis,
@@ -510,8 +511,24 @@ async function handleCommand(cmd: string) {
       }
     }
 
-    /* 箭頭的 width: inherit 會吃到 title 的 width: 100%，撐成整列寬後被置中畫在文字上，直接不顯示 */
-    :deep(.el-sub-menu__icon-arrow) {
+    /* 箭頭的 width: inherit 會吃到 title 的 width: 100%，撐成整列寬後被置中畫在文字上，需固定尺寸並脫離文字流 */
+    :deep(.el-sub-menu__title .el-sub-menu__icon-arrow) {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      width: 12px;
+      height: 12px;
+      margin: -6px 0 0;
+      font-size: 12px;
+      color: var(--app-nav-fg-muted);
+      transition: transform 0.25s ease;
+    }
+
+    :deep(.el-sub-menu.is-opened > .el-sub-menu__title .el-sub-menu__icon-arrow) {
+      transform: rotate(180deg);
+    }
+
+    &.el-menu--collapse :deep(.el-sub-menu__icon-arrow) {
       display: none;
     }
 
@@ -579,6 +596,15 @@ async function handleCommand(cmd: string) {
       &:hover {
         background-color: var(--app-status-neutral-bg);
         color: var(--app-text-primary);
+      }
+
+      .el-icon {
+        transition: transform 0.25s ease;
+      }
+
+      /* 收合狀態下把同一個圖示轉向，讓展開／收合是同一個方向可逆的動作 */
+      &.is-collapsed .el-icon {
+        transform: rotate(180deg);
       }
     }
   }
@@ -716,7 +742,9 @@ async function handleCommand(cmd: string) {
 
 @media (prefers-reduced-motion: reduce) {
   .aside-menu, .el-menu-vertical :deep(.el-menu-item), .el-menu-vertical :deep(.el-sub-menu__title),
-  .user-dropdown-link, .page-enter-active, .page-leave-active, .skip-link { transition: none !important; }
+  .user-dropdown-link, .page-enter-active, .page-leave-active, .skip-link,
+  .toggle-btn .el-icon,
+  .el-menu-vertical :deep(.el-sub-menu__icon-arrow) { transition: none !important; }
   .el-menu-item.is-active::before { animation: none !important; }
 }
 </style>
