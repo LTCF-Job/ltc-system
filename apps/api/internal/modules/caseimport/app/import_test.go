@@ -54,9 +54,39 @@ func TestParseCases_TemplateExcel(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, preview)
 
-	assert.Equal(t, 2, preview.TotalRows)
-	assert.Equal(t, 2, preview.ValidRows)
+	// 範本自帶的示範列以「例：」前綴標記，原封不動上傳不得產生任何可匯入的個案。
+	assert.Equal(t, 0, preview.TotalRows)
+	assert.Equal(t, 0, preview.ValidRows)
 	assert.Equal(t, 0, preview.ErrorRows)
+}
+
+// 姓名空白但同列其他欄位有值，代表使用者漏填，必須列成錯誤列而不是靜默丟棄。
+func TestParseCases_BlankNameRowBecomesError(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	sheet := f.GetSheetName(0)
+	headers := []string{"姓名*", "戶別", "身分證字號", "性別", "生日", "單位", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名(個管/照專)", "戶籍", "居住地", "備註"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		require.NoError(t, f.SetCellValue(sheet, cell, h))
+	}
+	require.NoError(t, f.SetCellValue(sheet, "A2", "王大明"))
+	require.NoError(t, f.SetCellValue(sheet, "B3", "一般戶"))
+	require.NoError(t, f.SetCellValue(sheet, "M3", "姓名漏填"))
+
+	buf, err := f.WriteToBuffer()
+	require.NoError(t, err)
+
+	svc := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "blank-name.xlsx")
+	require.NoError(t, err)
+	require.NotNil(t, preview)
+
+	assert.Equal(t, 2, preview.TotalRows)
+	assert.Equal(t, 1, preview.ErrorRows)
+	require.Len(t, preview.Errors, 1)
+	assert.Equal(t, 3, preview.Errors[0].RowIndex)
+	assert.Contains(t, preview.Errors[0].Message, "姓名未填寫")
 }
 
 // TestParseCases_ProfileWorkbook 驗證表頭「姓名」出現兩次時，第一個對應個案姓名，

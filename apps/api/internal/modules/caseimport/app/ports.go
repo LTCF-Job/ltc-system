@@ -103,6 +103,8 @@ type TxRunner interface {
 // 實作必須在目前列的 transaction 內以唯一鍵 claim，避免併發匯入穿透。
 type CaseImportIdempotencyStore interface {
 	ClaimCaseImportRow(ctx context.Context, fileHash, rowKey string, caseID uuid.UUID) (bool, error)
+	// 唯讀查詢，供重複判斷之前先短路掉已建立的列；claim 仍負責併發保護。
+	IsCaseImportRowCommitted(ctx context.Context, fileHash, rowKey string) (bool, error)
 }
 
 // StageDuplicateCandidate 是疑似重複個案暫存所需的完整列輸入。

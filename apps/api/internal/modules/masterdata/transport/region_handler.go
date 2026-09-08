@@ -168,6 +168,10 @@ func (h *RegionHandler) Delete(c *gin.Context) {
 			respondNotFound(c, "查無此區域")
 			return
 		}
+		if errors.Is(err, app.ErrRegionInUse) {
+			httpx.RespondError(c, http.StatusConflict, httpx.CodeResourceInUse, "此地區仍被單位、司機、個案或申報紀錄使用，請先改到其他地區再刪除", nil)
+			return
+		}
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "刪除區域失敗", nil)
 		return
 	}

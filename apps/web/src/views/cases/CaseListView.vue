@@ -31,10 +31,10 @@
         >
           <el-option label="全部區域" value="" />
           <el-option
-            v-for="(label, key) in REGION_LABELS"
-            :key="key"
-            :label="label"
-            :value="key"
+            v-for="opt in regionOptions"
+            :key="opt.code"
+            :label="opt.name"
+            :value="opt.code"
           />
         </el-select>
 
@@ -98,24 +98,24 @@
               >
                 <span class="cursor-pointer">
                   <span class="inline-value inline-value-clickable">
-                    {{ REGION_LABELS[row.region as Region] || row.region }}
+                    {{ regionLabel(row.region) }}
                     <el-icon class="el-icon--right"><ArrowDown /></el-icon>
                   </span>
                 </span>
                 <template #dropdown>
                   <el-dropdown-menu style="max-height: 240px; overflow-y: auto;">
                     <el-dropdown-item
-                      v-for="(label, key) in REGION_LABELS"
-                      :key="key"
-                      :command="key"
+                      v-for="opt in regionOptions"
+                      :key="opt.code"
+                      :command="opt.code"
                     >
-                      <span>{{ label }}</span>
+                      <span>{{ opt.name }}</span>
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
               <span v-else class="inline-value">
-                {{ REGION_LABELS[row.region as Region] || row.region }}
+                {{ regionLabel(row.region) }}
               </span>
             </template>
           </el-table-column>
@@ -338,7 +338,7 @@
         <el-form-item label="單位名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
         <el-form-item label="區域">
           <el-select v-model="quickCreateSiteForm.region" style="width: 100%">
-            <el-option v-for="(label, key) in REGION_LABELS" :key="key" :value="key" :label="label" />
+            <el-option v-for="opt in regionOptions" :key="opt.code" :value="opt.code" :label="opt.name" />
           </el-select>
         </el-form-item>
         <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
@@ -464,6 +464,14 @@ import type {
   VehicleDTO
 } from '@/types/api'
 
+import { fetchRegionOptions, regionLabel, type RegionOption } from '@/api/regionOptions'
+
+// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
+const regionOptions = ref<RegionOption[]>([])
+onMounted(async () => {
+  regionOptions.value = await fetchRegionOptions()
+})
+
 // 匯入預覽的生日僅供人工核對，改用民國年顯示；後端仍以西元 ISO 日期解析與儲存
 function formatRocBirthDate(birthDate?: string): string {
   if (!birthDate) return ''
@@ -515,7 +523,7 @@ async function handleQuickUpdateRegion(row: CaseDTO, newRegion: Region) {
   try {
     await updateCase(row.id, { region: newRegion })
     row.region = newRegion
-    ElMessage.success(`已將個案「${row.name}」申報區域修改為 ${REGION_LABELS[newRegion]}`)
+    ElMessage.success(`已將個案「${row.name}」申報區域修改為 ${regionLabel(newRegion)}`)
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
   }
@@ -899,7 +907,7 @@ const quickCreateKind = ref<'site' | 'vehicle'>('site')
 const quickCreateSaving = ref(false)
 const quickCreateTargetCase = ref<CaseDTO | null>(null)
 const quickCreateSlot = ref<UnresolvedSlot>('site')
-const quickCreateSiteForm = reactive({ name: '', region: 'miaoli' as Region, address: '', openDays: [1, 2, 3, 4, 5] })
+const quickCreateSiteForm = reactive({ name: '', region: '' as Region, address: '', openDays: [1, 2, 3, 4, 5] })
 const quickCreateVehicleForm = reactive<CreateVehicleRequest>(emptyVehicleForm())
 const quickCreateVehicleFormRef = ref<FormInstance>()
 
@@ -909,7 +917,7 @@ function openQuickCreate(kind: 'site' | 'vehicle', row: CaseDTO, slot: Unresolve
   quickCreateTargetCase.value = row
   quickCreateSlot.value = kind === 'site' ? 'site' : slot
   quickCreateSiteForm.name = kind === 'site' ? row.siteNameRaw || '' : ''
-  quickCreateSiteForm.region = 'miaoli'
+  quickCreateSiteForm.region = ''
   quickCreateSiteForm.address = ''
   Object.assign(quickCreateVehicleForm, emptyVehicleForm(), {
     displayName: kind === 'vehicle' ? row[SLOT_RAW_FIELD[slot]] || '' : ''

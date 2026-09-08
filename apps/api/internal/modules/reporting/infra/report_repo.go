@@ -31,7 +31,7 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 		SELECT v.id, v.plate_no, v.display_name, COALESCE(s.region, '')
 		FROM vehicles v
 		LEFT JOIN sites s ON s.id = v.site_id
-		WHERE 1=1
+		WHERE v.deleted_at IS NULL
 	`
 	var args []interface{}
 	argIdx := 1
@@ -138,7 +138,7 @@ func (r *ReportRepository) QueryHsinchuScheduleDataAsOf(ctx context.Context, asO
 		JOIN case_schedules cs ON cs.id = l.schedule_id
 		JOIN cases c ON c.id = cs.case_id
 		JOIN sites s ON s.id = cs.site_id
-		LEFT JOIN vehicles v ON v.id = l.vehicle_id
+		LEFT JOIN vehicles v ON v.id = l.vehicle_id AND v.deleted_at IS NULL
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.region = 'hsinchu'
 		  AND c.status = 'active'

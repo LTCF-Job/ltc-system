@@ -97,9 +97,10 @@ func (r ExcelAdapter) RenderCaregiverImportTemplate() ([]byte, error) {
 	lastCol, _ := excelize.CoordinatesToCellName(len(headers), 1)
 	_ = f.SetCellStyle(sheetName, "A1", lastCol, headerStyle)
 
+	// 姓名的「例：」前綴是解析時略過示範列的依據，拿掉會讓未修改的範本被當成真實資料匯入。
 	sampleRows := [][]interface{}{
-		{"個管", "竹北日照中心", "陳小華", "0912-345-678", "熟悉輪椅移位協助"},
-		{"照專", "竹南日照單位", "王大明", "0987-654-321", ""},
+		{"個管", "竹北日照中心", "例：陳小華", "0912-345-678", "熟悉輪椅移位協助"},
+		{"照專", "竹南日照單位", "例：王大明", "0987-654-321", ""},
 	}
 	for rIdx, rData := range sampleRows {
 		rowNum := rIdx + 2

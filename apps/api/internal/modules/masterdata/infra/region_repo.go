@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
 )
@@ -15,6 +16,7 @@ import (
 // regionRow 是 regions 資料表的一列。
 type regionRow struct {
 	ID          uuid.UUID
+	Code        string
 	Name        string
 	Description string
 	Status      string
@@ -26,6 +28,7 @@ type regionRow struct {
 func (r regionRow) toApp() app.Region {
 	return app.Region{
 		ID:          r.ID,
+		Code:        r.Code,
 		Name:        r.Name,
 		Description: r.Description,
 		Status:      r.Status,
@@ -36,10 +39,10 @@ func (r regionRow) toApp() app.Region {
 }
 
 func (r *regionRow) scanTargets() []interface{} {
-	return []interface{}{&r.ID, &r.Name, &r.Description, &r.Status, &r.SortOrder, &r.CreatedAt, &r.UpdatedAt}
+	return []interface{}{&r.ID, &r.Code, &r.Name, &r.Description, &r.Status, &r.SortOrder, &r.CreatedAt, &r.UpdatedAt}
 }
 
-const regionColumns = `id, name, description, status, sort_order, created_at, updated_at`
+const regionColumns = `id, code, name, description, status, sort_order, created_at, updated_at`
 
 // RegionRepository 提供 regions 資料表之存取操作。
 type RegionRepository struct {
@@ -152,15 +155,20 @@ func (r *RegionRepository) Create(ctx context.Context, reg *app.Region) error {
 		return fmt.Errorf("database not connected")
 	}
 	query := `
-		INSERT INTO regions (id, name, description, status, sort_order)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO regions (id, code, name, description, status, sort_order)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING created_at, updated_at
 	`
 	if reg.ID == uuid.Nil {
 		reg.ID = uuid.New()
 	}
-	return r.db.QueryRow(ctx, query, reg.ID, reg.Name, reg.Description, reg.Status, reg.SortOrder).
+	err := r.db.QueryRow(ctx, query, reg.ID, reg.Code, reg.Name, reg.Description, reg.Status, reg.SortOrder).
 		Scan(&reg.CreatedAt, &reg.UpdatedAt)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return app.ErrDuplicateRegionName
+	}
+	return err
 }
 
 // Update 修改區域。
@@ -184,5 +192,10 @@ func (r *RegionRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("database not connected")
 	}
 	_, err := r.db.Exec(ctx, `DELETE FROM regions WHERE id = $1`, id)
+	var pgErr *pgconn.PgError
+	// 業務資料表的 region 外鍵參照 regions(code)，仍被引用時交由呼叫端回可讀訊息。
+	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+		return app.ErrRegionInUse
+	}
 	return err
 }

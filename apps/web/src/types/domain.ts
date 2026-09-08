@@ -20,7 +20,7 @@ export interface RoleItem {
   tagType: RoleTagType
   isSystem: boolean
   permissions: SystemPermissions
-  userCount?: number
+  userCount?: number | null
   createdAt?: string
   updatedAt?: string
 }

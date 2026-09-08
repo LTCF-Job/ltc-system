@@ -55,6 +55,22 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			continue
 		}
 
+		// 重傳同一份檔案時，先前建立的個案會在 re-parse 被自己判成疑似重複；
+		// 冪等鍵必須比重複分支先判，否則那些列會變成假的待裁決項目。
+		if s.idempotency != nil && preview.FileHash != "" {
+			committed, err := s.idempotency.IsCaseImportRowCommitted(ctx, preview.FileHash, importRowKey(row.RowID, row.RowIndex))
+			if err != nil {
+				slog.Error("case import idempotency lookup failed", "row_index", row.RowIndex, "error", err)
+				recordFailed(caseImportFailureRow(row, "匯入紀錄查詢失敗，請稍後重試"))
+				continue
+			}
+			if committed {
+				result.AlreadyImportedCount++
+				recordSkipped(caseImportFailureRow(row, "此檔案的此列已完成匯入，略過重試"))
+				continue
+			}
+		}
+
 		// 單位／去回程車輛各自獨立比對：比對到則寫入 ID，比對不到但有填名稱則保留
 		// 原始名稱待人工關聯，兩種情況都不影響個案主檔本身的建立。
 		siteID, siteNameRaw, siteWarning, err := s.resolveSite(ctx, row.SiteName)

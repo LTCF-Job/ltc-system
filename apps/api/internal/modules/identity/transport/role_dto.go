@@ -15,9 +15,10 @@ type roleResponse struct {
 	TagType     string                         `json:"tagType"`
 	IsSystem    bool                           `json:"isSystem"`
 	Permissions map[string]modulePermissionDTO `json:"permissions"`
-	UserCount   int                            `json:"userCount"`
-	CreatedAt   string                         `json:"createdAt"`
-	UpdatedAt   string                         `json:"updatedAt"`
+	// null 代表使用者來源不可用、人數未知；不加 omitempty 才能把 null 顯式送給前端。
+	UserCount *int   `json:"userCount"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
 }
 
 func toRoleResponse(r app.Role) roleResponse {

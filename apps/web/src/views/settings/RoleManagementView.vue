@@ -59,7 +59,7 @@
             </div>
 
             <div class="role-row-meta">
-              <span class="role-row-meta-item">{{ role.userCount || 0 }} 位使用者</span>
+              <span class="role-row-meta-item">{{ role.userCount == null ? '使用者數未知' : `${role.userCount} 位使用者` }}</span>
               <span class="role-row-meta-sep">·</span>
               <span class="role-row-meta-item">
                 {{ countRolePerms(role.permissions).views }} 檢視 / {{ countRolePerms(role.permissions).edits }} 編輯
@@ -538,9 +538,12 @@ async function handleDeleteRole(role: RoleDTO) {
     return
   }
 
-  if ((role.userCount || 0) > 0) {
+  // null 代表人數未知（使用者來源不可用），不在前端放行，交由後端擋下。
+  if (role.userCount == null || role.userCount > 0) {
     ElMessageBox.alert(
-      `目前尚有 ${role.userCount} 位使用者正在使用「${role.name}」角色。請先前往「使用者管理」將這些使用者調派至其他角色後，方可刪除此角色。`,
+      role.userCount == null
+        ? `目前無法取得「${role.name}」角色的使用者數，為避免誤刪仍在使用中的角色，請稍後再試。`
+        : `目前尚有 ${role.userCount} 位使用者正在使用「${role.name}」角色。請先前往「使用者管理」將這些使用者調派至其他角色後，方可刪除此角色。`,
       '無法刪除角色',
       {
         type: 'warning',

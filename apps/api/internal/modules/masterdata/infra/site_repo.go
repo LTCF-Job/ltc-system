@@ -122,7 +122,7 @@ func (r *SiteRepository) getOne(ctx context.Context, query string, arg interface
 func (r *SiteRepository) Create(ctx context.Context, s *app.Site) error {
 	query := `
 		INSERT INTO sites (id, name, address, region, open_days, status)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6)
 		RETURNING created_at, updated_at
 	`
 	if s.ID == uuid.Nil {
@@ -144,7 +144,7 @@ func (r *SiteRepository) Create(ctx context.Context, s *app.Site) error {
 func (r *SiteRepository) Update(ctx context.Context, s *app.Site) error {
 	query := `
 		UPDATE sites
-		SET name = $2, address = $3, region = $4, open_days = $5, status = $6, updated_at = now()
+		SET name = $2, address = $3, region = NULLIF($4, ''), open_days = $5, status = $6, updated_at = now()
 		WHERE id = $1
 		RETURNING updated_at
 	`

@@ -36,8 +36,8 @@ type ImportHolidayRequest struct {
 
 // List 查詢特定日期範圍之國定假日。
 func (h *HolidayHandler) List(c *gin.Context) {
-	startStr := c.DefaultQuery("startDate", time.Now().Format("2006-01-01"))
-	endStr := c.DefaultQuery("endDate", time.Now().AddDate(1, 0, 0).Format("2006-01-01"))
+	startStr := c.DefaultQuery("startDate", time.Now().Format(holidayDateLayout))
+	endStr := c.DefaultQuery("endDate", time.Now().AddDate(1, 0, 0).Format(holidayDateLayout))
 	region := c.Query("region")
 
 	start, err1 := time.Parse("2006-01-02", startStr)
@@ -53,7 +53,7 @@ func (h *HolidayHandler) List(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, holidays, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newHolidayResponses(holidays), nil)
 }
 
 // Create 新增或更新單一國定假日。
@@ -94,7 +94,7 @@ func (h *HolidayHandler) Create(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, item, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, newHolidayResponse(*item), nil)
 }
 
 // Import 匯入官方標準國定假日。

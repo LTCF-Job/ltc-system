@@ -234,6 +234,10 @@ func (f *fakeCaseImportIdempotency) ClaimCaseImportRow(_ context.Context, fileHa
 	return true, nil
 }
 
+func (f *fakeCaseImportIdempotency) IsCaseImportRowCommitted(_ context.Context, fileHash, rowKey string) (bool, error) {
+	return f.claimed[fileHash+":"+rowKey], nil
+}
+
 func TestCommitCases_LookupDatabaseErrorFailsOnlyThatRow(t *testing.T) {
 	registrar := &fakeCaseRegistrar{}
 	svc := &ImportService{
@@ -275,6 +279,40 @@ func TestCommitCases_IdempotencySkipsRepeatedFileRow(t *testing.T) {
 	assert.Equal(t, 0, second.ImportedCount)
 	assert.Equal(t, 1, second.AlreadyImportedCount)
 	assert.Len(t, second.SkippedRows, 1)
+}
+
+// 重傳同一份檔案時，先前建立的個案會在 re-parse 被自己判成疑似重複；
+// 冪等鍵必須比重複分支先判，否則會替自己剛建的個案生出假的待裁決列。
+func TestCommitCases_RepeatedFileDoesNotStageOwnCreatedCase(t *testing.T) {
+	registrar := &fakeCaseRegistrar{}
+	stager := &fakeDuplicateCandidateStager{}
+	idempotency := &fakeCaseImportIdempotency{}
+	svc := &ImportService{cases: registrar, txRunner: fakeTxRunner{}, idempotency: idempotency, duplicateStager: stager}
+
+	firstPreview := &CaseImportPreviewResult{
+		FileHash: "sha256:same-file",
+		Rows:     []CaseImportRowResult{{RowID: "個案匯入範本:2", RowIndex: 2, Name: "重傳個案"}},
+	}
+	first, err := svc.CommitCases(context.Background(), firstPreview, Actor{ActorID: uuid.New()})
+	require.NoError(t, err)
+	require.Equal(t, 1, first.ImportedCount)
+
+	// 第二次解析同一份檔案，該列已比對到剛建立的個案
+	duplicateID := uuid.New()
+	secondPreview := &CaseImportPreviewResult{
+		FileHash: "sha256:same-file",
+		Rows: []CaseImportRowResult{{
+			RowID: "個案匯入範本:2", RowIndex: 2, Name: "重傳個案",
+			IsDuplicate: true, DuplicateCaseID: &duplicateID,
+		}},
+	}
+	second, err := svc.CommitCases(context.Background(), secondPreview, Actor{ActorID: uuid.New()})
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, second.StagedDuplicateCount, "已匯入的列不得被暫存為疑似重複")
+	assert.Equal(t, 0, second.ImportedCount)
+	assert.Equal(t, 1, second.AlreadyImportedCount)
+	assert.Empty(t, stager.staged, "不得呼叫待裁決暫存")
 }
 
 func TestCommitCases_BirthDateAndNationalIDInvalid_StillCreatesCase(t *testing.T) {

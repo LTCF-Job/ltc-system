@@ -55,6 +55,10 @@ func NewRoleService(store RoleStore, userCounter UserCounter, auditRepo AuditWri
 	return &RoleService{store: store, userCounter: userCounter, auditRepo: auditRepo, txRunner: txRunner}
 }
 
+func (s *RoleService) userCountUnavailable() bool {
+	return s.userCounter == nil || !s.userCounter.Configured()
+}
+
 func (s *RoleService) countUsers(ctx context.Context, key string) (int, error) {
 	if s.userCounter == nil {
 		return 0, nil
@@ -72,6 +76,10 @@ func (s *RoleService) List(ctx context.Context) ([]Role, error) {
 }
 
 func (s *RoleService) fillUserCounts(ctx context.Context, roles []Role) ([]Role, error) {
+	// 角色本身存在本地 roles 表，使用者來源不可用時仍要列得出角色，人數留 nil 表示未知。
+	if s.userCountUnavailable() {
+		return roles, nil
+	}
 	if lister, ok := s.userCounter.(UserLister); ok {
 		users, err := lister.ListUsers(ctx)
 		if err != nil {
@@ -86,7 +94,8 @@ func (s *RoleService) fillUserCounts(ctx context.Context, roles []Role) ([]Role,
 			counts[key]++
 		}
 		for i := range roles {
-			roles[i].UserCount = counts[roles[i].Key]
+			count := counts[roles[i].Key]
+			roles[i].UserCount = &count
 		}
 		return roles, nil
 	}
@@ -95,7 +104,7 @@ func (s *RoleService) fillUserCounts(ctx context.Context, roles []Role) ([]Role,
 		if err != nil {
 			return nil, err
 		}
-		roles[i].UserCount = count
+		roles[i].UserCount = &count
 	}
 	return roles, nil
 }
@@ -109,11 +118,14 @@ func (s *RoleService) GetByID(ctx context.Context, id uuid.UUID) (*Role, error) 
 	if role == nil {
 		return nil, ErrRoleNotFound
 	}
+	if s.userCountUnavailable() {
+		return role, nil
+	}
 	count, err := s.countUsers(ctx, role.Key)
 	if err != nil {
 		return nil, err
 	}
-	role.UserCount = count
+	role.UserCount = &count
 	return role, nil
 }
 
@@ -149,12 +161,18 @@ func (s *RoleService) Create(ctx context.Context, in CreateRoleInput, actorID uu
 		baseRole = "viewer"
 	}
 
+	// 前端建立自訂角色時不會選標籤樣式，空字串會撞上 roles_tag_type_check。
+	tagType := in.TagType
+	if tagType == "" {
+		tagType = "info"
+	}
+
 	role := &Role{
 		ID:          uuid.New(),
 		Key:         key,
 		Name:        in.Name,
 		Description: in.Description,
-		TagType:     in.TagType,
+		TagType:     tagType,
 		IsSystem:    false,
 		BaseRole:    baseRole,
 		Permissions: in.Permissions,
@@ -246,6 +264,10 @@ func (s *RoleService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRo
 		return ErrSystemRoleImmutable
 	}
 
+	// 人數是刪除守衛，數不出來時必須停手；退化成 0 會讓還有人在用的角色被刪掉。
+	if s.userCountUnavailable() {
+		return ErrIdentityProviderUnconfigured
+	}
 	count, err := s.countUsers(ctx, before.Key)
 	if err != nil {
 		return err

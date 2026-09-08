@@ -137,5 +137,5 @@ func (h *AttendanceHandler) Upsert(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, item, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newAttendanceRecordResponse(*item), nil)
 }

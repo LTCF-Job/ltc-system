@@ -51,10 +51,10 @@
               <el-form-item label="申報地區" prop="region">
                 <el-select v-model="editForm.region" filterable style="width: 100%">
                   <el-option
-                    v-for="(label, key) in REGION_LABELS"
-                    :key="key"
-                    :value="key"
-                    :label="label"
+                    v-for="opt in regionOptions"
+                    :key="opt.code"
+                    :value="opt.code"
+                    :label="opt.name"
                   />
                 </el-select>
               </el-form-item>
@@ -229,7 +229,7 @@
         <ScheduleEditor
           v-if="caseData"
           :case-id="caseData.id"
-          :region="caseData.region || 'miaoli'"
+          :region="caseData.region || ''"
           :schedule="caseData.activeSchedule"
           @saved="handleScheduleSaved"
         />
@@ -252,6 +252,14 @@ import { formatDateTime } from '@/utils/formatters'
 import { REGION_LABELS } from '@/types/domain'
 import type { CaseDTO, UpdateCaseRequest, UpdateCaseTransportPreferenceRequest, SiteDTO, VehicleDTO } from '@/types/api'
 
+import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
+
+// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
+const regionOptions = ref<RegionOption[]>([])
+onMounted(async () => {
+  regionOptions.value = await fetchRegionOptions()
+})
+
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -267,7 +275,7 @@ const availableVehicles = ref<VehicleDTO[]>([])
 
 const editForm = reactive<UpdateCaseRequest>({
   name: '',
-  region: 'miaoli',
+  region: undefined,
   homeAddress: '',
   serviceCategory: undefined,
   serviceUsageType: undefined,
@@ -309,7 +317,7 @@ async function fetchDetail() {
 
     caseData.value = res
     editForm.name = res.name || ''
-    editForm.region = res.region || 'miaoli'
+    editForm.region = res.region ?? undefined
     editForm.homeAddress = res.homeAddress || ''
     editForm.serviceCategory = res.serviceCategory
     editForm.serviceUsageType = res.serviceUsageType

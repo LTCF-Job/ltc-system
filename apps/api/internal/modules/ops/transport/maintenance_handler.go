@@ -71,7 +71,7 @@ func (h *MaintenanceHandler) List(c *gin.Context) {
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
-	httpx.RespondSuccess(c, http.StatusOK, list, &httpx.PaginationMeta{
+	httpx.RespondSuccess(c, http.StatusOK, newMaintenanceLogResponses(list), &httpx.PaginationMeta{
 		Page:       page,
 		PageSize:   pageSize,
 		Total:      int64(total),
@@ -122,7 +122,7 @@ func (h *MaintenanceHandler) Create(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, item, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, newMaintenanceLogResponse(*item), nil)
 }
 
 // Update 修改維修保養紀錄。
@@ -174,7 +174,7 @@ func (h *MaintenanceHandler) Update(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, item, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newMaintenanceLogResponse(*item), nil)
 }
 
 // Delete 刪除維修保養紀錄。

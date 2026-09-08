@@ -41,7 +41,7 @@ const govClaimSourceQuery = `
 	LEFT JOIN case_schedules s ON s.case_id = c.id AND s.effective_range @> r.service_date
 	LEFT JOIN sites st ON st.id = s.site_id
 	LEFT JOIN schedule_legs l ON l.schedule_id = s.id AND l.leg_seq = r.leg_seq
-	LEFT JOIN vehicles v ON v.id = r.vehicle_id
+	LEFT JOIN vehicles v ON v.id = r.vehicle_id AND v.deleted_at IS NULL
 	LEFT JOIN drivers d ON d.id = r.driver_id
 	WHERE r.service_date >= $1 AND r.service_date < $2
 	  AND NOT ps.is_pending

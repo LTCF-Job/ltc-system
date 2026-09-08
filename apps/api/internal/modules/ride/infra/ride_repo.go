@@ -166,7 +166,7 @@ func (r *RideRepository) ListSubmissionsForForms(ctx context.Context, formIDs []
 		       fs.service_date, fs.payload->'answers'
 		FROM form_submissions fs
 		LEFT JOIN driver_report_forms df ON fs.form_id = df.id
-		LEFT JOIN vehicles v ON df.vehicle_id = v.id
+		LEFT JOIN vehicles v ON df.vehicle_id = v.id AND v.deleted_at IS NULL
 		WHERE fs.form_id = ANY($1::uuid[])
 	`
 	db := pgxdb.FromContext(ctx, r.db)
@@ -203,7 +203,7 @@ func (r *RideRepository) ListUnmatchedDriverSubmissions(ctx context.Context) ([]
 		       fs.service_date, fs.submitted_at, fs.driver_name_raw, fs.payload->'answers'
 		FROM form_submissions fs
 		LEFT JOIN driver_report_forms df ON fs.form_id = df.id
-		LEFT JOIN vehicles v ON df.vehicle_id = v.id
+		LEFT JOIN vehicles v ON df.vehicle_id = v.id AND v.deleted_at IS NULL
 		WHERE fs.driver_id IS NULL AND COALESCE(fs.driver_name_raw, '') <> ''
 	`
 	db := pgxdb.FromContext(ctx, r.db)
@@ -313,7 +313,7 @@ func (r *RideRepository) ListPendingRowConflicts(ctx context.Context) ([]app.Row
 		       c.detected_at
 		FROM ride_source_row_conflicts c
 		LEFT JOIN driver_report_forms df ON c.form_id = df.id
-		LEFT JOIN vehicles v ON c.vehicle_id = v.id
+		LEFT JOIN vehicles v ON c.vehicle_id = v.id AND v.deleted_at IS NULL
 		LEFT JOIN cases cs ON c.case_id = cs.id
 		LEFT JOIN drivers pd ON c.previous_driver_id = pd.id
 		LEFT JOIN drivers nd ON c.new_driver_id = nd.id

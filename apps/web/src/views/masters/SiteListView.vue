@@ -30,10 +30,10 @@
         >
           <el-option label="全部區域" value="" />
           <el-option
-            v-for="(label, key) in REGION_LABELS"
-            :key="key"
-            :label="label"
-            :value="key"
+            v-for="opt in regionOptions"
+            :key="opt.code"
+            :label="opt.name"
+            :value="opt.code"
           />
         </el-select>
 
@@ -70,7 +70,7 @@
           <el-table-column prop="name" label="單位名稱" min-width="140" class-name="site-name-col" />
           <el-table-column prop="region" label="區域" width="120" align="center">
             <template #default="{ row }">
-              <span>{{ (row.region && REGION_LABELS[row.region as Region]) ? REGION_LABELS[row.region as Region] : (row.region || '-') }}</span>
+              <span>{{ row.region ? regionLabel(row.region) : '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="address" label="單位地址" min-width="180" class-name="site-address-col" show-overflow-tooltip>
@@ -168,10 +168,10 @@
             style="width: 100%"
           >
             <el-option
-              v-for="(label, key) in REGION_LABELS"
-              :key="key"
-              :label="label"
-              :value="key"
+              v-for="opt in regionOptions"
+              :key="opt.code"
+              :label="opt.name"
+              :value="opt.code"
             />
           </el-select>
         </el-form-item>
@@ -227,8 +227,15 @@ import TableRowActions from '@/components/TableRowActions.vue'
 import { listSites, createSite, updateSite, deleteSite } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
-import { REGION_LABELS, type Region } from '@/types/domain'
 import type { SiteDTO, CreateSiteRequest } from '@/types/api'
+
+import { fetchRegionOptions, regionLabel, type RegionOption } from '@/api/regionOptions'
+
+// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
+const regionOptions = ref<RegionOption[]>([])
+onMounted(async () => {
+  regionOptions.value = await fetchRegionOptions()
+})
 
 const authStore = useAuthStore()
 const sites = ref<SiteDTO[]>([])
@@ -239,7 +246,7 @@ const formRef = ref<FormInstance>()
 
 const form = reactive<CreateSiteRequest>({
   name: '',
-  region: 'miaoli',
+  region: '',
   address: '',
   openDays: [1, 2, 3, 4, 5],
   status: 'active'

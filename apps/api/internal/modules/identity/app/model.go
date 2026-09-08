@@ -16,9 +16,10 @@ type Role struct {
 	IsSystem    bool
 	BaseRole    string
 	Permissions map[string]ModulePermission
-	UserCount   int
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// nil 代表使用者來源不可用、人數未知，不等同於 0 人。
+	UserCount *int
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // ModulePermission 是單一功能模組的檢視／編輯／刪除權限。

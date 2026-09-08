@@ -34,7 +34,7 @@ const formSelectColumns = `
 	       (SELECT count(*) FROM form_columns fc WHERE fc.form_id = f.id AND fc.mapping_status = 'pending'),
 	       (SELECT count(*) FROM form_submissions fs WHERE fs.form_id = f.id)
 	FROM driver_report_forms f
-	LEFT JOIN vehicles v ON f.vehicle_id = v.id
+	LEFT JOIN vehicles v ON f.vehicle_id = v.id AND v.deleted_at IS NULL
 	LEFT JOIN sites s ON v.site_id = s.id
 `
 
@@ -45,7 +45,8 @@ func (r *DriverReportRepository) ListForms(ctx context.Context) ([]app.ReportFor
 	}
 
 	db := pgxdb.FromContext(ctx, r.db)
-	rows, err := db.Query(ctx, formSelectColumns+" ORDER BY f.created_at ASC")
+	// 車輛軟刪除後該車的匯報表一併從清單消失；GetForm 不套這個條件，既有匯入流程才不會斷。
+	rows, err := db.Query(ctx, formSelectColumns+" WHERE v.id IS NOT NULL ORDER BY f.created_at ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +141,7 @@ func (r *DriverReportRepository) ListColumnsWithMapping(ctx context.Context, for
 		       fc.suggested_case_id::text, sc.name, fc.suggestion_score
 		FROM form_columns fc
 		LEFT JOIN driver_report_forms df ON fc.form_id = df.id
-		LEFT JOIN vehicles v ON df.vehicle_id = v.id
+		LEFT JOIN vehicles v ON df.vehicle_id = v.id AND v.deleted_at IS NULL
 		LEFT JOIN cases c ON fc.case_id = c.id
 		LEFT JOIN cases sc ON fc.suggested_case_id = sc.id
 		WHERE ($1 = '' OR fc.form_id = NULLIF($1, '')::uuid)

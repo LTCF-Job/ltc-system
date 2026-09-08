@@ -32,10 +32,10 @@
               @change="fetchReport"
             >
               <el-option
-                v-for="(label, key) in REGION_LABELS"
-                :key="key"
-                :label="label"
-                :value="key"
+                v-for="opt in regionOptions"
+                :key="opt.code"
+                :label="opt.name"
+                :value="opt.code"
               />
             </el-select>
 
@@ -151,9 +151,16 @@ import { ElMessage } from 'element-plus'
 import { getTripSummaryReport, exportTripSummaryExcel } from '@/api/reports'
 import { listAllVehicles } from '@/api/masters'
 import type { TripSummaryReportDTO, VehicleDTO } from '@/types/api'
-import { REGION_LABELS } from '@/types/domain'
 import { downloadBlob } from '@/utils/download'
 import { currentLocalMonth } from '@/utils/formatters'
+
+import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
+
+// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
+const regionOptions = ref<RegionOption[]>([])
+onMounted(async () => {
+  regionOptions.value = await fetchRegionOptions()
+})
 
 const queryMonth = ref(currentLocalMonth())
 const queryKeyword = ref('')

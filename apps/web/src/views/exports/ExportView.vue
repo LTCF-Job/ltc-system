@@ -42,10 +42,10 @@
               >
                 <el-option label="全部地區" value="" />
                 <el-option
-                  v-for="(label, key) in REGION_LABELS"
-                  :key="key"
-                  :label="label"
-                  :value="key"
+                  v-for="opt in regionOptions"
+                  :key="opt.code"
+                  :label="opt.name"
+                  :value="opt.code"
                 />
               </el-select>
             </el-form-item>
@@ -136,7 +136,7 @@
         <el-table-column prop="caseName" label="姓名" width="120" />
         <el-table-column prop="region" label="區域" width="110" align="center">
           <template #default="{ row }">
-            {{ row.region ? (REGION_LABELS[row.region] || row.region) : '—' }}
+            {{ row.region ? regionLabel(row.region) : '—' }}
           </template>
         </el-table-column>
         <el-table-column prop="rowCount" label="申報行數" width="100" align="center" />
@@ -183,7 +183,7 @@
         <el-table-column prop="periodYm" label="申報年月" width="110" align="center" />
         <el-table-column prop="region" label="區域" width="100" align="center">
           <template #default="{ row }">
-            {{ row.region ? (REGION_LABELS[row.region] || row.region) : '全區' }}
+            {{ row.region ? regionLabel(row.region) : '全區' }}
           </template>
         </el-table-column>
         <el-table-column label="模式" width="120" align="center">
@@ -251,7 +251,7 @@
         <el-table-column prop="caseName" label="姓名" width="120" />
         <el-table-column prop="region" label="區域" width="110" align="center">
           <template #default="{ row }">
-            {{ row.region ? (REGION_LABELS[row.region] || row.region) : '—' }}
+            {{ row.region ? regionLabel(row.region) : '—' }}
           </template>
         </el-table-column>
         <el-table-column prop="rowCount" label="申報行數" width="100" align="center" />
@@ -297,6 +297,14 @@ import type {
   ExportJobFileDTO,
   CreateExportJobRequest
 } from '@/types/api'
+
+import { fetchRegionOptions, regionLabel, type RegionOption } from '@/api/regionOptions'
+
+// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
+const regionOptions = ref<RegionOption[]>([])
+onMounted(async () => {
+  regionOptions.value = await fetchRegionOptions()
+})
 
 const authStore = useAuthStore()
 const { toRocMonth, toRocPeriodYm, formatRocMonthLabel } = useRocMonth()
@@ -359,6 +367,11 @@ function handleCaseSelected(cases: { id: string; name: string }[]) {
 }
 
 async function handleRunPrecheck() {
+  // caseIds 為空時後端會把檢核範圍放大成整月全部個案，結果與使用者以為的不同。
+  if (form.caseIds.length === 0) {
+    ElMessage.warning('請先選擇要申報的個案')
+    return
+  }
   checking.value = true
   try {
     const res = await precheckExport({

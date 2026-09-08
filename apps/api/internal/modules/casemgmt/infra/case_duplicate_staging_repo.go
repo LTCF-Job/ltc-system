@@ -73,8 +73,8 @@ const duplicateStagingFrom = `
 	FROM case_import_duplicate_rows d
 	JOIN cases dc ON dc.id = d.duplicate_case_id
 	LEFT JOIN sites st ON st.id = d.site_id
-	LEFT JOIN vehicles vo ON vo.id = d.outbound_vehicle_id
-	LEFT JOIN vehicles vi ON vi.id = d.inbound_vehicle_id
+	LEFT JOIN vehicles vo ON vo.id = d.outbound_vehicle_id AND vo.deleted_at IS NULL
+	LEFT JOIN vehicles vi ON vi.id = d.inbound_vehicle_id AND vi.deleted_at IS NULL
 `
 
 func scanDuplicateCandidate(row pgx.Row) (*app.DuplicateCandidate, error) {

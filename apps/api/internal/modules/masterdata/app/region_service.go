@@ -45,6 +45,11 @@ type UpdateRegionInput struct {
 	SortOrder   *int
 }
 
+// regionCodeFromID 產生區域的外鍵代碼，規則與 000043 migration 回填自訂地區時一致。
+func regionCodeFromID(id uuid.UUID) string {
+	return "region_" + strings.ReplaceAll(id.String(), "-", "")[:8]
+}
+
 // ListRegions 取得區域分頁清單。
 func (s *RegionService) ListRegions(ctx context.Context, q, status string, page, pageSize int) ([]Region, int64, error) {
 	if page < 1 {
@@ -90,11 +95,15 @@ func (s *RegionService) CreateRegion(ctx context.Context, in CreateRegionInput, 
 	}
 
 	region := Region{
+		ID:          uuid.New(),
 		Name:        name,
 		Description: strings.TrimSpace(in.Description),
 		Status:      status,
 		SortOrder:   in.SortOrder,
 	}
+	// code 是業務資料表 region 外鍵參照的值；中文地區名產不出可用 slug，
+	// 一律由 id 導出，與 migration 回填自訂地區時的規則相同。
+	region.Code = regionCodeFromID(region.ID)
 
 	if err := s.store.Create(ctx, &region); err != nil {
 		return nil, fmt.Errorf("failed to create region: %w", err)
@@ -148,6 +157,9 @@ func (s *RegionService) DeleteRegion(ctx context.Context, id uuid.UUID, actor Ac
 	}
 
 	if err := s.store.Delete(ctx, id); err != nil {
+		if errors.Is(err, ErrRegionInUse) {
+			return ErrRegionInUse
+		}
 		return fmt.Errorf("failed to delete region: %w", err)
 	}
 

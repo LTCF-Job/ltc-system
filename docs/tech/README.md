@@ -52,6 +52,7 @@
 
 | 文件 | 內容說明 |
 |---|---|
+| [qa-crud-testing.md](qa-crud-testing.md) | 前端 CRUD 全功能測試流程：五道驗證層級、每個模組的固定測試矩陣、匯入匯出驗證順序、測試資料標記與清除。實作在 `tests/qa-crud/`。 |
 | [maintainer-runbook.md](maintainer-runbook.md) | 維護 Runbook：本機啟動、Migration 執行、Health Check 與故障排查。 |
 | [deployment.md](deployment.md) | 部署設定：GitHub Actions、Cloud Run、Vercel、Supabase 環境變數串接與踩坑紀錄。 |
 | [environment-bootstrap.md](environment-bootstrap.md) | 從零把專案部署到全新 Supabase / GCP / Vercel 環境之建置手冊。 |

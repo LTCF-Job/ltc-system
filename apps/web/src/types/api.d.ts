@@ -105,7 +105,8 @@ export interface RoleDTO {
   tagType: "danger" | "primary" | "success" | "warning" | "info";
   isSystem: boolean;
   permissions: SystemPermissions;
-  userCount?: number;
+  /** null 代表使用者來源不可用、人數未知，不等同於 0 人。 */
+  userCount?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -185,7 +186,7 @@ export interface CaseDTO {
   nationalIdMasked?: string;
   nationalIdInvalid?: boolean;
   homeAddress?: string;
-  region?: Region;
+  region?: Region | null;
   ltcLevel?: string;
   serviceCategory?: ServiceCategory;
   serviceUsageType?: ServiceUsageType;
@@ -217,7 +218,7 @@ export interface CreateCaseRequest {
   name: string;
   nationalId?: string;
   homeAddress?: string;
-  region?: Region;
+  region?: Region | null;
   ltcLevel?: string;
   serviceCategory?: ServiceCategory;
   serviceUsageType?: ServiceUsageType;
@@ -273,6 +274,8 @@ export interface SaveScheduleRequest {
 // 主檔：區域、單位、車輛、司機
 export interface RegionDTO {
   id: string;
+  /** 業務資料表 region 欄位參照的外鍵值。 */
+  code: string;
   name: string;
   description?: string;
   status: "active" | "inactive";
@@ -458,7 +461,7 @@ export interface DriverReportFormDTO {
   vehicleId: string;
   vehicleName: string;
   title: string;
-  region?: Region;
+  region?: Region | null;
   lastImportedAt?: string | null;
   totalColumns: number;
   mappedColumns: number;
@@ -807,7 +810,7 @@ export interface PrecheckResultDTO {
 export interface CreateExportJobRequest {
   jobType: ExportJobType;
   periodYm: string; // 民國 5 碼，如 11507
-  region?: Region;
+  region?: Region | null;
   mode: ExportMode;
   caseIds: string[];
 }
@@ -816,7 +819,7 @@ export interface CreateExportJobRequest {
 export interface ExportJobFileDTO {
   caseId: string;
   caseName: string;
-  region?: Region;
+  region?: Region | null;
   rowCount: number;
   fileName: string;
   downloadUrl: string;
@@ -834,7 +837,7 @@ export interface ExportJobDTO {
   id: string;
   jobType: ExportJobType;
   periodYm: string;
-  region?: Region;
+  region?: Region | null;
   mode: ExportMode;
   status: ExportJobStatus;
   totalCases?: number;
@@ -947,7 +950,7 @@ export interface CaseDuplicateCandidateDTO {
   careContactName?: string;
   registeredAddress?: string;
   homeAddress?: string;
-  region?: Region;
+  region?: Region | null;
   siteId?: string;
   siteName?: string;
   siteNameRaw?: string;
@@ -1034,30 +1037,21 @@ export interface NotificationRecipientDTO {
 
 export interface CreateNotificationRecipientRequest {
   topic: NotificationTopic;
-  recipientType?: RecipientTargetType;
-  targetRole?: UserRole;
-  userId?: string;
+  email: string;
+  displayName?: string;
+}
+
+export interface UpdateNotificationRecipientRequest {
+  /** email 為必填：後端以完整列覆寫，不支援部分更新。topic 不可變更。 */
   email: string;
   displayName?: string;
   active?: boolean;
 }
 
-export interface UpdateNotificationRecipientRequest {
-  topic?: NotificationTopic;
-  recipientType?: RecipientTargetType;
-  targetRole?: UserRole;
-  userId?: string;
-  email?: string;
-  displayName?: string;
-  active?: boolean;
-}
-
 export interface BatchCreateNotificationRecipientsRequest {
-  topic: NotificationTopic;
+  /** topic 屬於每一筆收件人；後端以 topic + email 為唯一鍵。 */
   recipients: Array<{
-    recipientType?: RecipientTargetType;
-    targetRole?: UserRole;
-    userId?: string;
+    topic: NotificationTopic;
     email: string;
     displayName?: string;
   }>;
@@ -1115,7 +1109,7 @@ export interface TripSummaryVehicleDTO {
 
 export interface TripSummaryReportDTO {
   periodYm: string;
-  region?: Region;
+  region?: Region | null;
   generatedAt: string;
   vehicles: TripSummaryVehicleDTO[];
   grandTotalOutbound: number;
