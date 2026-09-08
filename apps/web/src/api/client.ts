@@ -86,7 +86,7 @@ apiClient.interceptors.response.use(
     const FIELD_LABELS: Record<string, string> = {
       plateNo: '車號',
       siteId: '所屬單位',
-      displayName: '代稱',
+      displayName: '車別',
       brand: '廠牌',
       model: '車型',
       manufactureYm: '出廠年月',

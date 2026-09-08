@@ -2,8 +2,8 @@
   <el-form-item label="車號" prop="plateNo">
     <el-input v-model="form.plateNo" placeholder="如：BZG-7915" />
   </el-form-item>
-  <el-form-item label="代稱" prop="displayName">
-    <el-input v-model="form.displayName" placeholder="請輸入代稱" />
+  <el-form-item label="車別" prop="displayName">
+    <el-input v-model="form.displayName" placeholder="請輸入車別" />
   </el-form-item>
   <el-form-item label="所屬單位" prop="siteId">
     <el-select v-model="form.siteId" placeholder="請選擇單位" filterable style="width: 100%">
