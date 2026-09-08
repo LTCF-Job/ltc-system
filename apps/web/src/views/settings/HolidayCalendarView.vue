@@ -21,10 +21,20 @@
       </template>
 
       <template #actions>
-        <el-button plain :loading="syncing" @click="syncYear">
+        <el-button
+          v-if="authStore.hasPermission('settings_holidays', 'edit')"
+          plain
+          :loading="syncing"
+          @click="syncYear"
+        >
           從政府行事曆匯入
         </el-button>
-        <el-button type="primary" :icon="Plus" @click="openCreate">
+        <el-button
+          v-if="authStore.hasPermission('settings_holidays', 'edit')"
+          type="primary"
+          :icon="Plus"
+          @click="openCreate"
+        >
           新增休假日／上班日
         </el-button>
       </template>
@@ -49,7 +59,12 @@
               {{ sourceLabel(row.source) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="100" align="center">
+          <el-table-column
+            v-if="authStore.hasPermission('settings_holidays', 'delete')"
+            label="操作"
+            width="100"
+            align="center"
+          >
             <template #default="{ row }">
               <TableRowActions>
                 <el-button link type="danger" size="small" @click="removeHoliday(row.holidayDate)">
@@ -125,6 +140,7 @@ import { Plus } from '@element-plus/icons-vue'
 import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
+import { useAuthStore } from '@/stores/auth'
 import {
   createHoliday,
   deleteHoliday,
@@ -132,6 +148,8 @@ import {
   listHolidays,
   type HolidayItem
 } from '@/api/holidays'
+
+const authStore = useAuthStore()
 
 type HolidayFilter = 'all' | 'holidays' | 'manual-workdays'
 

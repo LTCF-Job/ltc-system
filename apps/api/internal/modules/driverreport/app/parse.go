@@ -28,9 +28,6 @@ var ErrFormNotFound = errors.New("driver report form not found")
 // ErrInvalidYearMonth 代表宣告的匯入月份格式不是 YYYY-MM。
 var ErrInvalidYearMonth = errors.New("匯入月份格式錯誤，請使用 YYYY-MM")
 
-// ErrImportHasBlockingErrors 代表宣告整月覆蓋時，檔案含有不能安全略過的錯誤列。
-var ErrImportHasBlockingErrors = errors.New("匯入檔案包含阻斷性錯誤，未寫入任何資料")
-
 // ParseDriverReport 解析上傳的匯報表 .xlsx，產生欄位對應與每日匯報列的預覽；
 // 此階段不寫入任何資料，需經 CommitDriverReport 才會真正寫回。
 func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid.UUID, r io.Reader, yearMonth string) (*PreviewResult, error) {

@@ -18,6 +18,8 @@ type RoleStore interface {
 
 // UserCounter 統計某角色目前被幾位使用者採用。
 type UserCounter interface {
+	// 回 false 代表使用者來源不可用，呼叫端須把人數視為未知而非 0。
+	Configured() bool
 	CountUsersByRoleKey(ctx context.Context, key string) (int, error)
 }
 

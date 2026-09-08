@@ -219,7 +219,7 @@ func (r *DriverRepository) Create(ctx context.Context, d *app.Driver) error {
 			id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
 			email, region, status, license_class, license_expiry_date,
 			gender, birth_date, has_professional_license, employment_date, has_transfer_cert, inspection_date, remarks
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		RETURNING created_at, updated_at
 	`
 	if d.ID == uuid.Nil {
@@ -236,7 +236,7 @@ func (r *DriverRepository) Create(ctx context.Context, d *app.Driver) error {
 func (r *DriverRepository) Update(ctx context.Context, d *app.Driver) error {
 	query := `
 		UPDATE drivers
-		SET name = $2, name_normalized = $3, email = $4, region = $5, status = $6,
+		SET name = $2, name_normalized = $3, email = $4, region = NULLIF($5, ''), status = $6,
 		    license_class = $7, license_expiry_date = $8,
 		    gender = $9, birth_date = $10, has_professional_license = $11, employment_date = $12,
 		    has_transfer_cert = $13, inspection_date = $14, remarks = $15,

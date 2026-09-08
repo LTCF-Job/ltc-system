@@ -22,6 +22,8 @@ var (
 	ErrDuplicateRegionName = errors.New("region name already exists")
 	// ErrRegionNotFound 代表查無區域資料。
 	ErrRegionNotFound = errors.New("region not found")
+	// ErrRegionInUse 代表區域仍被單位、司機、個案或匯出工作引用，不可刪除。
+	ErrRegionInUse = errors.New("region is still referenced")
 
 	// ErrSiteNameRequired 代表未提供單位名稱。
 	ErrSiteNameRequired = errors.New("site name is required")

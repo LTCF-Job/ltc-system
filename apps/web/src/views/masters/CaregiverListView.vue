@@ -207,7 +207,7 @@
         <el-form-item label="單位名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
         <el-form-item label="區域">
           <el-select v-model="quickCreateSiteForm.region" clearable placeholder="請選擇區域（選填）" style="width: 100%">
-            <el-option v-for="(label, key) in REGION_LABELS" :key="key" :value="key" :label="label" />
+            <el-option v-for="opt in regionOptions" :key="opt.code" :value="opt.code" :label="opt.name" />
           </el-select>
         </el-form-item>
         <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" placeholder="選填" clearable /></el-form-item>
@@ -339,6 +339,14 @@ import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
 import { REGION_LABELS, CAREGIVER_TYPE_LABELS, type Region, type CaregiverType } from '@/types/domain'
 import type { CaregiverDTO, SiteDTO } from '@/types/api'
+
+import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
+
+// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
+const regionOptions = ref<RegionOption[]>([])
+onMounted(async () => {
+  regionOptions.value = await fetchRegionOptions()
+})
 
 const authStore = useAuthStore()
 const activeTab = ref<'list' | 'pending'>('list')

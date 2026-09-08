@@ -853,6 +853,12 @@ async function analyzeRow(row: BatchFileRow) {
     row.monthStates = Object.fromEntries(months.map((month) => [month, 'pending' as MonthImportStatus]))
     row.monthMessages = {}
     row.status = 'queued'
+    // 錯誤列會被逐列略過，其餘照常寫入；把列號直接放到檔案列上，
+    // 使用者不必再展開「檢視說明」才知道哪一列沒進去。
+    const firstError = row.issues.find((issue) => issue.level === 'error')
+    row.message = firstError
+      ? `${preview.errorRows} 列將被略過（${firstError.message}）`
+      : ''
   } catch (error) {
     row.status = 'failed'
     row.message = rowErrorMessage(error)

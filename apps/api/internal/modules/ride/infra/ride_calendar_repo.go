@@ -144,7 +144,7 @@ func (r *RideRepository) ListCalendarCases(
 		SELECT sl.schedule_id, sl.leg_seq, sl.direction, to_char(sl.depart_time, 'HH24:MI'),
 		       sl.vehicle_id, COALESCE(v.display_name, '')
 		FROM schedule_legs sl
-		LEFT JOIN vehicles v ON sl.vehicle_id = v.id
+		LEFT JOIN vehicles v ON sl.vehicle_id = v.id AND v.deleted_at IS NULL
 		WHERE sl.schedule_id = ANY($1::uuid[])
 		ORDER BY sl.leg_seq ASC
 	`, pgxdb.UUIDStrings(ids))
@@ -181,7 +181,7 @@ func (r *RideRepository) ListRideRecordsInRange(
 		       rr.corrected_by, rr.corrected_at, rr.correction_reason, rr.created_at, rr.updated_at
 		FROM ride_records rr
 		JOIN cases c ON rr.case_id = c.id
-		LEFT JOIN vehicles v ON rr.vehicle_id = v.id
+		LEFT JOIN vehicles v ON rr.vehicle_id = v.id AND v.deleted_at IS NULL
 		LEFT JOIN drivers d ON rr.driver_id = d.id
 		WHERE rr.service_date >= $1 AND rr.service_date < $2
 		  AND ($3 = '' OR c.region = $3)
@@ -224,7 +224,7 @@ func (r *RideRepository) ListPendingConflicts(ctx context.Context, start, end ti
 		LEFT JOIN LATERAL (
 			SELECT array_agg(DISTINCT v.display_name ORDER BY v.display_name) AS vehicles
 			FROM ride_sources rs
-			JOIN vehicles v ON rs.vehicle_id = v.id
+			JOIN vehicles v ON rs.vehicle_id = v.id AND v.deleted_at IS NULL
 			WHERE rs.case_id = rr.case_id AND rs.service_date = rr.service_date AND rs.leg_seq = rr.leg_seq
 			  AND rs.reported = 'boarded'
 		) veh ON true

@@ -47,9 +47,9 @@ export async function listRegions(params?: {
   return unwrapPaged<RegionDTO>(res, createPaginationMeta(params?.page, params?.pageSize))
 }
 
-export async function listAllRegions(): Promise<{ data: RegionDTO[] }> {
+export async function listAllRegions(): Promise<RegionDTO[]> {
   const res = await apiClient.get('/regions', { params: { all: true } })
-  return { data: unwrapData<RegionDTO[]>(res) ?? [] }
+  return unwrapData<RegionDTO[]>(res) ?? []
 }
 
 export async function createRegion(data: CreateRegionRequest): Promise<RegionDTO> {

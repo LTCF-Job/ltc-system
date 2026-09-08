@@ -89,6 +89,7 @@ func (r *DashboardRepository) GetVehicleTripTrends(ctx context.Context, start, e
 		LEFT JOIN ride_records r ON r.vehicle_id = v.id 
 		  AND r.service_date >= $1 AND r.service_date < $2 
 		  AND r.effective_status = 'boarded'
+		WHERE v.deleted_at IS NULL
 		GROUP BY v.id, v.display_name, v.plate_no
 		ORDER BY v.display_name ASC
 	`

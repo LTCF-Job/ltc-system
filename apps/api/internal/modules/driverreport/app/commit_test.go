@@ -300,16 +300,23 @@ func TestCommitDriverReport_WritesEachImportableRow(t *testing.T) {
 	assert.Equal(t, []string{"ingest", "ingest"}, ingestor.events)
 }
 
-func TestCommitDriverReport_DeclaredMonthBlocksOnMalformedRow(t *testing.T) {
+// 單筆髒資料不得讓整份檔案停擺（docs/tech/system-logic-specification.md 準則三 §3.2）：
+// 日期壞掉的那一列進 SkippedRows，其餘合法列照常寫入。
+func TestCommitDriverReport_DeclaredMonthSkipsMalformedRowAndWritesRest(t *testing.T) {
 	ingestor := &fakeIngestor{}
 	svc, store := newCommitService(sampleTable(), ingestor)
 
 	result, err := commit(svc, "2026-03")
 
-	require.ErrorIs(t, err, ErrImportHasBlockingErrors)
-	assert.Nil(t, result)
-	assert.Empty(t, ingestor.submissions, "阻斷性錯誤時不得寫入有效列")
-	assert.False(t, store.markedImported, "阻斷性錯誤時不得更新最後匯入時間")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 2, result.ImportedRows)
+	assert.Len(t, ingestor.submissions, 2, "合法列必須寫入")
+	assert.True(t, store.markedImported)
+
+	require.Len(t, result.SkippedRows, 1, "日期無法解析的列必須被記為略過")
+	assert.Equal(t, 5, result.SkippedRows[0].RowIndex, "略過原因要帶得出列號讓使用者定位")
+	assert.NotEmpty(t, result.SkippedRows[0].Reasons)
 }
 
 func TestCommitDriverReport_AggregatesReaffirmedAndPendingConflictCounts(t *testing.T) {
@@ -369,7 +376,7 @@ func TestCommitDriverReport_IngestFailureAbortsWholeImport(t *testing.T) {
 	assert.False(t, store.markedImported, "交易中止時不得更新最後匯入時間")
 }
 
-func TestCommitDriverReport_BlockingErrorWritesNothing(t *testing.T) {
+func TestCommitDriverReport_AllRowsMalformedWritesNothing(t *testing.T) {
 	// 只有表頭與一列壞掉的日期：沒有任何可寫入的列，代表多半是傳錯檔案
 	table := [][]string{
 		{"民國日期", "駕駛人", "1.吳桂(去程竹3) [去程]", "備註"},
@@ -380,10 +387,13 @@ func TestCommitDriverReport_BlockingErrorWritesNothing(t *testing.T) {
 
 	result, err := commit(svc, "2026-03")
 
-	require.ErrorIs(t, err, ErrImportHasBlockingErrors)
-	assert.Nil(t, result)
-	assert.Empty(t, ingestor.submissions, "阻斷性錯誤時不得寫入任何資料")
-	assert.False(t, store.markedImported)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.ImportedRows)
+	assert.Empty(t, ingestor.submissions, "沒有合法列時不得寫入任何資料")
+	assert.False(t, store.markedImported, "全部略過時不得更新最後匯入時間")
+	require.Len(t, result.SkippedRows, 1)
+	assert.Equal(t, 2, result.SkippedRows[0].RowIndex)
 }
 
 func TestCommitDriverReport_SameFileTwiceStillReconciles(t *testing.T) {

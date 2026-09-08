@@ -385,6 +385,7 @@ type SetVehicleDriversRequest struct {
 // RegionResponse 代表回傳給前端的區域資料。
 type RegionResponse struct {
 	ID          uuid.UUID `json:"id"`
+	Code        string    `json:"code"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	Status      string    `json:"status"`
@@ -396,6 +397,7 @@ type RegionResponse struct {
 func newRegionResponse(r app.Region) RegionResponse {
 	return RegionResponse{
 		ID:          r.ID,
+		Code:        r.Code,
 		Name:        r.Name,
 		Description: r.Description,
 		Status:      r.Status,

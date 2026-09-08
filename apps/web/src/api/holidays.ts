@@ -3,7 +3,8 @@ import { apiClient, unwrapData } from './client'
 export interface HolidayItem {
   holidayDate: string
   name: string
-  region?: string
+  /** 全區假日為 null。 */
+  region?: string | null
   source: string
   isDayOff: boolean
   createdAt?: string

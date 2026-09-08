@@ -225,7 +225,9 @@ func (a DriverAssignment) AuditSnapshot() DriverAssignmentAuditSnapshot {
 
 // Region 代表一個服務區域。
 type Region struct {
-	ID          uuid.UUID
+	ID uuid.UUID
+	// Code 是業務資料表 region 欄位參照的外鍵值，建立後不可變更。
+	Code        string
 	Name        string
 	Description string
 	Status      string

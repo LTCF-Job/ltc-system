@@ -247,7 +247,7 @@
         label-width="110px"
       >
         <el-form-item label="通知主題" prop="topic">
-          <el-select v-model="editFormModel.topic" placeholder="請選擇主題" style="width: 100%;">
+          <el-select v-model="editFormModel.topic" placeholder="請選擇主題" disabled style="width: 100%;">
             <el-option
               v-for="(label, key) in NOTIFICATION_TOPIC_LABELS"
               :key="key"
@@ -455,14 +455,12 @@ async function handleSaveAdd() {
   addSubmitting.value = true
   try {
     const payload = validParsedEmails.value.map((item) => ({
+      topic: addTopic.value,
       email: item.email,
       displayName: item.displayName
     }))
 
-    await batchCreateNotificationRecipients({
-      topic: addTopic.value,
-      recipients: payload
-    })
+    await batchCreateNotificationRecipients({ recipients: payload })
 
     ElMessage.success(`成功新增 ${payload.length} 筆外部收件信箱！`)
     addDialogVisible.value = false
@@ -491,7 +489,6 @@ async function handleSaveEdit() {
     try {
       if (currentEditId.value) {
         await updateNotificationRecipient(currentEditId.value, {
-          topic: editFormModel.topic,
           email: editFormModel.email,
           displayName: editFormModel.displayName,
           active: editFormModel.active
@@ -521,7 +518,11 @@ async function handleToggleActive(row: any, targetVal: boolean) {
       type: targetVal ? 'info' : 'warning'
     })
 
-    await updateNotificationRecipient(row.id, { active: targetVal })
+    await updateNotificationRecipient(row.id, {
+      email: row.email,
+      displayName: row.displayName,
+      active: targetVal
+    })
     row.active = targetVal
     ElMessage.success(`收件信箱已${targetVal ? '啟用' : '停用'}`)
   } catch {

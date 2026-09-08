@@ -42,8 +42,8 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 		FROM cases c
 		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
 		LEFT JOIN sites st ON st.id = p.site_id
-		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
-		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
+		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id AND vo.deleted_at IS NULL
+		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id AND vi.deleted_at IS NULL
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.deleted_at IS NULL
 		  AND ($1 = '' OR c.region = $1)
@@ -109,8 +109,8 @@ func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 		FROM cases c
 		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
 		LEFT JOIN sites st ON st.id = p.site_id
-		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
-		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
+		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id AND vo.deleted_at IS NULL
+		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id AND vi.deleted_at IS NULL
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.deleted_at IS NULL
 		  AND NOT ps.is_pending
@@ -180,6 +180,19 @@ func (r *CaseRepository) ClaimCaseImportRow(ctx context.Context, fileHash, rowKe
 	return claimedID != uuid.Nil, nil
 }
 
+// IsCaseImportRowCommitted 查詢某份檔案的某一列是否已建立過個案。
+func (r *CaseRepository) IsCaseImportRowCommitted(ctx context.Context, fileHash, rowKey string) (bool, error) {
+	db := pgxdb.FromContext(ctx, r.db)
+	var exists bool
+	err := db.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM case_import_idempotency WHERE file_hash = $1 AND row_key = $2)
+	`, fileHash, rowKey).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 // nullIfEmpty 將空字串轉為 nil，讓 SQL 端可用 IS NOT NULL 判斷是否有提供 raw name。
 func nullIfEmpty(v string) *string {
 	if v == "" {
@@ -200,8 +213,8 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 		FROM cases c
 		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
 		LEFT JOIN sites st ON st.id = p.site_id
-		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id
-		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id
+		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id AND vo.deleted_at IS NULL
+		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id AND vi.deleted_at IS NULL
 		WHERE c.id = $1 AND c.deleted_at IS NULL
 	`
 	var c app.Case
@@ -443,7 +456,7 @@ func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, cas
 		       to_char(l.arrive_time, 'HH24:MI') as arrive_time,
 		       l.run_no, l.vehicle_id, v.display_name as vehicle_name, l.created_at
 		FROM schedule_legs l
-		LEFT JOIN vehicles v ON l.vehicle_id = v.id
+		LEFT JOIN vehicles v ON l.vehicle_id = v.id AND v.deleted_at IS NULL
 		WHERE l.schedule_id = $1
 		ORDER BY l.leg_seq ASC
 	`

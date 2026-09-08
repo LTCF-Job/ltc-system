@@ -43,7 +43,7 @@ func (h *NotificationHandler) ListRecipients(c *gin.Context) {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢收件人失敗", nil)
 		return
 	}
-	httpx.RespondSuccess(c, http.StatusOK, recipients, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newRecipientResponses(recipients), nil)
 }
 
 // CreateRecipient 新增通知收件人（admin 專屬）。
@@ -63,7 +63,7 @@ func (h *NotificationHandler) CreateRecipient(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, item, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, newRecipientResponse(*item), nil)
 }
 
 // UpdateRecipient 修改通知收件人。
@@ -94,7 +94,7 @@ func (h *NotificationHandler) UpdateRecipient(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, item, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newRecipientResponse(*item), nil)
 }
 
 // batchCreateRecipientsRequest 定義批次新增收件人請求結構。
@@ -128,7 +128,7 @@ func (h *NotificationHandler) BatchCreateRecipients(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, created, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, newRecipientResponses(created), nil)
 }
 
 // batchDeleteRecipientsRequest 定義批次刪除收件人請求結構。
@@ -210,7 +210,7 @@ func (h *NotificationHandler) ListLogs(c *gin.Context) {
 		totalPages++
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, logs, httpx.PaginationMeta{
+	httpx.RespondSuccess(c, http.StatusOK, newLogResponses(logs), httpx.PaginationMeta{
 		Page:       page,
 		PageSize:   pageSize,
 		Total:      total,

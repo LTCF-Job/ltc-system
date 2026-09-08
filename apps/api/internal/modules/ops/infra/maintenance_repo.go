@@ -29,6 +29,7 @@ func (r *MaintenanceRepository) GetByID(ctx context.Context, id uuid.UUID) (*app
 		       m.mileage, m.items, m.vendor, m.cost, m.receipt_url, m.note,
 		       m.created_by, m.created_at
 		FROM maintenance_logs m
+		-- 單筆查詢刻意不濾軟刪除：清單已排除，但既有紀錄仍要能編輯與刪除。
 		JOIN vehicles v ON v.id = m.vehicle_id
 		WHERE m.id = $1
 	`, id).Scan(
@@ -81,7 +82,7 @@ func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, ve
 		argIdx++
 	}
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM maintenance_logs m JOIN vehicles v ON v.id = m.vehicle_id %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM maintenance_logs m JOIN vehicles v ON v.id = m.vehicle_id AND v.deleted_at IS NULL %s", whereClause)
 	var total int
 	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count maintenance logs: %w", err)
@@ -93,7 +94,7 @@ func (r *MaintenanceRepository) List(ctx context.Context, page, pageSize int, ve
 		       m.mileage, m.items, m.vendor, m.cost, m.receipt_url, m.note,
 		       m.created_by, m.created_at
 		FROM maintenance_logs m
-		JOIN vehicles v ON v.id = m.vehicle_id
+		JOIN vehicles v ON v.id = m.vehicle_id AND v.deleted_at IS NULL
 		%s
 		ORDER BY m.service_date DESC, m.created_at DESC
 		LIMIT $%d OFFSET $%d

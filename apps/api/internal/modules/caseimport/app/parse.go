@@ -167,7 +167,36 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			}
 
 			name := getIdxVal(caseNameIdx)
-			if name == "" || strings.HasPrefix(name, "例:") || strings.HasPrefix(name, "例：") {
+			if strings.HasPrefix(name, "例:") || strings.HasPrefix(name, "例：") {
+				continue
+			}
+			if name == "" {
+				// 整列皆空是表尾補白；有其他欄位填了值代表使用者漏填姓名，靜默略過會讓整列無聲消失。
+				if isBlankRow(row) {
+					continue
+				}
+				totalRows++
+				errorRows++
+				blankNameRowIndex := rIdx + 1
+				blankNameRowID := fmt.Sprintf("%s:%d", sheetName, blankNameRowIndex)
+				errorsList = append(errorsList, CaseImportErrorItem{
+					RowID:    blankNameRowID,
+					RowIndex: blankNameRowIndex,
+					Field:    "姓名",
+					Message:  "姓名未填寫，此列不會匯入",
+				})
+				results = append(results, CaseImportRowResult{
+					RowID:        blankNameRowID,
+					RowIndex:     blankNameRowIndex,
+					SheetName:    sheetName,
+					ErrorMessage: "姓名未填寫，此列不會匯入",
+				})
+				previewRows = append(previewRows, map[string]interface{}{
+					"rowId":      blankNameRowID,
+					"rowIndex":   blankNameRowIndex,
+					"name":       "",
+					"__hasError": true,
+				})
 				continue
 			}
 
@@ -327,6 +356,15 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 		Warnings:    warningsList,
 		Rows:        results,
 	}, nil
+}
+
+func isBlankRow(row []string) bool {
+	for _, cell := range row {
+		if strings.TrimSpace(cell) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func appendMessage(existing, next string) string {

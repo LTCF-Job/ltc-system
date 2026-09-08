@@ -28,8 +28,8 @@ func (s *DriverReportService) CommitDriverReport(
 		return nil, errors.New("driver report service: transaction runner not configured")
 	}
 
-	_, monthDeclared, err := parseYearMonth(yearMonth)
-	if err != nil {
+	// 只驗格式；宣告月份與否不再決定整份是否寫入，錯誤列一律由 collectImportableRows 逐列略過。
+	if _, _, err := parseYearMonth(yearMonth); err != nil {
 		return nil, err
 	}
 
@@ -42,11 +42,6 @@ func (s *DriverReportService) CommitDriverReport(
 	if err != nil {
 		return nil, err
 	}
-	// 宣告整月時，日期無法解析屬於阻斷性錯誤，整份不寫入
-	if monthDeclared && !preview.CanCommit {
-		return nil, ErrImportHasBlockingErrors
-	}
-
 	form, err := s.repo.GetForm(ctx, formID)
 	if err != nil {
 		return nil, err

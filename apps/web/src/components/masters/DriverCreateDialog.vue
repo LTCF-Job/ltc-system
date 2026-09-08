@@ -30,7 +30,7 @@
       </el-form-item>
       <el-form-item label="所屬區域" prop="region">
         <el-select v-model="form.region" placeholder="請選擇區域（選填）" clearable filterable style="width: 100%">
-          <el-option v-for="(label, key) in REGION_LABELS" :key="key" :label="label" :value="key" />
+          <el-option v-for="opt in regionOptions" :key="opt.code" :label="opt.name" :value="opt.code" />
         </el-select>
       </el-form-item>
       <el-form-item label="電子信箱" prop="email">
@@ -98,6 +98,14 @@ import { createDriver } from '@/api/masters'
 import { DRIVER_LICENSE_CLASS_LABELS, REGION_LABELS } from '@/types/domain'
 import type { CreateDriverRequest, DriverDTO } from '@/types/api'
 import { isValidNationalID } from '@/utils/nationalId'
+
+import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
+
+// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
+const regionOptions = ref<RegionOption[]>([])
+onMounted(async () => {
+  regionOptions.value = await fetchRegionOptions()
+})
 
 // 跟司機管理頁「新增司機」共用同一份欄位與 API，避免兩邊各自維護造成落差；
 // 編輯流程不在本元件範圍，維持在司機管理頁自行處理。

@@ -122,6 +122,10 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 			if siteName == "" && name == "" && typeLabel == "" && contact == "" && notes == "" {
 				continue
 			}
+			// 範本自帶的示範列，比照個案匯入以「例：」前綴辨識並略過。
+			if strings.HasPrefix(name, "例:") || strings.HasPrefix(name, "例：") {
+				continue
+			}
 
 			totalRows++
 			actualRowIndex := rIdx + 1

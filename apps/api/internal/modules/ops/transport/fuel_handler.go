@@ -81,7 +81,7 @@ func (h *FuelHandler) List(c *gin.Context) {
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
-	httpx.RespondSuccess(c, http.StatusOK, list, &httpx.PaginationMeta{
+	httpx.RespondSuccess(c, http.StatusOK, newFuelLogResponses(list), &httpx.PaginationMeta{
 		Page:       page,
 		PageSize:   pageSize,
 		Total:      int64(total),
@@ -128,7 +128,7 @@ func (h *FuelHandler) Create(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, item, nil)
+	httpx.RespondSuccess(c, http.StatusCreated, newFuelLogResponse(*item), nil)
 }
 
 // Update 修改油資紀錄。
@@ -176,7 +176,7 @@ func (h *FuelHandler) Update(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, item, nil)
+	httpx.RespondSuccess(c, http.StatusOK, newFuelLogResponse(*item), nil)
 }
 
 // Delete 刪除油資紀錄。

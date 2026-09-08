@@ -29,6 +29,7 @@ func (r *FuelRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.FuelLo
 		       f.driver_id, d.name, f.fuel_date, f.liters, f.cost,
 		       f.receipt_url, f.created_by, f.created_at
 		FROM fuel_logs f
+		-- 單筆查詢刻意不濾軟刪除：清單已排除，但既有紀錄仍要能編輯與刪除。
 		JOIN vehicles v ON v.id = f.vehicle_id
 		LEFT JOIN drivers d ON d.id = f.driver_id
 		WHERE f.id = $1
@@ -87,7 +88,7 @@ func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID
 		argIdx++
 	}
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM fuel_logs f JOIN vehicles v ON v.id = f.vehicle_id LEFT JOIN drivers d ON d.id = f.driver_id %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM fuel_logs f JOIN vehicles v ON v.id = f.vehicle_id AND v.deleted_at IS NULL LEFT JOIN drivers d ON d.id = f.driver_id %s", whereClause)
 	var total int
 	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count fuel logs: %w", err)
@@ -99,7 +100,7 @@ func (r *FuelRepository) List(ctx context.Context, page, pageSize int, vehicleID
 		       f.driver_id, d.name, f.fuel_date, f.liters, f.cost,
 		       f.receipt_url, f.created_by, f.created_at
 		FROM fuel_logs f
-		JOIN vehicles v ON v.id = f.vehicle_id
+		JOIN vehicles v ON v.id = f.vehicle_id AND v.deleted_at IS NULL
 		LEFT JOIN drivers d ON d.id = f.driver_id
 		%s
 		ORDER BY f.fuel_date DESC, f.created_at DESC

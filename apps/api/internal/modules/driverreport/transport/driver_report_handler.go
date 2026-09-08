@@ -427,9 +427,6 @@ func respondReportError(c *gin.Context, err error) {
 	if errors.Is(err, app.ErrInvalidYearMonth) {
 		reason = "匯入月份格式錯誤，請使用 YYYY-MM"
 	}
-	if errors.Is(err, app.ErrImportHasBlockingErrors) {
-		reason = "檔案包含阻斷性錯誤，未寫入資料"
-	}
 	httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeReportImportFailed, err, []httpx.ErrorDetail{
 		{Field: "file", Reason: reason},
 	})

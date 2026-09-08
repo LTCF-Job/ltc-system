@@ -66,7 +66,12 @@ func (f *fakeRoleStore) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 type fakeUserCounter struct {
-	counts map[string]int
+	counts       map[string]int
+	unconfigured bool
+}
+
+func (f *fakeUserCounter) Configured() bool {
+	return !f.unconfigured
 }
 
 func (f *fakeUserCounter) CountUsersByRoleKey(ctx context.Context, key string) (int, error) {
@@ -160,5 +165,44 @@ func TestRoleService_List_FillsUserCounts(t *testing.T) {
 	roles, err := svc.List(context.Background())
 	require.NoError(t, err)
 	require.Len(t, roles, 1)
-	assert.Equal(t, 3, roles[0].UserCount)
+	require.NotNil(t, roles[0].UserCount)
+	assert.Equal(t, 3, *roles[0].UserCount)
+}
+
+// 角色資料在本地 roles 表，使用者來源掛掉時仍必須列得出角色，只是人數未知。
+func TestRoleService_List_UserSourceUnconfiguredKeepsRoles(t *testing.T) {
+	store := newFakeRoleStore()
+	id := uuid.New()
+	store.roles[id] = &Role{ID: id, Key: "dispatcher"}
+	counter := &fakeUserCounter{counts: map[string]int{"dispatcher": 3}, unconfigured: true}
+	svc := NewRoleService(store, counter, nil, nil)
+
+	roles, err := svc.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, roles, 1)
+	assert.Nil(t, roles[0].UserCount)
+}
+
+// 未指定標籤樣式時要補上合法預設值，否則會撞上 roles_tag_type_check。
+func TestRoleService_Create_DefaultsTagType(t *testing.T) {
+	store := newFakeRoleStore()
+	svc := NewRoleService(store, &fakeUserCounter{}, &fakeIdentityAuditWriter{}, nil)
+
+	role, err := svc.Create(context.Background(), CreateRoleInput{Name: "外部稽核員"}, uuid.New(), "admin")
+	require.NoError(t, err)
+	assert.Equal(t, "info", role.TagType)
+}
+
+// 人數是刪除守衛，數不出來時必須停手而不是當成 0 人放行。
+func TestRoleService_Delete_UserSourceUnconfiguredRefuses(t *testing.T) {
+	store := newFakeRoleStore()
+	id := uuid.New()
+	store.roles[id] = &Role{ID: id, Key: "custom_role", IsSystem: false}
+	counter := &fakeUserCounter{counts: map[string]int{}, unconfigured: true}
+	svc := NewRoleService(store, counter, &fakeIdentityAuditWriter{}, nil)
+
+	err := svc.Delete(context.Background(), id, uuid.New(), "admin")
+	assert.ErrorIs(t, err, ErrIdentityProviderUnconfigured)
+	_, exists := store.roles[id]
+	assert.True(t, exists)
 }

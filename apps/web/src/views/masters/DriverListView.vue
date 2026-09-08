@@ -111,7 +111,7 @@
           </el-table-column>
           <el-table-column prop="region" label="區域" width="100" align="center">
             <template #default="{ row }">
-              <span class="driver-data">{{ (row.region && REGION_LABELS[row.region as Region]) ? REGION_LABELS[row.region as Region] : (row.region || '-') }}</span>
+              <span class="driver-data">{{ row.region ? regionLabel(row.region) : '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="phone" label="聯絡電話" width="130" align="center">
@@ -229,10 +229,10 @@
         <el-form-item label="所屬區域" prop="region">
           <el-select v-model="form.region" placeholder="請選擇區域（選填）" clearable filterable style="width: 100%">
             <el-option
-              v-for="(label, key) in REGION_LABELS"
-              :key="key"
-              :label="label"
-              :value="key"
+              v-for="opt in regionOptions"
+              :key="opt.code"
+              :label="opt.name"
+              :value="opt.code"
             />
           </el-select>
         </el-form-item>
@@ -376,6 +376,14 @@ import { useListQuery } from '@/composables/useListQuery'
 import { formatDate, todayLocal } from '@/utils/formatters'
 import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass, REGION_LABELS, type Region } from '@/types/domain'
 import type { DriverDTO, CreateDriverRequest, UpdateDriverRequest, VehicleDTO } from '@/types/api'
+
+import { fetchRegionOptions, regionLabel, type RegionOption } from '@/api/regionOptions'
+
+// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
+const regionOptions = ref<RegionOption[]>([])
+onMounted(async () => {
+  regionOptions.value = await fetchRegionOptions()
+})
 
 const authStore = useAuthStore()
 const drivers = ref<DriverDTO[]>([])
