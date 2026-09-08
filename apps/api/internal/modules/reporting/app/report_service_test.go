@@ -15,7 +15,7 @@ import (
 
 type emptyReportRepository struct{}
 
-func (emptyReportRepository) QueryTripSummaryData(context.Context, time.Time, time.Time, *string, *uuid.UUID) ([]app.ReportVehicleTripSummary, error) {
+func (emptyReportRepository) QueryTripSummaryData(context.Context, time.Time, time.Time, *uuid.UUID) ([]app.ReportVehicleTripSummary, error) {
 	return []app.ReportVehicleTripSummary{}, nil
 }
 
@@ -27,7 +27,7 @@ func TestReportService_GenerateTripSummaryExcel(t *testing.T) {
 	svc := app.NewReportService(emptyReportRepository{}, infra.NewExcelRenderer())
 
 	ctx := context.Background()
-	excelBytes, err := svc.GenerateTripSummaryExcel(ctx, "115-07", nil, nil)
+	excelBytes, err := svc.GenerateTripSummaryExcel(ctx, "115-07", nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, excelBytes)
 

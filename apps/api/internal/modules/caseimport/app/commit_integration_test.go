@@ -61,7 +61,7 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	auditSvc := auditapp.NewService(auditinfra.NewAuditRepository(pool))
 	txRunner := pgxdb.NewTxRunner(pool)
 
-	caseSvc := caseapp.NewCaseService(cfg, caseRepo, siteAdapter{siteRepo}, auditWriter{auditSvc}, caseinfra.NewExcelRenderer(), caseinfra.NewCaseDuplicateStagingRepository(pool))
+	caseSvc := caseapp.NewCaseService(cfg, caseRepo, auditWriter{auditSvc}, caseinfra.NewExcelRenderer(), caseinfra.NewCaseDuplicateStagingRepository(pool))
 	excel := importinfra.NewExcelAdapter()
 	importSvc := importapp.NewImportService(
 		caseRegistrar{caseSvc},
@@ -76,6 +76,10 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	)
 
 	region := "hsinchu-" + uuid.NewString()[:8]
+	// region 自 000043 起以外鍵參照 regions(code)，測試用的隨機地區碼須先寫入地區主檔。
+	_, err = pool.Exec(ctx, `INSERT INTO regions (name, code) VALUES ($1, $2)`, "測試地區-"+region, region)
+	require.NoError(t, err)
+
 	site := masterapp.Site{
 		Name:     "測試單位-" + uuid.NewString()[:8],
 		Address:  "測試地址",
@@ -87,12 +91,13 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
-		_, _ = pool.Exec(cleanupCtx, `DELETE FROM schedule_legs WHERE schedule_id IN (SELECT id FROM case_schedules WHERE site_id = $1)`, site.ID)
-		_, _ = pool.Exec(cleanupCtx, `DELETE FROM case_schedules WHERE site_id = $1`, site.ID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM schedule_legs WHERE schedule_id IN (SELECT id FROM case_schedules WHERE case_id IN (SELECT id FROM cases WHERE region = $1))`, region)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM case_schedules WHERE case_id IN (SELECT id FROM cases WHERE region = $1)`, region)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM case_transport_preferences WHERE case_id IN (SELECT id FROM cases WHERE region = $1)`, region)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM audit_log WHERE entity_type = 'cases' AND entity_id IN (SELECT id::text FROM cases WHERE region = $1)`, region)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM cases WHERE region = $1`, region)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM sites WHERE id = $1`, site.ID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM regions WHERE code = $1`, region)
 	})
 
 	// Row A：正常成功列。
@@ -175,14 +180,6 @@ func (w auditWriter) Write(ctx context.Context, e caseapp.AuditEntry) error {
 
 type siteAdapter struct{ repo *masterinfra.SiteRepository }
 
-func (a siteAdapter) GetByID(ctx context.Context, id uuid.UUID) (*caseapp.SiteRef, error) {
-	s, err := a.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return &caseapp.SiteRef{ID: s.ID, Region: s.Region}, nil
-}
-
 func (a siteAdapter) GetByName(ctx context.Context, name string) (*importapp.SiteRef, error) {
 	s, err := a.repo.GetByName(ctx, name)
 	if err != nil {
@@ -234,11 +231,11 @@ type failingPreferenceWriter struct {
 	failName string
 }
 
-func (w failingPreferenceWriter) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
+func (w failingPreferenceWriter) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
 	if outboundVehicleNameRaw == w.failName {
 		return errors.New("forced preference write failure")
 	}
-	return w.delegate.UpsertTransportPreference(ctx, caseID, siteID, outboundVehicleID, inboundVehicleID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw)
+	return w.delegate.UpsertTransportPreference(ctx, caseID, outboundVehicleID, inboundVehicleID, outboundVehicleNameRaw, inboundVehicleNameRaw)
 }
 
 type caseRegistrar struct{ svc *caseapp.CaseService }
@@ -252,6 +249,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
 		ServiceCategory:  intPointerOrNilForTest(in.ServiceCategory),
 		ServiceUsageType: intPointerOrNilForTest(in.ServiceUsageType), Status: in.Status,
+		SiteID: in.SiteID, SiteNameRaw: nullableStringPtrForTest(in.SiteNameRaw),
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {
 		return uuid.Nil, err
@@ -261,6 +259,13 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 
 func intPointerOrNilForTest(v int) *int {
 	if v == 0 {
+		return nil
+	}
+	return &v
+}
+
+func nullableStringPtrForTest(v string) *string {
+	if v == "" {
 		return nil
 	}
 	return &v

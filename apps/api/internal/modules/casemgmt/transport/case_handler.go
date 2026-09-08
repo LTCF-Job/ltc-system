@@ -214,6 +214,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 
 	var req struct {
 		Name              *string      `json:"name"`
+		SiteID            *uuid.UUID   `json:"siteId"`
 		HomeAddress       *string      `json:"homeAddress"`
 		Region            *string      `json:"region"`
 		LTCLevel          *string      `json:"ltcLevel"`
@@ -237,6 +238,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 
 	in := app.UpdateCaseInput{
 		Name:                req.Name,
+		SiteID:              req.SiteID,
 		HomeAddress:         req.HomeAddress,
 		Region:              req.Region,
 		LTCLevel:            req.LTCLevel,
@@ -398,7 +400,7 @@ func (h *CaseHandler) DiscardDuplicateCandidate(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
 }
 
-// UpdateTransportPreference 更新個案的交通偏好（所屬單位與去回程車輛）。
+// UpdateTransportPreference 更新個案的交通偏好（去回程車輛）。據點請改用 PATCH /cases/:id。
 func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
@@ -408,10 +410,8 @@ func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 	}
 
 	var req struct {
-		SiteID                 *uuid.UUID `json:"siteId"`
 		OutboundVehicleID      *uuid.UUID `json:"outboundVehicleId"`
 		InboundVehicleID       *uuid.UUID `json:"inboundVehicleId"`
-		SiteNameRaw            string     `json:"siteNameRaw"`
 		OutboundVehicleNameRaw string     `json:"outboundVehicleNameRaw"`
 		InboundVehicleNameRaw  string     `json:"inboundVehicleNameRaw"`
 	}
@@ -421,8 +421,8 @@ func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
 	}
 
 	entity, err := h.masterService.UpdateCaseTransportPreference(
-		c.Request.Context(), id, req.SiteID, req.OutboundVehicleID, req.InboundVehicleID,
-		req.SiteNameRaw, req.OutboundVehicleNameRaw, req.InboundVehicleNameRaw,
+		c.Request.Context(), id, req.OutboundVehicleID, req.InboundVehicleID,
+		req.OutboundVehicleNameRaw, req.InboundVehicleNameRaw,
 		app.AuditContext{
 			ActorID:   auth.GetActorID(c),
 			ActorRole: auth.GetActorRole(c),

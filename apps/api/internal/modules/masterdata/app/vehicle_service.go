@@ -68,11 +68,11 @@ func (s *VehicleService) SetDrivers(ctx context.Context, vehicleID uuid.UUID, dr
 	return nil
 }
 
-// VehicleInput 是新增與更新車輛共用的輸入。Region 不在其中：車輛的區域一律由所屬單位帶出。
+// VehicleInput 是新增與更新車輛共用的輸入。
 type VehicleInput struct {
 	PlateNo                   string
 	DisplayName               string
-	SiteID                    *uuid.UUID
+	SiteName                  string
 	Brand                     string
 	Model                     string
 	ManufactureYM             string
@@ -87,7 +87,7 @@ type VehicleInput struct {
 func (in VehicleInput) apply(v *Vehicle) error {
 	v.PlateNo = strings.TrimSpace(in.PlateNo)
 	v.DisplayName = strings.TrimSpace(in.DisplayName)
-	v.SiteID = in.SiteID
+	v.SiteName = strings.TrimSpace(in.SiteName)
 	v.Brand = in.Brand
 	v.Model = in.Model
 	v.ManufactureYM = in.ManufactureYM

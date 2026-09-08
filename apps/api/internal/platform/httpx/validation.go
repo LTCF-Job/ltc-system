@@ -86,14 +86,14 @@ func init() {
 // 常用欄位中文名稱對照表，提供易讀的中文錯誤描述
 var commonFieldLabels = map[string]string{
 	"name":                      "名稱",
-	"siteName":                  "單位名稱",
+	"siteName":                  "據點名稱",
 	"address":                   "地址",
 	"region":                    "區域",
 	"openDays":                  "開放星期",
 	"status":                    "狀態",
 	"plateNo":                   "車牌號碼",
 	"displayName":               "顯示名稱",
-	"siteId":                    "所屬單位",
+	"siteId":                    "所屬據點",
 	"nationalId":                "身分證字號",
 	"email":                     "電子信箱",
 	"code":                      "代碼",

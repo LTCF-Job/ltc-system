@@ -85,7 +85,7 @@ apiClient.interceptors.response.use(
     // 常用欄位代碼轉繁體中文標籤，讓錯誤清單明確告知使用者有問題的欄位
     const FIELD_LABELS: Record<string, string> = {
       plateNo: '車號',
-      siteId: '所屬單位',
+      siteId: '所屬據點',
       displayName: '車別',
       brand: '廠牌',
       model: '車型',

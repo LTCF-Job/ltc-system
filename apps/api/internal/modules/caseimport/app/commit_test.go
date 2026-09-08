@@ -31,18 +31,18 @@ func (f *fakeCaseRegistrar) RecordSkipped(ctx context.Context, row CaseImportSki
 // fakeTransportPreferenceWriter is a deterministic TransportPreferenceWriter test double.
 type fakeTransportPreferenceWriter struct {
 	calls []struct {
-		caseID                                       uuid.UUID
-		siteID, outboundVehicleID, inboundVehicleID  *uuid.UUID
-		siteNameRaw, outboundNameRaw, inboundNameRaw string
+		caseID                              uuid.UUID
+		outboundVehicleID, inboundVehicleID *uuid.UUID
+		outboundNameRaw, inboundNameRaw     string
 	}
 }
 
-func (f *fakeTransportPreferenceWriter) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
+func (f *fakeTransportPreferenceWriter) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
 	f.calls = append(f.calls, struct {
-		caseID                                       uuid.UUID
-		siteID, outboundVehicleID, inboundVehicleID  *uuid.UUID
-		siteNameRaw, outboundNameRaw, inboundNameRaw string
-	}{caseID, siteID, outboundVehicleID, inboundVehicleID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw})
+		caseID                              uuid.UUID
+		outboundVehicleID, inboundVehicleID *uuid.UUID
+		outboundNameRaw, inboundNameRaw     string
+	}{caseID, outboundVehicleID, inboundVehicleID, outboundVehicleNameRaw, inboundVehicleNameRaw})
 	return nil
 }
 
@@ -161,18 +161,74 @@ func TestCommitCases_CreatesCaseWhenSiteAndVehicleNamesDoNotMatch(t *testing.T) 
 	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
 
 	require.NoError(t, err)
-	assert.Equal(t, 1, result.ImportedCount, "單位/車輛比對不到仍應建立個案")
+	assert.Equal(t, 1, result.ImportedCount, "據點/車輛比對不到仍應建立個案")
 	assert.Empty(t, result.SkippedRows)
-	require.Len(t, result.Warnings, 3, "單位與去回程車輛各自獨立比對不到，各附一則警示")
+	require.Len(t, result.Warnings, 3, "據點與去回程車輛各自獨立比對不到，各附一則警示")
+
+	require.Len(t, registrar.created, 1)
+	created := registrar.created[0]
+	assert.Nil(t, created.SiteID)
+	assert.Equal(t, "查無此單位", created.SiteNameRaw)
 
 	require.Len(t, prefWriter.calls, 1)
 	call := prefWriter.calls[0]
-	assert.Nil(t, call.siteID)
 	assert.Nil(t, call.outboundVehicleID)
 	assert.Nil(t, call.inboundVehicleID)
-	assert.Equal(t, "查無此單位", call.siteNameRaw)
 	assert.Equal(t, "查無此車", call.outboundNameRaw)
 	assert.Equal(t, "查無此車回", call.inboundNameRaw)
+}
+
+// 據點欄位完全空白（使用者根本沒填，不是「填了但比對不到」）時，SiteID 與 SiteNameRaw
+// 不可同時為空，否則違反 cases 的 ck_cases_site_present CHECK 約束；必須落入哨兵值待維護，
+// 而不是讓建立個案的 INSERT 直接失敗。
+func TestCommitCases_BlankSiteNameFallsBackToPendingPlaceholder(t *testing.T) {
+	registrar := &fakeCaseRegistrar{}
+	svc := &ImportService{
+		cases:    registrar,
+		siteRepo: fakeSiteLookup{byName: map[string]uuid.UUID{}},
+		txRunner: fakeTxRunner{},
+	}
+
+	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
+		{RowIndex: 1, Name: "個案空據點", SiteName: ""},
+	}}
+
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ImportedCount, "據點空白仍應建立個案，落入待維護而非匯入失敗")
+	assert.Empty(t, result.SkippedRows)
+	assert.Empty(t, result.FailedRows)
+
+	require.Len(t, registrar.created, 1)
+	created := registrar.created[0]
+	assert.Nil(t, created.SiteID)
+	assert.NotEmpty(t, created.SiteNameRaw, "SiteID 與 SiteNameRaw 不可同時為空，否則違反 ck_cases_site_present")
+}
+
+// 疑似重複個案裁決為新個案時，同樣要套用哨兵值，否則 resolveDuplicateAsNewCase 的
+// INSERT 會因兩欄同時為空而違反 CHECK 約束。
+func TestCommitCases_BlankSiteNameOnDuplicateRowAlsoGetsPlaceholder(t *testing.T) {
+	stager := &fakeDuplicateCandidateStager{}
+	dupID := uuid.New()
+	svc := &ImportService{
+		cases:           &fakeCaseRegistrar{},
+		siteRepo:        fakeSiteLookup{byName: map[string]uuid.UUID{}},
+		duplicateStager: stager,
+		txRunner:        fakeTxRunner{},
+	}
+
+	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
+		{RowIndex: 1, Name: "個案空據點重複", SiteName: "", IsDuplicate: true, DuplicateCaseID: &dupID},
+	}}
+
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.StagedDuplicateCount)
+	require.Len(t, stager.staged, 1)
+	assert.Nil(t, stager.staged[0].SiteID)
+	assert.NotEmpty(t, stager.staged[0].SiteNameRaw, "暫存列的 SiteID 與 SiteNameRaw 不可同時為空")
 }
 
 func TestCommitCases_ResolvesSiteAndVehicleWhenNamesMatch(t *testing.T) {
@@ -198,10 +254,13 @@ func TestCommitCases_ResolvesSiteAndVehicleWhenNamesMatch(t *testing.T) {
 	assert.Equal(t, 1, result.ImportedCount)
 	require.Len(t, result.Warnings, 1, "僅回程車比對不到，只附一則警示")
 
+	require.Len(t, registrar.created, 1)
+	created := registrar.created[0]
+	require.NotNil(t, created.SiteID)
+	assert.Equal(t, siteID, *created.SiteID)
+
 	require.Len(t, prefWriter.calls, 1)
 	call := prefWriter.calls[0]
-	require.NotNil(t, call.siteID)
-	assert.Equal(t, siteID, *call.siteID)
 	require.NotNil(t, call.outboundVehicleID)
 	assert.Equal(t, outboundID, *call.outboundVehicleID)
 	assert.Nil(t, call.inboundVehicleID)

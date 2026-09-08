@@ -54,7 +54,7 @@ func (r *RideRepository) ListRideSourcesForSlot(
 // 月曆上，不能因為個案還沒設定排班就整列不見。
 //
 // effective_range 與查詢區間有交集即納入，個案是否真的要出車由 domain/calendar
-// 依 weekdays 與單位營業日逐日推算。
+// 依 weekdays 與據點營業日逐日推算。
 func (r *RideRepository) ListCalendarCases(
 	ctx context.Context,
 	start, end time.Time,
@@ -62,11 +62,11 @@ func (r *RideRepository) ListCalendarCases(
 ) ([]app.CalendarCase, error) {
 	query := `
 		SELECT c.id, c.name, COALESCE(c.region, ''), c.claim_end_date,
-		       cs.id, cs.trip_pattern, cs.weekdays, s.open_days,
+		       cs.id, cs.trip_pattern, cs.weekdays, COALESCE(s.open_days, ARRAY[]::smallint[]),
 		       lower(cs.effective_range), upper(cs.effective_range)
 		FROM cases c
 		JOIN case_schedules cs ON cs.case_id = c.id AND cs.effective_range && daterange($1::date, $2::date, '[)')
-		JOIN sites s ON cs.site_id = s.id
+		LEFT JOIN sites s ON s.id = c.site_id
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.status = 'active'
 		  AND NOT ps.is_pending

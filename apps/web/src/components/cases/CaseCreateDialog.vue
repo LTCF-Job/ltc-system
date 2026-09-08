@@ -17,6 +17,11 @@
           <el-option v-for="opt in regionOptions" :key="opt.code" :label="opt.name" :value="opt.code" />
         </el-select>
       </el-form-item>
+      <el-form-item label="所屬據點" prop="siteId">
+        <el-select v-model="form.siteId" placeholder="請選擇據點" filterable style="width: 100%">
+          <el-option v-for="site in availableSites" :key="site.id" :label="site.name" :value="site.id" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="住家地址" prop="homeAddress">
         <el-input v-model="form.homeAddress" placeholder="請輸入住家地址" />
       </el-form-item>
@@ -45,19 +50,22 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { reactive, ref, watch, onMounted } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { createCase } from '@/api/cases'
+import { listAllSites } from '@/api/masters'
 import { REGION_LABELS } from '@/types/domain'
-import type { CaseDTO, CreateCaseRequest } from '@/types/api'
+import type { CaseDTO, CreateCaseRequest, SiteDTO } from '@/types/api'
 
 import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
 
 // 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
 const regionOptions = ref<RegionOption[]>([])
+const availableSites = ref<SiteDTO[]>([])
 onMounted(async () => {
   regionOptions.value = await fetchRegionOptions()
+  availableSites.value = await listAllSites({ status: 'active' })
 })
 
 // 跟個案清單頁「新增個案基本資料」共用同一份欄位與 API，避免兩邊各自維護造成落差；
@@ -76,6 +84,7 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 const form = reactive<CreateCaseRequest>({
   name: '',
+  siteId: '',
   nationalId: '',
   region: undefined,
   homeAddress: '',
@@ -85,9 +94,10 @@ const form = reactive<CreateCaseRequest>({
   remarks: ''
 })
 
-// 除姓名外全部欄位選填：身分證字號、居住地、區域不再是硬性阻擋條件
+// 姓名與所屬據點為必填；身分證字號、居住地、區域仍為選填
 const rules = {
-  name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }]
+  name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }],
+  siteId: [{ required: true, message: '請選擇所屬據點', trigger: 'change' }]
 }
 
 watch(
@@ -95,6 +105,7 @@ watch(
   (visible) => {
     if (!visible) return
     form.name = props.prefillName || ''
+    form.siteId = ''
     form.nationalId = ''
     form.homeAddress = ''
     form.region = undefined

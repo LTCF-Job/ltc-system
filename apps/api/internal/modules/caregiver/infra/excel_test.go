@@ -31,7 +31,7 @@ func TestRenderCaregiverImportTemplate_ReopensCleanly(t *testing.T) {
 
 	headerRow := rows[0]
 	assert.Equal(t, "類型*", headerRow[0])
-	assert.Equal(t, "單位", headerRow[1])
+	assert.Equal(t, "據點", headerRow[1])
 	assert.Equal(t, "姓名*", headerRow[2])
 	assert.Contains(t, rows[1], "個管")
 	assert.Contains(t, rows[2], "照專")

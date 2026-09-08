@@ -79,7 +79,7 @@ func (f *fakeDuplicateStaging) Delete(context.Context, uuid.UUID) (int64, error)
 }
 
 func newDiscardHandler(staging *fakeDuplicateStaging) *CaseHandler {
-	svc := app.NewCaseService(&config.Config{}, &fakeCaseStore{}, nil, nil, nil, staging)
+	svc := app.NewCaseService(&config.Config{}, &fakeCaseStore{}, nil, nil, staging)
 	return NewCaseHandler(svc)
 }
 

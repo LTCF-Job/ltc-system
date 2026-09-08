@@ -14,7 +14,7 @@ import (
 // repository entity 逐欄一致，搬遷不得改變任何既有回應形狀；轉換函式對 nil
 // slice 回傳 nil，維持清單為空時序列化成 null 的既有行為。
 
-// SiteResponse 代表回傳給前端的單位資料。
+// SiteResponse 代表回傳給前端的據點資料。
 type SiteResponse struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
@@ -50,7 +50,7 @@ func newSiteResponses(list []app.Site) []SiteResponse {
 	return out
 }
 
-// CreateSiteRequest 代表新增單位請求。
+// CreateSiteRequest 代表新增據點請求。
 type CreateSiteRequest struct {
 	Name     string  `json:"name" binding:"required"`
 	Address  string  `json:"address"`
@@ -59,7 +59,7 @@ type CreateSiteRequest struct {
 	Status   string  `json:"status"`
 }
 
-// UpdateSiteRequest 代表更新單位請求。
+// UpdateSiteRequest 代表更新據點請求。
 type UpdateSiteRequest struct {
 	Name     string  `json:"name" binding:"required"`
 	Address  string  `json:"address"`
@@ -68,14 +68,12 @@ type UpdateSiteRequest struct {
 	Status   string  `json:"status"`
 }
 
-// VehicleResponse 代表回傳給前端的車輛資料。Region 由所屬單位帶出，為唯讀欄位。
+// VehicleResponse 代表回傳給前端的車輛資料。
 type VehicleResponse struct {
 	ID                        uuid.UUID            `json:"id"`
 	PlateNo                   string               `json:"plateNo"`
 	DisplayName               string               `json:"displayName"`
-	SiteID                    *uuid.UUID           `json:"siteId"`
 	SiteName                  string               `json:"siteName"`
-	Region                    string               `json:"region"`
 	Brand                     string               `json:"brand"`
 	Model                     string               `json:"model"`
 	ManufactureYM             string               `json:"manufactureYm"`
@@ -105,9 +103,7 @@ func newVehicleResponse(v app.Vehicle) VehicleResponse {
 		ID:                        v.ID,
 		PlateNo:                   v.PlateNo,
 		DisplayName:               v.DisplayName,
-		SiteID:                    v.SiteID,
 		SiteName:                  v.SiteName,
-		Region:                    v.Region,
 		Brand:                     v.Brand,
 		Model:                     v.Model,
 		ManufactureYM:             v.ManufactureYM,
@@ -144,28 +140,28 @@ type UpdateVehicleRequest struct {
 	VehicleWriteFields
 }
 
-// VehicleWriteFields 是新增與更新車輛共用的可寫欄位。區域不在其中：車輛的區域由所屬單位決定。
-// 車號、車別與所屬單位為必填。
+// VehicleWriteFields 是新增與更新車輛共用的可寫欄位。據點是車輛自己的自由輸入文字，
+// 非必填，不關聯據點主檔。車號與車別為必填。
 type VehicleWriteFields struct {
-	PlateNo                   string     `json:"plateNo" binding:"required"`
-	DisplayName               string     `json:"displayName" binding:"required"`
-	SiteID                    *uuid.UUID `json:"siteId" binding:"required"`
-	Brand                     string     `json:"brand"`
-	Model                     string     `json:"model"`
-	ManufactureYM             string     `json:"manufactureYm"`
-	CompulsoryInsuranceExpiry *wireDate  `json:"compulsoryInsuranceExpiry"`
-	PassengerInsuranceExpiry  *wireDate  `json:"passengerInsuranceExpiry"`
-	ThirdPartyInsuranceExpiry *wireDate  `json:"thirdPartyInsuranceExpiry"`
-	LastInspectionDate        *wireDate  `json:"lastInspectionDate"`
-	WheelchairAccessible      *bool      `json:"wheelchairAccessible"`
-	Status                    string     `json:"status"`
+	PlateNo                   string    `json:"plateNo" binding:"required"`
+	DisplayName               string    `json:"displayName" binding:"required"`
+	SiteName                  string    `json:"siteName"`
+	Brand                     string    `json:"brand"`
+	Model                     string    `json:"model"`
+	ManufactureYM             string    `json:"manufactureYm"`
+	CompulsoryInsuranceExpiry *wireDate `json:"compulsoryInsuranceExpiry"`
+	PassengerInsuranceExpiry  *wireDate `json:"passengerInsuranceExpiry"`
+	ThirdPartyInsuranceExpiry *wireDate `json:"thirdPartyInsuranceExpiry"`
+	LastInspectionDate        *wireDate `json:"lastInspectionDate"`
+	WheelchairAccessible      *bool     `json:"wheelchairAccessible"`
+	Status                    string    `json:"status"`
 }
 
 func (f VehicleWriteFields) toInput() app.VehicleInput {
 	return app.VehicleInput{
 		PlateNo:                   f.PlateNo,
 		DisplayName:               f.DisplayName,
-		SiteID:                    f.SiteID,
+		SiteName:                  f.SiteName,
 		Brand:                     f.Brand,
 		Model:                     f.Model,
 		ManufactureYM:             f.ManufactureYM,

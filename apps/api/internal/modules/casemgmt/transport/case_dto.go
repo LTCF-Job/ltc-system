@@ -73,9 +73,10 @@ func (d requiredDate) toTime() time.Time {
 	return time.Time(d)
 }
 
-// CreateCaseRequest 代表新增個案主檔請求。僅姓名為必要欄位；其餘欄位皆選填。
+// CreateCaseRequest 代表新增個案主檔請求。姓名與所屬據點為必要欄位；其餘欄位皆選填。
 type CreateCaseRequest struct {
 	Name              string     `json:"name" binding:"required"`
+	SiteID            uuid.UUID  `json:"siteId" binding:"required"`
 	NationalID        string     `json:"nationalId"`
 	HouseholdType     *string    `json:"householdType"`
 	Gender            *string    `json:"gender"`
@@ -95,8 +96,10 @@ type CreateCaseRequest struct {
 
 // ToService 轉換為 service 層的建立個案輸入。
 func (r CreateCaseRequest) ToService() app.CreateCaseRequest {
+	siteID := r.SiteID
 	return app.CreateCaseRequest{
 		Name:              r.Name,
+		SiteID:            &siteID,
 		NationalID:        r.NationalID,
 		HouseholdType:     r.HouseholdType,
 		Gender:            r.Gender,
@@ -115,10 +118,9 @@ func (r CreateCaseRequest) ToService() app.CreateCaseRequest {
 	}
 }
 
-// CreateScheduleRequest 代表建立個案排班設定請求。
+// CreateScheduleRequest 代表建立個案排班設定請求。據點已改由個案本身持有，不在排班中設定。
 type CreateScheduleRequest struct {
 	CaseID             uuid.UUID                      `json:"caseId" binding:"required"`
-	SiteID             uuid.UUID                      `json:"siteId" binding:"required"`
 	EffectiveFrom      requiredDate                   `json:"effectiveFrom" binding:"required"`
 	EffectiveTo        *optionalDate                  `json:"effectiveTo"`
 	Weekdays           []int16                        `json:"weekdays" binding:"required"`
@@ -141,7 +143,6 @@ type CreateScheduleLegItemRequest struct {
 
 // SaveScheduleRequest 代表依個案路徑參數儲存排班設定之請求參數。
 type SaveScheduleRequest struct {
-	SiteID             uuid.UUID                      `json:"siteId" binding:"required"`
 	EffectiveFrom      requiredDate                   `json:"effectiveFrom" binding:"required"`
 	EffectiveTo        *optionalDate                  `json:"effectiveTo"`
 	Weekdays           []int16                        `json:"weekdays" binding:"required"`
@@ -158,7 +159,6 @@ type SaveScheduleRequest struct {
 func (r SaveScheduleRequest) ToService(caseID uuid.UUID) app.CreateScheduleRequest {
 	return app.CreateScheduleRequest{
 		CaseID:             caseID,
-		SiteID:             r.SiteID,
 		EffectiveFrom:      r.EffectiveFrom.toTime(),
 		EffectiveTo:        r.EffectiveTo.toTimePtr(),
 		Weekdays:           r.Weekdays,
@@ -189,7 +189,6 @@ func toServiceScheduleLegs(legs []CreateScheduleLegItemRequest) []app.CreateSche
 func (r CreateScheduleRequest) ToService() app.CreateScheduleRequest {
 	return app.CreateScheduleRequest{
 		CaseID:             r.CaseID,
-		SiteID:             r.SiteID,
 		EffectiveFrom:      r.EffectiveFrom.toTime(),
 		EffectiveTo:        r.EffectiveTo.toTimePtr(),
 		Weekdays:           r.Weekdays,
@@ -403,8 +402,6 @@ func newScheduleLegResponse(l app.ScheduleLeg) ScheduleLegResponse {
 type CaseScheduleResponse struct {
 	ID                 uuid.UUID             `json:"id"`
 	CaseID             uuid.UUID             `json:"caseId"`
-	SiteID             uuid.UUID             `json:"siteId"`
-	SiteName           string                `json:"siteName"`
 	EffectiveFrom      time.Time             `json:"effectiveFrom"`
 	EffectiveTo        *time.Time            `json:"effectiveTo"`
 	Weekdays           []int16               `json:"weekdays"`
@@ -427,8 +424,6 @@ func newCaseScheduleResponse(s app.CaseSchedule) CaseScheduleResponse {
 	return CaseScheduleResponse{
 		ID:                 s.ID,
 		CaseID:             s.CaseID,
-		SiteID:             s.SiteID,
-		SiteName:           s.SiteName,
 		EffectiveFrom:      s.EffectiveFrom,
 		EffectiveTo:        s.EffectiveTo,
 		Weekdays:           s.Weekdays,

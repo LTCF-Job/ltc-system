@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/rocdate"
-	caregiverapp "ltc-system/apps/api/internal/modules/caregiver/app"
 	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
 	caseinfra "ltc-system/apps/api/internal/modules/casemgmt/infra"
@@ -22,17 +21,6 @@ import (
 
 // 跨模組協作一律走「消費者宣告 port、composition root 注入」：以下 adapter 把某個
 // 模組的查詢結果轉成消費模組自己的型別，任一模組都不直接 import 另一個模組。
-
-// caseSiteFinder 讓 casemgmt 驗證個案交通偏好的單位是否同區。
-type caseSiteFinder struct{ repo *masterinfra.SiteRepository }
-
-func (a caseSiteFinder) GetByID(ctx context.Context, id uuid.UUID) (*caseapp.SiteRef, error) {
-	s, err := a.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return &caseapp.SiteRef{ID: s.ID, Region: s.Region}, nil
-}
 
 // rideDriverResolver 讓 ride 由姓名或當日車輛推導司機。
 type rideDriverResolver struct{ repo *masterinfra.DriverRepository }
@@ -78,7 +66,6 @@ func (a rideScheduleReader) GetActiveScheduleForCaseOnDate(ctx context.Context, 
 	return &rideapp.CaseSchedule{
 		ID:          s.ID,
 		CaseID:      s.CaseID,
-		SiteID:      s.SiteID,
 		Weekdays:    s.Weekdays,
 		TripPattern: s.TripPattern,
 		Legs:        legs,
@@ -125,7 +112,7 @@ func (a taskScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year
 		}
 		out = append(out, taskapp.ActiveSchedule{
 			CaseID: s.CaseID, CaseName: s.CaseName, Region: s.Region,
-			ClaimEndDate: s.ClaimEndDate, SiteID: s.SiteID,
+			ClaimEndDate: s.ClaimEndDate,
 			SiteOpenDays: s.SiteOpenDays, EffectiveFrom: s.EffectiveFrom, EffectiveTo: s.EffectiveTo,
 			Weekdays: s.Weekdays, TripPattern: s.TripPattern, Legs: legs,
 		})
@@ -178,7 +165,8 @@ type opsVehicleLister struct {
 }
 
 func (a opsVehicleLister) List(ctx context.Context, region, q string, page, pageSize int) ([]opsapp.VehicleRef, int64, error) {
-	list, total, err := a.repo.List(ctx, masterapp.VehicleFilter{Region: region, Q: q}, page, pageSize)
+	_ = region
+	list, total, err := a.repo.List(ctx, masterapp.VehicleFilter{Q: q}, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -201,7 +189,7 @@ func (a opsVehicleLister) ListAll(ctx context.Context) ([]opsapp.VehicleRef, err
 	return out, nil
 }
 
-// importSiteLookup 讓 caseimport 以名稱或區域比對單位。
+// importSiteLookup 讓 caseimport 以名稱或區域比對據點。
 type importSiteLookup struct{ repo *masterinfra.SiteRepository }
 
 func (a importSiteLookup) GetByName(ctx context.Context, name string) (*importapp.SiteRef, error) {
@@ -261,6 +249,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
 		ServiceCategory:  intPointerOrNil(in.ServiceCategory),
 		ServiceUsageType: intPointerOrNil(in.ServiceUsageType), Status: in.Status, Remarks: in.Remarks,
+		SiteID: in.SiteID, SiteNameRaw: nullableStringPtr(in.SiteNameRaw),
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {
 		return uuid.Nil, err
@@ -305,22 +294,14 @@ func intPointerOrNil(v int) *int {
 	return &v
 }
 
-// caregiverSiteLookup 讓 caregiver 匯入時以名稱比對單位。
-type caregiverSiteLookup struct{ repo *masterinfra.SiteRepository }
-
-func (a caregiverSiteLookup) GetByName(ctx context.Context, name string) (*caregiverapp.SiteRef, error) {
-	s, err := a.repo.GetByName(ctx, name)
-	if err != nil {
-		if errors.Is(err, masterapp.ErrSiteNotFound) {
-			return nil, caregiverapp.ErrCaregiverSiteNotFound
-		}
-		return nil, err
+// nullableStringPtr 將空字串轉為 nil，避免匯入未提供據點原始名稱時寫入空字串。
+func nullableStringPtr(v string) *string {
+	if v == "" {
+		return nil
 	}
-	if s == nil {
-		return nil, nil
-	}
-	return &caregiverapp.SiteRef{ID: s.ID, Name: s.Name}, nil
+	return &v
 }
+
 
 // driverReportCaseLookup 讓 driverreport 以姓名相似度推薦欄位要對應的個案。
 type driverReportCaseLookup struct{ repo *caseinfra.CaseRepository }

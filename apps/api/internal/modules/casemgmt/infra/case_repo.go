@@ -35,13 +35,13 @@ func (r *CaseRepository) List(ctx context.Context, region, status, q string, pag
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
 		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       p.site_id, COALESCE(st.name, ''), p.site_name_raw, p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
+		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
 		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
 		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
 		FROM cases c
+		LEFT JOIN sites st ON st.id = c.site_id
 		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
-		LEFT JOIN sites st ON st.id = p.site_id
 		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id AND vo.deleted_at IS NULL
 		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id AND vi.deleted_at IS NULL
 		JOIN case_pending_status ps ON ps.case_id = c.id
@@ -102,13 +102,13 @@ func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
 		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       p.site_id, COALESCE(st.name, ''), p.site_name_raw, p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
+		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
 		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
 		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
 		FROM cases c
+		LEFT JOIN sites st ON st.id = c.site_id
 		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
-		LEFT JOIN sites st ON st.id = p.site_id
 		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id AND vo.deleted_at IS NULL
 		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id AND vi.deleted_at IS NULL
 		JOIN case_pending_status ps ON ps.case_id = c.id
@@ -143,21 +143,20 @@ func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 	return list, nil
 }
 
-// UpsertTransportPreference 以完整替換語意寫入個案的交通偏好；nil 的 ID 代表清除欄位。
-func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
+// UpsertTransportPreference 以完整替換語意寫入個案的去回程車輛偏好；nil 的 ID 代表清除欄位。
+// 據點已改由個案本身持有（見 Update），不在此處理。
+func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
 	db := pgxdb.FromContext(ctx, r.db)
-	_, err := db.Exec(ctx, `INSERT INTO case_transport_preferences (case_id, site_id, outbound_vehicle_id, inbound_vehicle_id, site_name_raw, outbound_vehicle_name_raw, inbound_vehicle_name_raw)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	_, err := db.Exec(ctx, `INSERT INTO case_transport_preferences (case_id, outbound_vehicle_id, inbound_vehicle_id, outbound_vehicle_name_raw, inbound_vehicle_name_raw)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (case_id) DO UPDATE SET
-			site_id = EXCLUDED.site_id,
 			outbound_vehicle_id = EXCLUDED.outbound_vehicle_id,
 			inbound_vehicle_id = EXCLUDED.inbound_vehicle_id,
-			site_name_raw = EXCLUDED.site_name_raw,
 			outbound_vehicle_name_raw = EXCLUDED.outbound_vehicle_name_raw,
 			inbound_vehicle_name_raw = EXCLUDED.inbound_vehicle_name_raw,
 			updated_at = now()`,
-		caseID, siteID, outboundVehicleID, inboundVehicleID,
-		nullIfEmpty(siteNameRaw), nullIfEmpty(outboundVehicleNameRaw), nullIfEmpty(inboundVehicleNameRaw))
+		caseID, outboundVehicleID, inboundVehicleID,
+		nullIfEmpty(outboundVehicleNameRaw), nullIfEmpty(inboundVehicleNameRaw))
 	return err
 }
 
@@ -206,13 +205,13 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
 		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       p.site_id, COALESCE(st.name, ''), p.site_name_raw, p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
+		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
 		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
 		       c.home_address, c.region, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
 		FROM cases c
+		LEFT JOIN sites st ON st.id = c.site_id
 		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
-		LEFT JOIN sites st ON st.id = p.site_id
 		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id AND vo.deleted_at IS NULL
 		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id AND vi.deleted_at IS NULL
 		WHERE c.id = $1 AND c.deleted_at IS NULL
@@ -298,8 +297,9 @@ func (r *CaseRepository) Create(ctx context.Context, c *app.Case) error {
 		INSERT INTO cases (
 			id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked, national_id_invalid,
 			household_type, gender, birth_date, birth_date_raw, care_contact_role, care_contact_name, registered_address,
-			home_address, region, ltc_level, service_category, service_usage_type, claim_end_date, status, remarks
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+			home_address, region, ltc_level, service_category, service_usage_type, claim_end_date, status, remarks,
+			site_id, site_name_raw
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
 		RETURNING created_at, updated_at
 	`
 	if c.ID == uuid.Nil {
@@ -310,6 +310,7 @@ func (r *CaseRepository) Create(ctx context.Context, c *app.Case) error {
 		c.ID, c.Name, c.NameNormalized, c.NationalIDCipher, c.NationalIDHMAC, c.NationalIDMasked, c.NationalIDInvalid,
 		c.HouseholdType, c.Gender, c.BirthDate, c.BirthDateRaw, c.CareContactRole, c.CareContactName, c.RegisteredAddress,
 		c.HomeAddress, c.Region, c.LTCLevel, c.ServiceCategory, c.ServiceUsageType, c.ClaimEndDate, c.Status, c.Remarks,
+		c.SiteID, c.SiteNameRaw,
 	).Scan(&c.CreatedAt, &c.UpdatedAt)
 	return handleCaseDBError(err)
 }
@@ -324,6 +325,7 @@ func (r *CaseRepository) Update(ctx context.Context, c *app.Case) error {
 		    status = $10, household_type = $11, gender = $12, birth_date = $13, birth_date_raw = $14,
 		    care_contact_role = $15, care_contact_name = $16, registered_address = $17, remarks = $18,
 		    national_id_cipher = $19, national_id_hmac = $20, national_id_masked = $21, national_id_invalid = $22,
+		    site_id = $23, site_name_raw = $24,
 		    updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING updated_at
@@ -334,6 +336,7 @@ func (r *CaseRepository) Update(ctx context.Context, c *app.Case) error {
 		c.ServiceCategory, c.ServiceUsageType, c.ClaimEndDate, c.Status,
 		c.HouseholdType, c.Gender, c.BirthDate, c.BirthDateRaw, c.CareContactRole, c.CareContactName, c.RegisteredAddress, c.Remarks,
 		c.NationalIDCipher, c.NationalIDHMAC, c.NationalIDMasked, c.NationalIDInvalid,
+		c.SiteID, c.SiteNameRaw,
 	).Scan(&c.UpdatedAt)
 	return handleCaseDBError(err)
 }
@@ -378,9 +381,9 @@ func (r *CaseRepository) insertSchedule(ctx context.Context, tx pgxdb.Querier, s
 
 	querySchedule := `
 		INSERT INTO case_schedules (
-			id, case_id, site_id, effective_range, weekdays, trip_pattern, unit_price, distance_km,
+			id, case_id, effective_range, weekdays, trip_pattern, unit_price, distance_km,
 			service_duration_min, service_code, note
-		) VALUES ($1, $2, $3, daterange($4, $5, '[)'), $6, $7, $8, $9, $10, $11, $12)
+		) VALUES ($1, $2, daterange($3, $4, '[)'), $5, $6, $7, $8, $9, $10, $11)
 		RETURNING created_at, updated_at
 	`
 	var toVal *time.Time
@@ -389,7 +392,7 @@ func (r *CaseRepository) insertSchedule(ctx context.Context, tx pgxdb.Querier, s
 		toVal = &exclusiveEnd
 	}
 	err := tx.QueryRow(ctx, querySchedule,
-		s.ID, s.CaseID, s.SiteID, s.EffectiveFrom, toVal, s.Weekdays, s.TripPattern,
+		s.ID, s.CaseID, s.EffectiveFrom, toVal, s.Weekdays, s.TripPattern,
 		s.UnitPrice, s.DistanceKM, s.ServiceDurationMin, s.ServiceCode, s.Note,
 	).Scan(&s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
@@ -427,18 +430,17 @@ func (r *CaseRepository) insertSchedule(ctx context.Context, tx pgxdb.Querier, s
 // GetActiveScheduleForCaseOnDate 查詢個案在指定日期的有效排班與時段細節。
 func (r *CaseRepository) GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*app.CaseSchedule, error) {
 	query := `
-		SELECT s.id, s.case_id, s.site_id, st.name as site_name, s.weekdays, s.trip_pattern,
+		SELECT s.id, s.case_id, s.weekdays, s.trip_pattern,
 		       s.unit_price, s.distance_km, s.service_duration_min, s.service_code, s.note,
 		       s.created_at, s.updated_at
 		FROM case_schedules s
-		JOIN sites st ON s.site_id = st.id
 		WHERE s.case_id = $1
 		  AND s.effective_range @> $2::date
 		LIMIT 1
 	`
 	var s app.CaseSchedule
 	err := r.db.QueryRow(ctx, query, caseID, serviceDate).Scan(
-		&s.ID, &s.CaseID, &s.SiteID, &s.SiteName, &s.Weekdays, &s.TripPattern,
+		&s.ID, &s.CaseID, &s.Weekdays, &s.TripPattern,
 		&s.UnitPrice, &s.DistanceKM, &s.ServiceDurationMin, &s.ServiceCode, &s.Note,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
@@ -494,13 +496,13 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 
 	query := `
 		SELECT c.id, c.name, COALESCE(c.region, ''), c.claim_end_date,
-		       s.id as schedule_id, s.site_id, st.open_days,
+		       s.id as schedule_id, COALESCE(st.open_days, ARRAY[]::smallint[]),
 		       lower(s.effective_range) as eff_from,
 		       CASE WHEN upper_inf(s.effective_range) THEN NULL ELSE to_char(upper(s.effective_range) - 1, 'YYYY-MM-DD') END as eff_to_str,
 		       s.weekdays, s.trip_pattern
 		FROM cases c
 		JOIN case_schedules s ON c.id = s.case_id
-		JOIN sites st ON s.site_id = st.id
+		LEFT JOIN sites st ON st.id = c.site_id
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.status = 'active' AND c.deleted_at IS NULL AND NOT ps.is_pending
 		  AND ($1 = '' OR c.region = $1)
@@ -525,7 +527,7 @@ func (r *CaseRepository) GetActiveSchedulesForMonth(ctx context.Context, year, m
 		if err := rows.Scan(
 			&sr.info.CaseID, &sr.info.CaseName, &sr.info.Region,
 			&sr.info.ClaimEndDate,
-			&sr.scheduleID, &sr.info.SiteID, &sr.info.SiteOpenDays,
+			&sr.scheduleID, &sr.info.SiteOpenDays,
 			&sr.info.EffectiveFrom, &effToStr,
 			&sr.info.Weekdays, &sr.info.TripPattern,
 		); err != nil {

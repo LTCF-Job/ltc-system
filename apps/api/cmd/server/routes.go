@@ -145,7 +145,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		// masters_cases 的 delete 軸僅 admin 為 true（見 000018），改用它會讓 staff 只能裁決不能忽略。
 		apiV1.DELETE("/cases/import/duplicates/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.DiscardDuplicateCandidate)
 
-		// 2. 單位主檔
+		// 2. 據點主檔
 		apiV1.GET("/sites", auth.RequirePermission(perm, customPerm, "masters_sites", "view"), h.site.List)
 		apiV1.POST("/sites", auth.RequirePermission(perm, customPerm, "masters_sites", "edit"), h.site.Create)
 		apiV1.PATCH("/sites/:id", auth.RequirePermission(perm, customPerm, "masters_sites", "edit"), h.site.Update)
@@ -265,7 +265,6 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.POST("/caregivers/import", auth.RequirePermission(perm, customPerm, "masters_caregivers", "edit"), h.caregiver.ImportExcel)
 		apiV1.PATCH("/caregivers/:id", auth.RequirePermission(perm, customPerm, "masters_caregivers", "edit"), h.caregiver.Update)
 		apiV1.DELETE("/caregivers/:id", auth.RequirePermission(perm, customPerm, "masters_caregivers", "delete"), h.caregiver.Delete)
-		apiV1.PUT("/caregivers/:id/site", auth.RequirePermission(perm, customPerm, "masters_caregivers", "edit"), h.caregiver.LinkSite)
 
 		// 18. 角色身分管理 roleH
 		apiV1.GET("/roles", auth.RequirePermission(perm, customPerm, "settings_roles", "view"), h.role.ListRoles)

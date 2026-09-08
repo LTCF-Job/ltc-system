@@ -26,16 +26,16 @@ func NewDriverReportRepository(db *pgxpool.Pool) *DriverReportRepository {
 	return &DriverReportRepository{db: db}
 }
 
+// 車輛已不再關聯據點主檔，匯報表的區域改為固定常數（現況 fallback 本就是它）。
 const formSelectColumns = `
 	SELECT f.id, f.vehicle_id, COALESCE(v.display_name, '未知車輛'), f.title,
-	       COALESCE(s.region, 'hsinchu'), f.last_imported_at, f.status,
+	       'hsinchu', f.last_imported_at, f.status,
 	       (SELECT count(*) FROM form_columns fc WHERE fc.form_id = f.id),
 	       (SELECT count(*) FROM form_columns fc WHERE fc.form_id = f.id AND fc.mapping_status = 'mapped'),
 	       (SELECT count(*) FROM form_columns fc WHERE fc.form_id = f.id AND fc.mapping_status = 'pending'),
 	       (SELECT count(*) FROM form_submissions fs WHERE fs.form_id = f.id)
 	FROM driver_report_forms f
 	LEFT JOIN vehicles v ON f.vehicle_id = v.id AND v.deleted_at IS NULL
-	LEFT JOIN sites s ON v.site_id = s.id
 `
 
 // ListForms 查詢所有匯報表與其對應進度。

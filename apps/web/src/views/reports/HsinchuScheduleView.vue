@@ -19,7 +19,7 @@
 
           <el-select
             v-model="selectedSiteId"
-            placeholder="全部單位"
+            placeholder="全部據點"
             clearable
             style="width: 150px"
             @change="fetchSchedule"
@@ -117,7 +117,7 @@
             {{ row.arriveTime || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="destination" label="目的地 (單位)" min-width="180" show-overflow-tooltip class-name="destination-col" />
+        <el-table-column prop="destination" label="目的地 (據點)" min-width="180" show-overflow-tooltip class-name="destination-col" />
         <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="vehicle-name-col" />
       </el-table>
       <el-empty
@@ -163,7 +163,7 @@
             <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="origin" label="出發地 (單位)" min-width="180" show-overflow-tooltip class-name="origin-col" />
+        <el-table-column prop="origin" label="出發地 (據點)" min-width="180" show-overflow-tooltip class-name="origin-col" />
         <el-table-column prop="arriveTime" label="抵達時間" width="95" align="center">
           <template #default="{ row }">
             {{ row.arriveTime || '-' }}
@@ -211,7 +211,8 @@ async function fetchFilterOptions() {
       listAllVehicles()
     ])
     sites.value = siteRes.filter(s => s.region === 'hsinchu')
-    vehicles.value = vehRes.filter(v => v.region === 'hsinchu')
+    // 車輛已不再關聯據點，不再有區域可篩選，改列出全部車輛。
+    vehicles.value = vehRes
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
   }
