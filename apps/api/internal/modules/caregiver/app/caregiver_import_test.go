@@ -35,24 +35,6 @@ func (testExcelReader) ReadTables(data []byte) ([][][]string, []string, error) {
 	return tables, sheetNames, nil
 }
 
-// fakeCaregiverSiteLookup resolves a fixed set of names to sites; anything else is "not found".
-// err 模擬查詢本身故障，與「查無單位」是不同的路徑。
-type fakeCaregiverSiteLookup struct {
-	byName map[string]uuid.UUID
-	err    error
-}
-
-func (f fakeCaregiverSiteLookup) GetByName(ctx context.Context, name string) (*SiteRef, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	id, ok := f.byName[name]
-	if !ok {
-		return nil, ErrCaregiverSiteNotFound
-	}
-	return &SiteRef{ID: id, Name: name}, nil
-}
-
 // xlsxReader 依表頭與逐列字串值組出一份真實 .xlsx 位元組，供測試以既有 ExcelAdapter 解析，
 // 對齊本模組僅支援 .xlsx 匯入格式的限制。
 func xlsxReader(t *testing.T, header []string, rows ...[]string) *bytes.Reader {
@@ -79,14 +61,14 @@ func xlsxReader(t *testing.T, header []string, rows ...[]string) *bytes.Reader {
 	return bytes.NewReader(buf.Bytes())
 }
 
-var caregiverHeader = []string{"單位", "姓名", "類型", "聯絡方式", "備註"}
+var caregiverHeader = []string{"據點", "姓名", "類型", "聯絡方式", "備註"}
 
 func TestParseCaregivers_KeepsRowMissingNameAsPending(t *testing.T) {
-	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
+	svc := NewCaregiverService(newFakeCaregiverStore(), testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照單位", "", "個管", "0912-000-000", ""},
-		[]string{"竹南日照單位", "王大明", "個管", "0987-000-000", "行動自如"},
+		[]string{"竹南日照據點", "", "個管", "0912-000-000", ""},
+		[]string{"竹南日照據點", "王大明", "個管", "0987-000-000", "行動自如"},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -102,11 +84,11 @@ func TestParseCaregivers_KeepsRowMissingNameAsPending(t *testing.T) {
 }
 
 func TestParseCaregivers_IgnoresFullyBlankRow(t *testing.T) {
-	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
+	svc := NewCaregiverService(newFakeCaregiverStore(), testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
 		[]string{"", "", "", "", ""},
-		[]string{"竹南日照單位", "王大明", "個管", "0987-000-000", "行動自如"},
+		[]string{"竹南日照據點", "王大明", "個管", "0987-000-000", "行動自如"},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -117,14 +99,14 @@ func TestParseCaregivers_IgnoresFullyBlankRow(t *testing.T) {
 }
 
 func TestParseCaregivers_KeepsRowWithMissingOrInvalidTypeAsPending(t *testing.T) {
-	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
+	svc := NewCaregiverService(newFakeCaregiverStore(), testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照單位", "王大明", "", "0987-000-000", "行動自如"},
-		[]string{"竹南日照單位", "陳小華", "居服員", "0987-000-000", ""},
-		[]string{"竹南日照單位", "李美玲", "個管", "0987-000-000", ""},
-		[]string{"竹南日照單位", "張大千", "照專", "0987-000-000", ""},
-		[]string{"竹南日照單位", "何專護", "專護", "0987-000-000", ""},
+		[]string{"竹南日照據點", "王大明", "", "0987-000-000", "行動自如"},
+		[]string{"竹南日照據點", "陳小華", "居服員", "0987-000-000", ""},
+		[]string{"竹南日照據點", "李美玲", "個管", "0987-000-000", ""},
+		[]string{"竹南日照據點", "張大千", "照專", "0987-000-000", ""},
+		[]string{"竹南日照據點", "何專護", "專護", "0987-000-000", ""},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -144,41 +126,41 @@ func TestParseCaregivers_KeepsRowWithMissingOrInvalidTypeAsPending(t *testing.T)
 	assert.Equal(t, CaregiverTypeSpecialist, preview.Rows[4].Type, "向後相容舊稱專護")
 }
 
-func TestParseCaregivers_LeavesSiteUnlinkedWhenSiteNotFound(t *testing.T) {
-	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{byName: map[string]uuid.UUID{}}, testExcelReader{}, nil)
+// 據點是自由輸入文字，不關聯主檔：任意字串都原樣保留，不比對、不產生警告。
+func TestParseCaregivers_KeepsSiteNameAsFreeText(t *testing.T) {
+	svc := NewCaregiverService(newFakeCaregiverStore(), testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"查無此單位", "陳小華", "專護", "0912-345-678", "熟悉輪椅移位"},
+		[]string{"任意輸入的據點名稱", "陳小華", "專護", "0912-345-678", "熟悉輪椅移位"},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
 	row := preview.Rows[0]
-	assert.Nil(t, row.SiteID, "單位比對不到時應保留 SiteID 為 nil")
+	assert.Equal(t, "任意輸入的據點名稱", row.SiteName)
 	assert.Equal(t, CaregiverTypeSpecialist, row.Type)
-	assert.Empty(t, row.WarningMessage, "單位比對不到只留白，不再列為待維護或產生警告")
+	assert.Empty(t, row.WarningMessage)
 }
 
 func TestParseCaregivers_DoesNotWarnOnMissingContactOrNotes(t *testing.T) {
-	siteID := uuid.New()
-	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{byName: map[string]uuid.UUID{"竹南日照單位": siteID}}, testExcelReader{}, nil)
+	svc := NewCaregiverService(newFakeCaregiverStore(), testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照單位", "王大明", "個管", "", ""},
+		[]string{"竹南日照據點", "王大明", "個管", "", ""},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, preview.ValidRows)
 	assert.Equal(t, 0, preview.ErrorRows)
 	require.Len(t, preview.Rows, 1)
-	assert.Equal(t, &siteID, preview.Rows[0].SiteID)
+	assert.Equal(t, "竹南日照據點", preview.Rows[0].SiteName)
 	assert.Empty(t, preview.Rows[0].WarningMessage, "聯絡方式與備註缺漏不再算待維護，不產生警告")
 }
 
 func TestParseCaregivers_RejectsNonExcelUpload(t *testing.T) {
-	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
+	svc := NewCaregiverService(newFakeCaregiverStore(), testExcelReader{}, nil)
 
-	_, err := svc.ParseCaregivers(context.Background(), bytes.NewReader([]byte("單位,姓名,類型,聯絡方式,備註\n竹南日照單位,王大明,個管,,")), "upload.csv")
+	_, err := svc.ParseCaregivers(context.Background(), bytes.NewReader([]byte("據點,姓名,類型,聯絡方式,備註\n竹南日照據點,王大明,個管,,")), "upload.csv")
 
 	assert.Error(t, err, "僅支援 .xlsx 匯入，CSV 上傳應回傳錯誤")
 }
@@ -187,10 +169,10 @@ func TestParseCaregivers_FlagsDuplicateByName(t *testing.T) {
 	store := newFakeCaregiverStore()
 	existingID := uuid.New()
 	store.byID[existingID] = &Caregiver{ID: existingID, Name: "王大明", Type: CaregiverTypeCaseManager}
-	svc := NewCaregiverService(store, fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
+	svc := NewCaregiverService(store, testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照單位", "王大明", "個管", "0987-000-000", "行動自如"},
+		[]string{"竹南日照據點", "王大明", "個管", "0987-000-000", "行動自如"},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -207,10 +189,10 @@ func TestParseCaregivers_SkipsDuplicateLookupWhenNameEmpty(t *testing.T) {
 	store := newFakeCaregiverStore()
 	existingID := uuid.New()
 	store.byID[existingID] = &Caregiver{ID: existingID, Name: "", Type: CaregiverTypeCaseManager, Status: "active"}
-	svc := NewCaregiverService(store, fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
+	svc := NewCaregiverService(store, testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照單位", "", "個管", "0987-000-000", ""},
+		[]string{"竹南日照據點", "", "個管", "0987-000-000", ""},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -218,24 +200,13 @@ func TestParseCaregivers_SkipsDuplicateLookupWhenNameEmpty(t *testing.T) {
 	assert.False(t, preview.Rows[0].IsDuplicate, "姓名為空的列不應進行重複比對")
 }
 
-// 單位查詢失敗與「查無單位」是兩件事：前者必須中止預覽，不能被降級成靜默略過。
-func TestParseCaregivers_AbortsWhenSiteLookupFailsWithRealError(t *testing.T) {
-	svc := NewCaregiverService(newFakeCaregiverStore(), fakeCaregiverSiteLookup{err: assert.AnError}, testExcelReader{}, nil)
-
-	_, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照單位", "王大明", "個管", "0987-000-000", "行動自如"},
-	), "upload.xlsx")
-
-	assert.ErrorIs(t, err, assert.AnError)
-}
-
 func TestParseCaregivers_AbortsWhenDuplicateLookupFails(t *testing.T) {
 	store := newFakeCaregiverStore()
 	store.listErr = assert.AnError
-	svc := NewCaregiverService(store, fakeCaregiverSiteLookup{}, testExcelReader{}, nil)
+	svc := NewCaregiverService(store, testExcelReader{}, nil)
 
 	_, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"查無此單位", "王大明", "個管", "0987-000-000", "行動自如"},
+		[]string{"查無此據點", "王大明", "個管", "0987-000-000", "行動自如"},
 	), "upload.xlsx")
 
 	assert.ErrorIs(t, err, assert.AnError)
@@ -243,7 +214,7 @@ func TestParseCaregivers_AbortsWhenDuplicateLookupFails(t *testing.T) {
 
 func TestCommitCaregivers_SkipsDuplicateRowUnlessIncluded(t *testing.T) {
 	store := newFakeCaregiverStore()
-	svc := NewCaregiverService(store, fakeCaregiverSiteLookup{}, nil, nil)
+	svc := NewCaregiverService(store, nil, nil)
 	dupID := uuid.New()
 	preview := &CaregiverImportPreviewResult{
 		Rows: []CaregiverImportRowResult{
@@ -265,12 +236,11 @@ func TestCommitCaregivers_SkipsDuplicateRowUnlessIncluded(t *testing.T) {
 
 func TestCommitCaregivers_ImportsRowsAndReportsWarningsByField(t *testing.T) {
 	store := newFakeCaregiverStore()
-	svc := NewCaregiverService(store, fakeCaregiverSiteLookup{}, nil, nil)
+	svc := NewCaregiverService(store, nil, nil)
 
 	preview := &CaregiverImportPreviewResult{
 		Rows: []CaregiverImportRowResult{
-			// 單位比對不到：SiteName 有值但不得寫入 SiteNameRaw，也不該產生警告
-			{RowIndex: 2, Name: "查無單位者", Type: CaregiverTypeCaseManager, SiteName: "查無此單位"},
+			{RowIndex: 2, Name: "有據點者", Type: CaregiverTypeCaseManager, SiteName: "任意據點文字"},
 			{RowIndex: 3, Name: "", Type: CaregiverTypeSpecialist},
 			{RowIndex: 4, Name: "缺類型者", Type: ""},
 		},
@@ -299,7 +269,12 @@ func TestCommitCaregivers_ImportsRowsAndReportsWarningsByField(t *testing.T) {
 	assert.True(t, typeWarning, "類型缺漏的列應標記 field=type")
 
 	require.Len(t, store.byID, 3)
+	var sawSiteName bool
 	for _, c := range store.byID {
-		assert.Empty(t, c.SiteNameRaw, "單位比對不到時只留白，不得保留原始名稱")
+		if c.Name == "有據點者" {
+			sawSiteName = true
+			assert.Equal(t, "任意據點文字", c.SiteName)
+		}
 	}
+	assert.True(t, sawSiteName)
 }

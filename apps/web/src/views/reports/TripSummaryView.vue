@@ -24,22 +24,6 @@
             />
 
             <el-select
-              v-model="queryRegion"
-              placeholder="選擇區域"
-              clearable
-              filterable
-              style="width: 140px;"
-              @change="fetchReport"
-            >
-              <el-option
-                v-for="opt in regionOptions"
-                :key="opt.code"
-                :label="opt.name"
-                :value="opt.code"
-              />
-            </el-select>
-
-            <el-select
               v-model="queryVehicle"
               placeholder="指定車輛"
               clearable
@@ -154,17 +138,8 @@ import type { TripSummaryReportDTO, VehicleDTO } from '@/types/api'
 import { downloadBlob } from '@/utils/download'
 import { currentLocalMonth } from '@/utils/formatters'
 
-import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
-
-// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
-const regionOptions = ref<RegionOption[]>([])
-onMounted(async () => {
-  regionOptions.value = await fetchRegionOptions()
-})
-
 const queryMonth = ref(currentLocalMonth())
 const queryKeyword = ref('')
-const queryRegion = ref<string | undefined>(undefined)
 const queryVehicle = ref<string | undefined>(undefined)
 const vehicleOptions = ref<VehicleDTO[]>([])
 
@@ -185,7 +160,6 @@ async function fetchReport() {
   try {
     const res = await getTripSummaryReport({
       periodYm: queryMonth.value,
-      region: queryRegion.value,
       vehicleId: queryVehicle.value,
       q: queryKeyword.value || undefined
     })
@@ -199,7 +173,6 @@ async function fetchReport() {
 
 function handleReset() {
   queryKeyword.value = ''
-  queryRegion.value = undefined
   queryVehicle.value = undefined
   fetchReport()
 }
@@ -209,7 +182,6 @@ async function handleExportExcel() {
   try {
     const blob = await exportTripSummaryExcel({
       periodYm: queryMonth.value,
-      region: queryRegion.value,
       vehicleId: queryVehicle.value
     })
     downloadBlob(blob, `車輛趟數表-${queryMonth.value}.xlsx`)

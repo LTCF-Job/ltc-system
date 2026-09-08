@@ -39,24 +39,6 @@
 
         <el-row :gutter="16">
           <el-col :xs="24" :lg="12">
-            <el-form-item label="所屬單位" prop="siteId">
-              <el-select
-                v-model="formData.siteId"
-                placeholder="請選擇單位"
-                style="width: 100%"
-                filterable
-              >
-                <el-option
-                  v-for="site in availableSites"
-                  :key="site.id"
-                  :label="site.name"
-                  :value="site.id"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-
-          <el-col :xs="24" :lg="12">
             <el-form-item label="有效起始日" prop="effectiveFrom">
               <el-date-picker
                 v-model="formData.effectiveFrom"
@@ -443,7 +425,7 @@
           <div class="leg-header">
             <span class="leg-label">第 {{ leg.legSeq }} 趟</span>
             <span class="leg-direction">
-              {{ leg.direction === 'outbound' ? '去程 (住家 -> 單位)' : '回程 (單位 -> 住家)' }}
+              {{ leg.direction === 'outbound' ? '去程 (住家 -> 據點)' : '回程 (據點 -> 住家)' }}
             </span>
           </div>
 
@@ -523,13 +505,12 @@ import { currentLocalMonth, todayLocal } from '@/utils/formatters'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { Calendar, SetUp, RefreshRight, CircleClose } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { listAllSites, listAllVehicles } from '@/api/masters'
+import { listAllVehicles } from '@/api/masters'
 import { saveCaseSchedule } from '@/api/cases'
 import { listHolidays } from '@/api/holidays'
 import type {
   CaseScheduleDTO,
   SaveScheduleRequest,
-  SiteDTO,
   VehicleDTO,
   ScheduleMode,
   DayScheduleConfig
@@ -549,7 +530,6 @@ const emit = defineEmits<{
 const authStore = useAuthStore()
 const formRef = ref<FormInstance>()
 const saving = ref(false)
-const availableSites = ref<SiteDTO[]>([])
 const availableVehicles = ref<VehicleDTO[]>([])
 const scheduleMode = ref<ScheduleMode>('monthly')
 const selectedMonth = ref<string>(currentLocalMonth())
@@ -570,7 +550,6 @@ const weekdayConfigs = reactive([
 const monthlyConfigs = reactive<Record<string, DayScheduleConfig>>({})
 
 const formData = reactive<SaveScheduleRequest>({
-  siteId: '',
   effectiveFrom: todayLocal(),
   tripPattern: 2,
   weekdays: [1, 2, 3, 4, 5],
@@ -586,7 +565,6 @@ const formData = reactive<SaveScheduleRequest>({
 })
 
 const rules = {
-  siteId: [{ required: true, message: '請選擇單位', trigger: 'change' }],
   effectiveFrom: [{ required: true, message: '請選擇生效日期', trigger: 'change' }],
   weekdays: [{ type: 'array', required: true, min: 1, message: '請至少選擇一個每週搭乘日', trigger: 'change' }],
   unitPrice: [{ required: true, message: '請輸入單價', trigger: 'blur' }],
@@ -818,7 +796,6 @@ watch(
   (s) => {
     if (s) {
       scheduleMode.value = s.scheduleMode || 'monthly'
-      formData.siteId = s.siteId
       formData.effectiveFrom = s.effectiveFrom || todayLocal()
       formData.tripPattern = s.tripPattern || 2
       // 既有排班從 API 載入，欄位缺漏時保持未填，不得用猜測值頂替申報單價、里程與時長
@@ -872,13 +849,8 @@ watch(
   { immediate: true, deep: true }
 )
 
-async function loadSitesAndVehicles() {
-  const [sitesRes, vehiclesRes] = await Promise.all([
-    listAllSites({ status: 'active' }),
-    listAllVehicles({ status: 'active' })
-  ])
-  availableSites.value = sitesRes
-  availableVehicles.value = vehiclesRes
+async function loadVehicles() {
+  availableVehicles.value = await listAllVehicles({ status: 'active' })
 
   buildMonthDaysList()
 }
@@ -886,12 +858,12 @@ async function loadSitesAndVehicles() {
 watch(
   () => props.region,
   () => {
-    loadSitesAndVehicles()
+    loadVehicles()
   }
 )
 
 onMounted(async () => {
-  await loadSitesAndVehicles()
+  await loadVehicles()
   await loadHolidays()
   buildMonthDaysList()
 })
@@ -899,8 +871,8 @@ onMounted(async () => {
 async function handleSave() {
   if (!formRef.value) return
 
-  if (!formData.siteId || formData.legs.some((leg) => !leg.vehicleId)) {
-    ElMessage.warning('請明確選擇所屬單位與每一趟車輛')
+  if (formData.legs.some((leg) => !leg.vehicleId)) {
+    ElMessage.warning('請明確選擇每一趟車輛')
     return
   }
 

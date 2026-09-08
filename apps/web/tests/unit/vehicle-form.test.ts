@@ -23,12 +23,13 @@ test('sanitizeVehiclePayload turns optional blanks into null', () => {
 })
 
 // 必填欄位維持空字串而非 null，讓後端的 binding:"required" 能一致地擋下來。
+// 據點是自由輸入的選填文字，非必填，同樣不轉成 null（trim 後留空字串）。
 test('sanitizeVehiclePayload keeps required fields as strings', () => {
   const payload = sanitizeVehiclePayload(emptyVehicleForm())
 
   assert.equal(payload.plateNo, '')
   assert.equal(payload.displayName, '')
-  assert.equal(payload.siteId, '')
+  assert.equal(payload.siteName, '')
 })
 
 test('sanitizeVehiclePayload trims whitespace-only values down to null', () => {

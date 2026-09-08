@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -107,10 +106,9 @@ func TestWireDate_UnmarshalJSON_And_ToTimePtr(t *testing.T) {
 
 func TestCreateVehicleRequest_Unmarshal(t *testing.T) {
 	t.Run("四個日期為空字串時成功反序列化且時間指標為 nil", func(t *testing.T) {
-		siteID := uuid.New()
 		body := `{
 			"plateNo": "BZG-7915",
-			"siteId": "` + siteID.String() + `",
+			"siteName": "竹南日照據點",
 			"compulsoryInsuranceExpiry": "",
 			"passengerInsuranceExpiry": "",
 			"thirdPartyInsuranceExpiry": "",
@@ -123,7 +121,7 @@ func TestCreateVehicleRequest_Unmarshal(t *testing.T) {
 		err := json.Unmarshal([]byte(body), &req)
 		require.NoError(t, err)
 		assert.Equal(t, "BZG-7915", req.PlateNo)
-		assert.Equal(t, siteID, *req.SiteID)
+		assert.Equal(t, "竹南日照據點", req.SiteName)
 
 		input := req.toInput()
 		assert.Nil(t, input.CompulsoryInsuranceExpiry)
@@ -133,10 +131,9 @@ func TestCreateVehicleRequest_Unmarshal(t *testing.T) {
 	})
 
 	t.Run("四個日期為 null 時成功反序列化且時間指標為 nil", func(t *testing.T) {
-		siteID := uuid.New()
 		body := `{
 			"plateNo": "BZG-7915",
-			"siteId": "` + siteID.String() + `",
+			"siteName": "竹南日照據點",
 			"displayName": null,
 			"brand": null,
 			"model": null,
@@ -153,7 +150,7 @@ func TestCreateVehicleRequest_Unmarshal(t *testing.T) {
 		err := json.Unmarshal([]byte(body), &req)
 		require.NoError(t, err)
 		assert.Equal(t, "BZG-7915", req.PlateNo)
-		assert.Equal(t, siteID, *req.SiteID)
+		assert.Equal(t, "竹南日照據點", req.SiteName)
 
 		input := req.toInput()
 		assert.Nil(t, input.CompulsoryInsuranceExpiry)

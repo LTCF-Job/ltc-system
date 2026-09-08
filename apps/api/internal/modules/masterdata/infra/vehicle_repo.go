@@ -15,14 +15,12 @@ import (
 	"ltc-system/apps/api/internal/platform/pgxdb"
 )
 
-// vehicleRow 是 vehicles 資料表的一列，另帶所屬單位 join 出來的名稱與區域。
+// vehicleRow 是 vehicles 資料表的一列。
 type vehicleRow struct {
 	ID                        uuid.UUID
 	PlateNo                   string
 	DisplayName               string
-	SiteID                    *uuid.UUID
 	SiteName                  *string
-	SiteRegion                *string
 	Brand                     *string
 	Model                     *string
 	ManufactureYM             *string
@@ -48,9 +46,7 @@ func (r vehicleRow) toApp() app.Vehicle {
 		ID:                        r.ID,
 		PlateNo:                   r.PlateNo,
 		DisplayName:               r.DisplayName,
-		SiteID:                    r.SiteID,
 		SiteName:                  derefString(r.SiteName),
-		Region:                    derefString(r.SiteRegion),
 		Brand:                     derefString(r.Brand),
 		Model:                     derefString(r.Model),
 		ManufactureYM:             derefString(r.ManufactureYM),
@@ -66,18 +62,17 @@ func (r vehicleRow) toApp() app.Vehicle {
 }
 
 const vehicleSelect = `
-	SELECT v.id, v.plate_no, v.display_name, v.site_id, s.name, s.region,
+	SELECT v.id, v.plate_no, v.display_name, v.site_name,
 	       v.brand, v.model, v.manufacture_ym,
 	       v.compulsory_insurance_expiry, v.passenger_insurance_expiry,
 	       v.third_party_insurance_expiry, v.last_inspection_date,
 	       v.wheelchair_accessible, v.status, v.created_at, v.updated_at
 	FROM vehicles v
-	LEFT JOIN sites s ON s.id = v.site_id
 `
 
 func scanVehicle(dest *vehicleRow) []interface{} {
 	return []interface{}{
-		&dest.ID, &dest.PlateNo, &dest.DisplayName, &dest.SiteID, &dest.SiteName, &dest.SiteRegion,
+		&dest.ID, &dest.PlateNo, &dest.DisplayName, &dest.SiteName,
 		&dest.Brand, &dest.Model, &dest.ManufactureYM,
 		&dest.CompulsoryInsuranceExpiry, &dest.PassengerInsuranceExpiry,
 		&dest.ThirdPartyInsuranceExpiry, &dest.LastInspectionDate,
@@ -95,13 +90,11 @@ func NewVehicleRepository(db *pgxpool.Pool) *VehicleRepository {
 	return &VehicleRepository{db: db}
 }
 
-// vehicleFilterSQL 是 List 與其 count 查詢共用的條件；區域條件走所屬單位，車輛本身不存區域。
+// vehicleFilterSQL 是 List 與其 count 查詢共用的條件；模糊查詢同時比對車牌、顯示名稱與據點文字。
 const vehicleFilterSQL = `
 	WHERE v.deleted_at IS NULL
-	  AND ($1::uuid IS NULL OR v.site_id = $1)
-	  AND ($2 = '' OR s.region = $2)
-	  AND ($3 = '' OR v.plate_no ILIKE '%' || $3 || '%' OR v.display_name ILIKE '%' || $3 || '%')
-	  AND ($4 = '' OR v.status = $4)
+	  AND ($1 = '' OR v.plate_no ILIKE '%' || $1 || '%' OR v.display_name ILIKE '%' || $1 || '%' OR v.site_name ILIKE '%' || $1 || '%')
+	  AND ($2 = '' OR v.status = $2)
 `
 
 // List 取得車輛清單。
@@ -113,9 +106,9 @@ func (r *VehicleRepository) List(ctx context.Context, filter app.VehicleFilter, 
 	offset := (page - 1) * pageSize
 	query := vehicleSelect + vehicleFilterSQL + `
 		ORDER BY v.display_name ASC
-		LIMIT $5 OFFSET $6
+		LIMIT $3 OFFSET $4
 	`
-	rows, err := db.Query(ctx, query, filter.SiteID, filter.Region, filter.Q, filter.Status, pageSize, offset)
+	rows, err := db.Query(ctx, query, filter.Q, filter.Status, pageSize, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query vehicles: %w", err)
 	}
@@ -136,9 +129,8 @@ func (r *VehicleRepository) List(ctx context.Context, filter app.VehicleFilter, 
 	var total int64
 	countQuery := `
 		SELECT COUNT(*) FROM vehicles v
-		LEFT JOIN sites s ON s.id = v.site_id
 	` + vehicleFilterSQL
-	if err := db.QueryRow(ctx, countQuery, filter.SiteID, filter.Region, filter.Q, filter.Status).Scan(&total); err != nil {
+	if err := db.QueryRow(ctx, countQuery, filter.Q, filter.Status).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count vehicles: %w", err)
 	}
 
@@ -194,7 +186,7 @@ func (r *VehicleRepository) getOne(ctx context.Context, query string, arg interf
 
 func vehicleWriteArgs(v *app.Vehicle) []interface{} {
 	return []interface{}{
-		v.ID, v.PlateNo, v.DisplayName, v.SiteID,
+		v.ID, v.PlateNo, v.DisplayName, nullableText(v.SiteName),
 		nullableText(v.Brand), nullableText(v.Model), nullableText(v.ManufactureYM),
 		v.CompulsoryInsuranceExpiry, v.PassengerInsuranceExpiry, v.ThirdPartyInsuranceExpiry,
 		v.LastInspectionDate, v.WheelchairAccessible, v.Status,
@@ -216,7 +208,7 @@ func (r *VehicleRepository) Create(ctx context.Context, v *app.Vehicle) error {
 	}
 	query := `
 		INSERT INTO vehicles (
-			id, plate_no, display_name, site_id, brand, model, manufacture_ym,
+			id, plate_no, display_name, site_name, brand, model, manufacture_ym,
 			compulsory_insurance_expiry, passenger_insurance_expiry, third_party_insurance_expiry,
 			last_inspection_date, wheelchair_accessible, status
 		)
@@ -227,14 +219,14 @@ func (r *VehicleRepository) Create(ctx context.Context, v *app.Vehicle) error {
 	if err := db.QueryRow(ctx, query, vehicleWriteArgs(v)...).Scan(&v.CreatedAt, &v.UpdatedAt); err != nil {
 		return handleVehicleDBError(err)
 	}
-	return r.fillSite(ctx, v)
+	return nil
 }
 
 // Update 修改車輛。
 func (r *VehicleRepository) Update(ctx context.Context, v *app.Vehicle) error {
 	query := `
 		UPDATE vehicles
-		SET plate_no = $2, display_name = $3, site_id = $4, brand = $5,
+		SET plate_no = $2, display_name = $3, site_name = $4, brand = $5,
 		    model = $6, manufacture_ym = $7, compulsory_insurance_expiry = $8,
 		    passenger_insurance_expiry = $9, third_party_insurance_expiry = $10,
 		    last_inspection_date = $11, wheelchair_accessible = $12, status = $13,
@@ -246,7 +238,7 @@ func (r *VehicleRepository) Update(ctx context.Context, v *app.Vehicle) error {
 	if err := db.QueryRow(ctx, query, vehicleWriteArgs(v)...).Scan(&v.CreatedAt, &v.UpdatedAt); err != nil {
 		return handleVehicleDBError(err)
 	}
-	return r.fillSite(ctx, v)
+	return nil
 }
 
 func handleVehicleDBError(err error) error {
@@ -261,21 +253,6 @@ func handleVehicleDBError(err error) error {
 		return app.ErrDuplicateVehiclePlateNo
 	}
 	return err
-}
-
-// fillSite 補上寫入結果的所屬單位名稱與區域，讓回應與 List 的形狀一致。
-func (r *VehicleRepository) fillSite(ctx context.Context, v *app.Vehicle) error {
-	v.SiteName, v.Region = "", ""
-	if v.SiteID == nil {
-		return nil
-	}
-	var name, region string
-	err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, `SELECT name, region FROM sites WHERE id = $1`, *v.SiteID).Scan(&name, &region)
-	if err != nil {
-		return err
-	}
-	v.SiteName, v.Region = name, region
-	return nil
 }
 
 // SoftDelete 軟刪除車輛，回傳 false 代表該筆已被刪除過。

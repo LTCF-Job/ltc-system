@@ -36,11 +36,10 @@ var (
 	ErrInvalidDuplicateDecision   = errors.New("invalid duplicate candidate decision")
 )
 
-// CaseService 封裝個案、單位、車輛、司機與排班之業務邏輯。
+// CaseService 封裝個案、據點、車輛、司機與排班之業務邏輯。
 type CaseService struct {
 	cfg         *config.Config
 	caseRepo    CaseStore
-	siteRepo    SiteFinder
 	auditRepo   AuditWriter
 	renderer    ProfileRenderer
 	txRunner    TransactionRunner
@@ -51,7 +50,6 @@ type CaseService struct {
 func NewCaseService(
 	cfg *config.Config,
 	caseRepo CaseStore,
-	siteRepo SiteFinder,
 	auditRepo AuditWriter,
 	renderer ProfileRenderer,
 	stagingRepo DuplicateStagingStore,
@@ -64,7 +62,6 @@ func NewCaseService(
 	return &CaseService{
 		cfg:         cfg,
 		caseRepo:    caseRepo,
-		siteRepo:    siteRepo,
 		auditRepo:   auditRepo,
 		renderer:    renderer,
 		txRunner:    txRunner,
@@ -72,7 +69,9 @@ func NewCaseService(
 	}
 }
 
-// CreateCaseRequest 代表新增個案之請求參數。
+// CreateCaseRequest 代表新增個案之請求參數。SiteID／SiteNameRaw 是個案直接關聯的據點：
+// 手動新增路徑由 transport 層要求 SiteID 必填，匯入路徑允許只提供 SiteNameRaw（比對不到
+// 主檔時落入待維護，待人工補齊）。
 type CreateCaseRequest struct {
 	ID                     uuid.UUID
 	Name                   string
@@ -93,6 +92,8 @@ type CreateCaseRequest struct {
 	ClaimEndDate           *time.Time
 	Status                 string
 	Remarks                *string
+	SiteID                 *uuid.UUID
+	SiteNameRaw            *string
 }
 
 // buildCaseEntity 組裝個案實體並套用身分證字號加密與生日 raw 保留規則，供
@@ -161,6 +162,8 @@ func (s *CaseService) buildCaseEntity(req CreateCaseRequest) (Case, error) {
 		ClaimEndDate:      req.ClaimEndDate,
 		Status:            req.Status,
 		Remarks:           req.Remarks,
+		SiteID:            req.SiteID,
+		SiteNameRaw:       req.SiteNameRaw,
 	}, nil
 }
 
@@ -197,7 +200,7 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 }
 
 // ListCases 查詢個案清單（回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳
-// 單位／去回程車輛任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案；
+// 據點／去回程車輛任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案；
 // excludePending 為 true 時排除這類待維護個案。
 func (s *CaseService) ListCases(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
 	return s.caseRepo.List(ctx, region, status, q, page, pageSize, unresolvedLink, excludePending)
@@ -208,7 +211,8 @@ func (s *CaseService) GetCaseByID(ctx context.Context, id uuid.UUID) (*Case, err
 	return s.caseRepo.GetByID(ctx, id)
 }
 
-// UpdateCaseInput 代表更新個案主檔所需之輸入，欄位為 nil 表示不變更。
+// UpdateCaseInput 代表更新個案主檔所需之輸入，欄位為 nil 表示不變更。設定 SiteID
+// 即視為完成關聯，清空匯入時保留的原始據點名稱（與 caregiver 相同慣例）。
 type UpdateCaseInput struct {
 	Name                *string
 	HomeAddress         *string
@@ -228,6 +232,7 @@ type UpdateCaseInput struct {
 	CareContactName     *string
 	RegisteredAddress   *string
 	Remarks             *string
+	SiteID              *uuid.UUID
 }
 
 // caseAuditSnapshot 是個案異動的固定稽核白名單；不得直接序列化 Case，避免把
@@ -344,6 +349,10 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 	if in.Remarks != nil {
 		entity.Remarks = in.Remarks
 	}
+	if in.SiteID != nil {
+		entity.SiteID = in.SiteID
+		entity.SiteNameRaw = nil
+	}
 
 	if err := s.caseRepo.Update(ctx, entity); err != nil {
 		return nil, err
@@ -414,9 +423,10 @@ func (s *CaseService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRo
 	return deleteFn(ctx)
 }
 
-// UpdateCaseTransportPreference 更新個案的交通偏好（所屬單位與去回程車輛），回傳更新後的個案主檔。
+// UpdateCaseTransportPreference 更新個案的交通偏好（去回程車輛），回傳更新後的個案主檔。
 // PUT 採完整替換語意：nil 的 ID 代表清除欄位，raw name 僅用於保留待人工關聯的來源名稱。
-func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string, auditContexts ...AuditContext) (*Case, error) {
+// 據點已改由個案本身持有，請透過 UpdateCase 設定 SiteID。
+func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string, auditContexts ...AuditContext) (*Case, error) {
 	var before *Case
 	if s.auditRepo != nil {
 		var err error
@@ -428,7 +438,7 @@ func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID 
 			return nil, ErrCaseNotFound
 		}
 	}
-	if err := s.caseRepo.UpsertTransportPreference(ctx, caseID, siteID, outboundVehicleID, inboundVehicleID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw); err != nil {
+	if err := s.caseRepo.UpsertTransportPreference(ctx, caseID, outboundVehicleID, inboundVehicleID, outboundVehicleNameRaw, inboundVehicleNameRaw); err != nil {
 		return nil, err
 	}
 	after, err := s.caseRepo.GetByID(ctx, caseID)
@@ -774,12 +784,14 @@ func (s *CaseService) resolveDuplicateAsNewCase(ctx context.Context, cand *Dupli
 		ServiceUsageType:  cand.ServiceUsageType,
 		Status:            "active",
 		Remarks:           cand.Remarks,
+		SiteID:            cand.SiteID,
+		SiteNameRaw:       cand.SiteNameRaw,
 	}
 	if err := s.caseRepo.Create(ctx, &entity); err != nil {
 		return nil, fmt.Errorf("failed to create case from duplicate candidate: %w", err)
 	}
-	if err := s.caseRepo.UpsertTransportPreference(ctx, entity.ID, cand.SiteID, cand.OutboundVehicleID, cand.InboundVehicleID,
-		derefOrEmpty(cand.SiteNameRaw), derefOrEmpty(cand.OutboundVehicleNameRaw), derefOrEmpty(cand.InboundVehicleNameRaw)); err != nil {
+	if err := s.caseRepo.UpsertTransportPreference(ctx, entity.ID, cand.OutboundVehicleID, cand.InboundVehicleID,
+		derefOrEmpty(cand.OutboundVehicleNameRaw), derefOrEmpty(cand.InboundVehicleNameRaw)); err != nil {
 		return nil, fmt.Errorf("failed to set transport preference for confirmed duplicate: %w", err)
 	}
 
@@ -832,6 +844,10 @@ func (s *CaseService) mergeDuplicateIntoExisting(ctx context.Context, targetCase
 	if entity.Region == nil {
 		entity.Region = cand.Region
 	}
+	if entity.SiteID == nil && entity.SiteNameRaw == nil {
+		entity.SiteID = cand.SiteID
+		entity.SiteNameRaw = cand.SiteNameRaw
+	}
 	if mergeRemarks && cand.Remarks != nil && strings.TrimSpace(*cand.Remarks) != "" {
 		merged := strings.TrimSpace(derefOrEmpty(entity.Remarks))
 		note := "[匯入合併備註] " + strings.TrimSpace(*cand.Remarks)
@@ -846,11 +862,7 @@ func (s *CaseService) mergeDuplicateIntoExisting(ctx context.Context, targetCase
 	if err := s.caseRepo.Update(ctx, entity); err != nil {
 		return nil, err
 	}
-	if entity.SiteID == nil && cand.SiteID != nil || entity.OutboundVehicleID == nil && cand.OutboundVehicleID != nil || entity.InboundVehicleID == nil && cand.InboundVehicleID != nil {
-		siteID := entity.SiteID
-		if siteID == nil {
-			siteID = cand.SiteID
-		}
+	if entity.OutboundVehicleID == nil && cand.OutboundVehicleID != nil || entity.InboundVehicleID == nil && cand.InboundVehicleID != nil {
 		outboundID := entity.OutboundVehicleID
 		if outboundID == nil {
 			outboundID = cand.OutboundVehicleID
@@ -859,8 +871,8 @@ func (s *CaseService) mergeDuplicateIntoExisting(ctx context.Context, targetCase
 		if inboundID == nil {
 			inboundID = cand.InboundVehicleID
 		}
-		if err := s.caseRepo.UpsertTransportPreference(ctx, entity.ID, siteID, outboundID, inboundID,
-			derefOrEmpty(cand.SiteNameRaw), derefOrEmpty(cand.OutboundVehicleNameRaw), derefOrEmpty(cand.InboundVehicleNameRaw)); err != nil {
+		if err := s.caseRepo.UpsertTransportPreference(ctx, entity.ID, outboundID, inboundID,
+			derefOrEmpty(cand.OutboundVehicleNameRaw), derefOrEmpty(cand.InboundVehicleNameRaw)); err != nil {
 			return nil, fmt.Errorf("failed to backfill transport preference on merge: %w", err)
 		}
 	}
@@ -993,10 +1005,10 @@ func (s *CaseService) RecordSkippedCaseImport(ctx context.Context, item CaseImpo
 	}
 }
 
-// CreateScheduleRequest 代表建立個案排班設定之請求參數。
+// CreateScheduleRequest 代表建立個案排班設定之請求參數。據點已改由個案本身持有，
+// 排班不再各自指定。
 type CreateScheduleRequest struct {
 	CaseID             uuid.UUID
-	SiteID             uuid.UUID
 	EffectiveFrom      time.Time
 	EffectiveTo        *time.Time
 	Weekdays           []int16
@@ -1030,11 +1042,6 @@ func (s *CaseService) CreateCaseSchedule(ctx context.Context, req CreateSchedule
 		return nil, fmt.Errorf("case not found: %w", err)
 	}
 
-	// 排班所屬單位不要求與案主地區一致，允許跨區指派。
-	if _, err := s.siteRepo.GetByID(ctx, req.SiteID); err != nil {
-		return nil, fmt.Errorf("site not found: %w", err)
-	}
-
 	var legs []ScheduleLeg
 	var lastTime string
 	for _, l := range req.Legs {
@@ -1060,7 +1067,6 @@ func (s *CaseService) CreateCaseSchedule(ctx context.Context, req CreateSchedule
 
 	entity := CaseSchedule{
 		CaseID:             req.CaseID,
-		SiteID:             req.SiteID,
 		EffectiveFrom:      req.EffectiveFrom,
 		EffectiveTo:        req.EffectiveTo,
 		Weekdays:           req.Weekdays,

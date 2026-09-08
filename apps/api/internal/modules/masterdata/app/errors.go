@@ -22,18 +22,18 @@ var (
 	ErrDuplicateRegionName = errors.New("region name already exists")
 	// ErrRegionNotFound 代表查無區域資料。
 	ErrRegionNotFound = errors.New("region not found")
-	// ErrRegionInUse 代表區域仍被單位、司機、個案或匯出工作引用，不可刪除。
+	// ErrRegionInUse 代表區域仍被據點、司機、個案或匯出工作引用，不可刪除。
 	ErrRegionInUse = errors.New("region is still referenced")
 
-	// ErrSiteNameRequired 代表未提供單位名稱。
+	// ErrSiteNameRequired 代表未提供據點名稱。
 	ErrSiteNameRequired = errors.New("site name is required")
-	// ErrSiteAddressRequired 代表未提供單位地址。
+	// ErrSiteAddressRequired 代表未提供據點地址。
 	ErrSiteAddressRequired = errors.New("site address is required")
 	// ErrSiteRegionRequired 代表未提供所屬區域。
 	ErrSiteRegionRequired = errors.New("site region is required")
-	// ErrDuplicateSiteName 代表該區域已存在相同名稱的單位。
+	// ErrDuplicateSiteName 代表該區域已存在相同名稱的據點。
 	ErrDuplicateSiteName = errors.New("site name already exists in region")
-	// ErrSiteNotFound 代表查無單位資料。
+	// ErrSiteNotFound 代表查無據點資料。
 	ErrSiteNotFound = errors.New("site not found")
 
 	// ErrDuplicateVehiclePlateNo 代表車號已存在。

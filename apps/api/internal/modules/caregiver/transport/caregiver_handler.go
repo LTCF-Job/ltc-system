@@ -68,12 +68,12 @@ func (h *CaregiverHandler) Create(c *gin.Context) {
 	}
 
 	caregiver, err := h.svc.Create(c.Request.Context(), app.CreateCaregiverInput{
-		SiteID:  req.SiteID,
-		Name:    req.Name,
-		Type:    req.Type,
-		Contact: req.Contact,
-		Notes:   req.Notes,
-		Status:  req.Status,
+		SiteName: req.SiteName,
+		Name:     req.Name,
+		Type:     req.Type,
+		Contact:  req.Contact,
+		Notes:    req.Notes,
+		Status:   req.Status,
 	}, actorOf(c))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
@@ -98,12 +98,12 @@ func (h *CaregiverHandler) Update(c *gin.Context) {
 	}
 
 	caregiver, err := h.svc.Update(c.Request.Context(), id, app.UpdateCaregiverInput{
-		SiteID:  req.SiteID,
-		Name:    req.Name,
-		Type:    req.Type,
-		Contact: req.Contact,
-		Notes:   req.Notes,
-		Status:  req.Status,
+		SiteName: req.SiteName,
+		Name:     req.Name,
+		Type:     req.Type,
+		Contact:  req.Contact,
+		Notes:    req.Notes,
+		Status:   req.Status,
 	}, actorOf(c))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
@@ -127,29 +127,6 @@ func (h *CaregiverHandler) Delete(c *gin.Context) {
 	}
 
 	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
-}
-
-// LinkSite 將單位待關聯的照護人員連結至既有單位。
-func (h *CaregiverHandler) LinkSite(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		respondInvalidID(c, "無效的照護人員 ID")
-		return
-	}
-
-	var req LinkCaregiverSiteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
-		return
-	}
-
-	caregiver, err := h.svc.LinkSite(c.Request.Context(), id, req.SiteID, actorOf(c))
-	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
-		return
-	}
-
-	httpx.RespondSuccess(c, http.StatusOK, newCaregiverResponse(*caregiver), nil)
 }
 
 // ImportExcel 批次上傳解析照護人員新增資料 Excel 檔案。

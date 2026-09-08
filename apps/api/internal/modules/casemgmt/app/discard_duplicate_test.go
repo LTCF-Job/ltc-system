@@ -63,7 +63,7 @@ func TestDiscardDuplicateCandidate_DeletesRowAndWritesAudit(t *testing.T) {
 	cand := pendingCandidate(id)
 	staging := &fakeDuplicateStagingStore{candidate: cand, deleteRows: 1}
 	audit := &fakeCaseAuditWriter{}
-	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, audit, nil, staging)
+	svc := NewCaseService(testConfig(), newFakeCaseStore(), audit, nil, staging)
 
 	err := svc.DiscardDuplicateCandidate(context.Background(), id, actorID, "staff", "10.0.0.1", "chrome")
 
@@ -104,7 +104,7 @@ func TestDiscardDuplicateCandidate_DeletesRowAndWritesAudit(t *testing.T) {
 
 func TestDiscardDuplicateCandidate_NotFound(t *testing.T) {
 	staging := &fakeDuplicateStagingStore{candidate: nil}
-	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, nil, nil, staging)
+	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, nil, staging)
 
 	err := svc.DiscardDuplicateCandidate(context.Background(), uuid.New(), uuid.New(), "admin", "", "")
 
@@ -117,7 +117,7 @@ func TestDiscardDuplicateCandidate_AlreadyResolved(t *testing.T) {
 	cand := pendingCandidate(id)
 	cand.Status = "confirmed_new"
 	staging := &fakeDuplicateStagingStore{candidate: cand}
-	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, nil, nil, staging)
+	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, nil, staging)
 
 	err := svc.DiscardDuplicateCandidate(context.Background(), id, uuid.New(), "admin", "", "")
 
@@ -130,7 +130,7 @@ func TestDiscardDuplicateCandidate_ConflictWhenRowDisappears(t *testing.T) {
 	id := uuid.New()
 	staging := &fakeDuplicateStagingStore{candidate: pendingCandidate(id), deleteRows: 0}
 	audit := &fakeCaseAuditWriter{}
-	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, audit, nil, staging)
+	svc := NewCaseService(testConfig(), newFakeCaseStore(), audit, nil, staging)
 
 	err := svc.DiscardDuplicateCandidate(context.Background(), id, uuid.New(), "admin", "", "")
 
@@ -143,7 +143,7 @@ func TestDiscardDuplicateCandidate_RollsBackWhenAuditFails(t *testing.T) {
 	staging := &fakeDuplicateStagingStore{candidate: pendingCandidate(id), deleteRows: 1}
 	audit := &fakeCaseAuditWriter{err: assert.AnError}
 	txRunner := &fakeCaseTransactionRunner{}
-	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, audit, nil, staging, txRunner)
+	svc := NewCaseService(testConfig(), newFakeCaseStore(), audit, nil, staging, txRunner)
 
 	err := svc.DiscardDuplicateCandidate(context.Background(), id, uuid.New(), "admin", "", "")
 
@@ -156,7 +156,7 @@ func TestDiscardDuplicateCandidate_RollsBackWhenAuditFails(t *testing.T) {
 func TestDiscardDuplicateCandidate_PropagatesStoreErrors(t *testing.T) {
 	t.Run("讀取暫存列失敗", func(t *testing.T) {
 		staging := &fakeDuplicateStagingStore{getErr: errors.New("db down")}
-		svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, nil, nil, staging)
+		svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, nil, staging)
 
 		err := svc.DiscardDuplicateCandidate(context.Background(), uuid.New(), uuid.New(), "admin", "", "")
 
@@ -168,7 +168,7 @@ func TestDiscardDuplicateCandidate_PropagatesStoreErrors(t *testing.T) {
 		id := uuid.New()
 		staging := &fakeDuplicateStagingStore{candidate: pendingCandidate(id), deleteErr: errors.New("delete failed")}
 		audit := &fakeCaseAuditWriter{}
-		svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, audit, nil, staging)
+		svc := NewCaseService(testConfig(), newFakeCaseStore(), audit, nil, staging)
 
 		err := svc.DiscardDuplicateCandidate(context.Background(), id, uuid.New(), "admin", "", "")
 
@@ -182,7 +182,7 @@ func TestDiscardDuplicateCandidate_PropagatesStoreErrors(t *testing.T) {
 func TestDiscardDuplicateCandidate_WorksWithoutAuditWriter(t *testing.T) {
 	id := uuid.New()
 	staging := &fakeDuplicateStagingStore{candidate: pendingCandidate(id), deleteRows: 1}
-	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, nil, nil, staging)
+	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, nil, staging)
 
 	require.NoError(t, svc.DiscardDuplicateCandidate(context.Background(), id, uuid.New(), "admin", "", ""))
 	assert.Equal(t, []uuid.UUID{id}, staging.deleteCalls)
@@ -192,7 +192,7 @@ func TestDiscardDuplicateCandidate_WorksWithoutAuditWriter(t *testing.T) {
 // 裁決路徑不得接受 discarded，否則兩條路徑會各自寫出不同的稽核與資料狀態。
 func TestResolveDuplicateCandidate_RejectsDiscardedDecision(t *testing.T) {
 	staging := &fakeDuplicateStagingStore{candidate: pendingCandidate(uuid.New())}
-	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, nil, nil, staging)
+	svc := NewCaseService(testConfig(), newFakeCaseStore(), nil, nil, staging)
 
 	_, err := svc.ResolveDuplicateCandidate(context.Background(), uuid.New(), "discarded", nil, false, uuid.New(), "admin", "", "")
 

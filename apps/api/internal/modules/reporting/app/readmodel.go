@@ -36,7 +36,6 @@ type ReportVehicleItem struct {
 	ID          uuid.UUID
 	PlateNo     string
 	DisplayName string
-	Region      string
 }
 
 // ReportTripSummaryCaseRow 代表個案趟數統計資料。

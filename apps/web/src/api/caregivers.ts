@@ -51,11 +51,6 @@ export async function deleteCaregiver(id: string): Promise<void> {
 	unwrapData<unknown>(res)
 }
 
-export async function linkCaregiverSite(id: string, siteId: string): Promise<CaregiverDTO> {
-  const res = await apiClient.put(`/caregivers/${id}/site`, { siteId })
-  return unwrapData<CaregiverDTO>(res)
-}
-
 // 上傳照護人員名單試算匯入結果，不寫入資料庫
 export async function dryRunImportCaregivers(file: File): Promise<DryRunImportResultDTO> {
   const formData = new FormData()

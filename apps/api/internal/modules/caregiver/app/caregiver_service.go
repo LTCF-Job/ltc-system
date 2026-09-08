@@ -12,19 +12,18 @@ import (
 // CaregiverService 封裝照護人員主檔的 CRUD 業務邏輯與批次匯入流程。
 type CaregiverService struct {
 	store     CaregiverStore
-	sites     SiteLookup
 	reader    SpreadsheetReader
 	renderer  TemplateRenderer
 	auditRepo AuditWriter
 }
 
 // NewCaregiverService 建立 CaregiverService 實例。
-func NewCaregiverService(store CaregiverStore, sites SiteLookup, reader SpreadsheetReader, renderer TemplateRenderer, audits ...AuditWriter) *CaregiverService {
+func NewCaregiverService(store CaregiverStore, reader SpreadsheetReader, renderer TemplateRenderer, audits ...AuditWriter) *CaregiverService {
 	var auditRepo AuditWriter
 	if len(audits) > 0 {
 		auditRepo = audits[0]
 	}
-	return &CaregiverService{store: store, sites: sites, reader: reader, renderer: renderer, auditRepo: auditRepo}
+	return &CaregiverService{store: store, reader: reader, renderer: renderer, auditRepo: auditRepo}
 }
 
 // List 查詢照護人員清單。pending 只取姓名或類型未填寫、待人工補齊的資料列，
@@ -40,12 +39,12 @@ func (s *CaregiverService) GetByID(ctx context.Context, id uuid.UUID) (*Caregive
 
 // CreateCaregiverInput 代表新增照護人員所需之輸入。
 type CreateCaregiverInput struct {
-	SiteID  *uuid.UUID
-	Name    string
-	Type    string
-	Contact string
-	Notes   string
-	Status  string
+	SiteName string
+	Name     string
+	Type     string
+	Contact  string
+	Notes    string
+	Status   string
 }
 
 // Create 新增照護人員。
@@ -66,7 +65,7 @@ func (s *CaregiverService) Create(ctx context.Context, in CreateCaregiverInput, 
 		return nil, ErrCaregiverStatusInvalid
 	}
 
-	c := Caregiver{SiteID: in.SiteID, Name: in.Name, Type: in.Type, Contact: in.Contact, Notes: in.Notes, Status: status}
+	c := Caregiver{SiteName: strings.TrimSpace(in.SiteName), Name: in.Name, Type: in.Type, Contact: in.Contact, Notes: in.Notes, Status: status}
 	if err := s.store.Create(ctx, &c); err != nil {
 		return nil, err
 	}
@@ -76,12 +75,12 @@ func (s *CaregiverService) Create(ctx context.Context, in CreateCaregiverInput, 
 
 // UpdateCaregiverInput 代表更新照護人員所需之輸入，欄位為 nil 表示不變更。
 type UpdateCaregiverInput struct {
-	SiteID  *uuid.UUID
-	Name    *string
-	Type    *string
-	Contact *string
-	Notes   *string
-	Status  *string
+	SiteName *string
+	Name     *string
+	Type     *string
+	Contact  *string
+	Notes    *string
+	Status   *string
 }
 
 // Update 更新照護人員。
@@ -98,10 +97,8 @@ func (s *CaregiverService) Update(ctx context.Context, id uuid.UUID, in UpdateCa
 	}
 	before := existing.AuditSnapshot()
 
-	if in.SiteID != nil {
-		existing.SiteID = in.SiteID
-		// 手動選定單位即視為完成關聯，清空匯入時保留的原始單位名稱。
-		existing.SiteNameRaw = ""
+	if in.SiteName != nil {
+		existing.SiteName = strings.TrimSpace(*in.SiteName)
 	}
 	if in.Name != nil {
 		name := strings.TrimSpace(*in.Name)
@@ -155,11 +152,6 @@ func (s *CaregiverService) Delete(ctx context.Context, id uuid.UUID, actors ...A
 	}
 	s.writeAudit(ctx, "delete", id, actorOrEmpty(actors), before, nil)
 	return nil
-}
-
-// LinkSite 將待關聯的照護人員連結至單位主檔，並清空原始單位名稱。
-func (s *CaregiverService) LinkSite(ctx context.Context, id, siteID uuid.UUID, actors ...ActorContext) (*Caregiver, error) {
-	return s.Update(ctx, id, UpdateCaregiverInput{SiteID: &siteID}, actors...)
 }
 
 func actorOrEmpty(actors []ActorContext) ActorContext {

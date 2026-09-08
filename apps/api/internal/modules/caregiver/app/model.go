@@ -6,42 +6,38 @@ import (
 	"github.com/google/uuid"
 )
 
-// Caregiver 代表一位照護人員。SiteID 為 nil 且 SiteNameRaw 有值時，表示匯入時的
-// 單位名稱未比對到既有單位，待人工於「待維護」畫面補建關聯。
+// Caregiver 代表一位照護人員。SiteName 是自由輸入的據點文字註記，非必填，不關聯
+// 據點主檔。
 type Caregiver struct {
-	ID          uuid.UUID
-	SiteID      *uuid.UUID
-	SiteName    string
-	SiteNameRaw string
-	Name        string
-	Type        string
-	Contact     string
-	Notes       string
-	Status      string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID        uuid.UUID
+	SiteName  string
+	Name      string
+	Type      string
+	Contact   string
+	Notes     string
+	Status    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // CaregiverAuditSnapshot 是照護人員主檔的明確稽核快照；聯絡方式與備註屬於
 // 個人資料，不直接寫入 audit_log。
 type CaregiverAuditSnapshot struct {
-	ID          uuid.UUID  `json:"id"`
-	SiteID      *uuid.UUID `json:"siteId,omitempty"`
-	SiteNameRaw string     `json:"siteNameRaw,omitempty"`
-	Name        string     `json:"name"`
-	Type        string     `json:"type"`
-	Status      string     `json:"status"`
+	ID       uuid.UUID `json:"id"`
+	SiteName string    `json:"siteName,omitempty"`
+	Name     string    `json:"name"`
+	Type     string    `json:"type"`
+	Status   string    `json:"status"`
 }
 
 // AuditSnapshot 產生照護人員的明確稽核快照。
 func (c Caregiver) AuditSnapshot() CaregiverAuditSnapshot {
 	return CaregiverAuditSnapshot{
-		ID:          c.ID,
-		SiteID:      c.SiteID,
-		SiteNameRaw: c.SiteNameRaw,
-		Name:        c.Name,
-		Type:        c.Type,
-		Status:      c.Status,
+		ID:       c.ID,
+		SiteName: c.SiteName,
+		Name:     c.Name,
+		Type:     c.Type,
+		Status:   c.Status,
 	}
 }
 
@@ -66,7 +62,7 @@ type CaregiverImportErrorItem struct {
 }
 
 // CaregiverImportWarningItem 代表單筆匯入警告明細：資料已建立但仍需人工處理。
-// Field 為 "site" 表示單位待關聯既有單位，為 "contact"／"notes" 表示該欄位缺漏待補齊。
+// Field 為 "contact"／"notes" 表示該欄位缺漏待補齊。
 type CaregiverImportWarningItem struct {
 	RowID    string `json:"rowId,omitempty"`
 	RowIndex int    `json:"rowIndex"`
@@ -80,7 +76,6 @@ type CaregiverImportRowResult struct {
 	RowID                  string            `json:"rowId"`
 	RowIndex               int               `json:"rowIndex"`
 	SiteName               string            `json:"siteName,omitempty"`
-	SiteID                 *uuid.UUID        `json:"siteId,omitempty"`
 	Name                   string            `json:"name"`
 	Type                   string            `json:"type,omitempty"`
 	Contact                string            `json:"contact,omitempty"`
@@ -108,7 +103,7 @@ type CaregiverImportSkippedRow struct {
 }
 
 // CaregiverImportCommitResult 回傳正式匯入成功與略過的列。Warnings 承載已建立但
-// 仍待人工補齊聯絡方式／備註或關聯單位的提示。
+// 仍待人工補齊姓名／類型的提示。
 type CaregiverImportCommitResult struct {
 	ImportedCount int                          `json:"importedCount"`
 	SkippedRows   []CaregiverImportSkippedRow  `json:"skippedRows"`

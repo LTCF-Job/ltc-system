@@ -21,7 +21,6 @@ type ActiveSchedule struct {
 	CaseName      string
 	Region        string
 	ClaimEndDate  *time.Time
-	SiteID        uuid.UUID
 	SiteOpenDays  []int16
 	EffectiveFrom time.Time
 	EffectiveTo   *time.Time
