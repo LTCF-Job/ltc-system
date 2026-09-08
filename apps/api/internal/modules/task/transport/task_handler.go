@@ -24,7 +24,6 @@ func NewTaskHandler(svc *app.TaskService) *TaskHandler {
 // CheckMissingReports 觸發未回報檢查並派送通知。
 func (h *TaskHandler) CheckMissingReports(c *gin.Context) {
 	dateStr := c.DefaultQuery("date", clock.Today().Format("2006-01-02"))
-	region := c.Query("region")
 
 	targetDate, err := rocdate.ParseDate(dateStr)
 	if err != nil {
@@ -32,7 +31,7 @@ func (h *TaskHandler) CheckMissingReports(c *gin.Context) {
 		return
 	}
 
-	missingList, err := h.svc.CheckMissingReports(c.Request.Context(), targetDate, region)
+	missingList, err := h.svc.CheckMissingReports(c.Request.Context(), targetDate)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
@@ -50,7 +49,6 @@ func (h *TaskHandler) CheckMissingReports(c *gin.Context) {
 // GetMissingReports 供前端頁面查詢特定日期或今日之未回報清單。
 func (h *TaskHandler) GetMissingReports(c *gin.Context) {
 	dateStr := c.DefaultQuery("date", clock.Today().Format("2006-01-02"))
-	region := c.Query("region")
 
 	targetDate, err := rocdate.ParseDate(dateStr)
 	if err != nil {
@@ -58,7 +56,7 @@ func (h *TaskHandler) GetMissingReports(c *gin.Context) {
 		return
 	}
 
-	missingList, err := h.svc.ListMissingReports(c.Request.Context(), targetDate, region)
+	missingList, err := h.svc.ListMissingReports(c.Request.Context(), targetDate)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return

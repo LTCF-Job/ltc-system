@@ -57,7 +57,7 @@ func newFakeCaseStore() *fakeCaseStore {
 	}
 }
 
-func (f *fakeCaseStore) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
+func (f *fakeCaseStore) List(ctx context.Context, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
 	return nil, 0, nil
 }
 
@@ -110,7 +110,7 @@ func (f *fakeCaseStore) GetActiveScheduleForCaseOnDate(ctx context.Context, case
 	return nil, nil
 }
 
-func (f *fakeCaseStore) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]ActiveCaseScheduleInfo, error) {
+func (f *fakeCaseStore) GetActiveSchedulesForMonth(ctx context.Context, year, month int) ([]ActiveCaseScheduleInfo, error) {
 	return nil, nil
 }
 
@@ -185,7 +185,7 @@ func TestCaseService_CreateCaseSchedule_ValidatesRequest(t *testing.T) {
 			req.Weekdays = append([]int16(nil), base.Weekdays...)
 			req.Legs = append([]CreateScheduleLegItemRequest(nil), base.Legs...)
 			tt.mutate(&req)
-			svc := NewCaseService(testConfig(), newFakeCaseStore(), &fakeSiteFinder{site: &SiteRef{ID: req.SiteID, Region: "north"}}, nil, nil, nil)
+			svc := NewCaseService(testConfig(), newFakeCaseStore(), &fakeSiteFinder{site: &SiteRef{ID: req.SiteID}}, nil, nil, nil)
 
 			_, err := svc.CreateCaseSchedule(context.Background(), req)
 			require.ErrorIs(t, err, tt.want)
@@ -273,7 +273,6 @@ func TestCreateCase_OnlyNameSucceeds(t *testing.T) {
 	assert.Equal(t, "只填姓名", entity.Name)
 	assert.Nil(t, entity.NationalIDCipher)
 	assert.Nil(t, entity.HomeAddress)
-	assert.Nil(t, entity.Region)
 	assert.Equal(t, "active", entity.Status)
 }
 

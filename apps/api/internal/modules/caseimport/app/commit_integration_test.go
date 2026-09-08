@@ -79,8 +79,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	site := masterapp.Site{
 		Name:     "測試單位-" + uuid.NewString()[:8],
 		Address:  "測試地址",
-		Region:   region,
-		OpenDays: []int16{1, 2, 3, 4, 5},
 		Status:   "active",
 	}
 	require.NoError(t, siteRepo.Create(ctx, &site))
@@ -101,7 +99,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		Name:        "受測個案A",
 		NationalID:  "A202559750",
 		HomeAddress: "苗栗縣測試路1號",
-		Region:      region,
 		SiteName:    site.Name,
 	}
 
@@ -111,7 +108,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		RowIndex:        2,
 		Name:            "受測個案B",
 		HomeAddress:     "苗栗縣測試路2號",
-		Region:          region,
 		SiteName:        site.Name,
 		OutboundVehicle: "FORCE_ROLLBACK",
 	}
@@ -122,7 +118,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		Name:        "受測個案C",
 		NationalID:  "G121806465",
 		HomeAddress: "苗栗縣測試路3號",
-		Region:      region,
 		SiteName:    site.Name,
 	}
 
@@ -146,7 +141,7 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	require.Equal(t, 2, result.FailedRows[0].RowIndex)
 
 	// 驗證 Row B 沒有殘留孤兒個案。
-	orphans, orphanCount, err := caseRepo.List(ctx, region, "", rowB.Name, 1, 10, false, false)
+	orphans, orphanCount, err := caseRepo.List(ctx, "", rowB.Name, 1, 10, false, false)
 	require.NoError(t, err)
 	require.Zero(t, orphanCount, "Row B 的個案主檔必須未寫入")
 	require.Empty(t, orphans, "Row B 的個案主檔必須未寫入")
@@ -198,8 +193,8 @@ func (a siteAdapter) GetByName(ctx context.Context, name string) (*importapp.Sit
 	return &importapp.SiteRef{ID: s.ID, Name: s.Name}, nil
 }
 
-func (a siteAdapter) List(ctx context.Context, region string, page, pageSize int) ([]importapp.SiteRef, error) {
-	list, _, err := a.repo.List(ctx, region, "", "", page, pageSize)
+func (a siteAdapter) List(ctx context.Context, page, pageSize int) ([]importapp.SiteRef, error) {
+	list, _, err := a.repo.List(ctx, "", "", "", page, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +244,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		Name: in.Name, NationalID: in.NationalID,
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
-		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
+		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress,
 		ServiceCategory:  intPointerOrNilForTest(in.ServiceCategory),
 		ServiceUsageType: intPointerOrNilForTest(in.ServiceUsageType), Status: in.Status,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
@@ -291,7 +286,7 @@ func (a caseDuplicateStager) StageDuplicateRow(ctx context.Context, fileHash, ro
 		Name: in.Name, NationalID: in.NationalID,
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate, BirthDateRaw: in.BirthDateRaw,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
-		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
+		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress,
 		ServiceCategory:  intPointerOrNilForTest(in.ServiceCategory),
 		ServiceUsageType: intPointerOrNilForTest(in.ServiceUsageType),
 		Remarks:          in.Remarks,

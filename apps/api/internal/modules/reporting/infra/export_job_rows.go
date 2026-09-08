@@ -15,7 +15,6 @@ type exportJobRow struct {
 	ID            uuid.UUID
 	JobType       string
 	PeriodYM      string
-	Region        string
 	Format        string
 	Status        string
 	ErrorMessage  *string
@@ -40,7 +39,6 @@ func (r exportJobRow) toApp() app.GovClaimJob {
 		ID:            r.ID,
 		JobType:       r.JobType,
 		PeriodYM:      r.PeriodYM,
-		Region:        r.Region,
 		Mode:          mode,
 		Status:        r.Status,
 		TotalCases:    r.TotalCases,

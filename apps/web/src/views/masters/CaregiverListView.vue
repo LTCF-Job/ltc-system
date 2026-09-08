@@ -206,9 +206,7 @@
       <el-form label-width="90px">
         <el-form-item label="單位名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
         <el-form-item label="區域">
-          <el-select v-model="quickCreateSiteForm.region" clearable placeholder="請選擇區域（選填）" style="width: 100%">
-            <el-option v-for="opt in regionOptions" :key="opt.code" :value="opt.code" :label="opt.name" />
-          </el-select>
+          <el-input v-model="quickCreateSiteForm.region" placeholder="請輸入區域（選填）" clearable />
         </el-form-item>
         <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" placeholder="選填" clearable /></el-form-item>
       </el-form>
@@ -337,16 +335,9 @@ import { listAllSites, createSite } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
-import { CAREGIVER_TYPE_LABELS, type Region, type CaregiverType } from '@/types/domain'
+import { CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
 import type { CaregiverDTO, SiteDTO } from '@/types/api'
 
-import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
-
-// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
-const regionOptions = ref<RegionOption[]>([])
-onMounted(async () => {
-  regionOptions.value = await fetchRegionOptions()
-})
 
 const authStore = useAuthStore()
 const activeTab = ref<'list' | 'pending'>('list')
@@ -610,7 +601,7 @@ async function handleLinkSite(row: CaregiverDTO, siteId: string) {
 const quickCreateSiteVisible = ref(false)
 const quickCreateSiteSaving = ref(false)
 const quickCreateTarget = ref<CaregiverDTO | null>(null)
-const quickCreateSiteForm = reactive({ name: '', region: '' as Region | '', address: '', openDays: [1, 2, 3, 4, 5] })
+const quickCreateSiteForm = reactive({ name: '', region: '', address: '' })
 
 // 單位名稱預先帶入匯入時的原始名稱，使用者只需確認區域與地址即可送出，不必重打一次名稱
 function openQuickCreateSite(row: CaregiverDTO) {

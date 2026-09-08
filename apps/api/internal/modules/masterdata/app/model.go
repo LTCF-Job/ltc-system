@@ -15,7 +15,6 @@ type Site struct {
 	Name      string
 	Address   string
 	Region    string
-	OpenDays  []int16
 	Status    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -23,23 +22,21 @@ type Site struct {
 
 // SiteAuditSnapshot 是單位主檔異動的明確快照。
 type SiteAuditSnapshot struct {
-	ID       uuid.UUID `json:"id"`
-	Name     string    `json:"name"`
-	Address  string    `json:"address"`
-	Region   string    `json:"region"`
-	OpenDays []int16   `json:"openDays"`
-	Status   string    `json:"status"`
+	ID      uuid.UUID `json:"id"`
+	Name    string    `json:"name"`
+	Address string    `json:"address"`
+	Region  string    `json:"region"`
+	Status  string    `json:"status"`
 }
 
 // AuditSnapshot 產生單位主檔的明確稽核快照。
 func (s Site) AuditSnapshot() SiteAuditSnapshot {
 	return SiteAuditSnapshot{
-		ID:       s.ID,
-		Name:     s.Name,
-		Address:  s.Address,
-		Region:   s.Region,
-		OpenDays: append([]int16(nil), s.OpenDays...),
-		Status:   s.Status,
+		ID:      s.ID,
+		Name:    s.Name,
+		Address: s.Address,
+		Region:  s.Region,
+		Status:  s.Status,
 	}
 }
 
@@ -60,10 +57,15 @@ type Vehicle struct {
 	ThirdPartyInsuranceExpiry *time.Time
 	LastInspectionDate        *time.Time
 	WheelchairAccessible      *bool
-	Status                    string
-	Drivers                   []VehicleDriver
-	CreatedAt                 time.Time
-	UpdatedAt                 time.Time
+	// 四項證件持有註記：行照、汽車買賣合約書、領牌登記書、異動登記書。
+	HasVehicleLicense       bool
+	HasPurchaseContract     bool
+	HasPlateRegistration    bool
+	HasTransferRegistration bool
+	Status                  string
+	Drivers                 []VehicleDriver
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 }
 
 // VehicleFilter 是車輛清單的查詢條件，零值欄位代表不篩選。
@@ -95,6 +97,10 @@ type VehicleAuditSnapshot struct {
 	ThirdPartyInsuranceExpiry *time.Time `json:"thirdPartyInsuranceExpiry,omitempty"`
 	LastInspectionDate        *time.Time `json:"lastInspectionDate,omitempty"`
 	WheelchairAccessible      *bool      `json:"wheelchairAccessible,omitempty"`
+	HasVehicleLicense         bool       `json:"hasVehicleLicense"`
+	HasPurchaseContract       bool       `json:"hasPurchaseContract"`
+	HasPlateRegistration      bool       `json:"hasPlateRegistration"`
+	HasTransferRegistration   bool       `json:"hasTransferRegistration"`
 	Status                    string     `json:"status"`
 }
 
@@ -113,6 +119,10 @@ func (v Vehicle) AuditSnapshot() VehicleAuditSnapshot {
 		ThirdPartyInsuranceExpiry: v.ThirdPartyInsuranceExpiry,
 		LastInspectionDate:        v.LastInspectionDate,
 		WheelchairAccessible:      v.WheelchairAccessible,
+		HasVehicleLicense:         v.HasVehicleLicense,
+		HasPurchaseContract:       v.HasPurchaseContract,
+		HasPlateRegistration:      v.HasPlateRegistration,
+		HasTransferRegistration:   v.HasTransferRegistration,
 		Status:                    v.Status,
 	}
 }
@@ -134,7 +144,6 @@ type Driver struct {
 	NationalIDHMAC   []byte
 	NationalIDMasked string
 	Email            *string
-	Region           string
 	Status           string
 	// LicenseClass 為駕照類別代碼，LicenseExpiryDate 為駕照有效日期；兩者皆可為空，代表尚未補登。
 	LicenseClass           *string
@@ -144,7 +153,6 @@ type Driver struct {
 	HasProfessionalLicense bool
 	EmploymentDate         *time.Time
 	HasTransferCert        bool
-	InspectionDate         *time.Time
 	Remarks                *string
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
@@ -156,7 +164,6 @@ type DriverAuditSnapshot struct {
 	ID                     uuid.UUID  `json:"id"`
 	Name                   string     `json:"name"`
 	NationalIDMasked       string     `json:"nationalIdMasked,omitempty"`
-	Region                 string     `json:"region"`
 	Status                 string     `json:"status"`
 	LicenseClass           *string    `json:"licenseClass,omitempty"`
 	LicenseExpiryDate      *time.Time `json:"licenseExpiryDate,omitempty"`
@@ -165,7 +172,6 @@ type DriverAuditSnapshot struct {
 	HasProfessionalLicense bool       `json:"hasProfessionalLicense"`
 	EmploymentDate         *time.Time `json:"employmentDate,omitempty"`
 	HasTransferCert        bool       `json:"hasTransferCert"`
-	InspectionDate         *time.Time `json:"inspectionDate,omitempty"`
 	Remarks                *string    `json:"remarks,omitempty"`
 }
 
@@ -175,7 +181,6 @@ func (d Driver) AuditSnapshot() DriverAuditSnapshot {
 		ID:                     d.ID,
 		Name:                   d.Name,
 		NationalIDMasked:       d.NationalIDMasked,
-		Region:                 d.Region,
 		Status:                 d.Status,
 		LicenseClass:           d.LicenseClass,
 		LicenseExpiryDate:      d.LicenseExpiryDate,
@@ -184,7 +189,6 @@ func (d Driver) AuditSnapshot() DriverAuditSnapshot {
 		HasProfessionalLicense: d.HasProfessionalLicense,
 		EmploymentDate:         d.EmploymentDate,
 		HasTransferCert:        d.HasTransferCert,
-		InspectionDate:         d.InspectionDate,
 		Remarks:                d.Remarks,
 	}
 }
@@ -223,19 +227,6 @@ func (a DriverAssignment) AuditSnapshot() DriverAssignmentAuditSnapshot {
 	}
 }
 
-// Region 代表一個服務區域。
-type Region struct {
-	ID uuid.UUID
-	// Code 是業務資料表 region 欄位參照的外鍵值，建立後不可變更。
-	Code        string
-	Name        string
-	Description string
-	Status      string
-	SortOrder   int
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
 // AuditEntry 代表一筆待寫入的稽核紀錄。BeforeData 與 AfterData 是會被序列化進
 // audit_log JSONB 欄位的快照，其形狀即為稽核紀錄的資料契約。
 type AuditEntry struct {
@@ -248,29 +239,4 @@ type AuditEntry struct {
 	AfterData  interface{}
 	IPAddress  *string
 	UserAgent  *string
-}
-
-// RegionSnapshot 是寫入稽核日誌的區域快照。json tag 必須與歷史紀錄一致，否則同
-// 一張表會同時存在兩種欄位命名。
-type RegionSnapshot struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Status      string    `json:"status"`
-	SortOrder   int       `json:"sortOrder"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-}
-
-// Snapshot 產生供稽核日誌保存的區域快照。
-func (r Region) Snapshot() RegionSnapshot {
-	return RegionSnapshot{
-		ID:          r.ID,
-		Name:        r.Name,
-		Description: r.Description,
-		Status:      r.Status,
-		SortOrder:   r.SortOrder,
-		CreatedAt:   r.CreatedAt,
-		UpdatedAt:   r.UpdatedAt,
-	}
 }

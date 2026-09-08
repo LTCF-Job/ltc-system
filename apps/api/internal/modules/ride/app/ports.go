@@ -218,10 +218,8 @@ type CalendarLeg struct {
 type CalendarCase struct {
 	ID            uuid.UUID
 	Name          string
-	Region        string
 	TripPattern   int16
 	Weekdays      []int16
-	SiteOpenDays  []int16
 	ClaimEndDate  *time.Time
 	EffectiveFrom time.Time
 	EffectiveTo   *time.Time
@@ -239,8 +237,8 @@ type PatchValue[T any] struct {
 type RideRecordStore interface {
 	GetFormColumns(ctx context.Context, formID uuid.UUID) ([]FormColumn, error)
 	ListRideSourcesForSlot(ctx context.Context, caseID uuid.UUID, serviceDate time.Time, legSeq int16) ([]RideSourceRow, error)
-	ListCalendarCases(ctx context.Context, start, end time.Time, region, keyword string) ([]CalendarCase, error)
-	ListRideRecordsInRange(ctx context.Context, start, end time.Time, region, keyword string) ([]RideRecord, error)
+	ListCalendarCases(ctx context.Context, start, end time.Time, keyword string) ([]CalendarCase, error)
+	ListRideRecordsInRange(ctx context.Context, start, end time.Time, keyword string) ([]RideRecord, error)
 	SaveFormSubmission(ctx context.Context, formID uuid.UUID, serviceDate, submittedAt time.Time, driverNameRaw string, driverID *uuid.UUID, source string, payload map[string]interface{}, issueText string, anomalyFlags []string) (uuid.UUID, error)
 	InsertRideSource(ctx context.Context, submissionID, caseID uuid.UUID, serviceDate time.Time, legSeq int16, vehicleID uuid.UUID, driverID *uuid.UUID, reported string, colIdx int, submittedAt time.Time) error
 	ListSubmissionAnswersForColumn(ctx context.Context, formID uuid.UUID, columnHeader string) ([]SubmissionAnswer, error)
@@ -334,5 +332,5 @@ type MissingRide struct {
 
 // MissingReportProvider 提供整月未回報清單，由擁有排班/回報比對能力的模組實作。
 type MissingReportProvider interface {
-	ListMissingForMonth(ctx context.Context, year, month int, region string) ([]MissingRide, error)
+	ListMissingForMonth(ctx context.Context, year, month int) ([]MissingRide, error)
 }

@@ -15,7 +15,7 @@ var errReportRepositoryNotConfigured = errors.New("report repository is not conf
 
 // ReportRepositoryPort 定義報表資料存取介面。
 type ReportRepositoryPort interface {
-	QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, region *string, vehicleID *uuid.UUID) ([]ReportVehicleTripSummary, error)
+	QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, vehicleID *uuid.UUID) ([]ReportVehicleTripSummary, error)
 	QueryHsinchuScheduleData(ctx context.Context, siteID *uuid.UUID, vehicleID *uuid.UUID) ([]ReportHsinchuScheduleRow, error)
 }
 
@@ -48,7 +48,6 @@ type TripSummaryVehicle struct {
 // TripSummaryReport 代表車輛趟數表報表總體結構。
 type TripSummaryReport struct {
 	PeriodYM           string               `json:"periodYm"`
-	Region             *string              `json:"region,omitempty"`
 	GeneratedAt        string               `json:"generatedAt"`
 	Vehicles           []TripSummaryVehicle `json:"vehicles"`
 	GrandTotalOutbound int                  `json:"grandTotalOutbound"`
@@ -91,10 +90,9 @@ func NewReportService(repo ReportRepositoryPort, renderer Renderer) *ReportServi
 }
 
 // GetTripSummary 查詢車輛趟數表結構化資料。
-func (s *ReportService) GetTripSummary(ctx context.Context, periodYm string, region *string, vehicleID *uuid.UUID) (*TripSummaryReport, error) {
+func (s *ReportService) GetTripSummary(ctx context.Context, periodYm string, vehicleID *uuid.UUID) (*TripSummaryReport, error) {
 	report := &TripSummaryReport{
 		PeriodYM:    periodYm,
-		Region:      region,
 		GeneratedAt: clock.Now().Format("2006-01-02 15:04:05"),
 		Vehicles:    []TripSummaryVehicle{},
 	}
@@ -107,7 +105,7 @@ func (s *ReportService) GetTripSummary(ctx context.Context, periodYm string, reg
 	if err != nil {
 		return nil, err
 	}
-	vehSummaries, err := s.repo.QueryTripSummaryData(ctx, startDate, endDate, region, vehicleID)
+	vehSummaries, err := s.repo.QueryTripSummaryData(ctx, startDate, endDate, vehicleID)
 	if err != nil {
 		return nil, err
 	}
@@ -145,8 +143,8 @@ func (s *ReportService) GetTripSummary(ctx context.Context, periodYm string, reg
 }
 
 // GenerateTripSummaryExcel 產生車輛趟數表 Excel 檔案。
-func (s *ReportService) GenerateTripSummaryExcel(ctx context.Context, periodYm string, region *string, vehicleID *uuid.UUID) ([]byte, error) {
-	report, err := s.GetTripSummary(ctx, periodYm, region, vehicleID)
+func (s *ReportService) GenerateTripSummaryExcel(ctx context.Context, periodYm string, vehicleID *uuid.UUID) ([]byte, error) {
+	report, err := s.GetTripSummary(ctx, periodYm, vehicleID)
 	if err != nil {
 		return nil, err
 	}

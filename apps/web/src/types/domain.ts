@@ -25,56 +25,6 @@ export interface RoleItem {
   updatedAt?: string
 }
 
-export type Region =
-  | 'hsinchu'
-  | 'hsinchu_city'
-  | 'miaoli'
-  | 'taipei'
-  | 'new_taipei'
-  | 'keelung'
-  | 'taoyuan'
-  | 'taichung'
-  | 'changhua'
-  | 'nantou'
-  | 'yunlin'
-  | 'chiayi_city'
-  | 'chiayi'
-  | 'tainan'
-  | 'kaohsiung'
-  | 'pingtung'
-  | 'yilan'
-  | 'hualien'
-  | 'taitung'
-  | 'penghu'
-  | 'kinmen'
-  | 'lienchiang'
-  | (string & {})
-
-export const REGION_LABELS: Record<string, string> = {
-  hsinchu: '新竹縣',
-  hsinchu_city: '新竹市',
-  miaoli: '苗栗縣',
-  taipei: '臺北市',
-  new_taipei: '新北市',
-  keelung: '基隆市',
-  taoyuan: '桃園市',
-  taichung: '臺中市',
-  changhua: '彰化縣',
-  nantou: '南投縣',
-  yunlin: '雲林縣',
-  chiayi_city: '嘉義市',
-  chiayi: '嘉義縣',
-  tainan: '臺南市',
-  kaohsiung: '高雄市',
-  pingtung: '屏東縣',
-  yilan: '宜蘭縣',
-  hualien: '花蓮縣',
-  taitung: '臺東縣',
-  penghu: '澎湖縣',
-  kinmen: '金門縣',
-  lienchiang: '連江縣'
-}
-
 
 export type CaseStatus = 'active' | 'suspended' | 'closed'
 
@@ -345,7 +295,6 @@ export interface SystemModuleInfo {
 
 export const SYSTEM_MODULES: SystemModuleInfo[] = [
   { id: 'dashboard', name: '總覽儀表板', category: 'overview', categoryName: '首頁儀表' },
-  { id: 'masters_regions', name: '地區管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_cases', name: '個案管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_sites', name: '單位管理', category: 'masters', categoryName: '主檔資料' },
   { id: 'masters_vehicles', name: '車輛管理', category: 'masters', categoryName: '主檔資料' },
@@ -481,6 +430,14 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   sort_order: '排序順序',
   openDays: '營運開放日',
   open_days: '營運開放日',
+  hasVehicleLicense: '行照',
+  has_vehicle_license: '行照',
+  hasPurchaseContract: '汽車買賣合約書',
+  has_purchase_contract: '汽車買賣合約書',
+  hasPlateRegistration: '領牌登記書',
+  has_plate_registration: '領牌登記書',
+  hasTransferRegistration: '異動登記書',
+  has_transfer_registration: '異動登記書',
   formId: '表單代碼',
   form_id: '表單代碼',
   sheetUrl: 'Google 試算表網址',
@@ -623,6 +580,14 @@ export const AUDIT_FIELD_SECTIONS: Record<string, string> = {
   active: '營運狀態',
   openDays: '營運排程',
   open_days: '營運排程',
+  hasVehicleLicense: '證照與檢驗',
+  has_vehicle_license: '證照與檢驗',
+  hasPurchaseContract: '證照與檢驗',
+  has_purchase_contract: '證照與檢驗',
+  hasPlateRegistration: '證照與檢驗',
+  has_plate_registration: '證照與檢驗',
+  hasTransferRegistration: '證照與檢驗',
+  has_transfer_registration: '證照與檢驗',
   sortOrder: '顯示順序',
   sort_order: '顯示順序',
   vehicleId: '車輛與司機指派',

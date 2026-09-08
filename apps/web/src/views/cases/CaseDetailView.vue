@@ -48,18 +48,6 @@
               </el-form-item>
             </el-col>
             <el-col :xs="24" :sm="12" :lg="6">
-              <el-form-item label="申報地區" prop="region">
-                <el-select v-model="editForm.region" filterable style="width: 100%">
-                  <el-option
-                    v-for="opt in regionOptions"
-                    :key="opt.code"
-                    :value="opt.code"
-                    :label="opt.name"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :xs="24" :sm="12" :lg="6">
               <el-form-item label="個案狀態" prop="status">
                 <el-select v-model="editForm.status" style="width: 100%">
                   <el-option value="active" label="在案" />
@@ -229,7 +217,6 @@
         <ScheduleEditor
           v-if="caseData"
           :case-id="caseData.id"
-          :region="caseData.region || ''"
           :schedule="caseData.activeSchedule"
           @saved="handleScheduleSaved"
         />
@@ -249,16 +236,8 @@ import { getCase, updateCase, deleteCase, getCaseSchedule, updateCaseTransportPr
 import { listAllSites, listAllVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
-import { REGION_LABELS } from '@/types/domain'
 import type { CaseDTO, UpdateCaseRequest, UpdateCaseTransportPreferenceRequest, SiteDTO, VehicleDTO } from '@/types/api'
 
-import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
-
-// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
-const regionOptions = ref<RegionOption[]>([])
-onMounted(async () => {
-  regionOptions.value = await fetchRegionOptions()
-})
 
 const route = useRoute()
 const router = useRouter()
@@ -275,7 +254,6 @@ const availableVehicles = ref<VehicleDTO[]>([])
 
 const editForm = reactive<UpdateCaseRequest>({
   name: '',
-  region: undefined,
   homeAddress: '',
   serviceCategory: undefined,
   serviceUsageType: undefined,
@@ -317,7 +295,6 @@ async function fetchDetail() {
 
     caseData.value = res
     editForm.name = res.name || ''
-    editForm.region = res.region ?? undefined
     editForm.homeAddress = res.homeAddress || ''
     editForm.serviceCategory = res.serviceCategory
     editForm.serviceUsageType = res.serviceUsageType

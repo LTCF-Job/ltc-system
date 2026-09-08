@@ -49,6 +49,12 @@
       <el-radio-button :value="false">否</el-radio-button>
     </el-radio-group>
   </el-form-item>
+  <el-form-item label="證件資料">
+    <el-checkbox v-model="form.hasVehicleLicense">行照</el-checkbox>
+    <el-checkbox v-model="form.hasPurchaseContract">汽車買賣合約書</el-checkbox>
+    <el-checkbox v-model="form.hasPlateRegistration">領牌登記書</el-checkbox>
+    <el-checkbox v-model="form.hasTransferRegistration">異動登記書</el-checkbox>
+  </el-form-item>
   <el-form-item v-if="showStatus" label="狀態" prop="status">
     <el-radio-group v-model="form.status" class="status-radio-group">
       <el-radio-button value="active">

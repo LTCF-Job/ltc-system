@@ -29,18 +29,13 @@ func (h *ReportHandler) GetTripSummary(c *gin.Context) {
 	if !validatePeriod(c, periodYm) {
 		return
 	}
-	region := c.Query("region")
-	var regionPtr *string
-	if region != "" {
-		regionPtr = &region
-	}
 
 	vehID, ok := parseOptionalUUID(c, "vehicleId")
 	if !ok {
 		return
 	}
 
-	report, err := h.reportSvc.GetTripSummary(c.Request.Context(), periodYm, regionPtr, vehID)
+	report, err := h.reportSvc.GetTripSummary(c.Request.Context(), periodYm, vehID)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
@@ -55,18 +50,13 @@ func (h *ReportHandler) ExportTripSummaryExcel(c *gin.Context) {
 	if !validatePeriod(c, periodYm) {
 		return
 	}
-	region := c.Query("region")
-	var regionPtr *string
-	if region != "" {
-		regionPtr = &region
-	}
 
 	vehID, ok := parseOptionalUUID(c, "vehicleId")
 	if !ok {
 		return
 	}
 
-	excelBytes, err := h.reportSvc.GenerateTripSummaryExcel(c.Request.Context(), periodYm, regionPtr, vehID)
+	excelBytes, err := h.reportSvc.GenerateTripSummaryExcel(c.Request.Context(), periodYm, vehID)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return

@@ -1,9 +1,6 @@
 import { apiClient, createPaginationMeta, unwrapData, unwrapPaged } from './client'
 import type {
   Paged,
-  RegionDTO,
-  CreateRegionRequest,
-  UpdateRegionRequest,
   SiteDTO,
   CreateSiteRequest,
   UpdateSiteRequest,
@@ -34,39 +31,6 @@ async function collectAllPages<T>(fetchPage: (page: number, pageSize: number) =>
 
   return items
 }
-
-// 區域 Regions
-export async function listRegions(params?: {
-  page?: number
-  pageSize?: number
-  q?: string
-  status?: string
-  all?: boolean
-}): Promise<Paged<RegionDTO>> {
-  const res = await apiClient.get('/regions', { params })
-  return unwrapPaged<RegionDTO>(res, createPaginationMeta(params?.page, params?.pageSize))
-}
-
-export async function listAllRegions(): Promise<RegionDTO[]> {
-  const res = await apiClient.get('/regions', { params: { all: true } })
-  return unwrapData<RegionDTO[]>(res) ?? []
-}
-
-export async function createRegion(data: CreateRegionRequest): Promise<RegionDTO> {
-  const res = await apiClient.post('/regions', data)
-  return unwrapData<RegionDTO>(res)
-}
-
-export async function updateRegion(id: string, data: UpdateRegionRequest): Promise<RegionDTO> {
-  const res = await apiClient.patch(`/regions/${id}`, data)
-  return unwrapData<RegionDTO>(res)
-}
-
-export async function deleteRegion(id: string): Promise<void> {
-	const res = await apiClient.delete(`/regions/${id}`)
-	unwrapData<unknown>(res)
-}
-
 
 // 單位 Sites
 export async function listSites(params?: {
@@ -170,8 +134,6 @@ export async function revealDriverId(id: string): Promise<{ nationalId: string }
 
 export async function assignDriverVehicle(driverId: string, data: {
   vehicleId: string
-  startDate: string
-  endDate?: string
 }): Promise<void> {
 	const res = await apiClient.post(`/drivers/${driverId}/assignments`, data)
 	unwrapData<unknown>(res)

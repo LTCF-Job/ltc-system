@@ -12,7 +12,6 @@ import (
 type createExportJobRequest struct {
 	JobType  string   `json:"jobType"`
 	PeriodYM string   `json:"periodYm" binding:"required"`
-	Region   string   `json:"region"`
 	Mode     string   `json:"mode" binding:"required,oneof=direct zip"`
 	CaseIDs  []string `json:"caseIds" binding:"required,min=1,dive,uuid"`
 }
@@ -21,7 +20,6 @@ type createExportJobRequest struct {
 type exportJobFileResponse struct {
 	CaseID      string `json:"caseId"`
 	CaseName    string `json:"caseName"`
-	Region      string `json:"region"`
 	RowCount    int    `json:"rowCount"`
 	FileName    string `json:"fileName"`
 	DownloadURL string `json:"downloadUrl"`
@@ -41,7 +39,6 @@ type exportJobResponse struct {
 	ID            string                     `json:"id"`
 	JobType       string                     `json:"jobType"`
 	PeriodYM      string                     `json:"periodYm"`
-	Region        string                     `json:"region"`
 	Mode          string                     `json:"mode"`
 	Status        string                     `json:"status"`
 	TotalCases    int                        `json:"totalCases"`
@@ -62,7 +59,6 @@ func toExportJobResponse(job app.GovClaimJob) exportJobResponse {
 		ID:            job.ID.String(),
 		JobType:       job.JobType,
 		PeriodYM:      job.PeriodYM,
-		Region:        job.Region,
 		Mode:          string(job.Mode),
 		Status:        job.Status,
 		TotalCases:    job.TotalCases,
@@ -79,7 +75,6 @@ func toExportJobResponse(job app.GovClaimJob) exportJobResponse {
 		resp.Files = append(resp.Files, exportJobFileResponse{
 			CaseID:      file.CaseID.String(),
 			CaseName:    file.CaseName,
-			Region:      file.Region,
 			RowCount:    file.RowCount,
 			FileName:    file.FileName,
 			DownloadURL: caseFileDownloadURL(job.ID.String(), file.CaseID.String()),
@@ -97,7 +92,7 @@ func toExportJobResponse(job app.GovClaimJob) exportJobResponse {
 
 	// 只有壓縮檔模式才有整包下載；逐案下載模式的連結一律掛在 files 上
 	if job.Mode == app.GovClaimModeZip && job.Status == app.ExportStatusSucceeded {
-		resp.ZipFileName = app.ZipFileName(job.Region, job.PeriodYM)
+		resp.ZipFileName = app.ZipFileName(job.PeriodYM)
 		resp.DownloadURL = fmt.Sprintf("/api/v1/exports/%s/download", job.ID.String())
 	}
 
@@ -112,7 +107,6 @@ func toExportJobListResponse(jobs []app.GovClaimJob) []exportJobResponse {
 			ID:            job.ID.String(),
 			JobType:       job.JobType,
 			PeriodYM:      job.PeriodYM,
-			Region:        job.Region,
 			Mode:          string(job.Mode),
 			Status:        job.Status,
 			TotalCases:    job.TotalCases,

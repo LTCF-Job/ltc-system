@@ -121,15 +121,11 @@
 
           <el-menu-item-group>
             <template #title><span class="nav-group-label">資料管理</span></template>
-          <el-sub-menu v-if="authStore.hasPermission('masters_regions') || authStore.hasPermission('masters_cases') || authStore.hasPermission('masters_sites') || authStore.hasPermission('masters_vehicles') || authStore.hasPermission('masters_drivers') || authStore.hasPermission('masters_caregivers')" index="masters">
+          <el-sub-menu v-if="authStore.hasPermission('masters_cases') || authStore.hasPermission('masters_sites') || authStore.hasPermission('masters_vehicles') || authStore.hasPermission('masters_drivers') || authStore.hasPermission('masters_caregivers')" index="masters">
             <template #title>
               <el-icon><Folder /></el-icon>
               <span>主檔資料</span>
             </template>
-            <el-menu-item v-if="authStore.hasPermission('masters_regions')" index="/masters/regions">
-              <el-icon><MapLocation /></el-icon>
-              <template #title>地區管理</template>
-            </el-menu-item>
             <el-menu-item v-if="authStore.hasPermission('masters_cases')" index="/cases">
               <el-icon><User /></el-icon>
               <template #title>個案管理</template>
@@ -294,7 +290,6 @@ import {
   DataAnalysis,
   List,
   Setting,
-  MapLocation,
   Lock,
   UserFilled,
   Tickets,

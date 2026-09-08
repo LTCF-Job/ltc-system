@@ -22,24 +22,18 @@ func NewReportRepository(db *pgxpool.Pool) *ReportRepository {
 }
 
 // QueryTripSummaryData 查詢車輛趟數表所需之資料庫聚合資料。
-func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, region *string, vehicleID *uuid.UUID) ([]app.ReportVehicleTripSummary, error) {
+func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, vehicleID *uuid.UUID) ([]app.ReportVehicleTripSummary, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("report database is not configured")
 	}
 
 	vehQuery := `
-		SELECT v.id, v.plate_no, v.display_name, COALESCE(s.region, '')
+		SELECT v.id, v.plate_no, v.display_name
 		FROM vehicles v
-		LEFT JOIN sites s ON s.id = v.site_id
 		WHERE v.deleted_at IS NULL
 	`
 	var args []interface{}
 	argIdx := 1
-	if region != nil && *region != "" {
-		vehQuery += fmt.Sprintf(" AND s.region = $%d", argIdx)
-		args = append(args, *region)
-		argIdx++
-	}
 	if vehicleID != nil {
 		vehQuery += fmt.Sprintf(" AND v.id = $%d", argIdx)
 		args = append(args, *vehicleID)
@@ -56,7 +50,7 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 	var vehicles []app.ReportVehicleItem
 	for vehRows.Next() {
 		var v app.ReportVehicleItem
-		if err := vehRows.Scan(&v.ID, &v.PlateNo, &v.DisplayName, &v.Region); err != nil {
+		if err := vehRows.Scan(&v.ID, &v.PlateNo, &v.DisplayName); err != nil {
 			return nil, fmt.Errorf("failed to scan report vehicle: %w", err)
 		}
 		vehicles = append(vehicles, v)
@@ -140,8 +134,7 @@ func (r *ReportRepository) QueryHsinchuScheduleDataAsOf(ctx context.Context, asO
 		JOIN sites s ON s.id = cs.site_id
 		LEFT JOIN vehicles v ON v.id = l.vehicle_id AND v.deleted_at IS NULL
 		JOIN case_pending_status ps ON ps.case_id = c.id
-		WHERE c.region = 'hsinchu'
-		  AND c.status = 'active'
+		WHERE c.status = 'active'
 		  AND NOT ps.is_pending
 		  AND cs.effective_range @> $1::date
 	`

@@ -20,7 +20,6 @@ type SiteResponse struct {
 	Name      string    `json:"name"`
 	Address   string    `json:"address"`
 	Region    string    `json:"region"`
-	OpenDays  []int16   `json:"openDays"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -32,7 +31,6 @@ func newSiteResponse(s app.Site) SiteResponse {
 		Name:      s.Name,
 		Address:   s.Address,
 		Region:    s.Region,
-		OpenDays:  s.OpenDays,
 		Status:    s.Status,
 		CreatedAt: s.CreatedAt,
 		UpdatedAt: s.UpdatedAt,
@@ -52,20 +50,18 @@ func newSiteResponses(list []app.Site) []SiteResponse {
 
 // CreateSiteRequest 代表新增單位請求。
 type CreateSiteRequest struct {
-	Name     string  `json:"name" binding:"required"`
-	Address  string  `json:"address"`
-	Region   string  `json:"region"`
-	OpenDays []int16 `json:"openDays"`
-	Status   string  `json:"status"`
+	Name    string `json:"name" binding:"required"`
+	Address string `json:"address"`
+	Region  string `json:"region"`
+	Status  string `json:"status"`
 }
 
 // UpdateSiteRequest 代表更新單位請求。
 type UpdateSiteRequest struct {
-	Name     string  `json:"name" binding:"required"`
-	Address  string  `json:"address"`
-	Region   string  `json:"region"`
-	OpenDays []int16 `json:"openDays"`
-	Status   string  `json:"status"`
+	Name    string `json:"name" binding:"required"`
+	Address string `json:"address"`
+	Region  string `json:"region"`
+	Status  string `json:"status"`
 }
 
 // VehicleResponse 代表回傳給前端的車輛資料。Region 由所屬單位帶出，為唯讀欄位。
@@ -84,6 +80,10 @@ type VehicleResponse struct {
 	ThirdPartyInsuranceExpiry *time.Time           `json:"thirdPartyInsuranceExpiry"`
 	LastInspectionDate        *time.Time           `json:"lastInspectionDate"`
 	WheelchairAccessible      *bool                `json:"wheelchairAccessible"`
+	HasVehicleLicense         bool                 `json:"hasVehicleLicense"`
+	HasPurchaseContract       bool                 `json:"hasPurchaseContract"`
+	HasPlateRegistration      bool                 `json:"hasPlateRegistration"`
+	HasTransferRegistration   bool                 `json:"hasTransferRegistration"`
 	Status                    string               `json:"status"`
 	Drivers                   []VehicleDriverBrief `json:"drivers"`
 	CreatedAt                 time.Time            `json:"createdAt"`
@@ -116,6 +116,10 @@ func newVehicleResponse(v app.Vehicle) VehicleResponse {
 		ThirdPartyInsuranceExpiry: v.ThirdPartyInsuranceExpiry,
 		LastInspectionDate:        v.LastInspectionDate,
 		WheelchairAccessible:      v.WheelchairAccessible,
+		HasVehicleLicense:         v.HasVehicleLicense,
+		HasPurchaseContract:       v.HasPurchaseContract,
+		HasPlateRegistration:      v.HasPlateRegistration,
+		HasTransferRegistration:   v.HasTransferRegistration,
 		Status:                    v.Status,
 		Drivers:                   drivers,
 		CreatedAt:                 v.CreatedAt,
@@ -158,7 +162,17 @@ type VehicleWriteFields struct {
 	ThirdPartyInsuranceExpiry *wireDate  `json:"thirdPartyInsuranceExpiry"`
 	LastInspectionDate        *wireDate  `json:"lastInspectionDate"`
 	WheelchairAccessible      *bool      `json:"wheelchairAccessible"`
-	Status                    string     `json:"status"`
+	// 四項證件持有註記：行照、汽車買賣合約書、領牌登記書、異動登記書。未提供時預設 false。
+	HasVehicleLicense       *bool  `json:"hasVehicleLicense"`
+	HasPurchaseContract     *bool  `json:"hasPurchaseContract"`
+	HasPlateRegistration    *bool  `json:"hasPlateRegistration"`
+	HasTransferRegistration *bool  `json:"hasTransferRegistration"`
+	Status                  string `json:"status"`
+}
+
+// boolOrFalse 讓未提供的證件註記維持 false，避免 nil 與 false 兩種語意混用。
+func boolOrFalse(b *bool) bool {
+	return b != nil && *b
 }
 
 func (f VehicleWriteFields) toInput() app.VehicleInput {
@@ -174,6 +188,10 @@ func (f VehicleWriteFields) toInput() app.VehicleInput {
 		ThirdPartyInsuranceExpiry: f.ThirdPartyInsuranceExpiry.toTimePtr(),
 		LastInspectionDate:        f.LastInspectionDate.toTimePtr(),
 		WheelchairAccessible:      f.WheelchairAccessible,
+		HasVehicleLicense:         boolOrFalse(f.HasVehicleLicense),
+		HasPurchaseContract:       boolOrFalse(f.HasPurchaseContract),
+		HasPlateRegistration:      boolOrFalse(f.HasPlateRegistration),
+		HasTransferRegistration:   boolOrFalse(f.HasTransferRegistration),
 		Status:                    f.Status,
 	}
 }
@@ -189,10 +207,8 @@ type DriverResponse struct {
 	HasProfessionalLicense bool       `json:"hasProfessionalLicense"`
 	EmploymentDate         *time.Time `json:"employmentDate,omitempty"`
 	HasTransferCert        bool       `json:"hasTransferCert"`
-	InspectionDate         *time.Time `json:"inspectionDate,omitempty"`
 	Remarks                *string    `json:"remarks,omitempty"`
 	Email                  *string    `json:"email,omitempty"`
-	Region                 string     `json:"region"`
 	Status                 string     `json:"status"`
 	// LicenseClass 為駕照類別代碼（sedan／truck／bus／trailer），未補登時為 null。
 	LicenseClass      *string    `json:"licenseClass"`
@@ -212,10 +228,8 @@ func newDriverResponse(d app.Driver) DriverResponse {
 		HasProfessionalLicense: d.HasProfessionalLicense,
 		EmploymentDate:         d.EmploymentDate,
 		HasTransferCert:        d.HasTransferCert,
-		InspectionDate:         d.InspectionDate,
 		Remarks:                d.Remarks,
 		Email:                  d.Email,
-		Region:                 d.Region,
 		Status:                 d.Status,
 		LicenseClass:           d.LicenseClass,
 		LicenseExpiryDate:      d.LicenseExpiryDate,
@@ -267,7 +281,6 @@ type CreateDriverRequest struct {
 	Name                   string    `json:"name" binding:"required"`
 	NationalID             string    `json:"nationalId" binding:"required"`
 	Email                  *string   `json:"email"`
-	Region                 string    `json:"region"`
 	LicenseClass           *string   `json:"licenseClass"`
 	LicenseExpiryDate      *wireDate `json:"licenseExpiryDate"`
 	Gender                 *string   `json:"gender"`
@@ -275,15 +288,14 @@ type CreateDriverRequest struct {
 	HasProfessionalLicense *bool     `json:"hasProfessionalLicense"`
 	EmploymentDate         *wireDate `json:"employmentDate"`
 	HasTransferCert        *bool     `json:"hasTransferCert"`
-	InspectionDate         *wireDate `json:"inspectionDate"`
 	Remarks                *string   `json:"remarks"`
 }
 
 // UpdateDriverRequest 代表更新司機請求，欄位為 nil 表示不變更。
 type UpdateDriverRequest struct {
 	Name                   *string      `json:"name"`
+	NationalID             *string      `json:"nationalId"`
 	Email                  *string      `json:"email"`
-	Region                 *string      `json:"region"`
 	Status                 *string      `json:"status"`
 	LicenseClass           *string      `json:"licenseClass"`
 	LicenseExpiryDate      nullableTime `json:"licenseExpiryDate"`
@@ -292,7 +304,6 @@ type UpdateDriverRequest struct {
 	HasProfessionalLicense *bool        `json:"hasProfessionalLicense"`
 	EmploymentDate         nullableTime `json:"employmentDate"`
 	HasTransferCert        *bool        `json:"hasTransferCert"`
-	InspectionDate         nullableTime `json:"inspectionDate"`
 	Remarks                *string      `json:"remarks"`
 }
 
@@ -369,67 +380,14 @@ func (d wireDate) toTime() time.Time {
 	return time.Time(d)
 }
 
-// AssignVehicleRequest 代表指派司機車輛請求。
+// AssignVehicleRequest 代表指派司機車輛請求。指派不再由使用者輸入期間，
+// 一律自今日起生效且不設結束日。
 type AssignVehicleRequest struct {
-	VehicleID     uuid.UUID `json:"vehicleId" binding:"required"`
-	EffectiveFrom wireDate  `json:"effectiveFrom" binding:"required"`
-	EffectiveTo   *wireDate `json:"effectiveTo"`
+	VehicleID uuid.UUID `json:"vehicleId" binding:"required"`
 }
 
 // SetVehicleDriversRequest 代表整批設定車輛司機的請求。DriverIDs 為空代表清空該車司機。
 type SetVehicleDriversRequest struct {
 	DriverIDs     []uuid.UUID `json:"driverIds"`
 	EffectiveFrom *wireDate   `json:"effectiveFrom"`
-}
-
-// RegionResponse 代表回傳給前端的區域資料。
-type RegionResponse struct {
-	ID          uuid.UUID `json:"id"`
-	Code        string    `json:"code"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Status      string    `json:"status"`
-	SortOrder   int       `json:"sortOrder"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-}
-
-func newRegionResponse(r app.Region) RegionResponse {
-	return RegionResponse{
-		ID:          r.ID,
-		Code:        r.Code,
-		Name:        r.Name,
-		Description: r.Description,
-		Status:      r.Status,
-		SortOrder:   r.SortOrder,
-		CreatedAt:   r.CreatedAt,
-		UpdatedAt:   r.UpdatedAt,
-	}
-}
-
-func newRegionResponses(list []app.Region) []RegionResponse {
-	if list == nil {
-		return nil
-	}
-	out := make([]RegionResponse, 0, len(list))
-	for _, r := range list {
-		out = append(out, newRegionResponse(r))
-	}
-	return out
-}
-
-// CreateRegionRequest 代表新增區域請求。
-type CreateRegionRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
-	SortOrder   int    `json:"sortOrder"`
-}
-
-// UpdateRegionRequest 代表更新區域請求，欄位為 nil 表示不變更。
-type UpdateRegionRequest struct {
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	Status      *string `json:"status"`
-	SortOrder   *int    `json:"sortOrder"`
 }

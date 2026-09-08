@@ -3,7 +3,6 @@ import type { TripSummaryReportDTO, HsinchuScheduleReportDTO } from '@/types/api
 
 export async function getTripSummaryReport(params: {
   periodYm: string
-  region?: string
   vehicleId?: string
   q?: string
 }): Promise<TripSummaryReportDTO> {
@@ -13,7 +12,6 @@ export async function getTripSummaryReport(params: {
 
 export async function exportTripSummaryExcel(params: {
   periodYm: string
-  region?: string
   vehicleId?: string
 }): Promise<Blob> {
   return apiClient.get('/reports/trip-summary/export', {

@@ -28,7 +28,7 @@ type VehicleStore interface {
 
 // DriverStore 定義司機主檔與車輛指派的讀寫邊界。
 type DriverStore interface {
-	List(ctx context.Context, region, q, status string, page, pageSize int) ([]Driver, int64, error)
+	List(ctx context.Context, q, status string, page, pageSize int) ([]Driver, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Driver, error)
 	Create(ctx context.Context, d *Driver) error
 	Update(ctx context.Context, d *Driver) error
@@ -42,17 +42,6 @@ type DriverStore interface {
 // TransactionRunner 讓涉及司機主檔與車輛指派的多步驟異動共用同一筆交易。
 type TransactionRunner interface {
 	WithTx(ctx context.Context, fn func(context.Context) error) error
-}
-
-// RegionStore 定義區域主檔的讀寫邊界。
-type RegionStore interface {
-	List(ctx context.Context, q, status string, page, pageSize int) ([]Region, int64, error)
-	ListAll(ctx context.Context) ([]Region, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*Region, error)
-	GetByName(ctx context.Context, name string) (*Region, error)
-	Create(ctx context.Context, r *Region) error
-	Update(ctx context.Context, r *Region) error
-	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 // AuditWriter 定義主檔異動留痕的寫入邊界。

@@ -28,7 +28,7 @@ func NewDriverReportRepository(db *pgxpool.Pool) *DriverReportRepository {
 
 const formSelectColumns = `
 	SELECT f.id, f.vehicle_id, COALESCE(v.display_name, '未知車輛'), f.title,
-	       COALESCE(s.region, 'hsinchu'), f.last_imported_at, f.status,
+	       COALESCE(s.region, ''), f.last_imported_at, f.status,
 	       (SELECT count(*) FROM form_columns fc WHERE fc.form_id = f.id),
 	       (SELECT count(*) FROM form_columns fc WHERE fc.form_id = f.id AND fc.mapping_status = 'mapped'),
 	       (SELECT count(*) FROM form_columns fc WHERE fc.form_id = f.id AND fc.mapping_status = 'pending'),

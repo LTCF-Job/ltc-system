@@ -30,7 +30,7 @@ type fakeSourceReader struct {
 }
 
 func (f *fakeSourceReader) QueryGovClaimSources(_ context.Context, scope app.ClaimScope) ([]app.GovClaimSource, error) {
-	f.gotStart, f.gotEnd, f.gotRegion, f.gotCaseIDs = scope.StartDate, scope.EndDate, scope.RegionValue(), scope.CaseIDs
+	f.gotStart, f.gotEnd, f.gotCaseIDs = scope.StartDate, scope.EndDate, scope.CaseIDs
 	return f.sources, f.err
 }
 
@@ -195,7 +195,6 @@ func newSource(t *testing.T, caseID uuid.UUID, caseCode, caseName string, driver
 	s := app.GovClaimSource{
 		CaseID:               caseID,
 		CaseName:             caseName,
-		Region:               "hsinchu",
 		CaseNationalIDCipher: mustEncrypt(t, "A202559750"),
 		CaseNationalIDMasked: "A2****9750",
 		HomeAddress:          "新竹縣竹北市光明六路264號",
@@ -232,7 +231,6 @@ func newServiceWithAudit(reader app.GovClaimSourceReader, store app.ExportJobSto
 func newInput(mode app.GovClaimMode, caseIDs ...uuid.UUID) app.CreateGovClaimInput {
 	return app.CreateGovClaimInput{
 		PeriodYM:  "11507",
-		Region:    "hsinchu",
 		CaseIDs:   caseIDs,
 		Mode:      mode,
 		CreatedBy: uuid.New(),
@@ -286,7 +284,6 @@ func TestCreateGovClaimJob_UsesSameClaimScopeForPrecheckAndExport(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, reader.gotStart, precheck.scope.StartDate)
 	assert.Equal(t, reader.gotEnd, precheck.scope.EndDate)
-	assert.Equal(t, reader.gotRegion, precheck.scope.RegionValue())
 	assert.Equal(t, reader.gotCaseIDs, precheck.scope.CaseIDs)
 }
 
@@ -466,7 +463,6 @@ func TestCreateGovClaimJob_ZipModeRecordsZipFormat(t *testing.T) {
 	driver := uuid.New()
 	store := &fakeExportStore{jobID: uuid.New()}
 	store.storedJob.Mode = app.GovClaimModeZip
-	store.storedJob.Region = "hsinchu"
 	store.storedJob.PeriodYM = "11507"
 
 	_, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{
@@ -484,7 +480,6 @@ func TestRenderZip_PacksEveryCaseFile(t *testing.T) {
 	driver := uuid.New()
 	store := &fakeExportStore{jobID: uuid.New()}
 	store.storedJob.Mode = app.GovClaimModeZip
-	store.storedJob.Region = "hsinchu"
 	store.storedJob.PeriodYM = "11507"
 	store.ciphers = app.NationalIDCiphers{
 		Case:    mustEncrypt(t, "A202559750"),
@@ -501,7 +496,7 @@ func TestRenderZip_PacksEveryCaseFile(t *testing.T) {
 
 	fileName, archive, err := svc.RenderZip(context.Background(), job.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "gov-claim-hsinchu-11507.zip", fileName)
+	assert.Equal(t, "gov-claim-11507.zip", fileName)
 	assert.NotEmpty(t, archive)
 	require.Len(t, archiver.entries, 2)
 	assert.Equal(t, "林大明11507.xlsx", archiver.entries[0].Name)

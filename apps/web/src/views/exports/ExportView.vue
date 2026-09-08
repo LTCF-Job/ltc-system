@@ -30,26 +30,6 @@
             </el-form-item>
           </el-col>
 
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="申報地區">
-              <el-select
-                v-model="form.region"
-                placeholder="全部地區"
-                clearable
-                filterable
-                style="width: 180px"
-                @change="handleRegionChange"
-              >
-                <el-option label="全部地區" value="" />
-                <el-option
-                  v-for="opt in regionOptions"
-                  :key="opt.code"
-                  :label="opt.name"
-                  :value="opt.code"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
         </el-row>
 
         <el-row :gutter="16">
@@ -134,11 +114,6 @@
         class="file-table"
       >
         <el-table-column prop="caseName" label="姓名" width="120" />
-        <el-table-column prop="region" label="區域" width="110" align="center">
-          <template #default="{ row }">
-            {{ row.region ? regionLabel(row.region) : '—' }}
-          </template>
-        </el-table-column>
         <el-table-column prop="rowCount" label="申報行數" width="100" align="center" />
         <el-table-column prop="fileName" label="檔案名稱" min-width="200" show-overflow-tooltip />
         <el-table-column label="操作" width="120" fixed="right" align="center">
@@ -181,11 +156,6 @@
 
       <el-table :data="historyJobs" border stripe v-loading="loadingHistory">
         <el-table-column prop="periodYm" label="申報年月" width="110" align="center" />
-        <el-table-column prop="region" label="區域" width="100" align="center">
-          <template #default="{ row }">
-            {{ row.region ? regionLabel(row.region) : '全區' }}
-          </template>
-        </el-table-column>
         <el-table-column label="模式" width="120" align="center">
           <template #default="{ row }">{{ EXPORT_MODE_LABELS[row.mode as ExportMode] || row.mode }}</template>
         </el-table-column>
@@ -226,7 +196,6 @@
       v-model="caseDialogVisible"
       title="選擇申報個案"
       confirm-text="確認選擇"
-      :region="form.region"
       :initial-selected-ids="form.caseIds"
       @confirm="handleCaseSelected"
     />
@@ -249,11 +218,6 @@
         max-height="360px"
       >
         <el-table-column prop="caseName" label="姓名" width="120" />
-        <el-table-column prop="region" label="區域" width="110" align="center">
-          <template #default="{ row }">
-            {{ row.region ? regionLabel(row.region) : '—' }}
-          </template>
-        </el-table-column>
         <el-table-column prop="rowCount" label="申報行數" width="100" align="center" />
         <el-table-column prop="fileName" label="檔案名稱" min-width="180" show-overflow-tooltip />
       </el-table>
@@ -285,12 +249,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useRocMonth } from '@/composables/useRocMonth'
 import { downloadBlob } from '@/utils/download'
 import {
-  REGION_LABELS,
   EXPORT_STATUS_LABELS,
   EXPORT_MODE_LABELS,
   EXPORT_DATA_GAP_LABELS
 } from '@/types/domain'
-import type { Region, ExportMode, ExportJobStatus } from '@/types/domain'
+import type { ExportMode, ExportJobStatus } from '@/types/domain'
 import type {
   PrecheckResultDTO,
   ExportJobDTO,
@@ -298,13 +261,6 @@ import type {
   CreateExportJobRequest
 } from '@/types/api'
 
-import { fetchRegionOptions, regionLabel, type RegionOption } from '@/api/regionOptions'
-
-// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
-const regionOptions = ref<RegionOption[]>([])
-onMounted(async () => {
-  regionOptions.value = await fetchRegionOptions()
-})
 
 const authStore = useAuthStore()
 const { toRocMonth, toRocPeriodYm, formatRocMonthLabel } = useRocMonth()
@@ -326,12 +282,10 @@ const loadingHistoryDetail = ref(false)
 const currentRocMonth = computed(() => toRocMonth(selectedDate.value))
 
 const form = reactive<{
-  region: Region | ''
   mode: ExportMode
   caseIds: string[]
   caseNames: string[]
 }>({
-  region: '',
   mode: 'direct',
   caseIds: [],
   caseNames: []
@@ -354,12 +308,6 @@ function dataGapLabel(reason: string): string {
   return EXPORT_DATA_GAP_LABELS[reason] || reason
 }
 
-// 地區是個案清單的篩選條件，改地區後既有勾選可能已不在清單內，一律清空重選
-function handleRegionChange() {
-  form.caseIds = []
-  form.caseNames = []
-}
-
 function handleCaseSelected(cases: { id: string; name: string }[]) {
   form.caseIds = cases.map((c) => c.id)
   form.caseNames = cases.map((c) => c.name)
@@ -376,7 +324,6 @@ async function handleRunPrecheck() {
   try {
     const res = await precheckExport({
       periodYm: toRocPeriodYm(selectedDate.value),
-      region: form.region || undefined,
       caseIds: [...form.caseIds]
     })
     precheckResult.value = res
@@ -415,7 +362,6 @@ async function handleStartExport() {
     const jobReq: CreateExportJobRequest = {
       jobType: 'gov_claim',
       periodYm: toRocPeriodYm(selectedDate.value),
-      region: form.region || undefined,
       mode: form.mode,
       caseIds: [...form.caseIds]
     }

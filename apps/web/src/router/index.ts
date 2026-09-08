@@ -34,12 +34,6 @@ const router = createRouter({
           meta: { title: '個案編輯', module: 'masters_cases' }
         },
         {
-          path: 'masters/regions',
-          name: 'RegionList',
-          component: () => import('@/views/masters/RegionListView.vue'),
-          meta: { title: '地區管理', module: 'masters_regions' }
-        },
-        {
           path: 'masters/sites',
           name: 'SiteList',
           component: () => import('@/views/masters/SiteListView.vue'),

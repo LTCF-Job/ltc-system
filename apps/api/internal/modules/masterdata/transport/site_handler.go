@@ -52,11 +52,10 @@ func (h *SiteHandler) Create(c *gin.Context) {
 	}
 
 	site, err := h.svc.Create(c.Request.Context(), app.CreateSiteInput{
-		Name:     req.Name,
-		Address:  req.Address,
-		Region:   req.Region,
-		OpenDays: req.OpenDays,
-		Status:   req.Status,
+		Name:    req.Name,
+		Address: req.Address,
+		Region:  req.Region,
+		Status:  req.Status,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
 		ActorRole: auth.GetActorRole(c),
@@ -77,12 +76,6 @@ func (h *SiteHandler) Create(c *gin.Context) {
 		if errors.Is(err, app.ErrSiteAddressRequired) {
 			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
 				{Field: "address", Reason: "請輸入單位地址"},
-			})
-			return
-		}
-		if errors.Is(err, app.ErrSiteRegionRequired) {
-			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "region", Reason: "請選擇所屬區域"},
 			})
 			return
 		}
@@ -115,11 +108,10 @@ func (h *SiteHandler) Update(c *gin.Context) {
 	}
 
 	site, err := h.svc.Update(c.Request.Context(), id, app.UpdateSiteInput{
-		Name:     req.Name,
-		Address:  req.Address,
-		Region:   req.Region,
-		OpenDays: req.OpenDays,
-		Status:   req.Status,
+		Name:    req.Name,
+		Address: req.Address,
+		Region:  req.Region,
+		Status:  req.Status,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
 		ActorRole: auth.GetActorRole(c),
@@ -144,12 +136,6 @@ func (h *SiteHandler) Update(c *gin.Context) {
 		if errors.Is(err, app.ErrSiteAddressRequired) {
 			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
 				{Field: "address", Reason: "請輸入單位地址"},
-			})
-			return
-		}
-		if errors.Is(err, app.ErrSiteRegionRequired) {
-			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "region", Reason: "請選擇所屬區域"},
 			})
 			return
 		}

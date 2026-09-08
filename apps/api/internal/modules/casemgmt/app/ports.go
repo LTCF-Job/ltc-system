@@ -9,7 +9,7 @@ import (
 
 // CaseStore 定義個案主檔與排班的讀寫邊界。
 type CaseStore interface {
-	List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error)
+	List(ctx context.Context, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Case, error)
 	GetByHMAC(ctx context.Context, hmac []byte) (*Case, error)
 	GetByNameNormalized(ctx context.Context, nameNorm string) ([]Case, error)
@@ -17,7 +17,7 @@ type CaseStore interface {
 	Update(ctx context.Context, c *Case) error
 	CreateSchedule(ctx context.Context, s *CaseSchedule) error
 	GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*CaseSchedule, error)
-	GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]ActiveCaseScheduleInfo, error)
+	GetActiveSchedulesForMonth(ctx context.Context, year, month int) ([]ActiveCaseScheduleInfo, error)
 	// UpsertTransportPreference 以 PUT 完整替換個案的單位與去回程車輛偏好。nil 的 ID
 	// 代表清除欄位；raw name 僅在沒有對應 ID 時保留來源名稱供人工關聯。
 	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
@@ -39,8 +39,7 @@ type DuplicateStagingStore interface {
 
 // SiteRef 是驗證個案交通偏好所需的最小單位資訊。
 type SiteRef struct {
-	ID     uuid.UUID
-	Region string
+	ID uuid.UUID
 }
 
 // SiteFinder 提供個案交通偏好驗證所需的單筆單位查詢。

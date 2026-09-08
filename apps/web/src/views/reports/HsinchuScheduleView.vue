@@ -210,8 +210,9 @@ async function fetchFilterOptions() {
       listAllSites(),
       listAllVehicles()
     ])
-    sites.value = siteRes.filter(s => s.region === 'hsinchu')
-    vehicles.value = vehRes.filter(v => v.region === 'hsinchu')
+    // 個案申報區域已移除，報表範圍改由下方的單位／車輛下拉收斂，不再以區域預先過濾。
+    sites.value = siteRes
+    vehicles.value = vehRes
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
   }

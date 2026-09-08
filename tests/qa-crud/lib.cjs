@@ -125,6 +125,16 @@ async function radio(page, label, text) {
   await page.waitForTimeout(150)
 }
 
+// 勾選 el-checkbox-group 內指定文字的核取方塊；已勾選時不重複點擊。
+async function check(page, label, text) {
+  const box = item(page, label).locator('.el-checkbox', { hasText: text }).first()
+  const classes = (await box.getAttribute('class')) || ''
+  if (!classes.includes('is-checked')) {
+    await box.click()
+    await page.waitForTimeout(150)
+  }
+}
+
 async function pickDate(page, label, value) {
   const input = item(page, label).locator('input').first()
   await input.click()
@@ -264,7 +274,7 @@ async function rowAction(page, rowText, actionText) {
 }
 
 module.exports = {
-  BASE, TAG, launch, dialog, item, dumpForm, fill, pick, selectOptions, radio, pickDate,
+  BASE, TAG, launch, dialog, item, dumpForm, fill, pick, selectOptions, radio, check, pickDate,
   errors, toasts, clearToasts, submit, confirmBox, closeDialog, openCreate, goto,
   tableRows, rowByText, resolveRow, rowAction, download, upload, DOWNLOAD_DIR
 }

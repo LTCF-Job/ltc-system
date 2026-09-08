@@ -39,7 +39,6 @@ type Case struct {
 	InboundVehicle         string
 	InboundVehicleNameRaw  *string
 	HomeAddress            *string
-	Region                 *string
 	LTCLevel               *string
 	ServiceCategory        *int
 	ServiceUsageType       *int
@@ -72,7 +71,6 @@ type DuplicateCandidate struct {
 	CareContactName        *string
 	RegisteredAddress      *string
 	HomeAddress            *string
-	Region                 *string
 	ServiceCategory        *int
 	ServiceUsageType       *int
 	SiteID                 *uuid.UUID
@@ -133,10 +131,8 @@ type ScheduleLeg struct {
 type ActiveCaseScheduleInfo struct {
 	CaseID        uuid.UUID
 	CaseName      string
-	Region        string
 	ClaimEndDate  *time.Time
 	SiteID        uuid.UUID
-	SiteOpenDays  []int16
 	EffectiveFrom time.Time
 	EffectiveTo   *time.Time
 	Weekdays      []int16

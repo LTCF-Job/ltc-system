@@ -19,7 +19,6 @@ type siteRow struct {
 	Name      string
 	Address   string
 	Region    string
-	OpenDays  []int16
 	Status    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -31,14 +30,13 @@ func (r siteRow) toApp() app.Site {
 		Name:      r.Name,
 		Address:   r.Address,
 		Region:    r.Region,
-		OpenDays:  r.OpenDays,
 		Status:    r.Status,
 		CreatedAt: r.CreatedAt,
 		UpdatedAt: r.UpdatedAt,
 	}
 }
 
-const siteColumns = `id, name, COALESCE(address, ''), COALESCE(region, ''), open_days, status, created_at, updated_at`
+const siteColumns = `id, name, COALESCE(address, ''), COALESCE(region, ''), status, created_at, updated_at`
 
 // SiteRepository 提供 sites 資料表之存取操作。
 type SiteRepository struct {
@@ -56,7 +54,7 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 	query := `
 		SELECT ` + siteColumns + `
 		FROM sites
-		WHERE ($1 = '' OR region = $1)
+		WHERE ($1 = '' OR COALESCE(region, '') ILIKE '%' || $1 || '%')
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR COALESCE(address, '') ILIKE '%' || $2 || '%')
 		  AND ($3 = '' OR status = $3)
 		ORDER BY name ASC
@@ -71,7 +69,7 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 	var sites []app.Site
 	for rows.Next() {
 		var s siteRow
-		if err := rows.Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.OpenDays, &s.Status, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.Status, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, 0, err
 		}
 		sites = append(sites, s.toApp())
@@ -83,7 +81,7 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 	var total int64
 	countQuery := `
 		SELECT COUNT(*) FROM sites
-		WHERE ($1 = '' OR region = $1)
+		WHERE ($1 = '' OR COALESCE(region, '') ILIKE '%' || $1 || '%')
 		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR COALESCE(address, '') ILIKE '%' || $2 || '%')
 		  AND ($3 = '' OR status = $3)
 	`
@@ -107,7 +105,7 @@ func (r *SiteRepository) GetByName(ctx context.Context, name string) (*app.Site,
 func (r *SiteRepository) getOne(ctx context.Context, query string, arg interface{}) (*app.Site, error) {
 	var s siteRow
 	err := r.db.QueryRow(ctx, query, arg).
-		Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.OpenDays, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+		Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.Status, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, app.ErrSiteNotFound
@@ -121,14 +119,14 @@ func (r *SiteRepository) getOne(ctx context.Context, query string, arg interface
 // Create 新增單位。
 func (r *SiteRepository) Create(ctx context.Context, s *app.Site) error {
 	query := `
-		INSERT INTO sites (id, name, address, region, open_days, status)
-		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6)
+		INSERT INTO sites (id, name, address, region, status)
+		VALUES ($1, $2, $3, NULLIF($4, ''), $5)
 		RETURNING created_at, updated_at
 	`
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
 	}
-	err := r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.OpenDays, s.Status).
+	err := r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.Status).
 		Scan(&s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -144,11 +142,11 @@ func (r *SiteRepository) Create(ctx context.Context, s *app.Site) error {
 func (r *SiteRepository) Update(ctx context.Context, s *app.Site) error {
 	query := `
 		UPDATE sites
-		SET name = $2, address = $3, region = NULLIF($4, ''), open_days = $5, status = $6, updated_at = now()
+		SET name = $2, address = $3, region = NULLIF($4, ''), status = $5, updated_at = now()
 		WHERE id = $1
 		RETURNING updated_at
 	`
-	err := r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.OpenDays, s.Status).
+	err := r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.Status).
 		Scan(&s.UpdatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError

@@ -28,7 +28,7 @@ type fakeMissingProvider struct {
 	err   error
 }
 
-func (f *fakeMissingProvider) ListMissingForMonth(context.Context, int, int, string) ([]MissingRide, error) {
+func (f *fakeMissingProvider) ListMissingForMonth(context.Context, int, int) ([]MissingRide, error) {
 	return f.rides, f.err
 }
 
@@ -113,7 +113,7 @@ func TestRideService_ListIssues_UnknownType(t *testing.T) {
 	store := newFakeRecordStore(nil)
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
-	_, _, err := svc.ListIssues(context.Background(), "not_a_type", 2026, 7, "", "", 1, 20)
+	_, _, err := svc.ListIssues(context.Background(), "not_a_type", 2026, 7, "", 1, 20)
 	assert.Error(t, err)
 }
 
@@ -125,7 +125,7 @@ func TestRideService_ListIssues_Conflict(t *testing.T) {
 	}
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
-	items, total, err := svc.ListIssues(context.Background(), "conflict", 2026, 7, "", "", 1, 20)
+	items, total, err := svc.ListIssues(context.Background(), "conflict", 2026, 7, "", 1, 20)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), total)
 	require.Len(t, items, 1)
@@ -140,7 +140,7 @@ func TestRideService_ListIssues_ImportError(t *testing.T) {
 	}
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, nil)
 
-	items, total, err := svc.ListIssues(context.Background(), "import_error", 2026, 7, "", "", 1, 20)
+	items, total, err := svc.ListIssues(context.Background(), "import_error", 2026, 7, "", 1, 20)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), total)
 	require.Len(t, items, 1)
@@ -156,7 +156,7 @@ func TestRideService_ListIssues_Unreported(t *testing.T) {
 	store := newFakeRecordStore(nil)
 	svc := NewRideService(store, fakeDriverResolver{}, fakeScheduleReader{}, nil, provider)
 
-	items, total, err := svc.ListIssues(context.Background(), "unreported", 2026, 7, "", "", 1, 20)
+	items, total, err := svc.ListIssues(context.Background(), "unreported", 2026, 7, "", 1, 20)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), total)
 	require.Len(t, items, 1)

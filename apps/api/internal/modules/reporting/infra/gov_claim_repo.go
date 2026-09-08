@@ -25,7 +25,7 @@ func NewGovClaimRepository(db *pgxpool.Pool) *GovClaimRepository {
 // 而不是被 INNER JOIN 整列濾掉、讓「缺排班」在匯出結果上完全看不見。
 const govClaimSourceQuery = `
 	SELECT
-		c.id, c.name, COALESCE(c.region, ''),
+		c.id, c.name,
 		c.national_id_cipher, COALESCE(c.national_id_masked, ''),
 		COALESCE(c.home_address, ''), c.service_category, c.service_usage_type,
 		r.service_date, r.leg_seq, r.not_claimed_aa09,
@@ -47,7 +47,6 @@ const govClaimSourceQuery = `
 	  AND NOT ps.is_pending
 	  AND r.effective_status = 'boarded'
 	  AND (r.has_conflict = false OR r.conflict_resolved_at IS NOT NULL)
-	  AND ($3 = '' OR c.region = $3)
 	  AND (COALESCE(cardinality($4::uuid[]), 0) = 0 OR c.id = ANY($4::uuid[]))
 	ORDER BY c.name, r.leg_seq, r.service_date
 `
@@ -62,7 +61,7 @@ func (r *GovClaimRepository) QueryGovClaimSources(
 	if r.db == nil {
 		return nil, fmt.Errorf("government claim database is not configured")
 	}
-	rows, err := r.db.Query(ctx, govClaimSourceQuery, scope.StartDate, scope.EndDate, scope.RegionValue(), pgxdb.UUIDStrings(scope.CaseIDs))
+	rows, err := r.db.Query(ctx, govClaimSourceQuery, scope.StartDate, scope.EndDate, pgxdb.UUIDStrings(scope.CaseIDs))
 	if err != nil {
 		return nil, fmt.Errorf("query gov claim sources: %w", err)
 	}
@@ -72,7 +71,7 @@ func (r *GovClaimRepository) QueryGovClaimSources(
 	for rows.Next() {
 		var row govClaimSourceRow
 		if err := rows.Scan(
-			&row.CaseID, &row.CaseName, &row.Region,
+			&row.CaseID, &row.CaseName,
 			&row.CaseNationalIDCipher, &row.CaseNationalIDMasked,
 			&row.HomeAddress, &row.ServiceCategory, &row.ServiceUsageType,
 			&row.ServiceDate, &row.LegSeq, &row.NotClaimedAA09,

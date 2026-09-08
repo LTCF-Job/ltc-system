@@ -34,7 +34,7 @@ func TestHolidayService_ImportTaiwanGovHolidays(t *testing.T) {
 // discardHolidayStore 接受任何寫入且回傳空清單，供不驗證持久化的 use case 測試使用。
 type discardHolidayStore struct{}
 
-func (discardHolidayStore) List(context.Context, time.Time, time.Time, string) ([]Holiday, error) {
+func (discardHolidayStore) List(context.Context, time.Time, time.Time) ([]Holiday, error) {
 	return nil, nil
 }
 func (discardHolidayStore) Upsert(context.Context, *Holiday) error       { return nil }

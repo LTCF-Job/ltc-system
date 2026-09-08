@@ -11,7 +11,6 @@ import (
 type govClaimSourceRow struct {
 	CaseID               uuid.UUID
 	CaseName             string
-	Region               string
 	CaseNationalIDCipher []byte
 	CaseNationalIDMasked string
 	HomeAddress          string
@@ -39,7 +38,6 @@ func (r govClaimSourceRow) toApp() app.GovClaimSource {
 	return app.GovClaimSource{
 		CaseID:               r.CaseID,
 		CaseName:             r.CaseName,
-		Region:               r.Region,
 		CaseNationalIDCipher: r.CaseNationalIDCipher,
 		CaseNationalIDMasked: r.CaseNationalIDMasked,
 		HomeAddress:          r.HomeAddress,

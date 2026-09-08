@@ -327,7 +327,7 @@ func (h *RideHandler) GetCalendar(c *gin.Context) {
 		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "月份格式錯誤，請使用 RRR-MM 或 YYYY-MM", nil)
 		return
 	}
-	matrix, err := h.rideService.GetCalendar(c.Request.Context(), start.Year(), int(start.Month()), c.Query("region"), c.Query("q"))
+	matrix, err := h.rideService.GetCalendar(c.Request.Context(), start.Year(), int(start.Month()), c.Query("q"))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
@@ -386,7 +386,7 @@ func (h *RideHandler) ListIssues(c *gin.Context) {
 		return
 	}
 
-	items, total, err := h.rideService.ListIssues(c.Request.Context(), issueType, start.Year(), int(start.Month()), c.Query("region"), c.Query("keyword"), page, pageSize)
+	items, total, err := h.rideService.ListIssues(c.Request.Context(), issueType, start.Year(), int(start.Month()), c.Query("keyword"), page, pageSize)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return

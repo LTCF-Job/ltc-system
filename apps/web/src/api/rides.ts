@@ -12,7 +12,6 @@ import type {
 
 export async function getRideCalendarMatrix(params: {
   month: string // RRR-MM 或 YYYY-MM
-  region?: string
   q?: string
 }): Promise<RideCalendarMatrixDTO> {
   const res = await apiClient.get('/rides/calendar', { params })
@@ -55,7 +54,6 @@ export async function listMissingRides(params?: {
   pageSize?: number
   startDate?: string
   endDate?: string
-  region?: string
   vehicleId?: string
   caseId?: string
   q?: string

@@ -12,11 +12,6 @@
       <el-form-item label="身分證字號" prop="nationalId">
         <el-input v-model="form.nationalId" placeholder="1 碼英文字母 + 9 碼數字" />
       </el-form-item>
-      <el-form-item label="申報區域" prop="region">
-        <el-select v-model="form.region" placeholder="請選擇區域" filterable style="width: 100%">
-          <el-option v-for="opt in regionOptions" :key="opt.code" :label="opt.name" :value="opt.code" />
-        </el-select>
-      </el-form-item>
       <el-form-item label="住家地址" prop="homeAddress">
         <el-input v-model="form.homeAddress" placeholder="請輸入住家地址" />
       </el-form-item>
@@ -49,16 +44,7 @@ import { reactive, ref, watch } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { createCase } from '@/api/cases'
-import { REGION_LABELS } from '@/types/domain'
 import type { CaseDTO, CreateCaseRequest } from '@/types/api'
-
-import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
-
-// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
-const regionOptions = ref<RegionOption[]>([])
-onMounted(async () => {
-  regionOptions.value = await fetchRegionOptions()
-})
 
 // 跟個案清單頁「新增個案基本資料」共用同一份欄位與 API，避免兩邊各自維護造成落差；
 // 呼叫端只在成功後拿到新建立的個案，趟次等匯報表專屬綁定資訊由呼叫端自行處理。
@@ -77,7 +63,6 @@ const saving = ref(false)
 const form = reactive<CreateCaseRequest>({
   name: '',
   nationalId: '',
-  region: undefined,
   homeAddress: '',
   serviceCategory: undefined,
   serviceUsageType: undefined,
@@ -85,7 +70,7 @@ const form = reactive<CreateCaseRequest>({
   remarks: ''
 })
 
-// 除姓名外全部欄位選填：身分證字號、居住地、區域不再是硬性阻擋條件
+// 除姓名外全部欄位選填：身分證字號、居住地不再是硬性阻擋條件
 const rules = {
   name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }]
 }
@@ -97,7 +82,6 @@ watch(
     form.name = props.prefillName || ''
     form.nationalId = ''
     form.homeAddress = ''
-    form.region = undefined
     form.serviceCategory = undefined
     form.serviceUsageType = undefined
     form.remarks = ''

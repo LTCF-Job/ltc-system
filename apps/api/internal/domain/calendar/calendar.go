@@ -31,7 +31,6 @@ type CaseScheduleCalendarInput struct {
 	EffectiveFrom  time.Time
 	EffectiveTo    *time.Time
 	Weekdays       []int16
-	SiteOpenDays   []int16
 	Holidays       map[string]bool
 	Legs           []LegInput
 	WeeklyConfigs  map[int]WeekdayScheduleInput
@@ -95,11 +94,6 @@ func CalculateScheduleDays(year, month int, input CaseScheduleCalendarInput) ([]
 	for _, wd := range input.Weekdays {
 		weekdayMap[int(wd)] = true
 	}
-	siteOpenMap := make(map[int]bool)
-	for _, wd := range input.SiteOpenDays {
-		siteOpenMap[int(wd)] = true
-	}
-
 	firstDay := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	lastDay := firstDay.AddDate(0, 1, -1)
 	for d := firstDay; !d.After(lastDay); d = d.AddDate(0, 0, 1) {
@@ -147,7 +141,7 @@ func CalculateScheduleDays(year, month int, input CaseScheduleCalendarInput) ([]
 
 		if cfg, ok := input.WeeklyConfigs[weekday]; ok {
 			day.Source = "weekly"
-			if cfg.TripCount > 0 && siteOpenMap[weekday] {
+			if cfg.TripCount > 0 {
 				day.Status = ScheduleDayScheduled
 				day.Legs, err = scheduleLegs(cfg.TripCount, cfg.Legs, input.Legs)
 				if err != nil {
@@ -158,7 +152,7 @@ func CalculateScheduleDays(year, month int, input CaseScheduleCalendarInput) ([]
 			continue
 		}
 
-		if siteOpenMap[weekday] && weekdayMap[weekday] {
+		if weekdayMap[weekday] {
 			day.Status = ScheduleDayScheduled
 			day.Legs = input.Legs
 		}

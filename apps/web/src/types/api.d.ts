@@ -271,48 +271,21 @@ export interface SaveScheduleRequest {
   }>;
 }
 
-// 主檔：區域、單位、車輛、司機
-export interface RegionDTO {
-  id: string;
-  /** 業務資料表 region 欄位參照的外鍵值。 */
-  code: string;
-  name: string;
-  description?: string;
-  status: "active" | "inactive";
-  sortOrder: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateRegionRequest {
-  name: string;
-  description?: string;
-  status?: "active" | "inactive";
-  sortOrder?: number;
-}
-
-export interface UpdateRegionRequest {
-  name?: string;
-  description?: string;
-  status?: "active" | "inactive";
-  sortOrder?: number;
-}
-
+// 主檔：單位、車輛、司機
 export interface SiteDTO {
   id: string;
   name: string;
-  region?: Region | "";
+  /** 使用者自由填寫的區域文字，不再參照地區主檔。 */
+  region?: string;
   address?: string;
-  openDays: number[];
   status: "active" | "inactive";
   createdAt: string;
 }
 
 export interface CreateSiteRequest {
   name: string;
-  region?: Region | "";
+  region?: string;
   address?: string;
-  openDays: number[];
   status?: "active" | "inactive";
 }
 
@@ -325,7 +298,7 @@ export interface VehicleDTO {
   siteId: string | null;
   siteName: string;
   // 由所屬單位帶出的唯讀區域，車輛本身不再自存
-  region: Region | "";
+  region: string;
   brand: string;
   model: string;
   // 出廠年月，格式為 YYYY-MM
@@ -335,6 +308,11 @@ export interface VehicleDTO {
   thirdPartyInsuranceExpiry: string | null;
   lastInspectionDate: string | null;
   wheelchairAccessible: boolean | null;
+  // 四項證件持有註記
+  hasVehicleLicense: boolean;
+  hasPurchaseContract: boolean;
+  hasPlateRegistration: boolean;
+  hasTransferRegistration: boolean;
   status: "active" | "inactive";
   createdAt: string;
   drivers?: VehicleDriverDTO[];
@@ -359,6 +337,10 @@ export interface CreateVehicleRequest {
   thirdPartyInsuranceExpiry?: string | null;
   lastInspectionDate?: string | null;
   wheelchairAccessible: boolean;
+  hasVehicleLicense?: boolean;
+  hasPurchaseContract?: boolean;
+  hasPlateRegistration?: boolean;
+  hasTransferRegistration?: boolean;
   status?: "active" | "inactive";
 }
 
@@ -371,8 +353,6 @@ export interface DriverAssignmentDTO {
   vehicleName?: string;
   vehiclePlateNo?: string;
   plateNo?: string;
-  startDate: string;
-  endDate?: string;
 }
 
 export interface DriverDTO {
@@ -380,14 +360,12 @@ export interface DriverDTO {
   name: string;
   nameNormalized?: string;
   nationalIdMasked: string;
-  region?: string;
   email?: string;
   gender?: string;
   birthDate?: string | null;
   hasProfessionalLicense?: boolean;
   employmentDate?: string | null;
   hasTransferCert?: boolean;
-  inspectionDate?: string | null;
   remarks?: string;
   status: "active" | "inactive";
   // 駕照類別與有效日期為選填，未補登時為 null
@@ -400,14 +378,12 @@ export interface DriverDTO {
 export interface CreateDriverRequest {
   name: string;
   nationalId: string;
-  region?: string;
   email?: string;
   gender?: string;
   birthDate?: string | null;
   hasProfessionalLicense?: boolean;
   employmentDate?: string | null;
   hasTransferCert?: boolean;
-  inspectionDate?: string | null;
   remarks?: string;
   licenseClass?: DriverLicenseClass | null;
   licenseExpiryDate?: string | null;
@@ -415,14 +391,14 @@ export interface CreateDriverRequest {
 
 export interface UpdateDriverRequest {
   name?: string;
-  region?: string;
+  /** 留空代表不變更；提供時後端會重新驗證檢查碼並重算密文與遮罩值。 */
+  nationalId?: string;
   email?: string;
   gender?: string;
   birthDate?: string | null;
   hasProfessionalLicense?: boolean;
   employmentDate?: string | null;
   hasTransferCert?: boolean;
-  inspectionDate?: string | null;
   remarks?: string;
   status?: "active" | "inactive";
   licenseClass?: DriverLicenseClass | null;

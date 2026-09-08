@@ -15,7 +15,6 @@ const holidayDateLayout = "2006-01-02"
 type HolidayResponse struct {
 	HolidayDate string    `json:"holidayDate"`
 	Name        string    `json:"name"`
-	Region      *string   `json:"region"`
 	Source      string    `json:"source"`
 	IsDayOff    bool      `json:"isDayOff"`
 	CreatedAt   time.Time `json:"createdAt"`
@@ -25,7 +24,6 @@ func newHolidayResponse(h app.Holiday) HolidayResponse {
 	return HolidayResponse{
 		HolidayDate: h.HolidayDate.Format(holidayDateLayout),
 		Name:        h.Name,
-		Region:      h.Region,
 		Source:      h.Source,
 		IsDayOff:    h.IsDayOff,
 		CreatedAt:   h.CreatedAt,
