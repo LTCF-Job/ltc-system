@@ -214,11 +214,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			householdType := getVal("戶別")
 			gender := getVal("性別")
 			birthDate := parseProfileBirthDate(getVal("生日"))
-			// 舊版範本的欄位標題是「據點」，仍要能匯入使用者手上既有的檔案
-			siteName := getVal("單位")
-			if siteName == "" {
-				siteName = getVal("據點")
-			}
+			siteName := getVal("據點")
 			outboundVehicle := getVal("接送車輛(去)")
 			inboundVehicle := getVal("接送車輛(回)")
 			careContactRole := getVal("個管or照專")
@@ -254,7 +250,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			hasWarning := false
 
 			// 生日格式錯誤不擋列：個案照常建立，birth_date 留空、原始字串存 birth_date_raw，
-			// 由使用者於待維護頁就地補正（比照單位/車輛比對不到主檔的既有待維護模式）。
+			// 由使用者於待維護頁就地補正（比照據點/車輛比對不到主檔的既有待維護模式）。
 			if strings.TrimSpace(getVal("生日")) != "" && birthDate == "" {
 				rowRes.BirthDateInvalid = true
 				rowRes.BirthDateRaw = getVal("生日")

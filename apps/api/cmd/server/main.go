@@ -129,7 +129,7 @@ func main() {
 	siteSvc := masterapp.NewSiteService(mdSiteRepo, mdAudit)
 	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo, mdAudit, txRunner)
 	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg, mdAudit, txRunner)
-	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseSiteFinder{repo: mdSiteRepo}, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer(), caseDuplicateStagingRepo, txRunner)
+	caseSvc := caseapp.NewCaseService(cfg, caseRepo, caseAuditWriter{svc: auditSvc}, caseinfra.NewExcelRenderer(), caseDuplicateStagingRepo, txRunner)
 	excelAdapter := importinfra.NewExcelAdapter()
 	importSvc := importapp.NewImportService(
 		caseRegistrar{svc: caseSvc},
@@ -196,7 +196,7 @@ func main() {
 	fuelSvc := opsapp.NewFuelService(fuelRepo, opsAudit)
 	dashboardSvc := reportapp.NewDashboardService(dashboardRepo, exportJobRepo)
 	caregiverExcelAdapter := caregiverinfra.NewExcelAdapter()
-	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverSiteLookup{repo: mdSiteRepo}, caregiverExcelAdapter, caregiverExcelAdapter, caregiverAuditWriter{svc: auditSvc})
+	caregiverSvc := caregiverapp.NewCaregiverService(caregiverRepo, caregiverExcelAdapter, caregiverExcelAdapter, caregiverAuditWriter{svc: auditSvc})
 
 	roleRepo := identityinfra.NewRoleRepository(pool)
 	securityStateRepo := identityinfra.NewUserSecurityStateRepository(pool)

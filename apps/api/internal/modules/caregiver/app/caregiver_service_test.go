@@ -71,7 +71,7 @@ func (f *fakeCaregiverStore) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func TestCaregiverService_Create_RequiresName(t *testing.T) {
-	svc := NewCaregiverService(newFakeCaregiverStore(), nil, nil, nil)
+	svc := NewCaregiverService(newFakeCaregiverStore(), nil, nil)
 
 	_, err := svc.Create(context.Background(), CreateCaregiverInput{Contact: "0912-000-000"})
 
@@ -79,19 +79,18 @@ func TestCaregiverService_Create_RequiresName(t *testing.T) {
 }
 
 func TestCaregiverService_Create_Succeeds(t *testing.T) {
-	svc := NewCaregiverService(newFakeCaregiverStore(), nil, nil, nil)
-	siteID := uuid.New()
+	svc := NewCaregiverService(newFakeCaregiverStore(), nil, nil)
 
-	c, err := svc.Create(context.Background(), CreateCaregiverInput{SiteID: &siteID, Name: "陳小華", Type: CaregiverTypeCaseManager, Contact: "0912-000-000"})
+	c, err := svc.Create(context.Background(), CreateCaregiverInput{SiteName: "竹南日照據點", Name: "陳小華", Type: CaregiverTypeCaseManager, Contact: "0912-000-000"})
 
 	require.NoError(t, err)
 	assert.NotEqual(t, uuid.Nil, c.ID)
 	assert.Equal(t, "陳小華", c.Name)
-	assert.Equal(t, &siteID, c.SiteID)
+	assert.Equal(t, "竹南日照據點", c.SiteName)
 }
 
 func TestCaregiverService_Create_RequiresValidType(t *testing.T) {
-	svc := NewCaregiverService(newFakeCaregiverStore(), nil, nil, nil)
+	svc := NewCaregiverService(newFakeCaregiverStore(), nil, nil)
 
 	_, err := svc.Create(context.Background(), CreateCaregiverInput{Name: "陳小華", Type: "居服員"})
 
@@ -109,7 +108,7 @@ func TestCaregiverService_Create_NormalizesStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewCaregiverService(newFakeCaregiverStore(), nil, nil, nil)
+			svc := NewCaregiverService(newFakeCaregiverStore(), nil, nil)
 
 			c, err := svc.Create(context.Background(), CreateCaregiverInput{Name: "陳小華", Type: CaregiverTypeCaseManager, Status: tt.input})
 
@@ -123,7 +122,7 @@ func TestCaregiverService_Update_NormalizesStatus(t *testing.T) {
 	store := newFakeCaregiverStore()
 	existing := Caregiver{ID: uuid.New(), Name: "王大明", Status: "active"}
 	require.NoError(t, store.Create(context.Background(), &existing))
-	svc := NewCaregiverService(store, nil, nil, nil)
+	svc := NewCaregiverService(store, nil, nil)
 
 	t.Run("接受合法狀態", func(t *testing.T) {
 		c, err := svc.Update(context.Background(), existing.ID, UpdateCaregiverInput{Status: strPtr("inactive")})
@@ -139,17 +138,14 @@ func TestCaregiverService_Update_NormalizesStatus(t *testing.T) {
 
 func strPtr(v string) *string { return &v }
 
-func TestCaregiverService_LinkSite_ClearsRawName(t *testing.T) {
+func TestCaregiverService_Update_SetsSiteName(t *testing.T) {
 	store := newFakeCaregiverStore()
-	svc := NewCaregiverService(store, nil, nil, nil)
-
-	existing := Caregiver{ID: uuid.New(), Name: "王大明", SiteNameRaw: "竹南日照單位"}
+	existing := Caregiver{ID: uuid.New(), Name: "王大明"}
 	require.NoError(t, store.Create(context.Background(), &existing))
+	svc := NewCaregiverService(store, nil, nil)
 
-	siteID := uuid.New()
-	updated, err := svc.LinkSite(context.Background(), existing.ID, siteID)
+	updated, err := svc.Update(context.Background(), existing.ID, UpdateCaregiverInput{SiteName: strPtr("新據點")})
 
 	require.NoError(t, err)
-	assert.Equal(t, &siteID, updated.SiteID)
-	assert.Empty(t, updated.SiteNameRaw, "手動關聯單位後應清空原始單位名稱")
+	assert.Equal(t, "新據點", updated.SiteName)
 }

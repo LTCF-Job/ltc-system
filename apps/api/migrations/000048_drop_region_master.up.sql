@@ -1,4 +1,4 @@
--- Migration: 000044_drop_region_master.up.sql
+-- Migration: 000048_drop_region_master.up.sql
 -- Description: 移除地區主檔（regions）與所有 region 外鍵關聯。
 --   - sites.region 保留為使用者自由填寫的文字欄位，既有 code 回填成中文名稱。
 --   - drivers / cases / holidays / export_jobs 的 region 欄位一併移除。

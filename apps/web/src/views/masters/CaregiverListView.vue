@@ -60,21 +60,9 @@
                   </span>
                 </template>
               </el-table-column>
-              <el-table-column label="單位" min-width="220" class-name="site-col">
+              <el-table-column prop="siteName" label="據點" min-width="220" class-name="site-col">
                 <template #default="{ row }">
                   <span v-if="row.siteName">{{ row.siteName }}</span>
-                  <div v-else-if="row.siteNameRaw" class="unresolved-slot">
-                    <span class="unresolved-raw-name">原始名稱：{{ row.siteNameRaw }}</span>
-                    <el-select
-                      filterable
-                      placeholder="選擇既有單位"
-                      style="width: 150px"
-                      @change="(val: string) => handleLinkSite(row as CaregiverDTO, val)"
-                    >
-                      <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
-                    </el-select>
-                    <el-button link type="primary" size="small" @click="openQuickCreateSite(row as CaregiverDTO)">新增單位</el-button>
-                  </div>
                   <span v-else class="empty-value">-</span>
                 </template>
               </el-table-column>
@@ -159,12 +147,6 @@
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="單位" min-width="140" class-name="pending-site-col">
-              <template #default="{ row }">
-                <span v-if="row.siteName">{{ row.siteName }}</span>
-                <span v-else class="empty-value">-</span>
-              </template>
-            </el-table-column>
             <el-table-column label="聯絡方式" min-width="140" class-name="pending-contact-col">
               <template #default="{ row }">
                 <span class="contact-value">{{ row.contact || '-' }}</span>
@@ -201,29 +183,10 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 新增單位快速建立對話框 -->
-    <el-dialog v-model="quickCreateSiteVisible" title="新增單位" width="min(480px, calc(100vw - 32px))">
-      <el-form label-width="90px">
-        <el-form-item label="單位名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
-        <el-form-item label="區域">
-          <el-input v-model="quickCreateSiteForm.region" placeholder="請輸入區域（選填）" clearable />
-        </el-form-item>
-        <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" placeholder="選填" clearable /></el-form-item>
-      </el-form>
-      <template #footer>
-        <DialogFooter
-          confirm-text="建立並關聯"
-          :loading="quickCreateSiteSaving"
-          @confirm="handleQuickCreateSiteAndLink"
-          @cancel="quickCreateSiteVisible = false"
-        />
-      </template>
-    </el-dialog>
-
     <!-- 批次匯入對話框 -->
     <ImportPreviewDialog
       ref="importDialogRef"
-      title="批次匯入照護人員 (類型/單位/姓名/聯絡方式/備註.xlsx)"
+      title="批次匯入照護人員 (類型/據點/姓名/聯絡方式/備註.xlsx)"
       :on-dry-run="handleDryRun"
       :on-commit="handleCommitImport"
       :on-download-template="handleDownloadTemplate"
@@ -231,7 +194,7 @@
     >
       <template #columns="{ checkedDuplicateRows, toggleDuplicateRow, getRowId }">
         <el-table-column prop="type" label="類型" width="80" />
-        <el-table-column prop="siteName" label="單位" width="140" />
+        <el-table-column prop="siteName" label="據點" width="140" />
         <el-table-column prop="name" label="姓名" width="110" />
         <el-table-column prop="contact" label="聯絡方式" width="140" />
         <el-table-column prop="notes" label="備註" min-width="160" show-overflow-tooltip />
@@ -269,10 +232,8 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="單位" prop="siteId">
-          <el-select v-model="form.siteId" placeholder="請選擇單位" filterable clearable style="width: 100%">
-            <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
-          </el-select>
+        <el-form-item label="據點" prop="siteName">
+          <el-input v-model="form.siteName" placeholder="請輸入所屬據點（選填）" />
         </el-form-item>
         <el-form-item label="姓名" prop="name">
           <el-input v-model="form.name" placeholder="請輸入姓名" />
@@ -325,24 +286,20 @@ import {
   createCaregiver,
   updateCaregiver,
   deleteCaregiver,
-  linkCaregiverSite,
   downloadCaregiverTemplate,
   dryRunImportCaregivers,
   commitImportCaregivers,
   listAllCaregivers
 } from '@/api/caregivers'
-import { listAllSites, createSite } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
 import { CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
-import type { CaregiverDTO, SiteDTO } from '@/types/api'
-
+import type { CaregiverDTO } from '@/types/api'
 
 const authStore = useAuthStore()
 const activeTab = ref<'list' | 'pending'>('list')
 const caregivers = ref<CaregiverDTO[]>([])
-const availableSites = ref<SiteDTO[]>([])
 const importDialogRef = ref<InstanceType<typeof ImportPreviewDialog>>()
 
 const {
@@ -370,10 +327,6 @@ const {
     total.value = res.meta.total
   }
 })
-
-async function loadSites() {
-  availableSites.value = await listAllSites({ status: 'active' })
-}
 
 async function handleDownloadTemplate() {
   try {
@@ -415,7 +368,7 @@ async function handleCommitImport(file: File, includeDuplicateRows: string[]): P
   }
 }
 
-// 匯入完成後，若有單位待關聯或資料待補齊的提示，導引使用者前往「待維護」頁籤處理；
+// 匯入完成後，若有姓名或類型待補齊的提示，導引使用者前往「待維護」頁籤處理；
 // 無論點選哪個按鈕都視為使用者已確認匯入結果，一併關閉匯入視窗
 function handleImportSuccess() {
   executeFetch()
@@ -449,7 +402,7 @@ const saving = ref(false)
 const editingId = ref<string | null>(null)
 const formRef = ref<FormInstance>()
 const form = reactive({
-  siteId: '' as string | undefined,
+  siteName: '' as string | undefined,
   name: '',
   type: '' as CaregiverType | '',
   contact: '',
@@ -463,7 +416,7 @@ const rules = {
 
 function openCreateDialog() {
   editingId.value = null
-  form.siteId = undefined
+  form.siteName = undefined
   form.name = ''
   form.type = ''
   form.contact = ''
@@ -474,7 +427,7 @@ function openCreateDialog() {
 
 function openEditDialog(row: any) {
   editingId.value = row.id
-  form.siteId = row.siteId
+  form.siteName = row.siteName
   form.name = row.name
   form.type = row.type
   form.contact = row.contact || ''
@@ -502,7 +455,7 @@ async function handleSave() {
     try {
       if (editingId.value) {
         await updateCaregiver(editingId.value, {
-          siteId: form.siteId,
+          siteName: form.siteName,
           name: form.name,
           type: form.type as CaregiverType,
           contact: form.contact,
@@ -512,7 +465,7 @@ async function handleSave() {
         ElMessage.success('照護人員資料已更新')
       } else {
         await createCaregiver({
-          siteId: form.siteId,
+          siteName: form.siteName,
           name: form.name,
           type: form.type as CaregiverType,
           contact: form.contact,
@@ -583,50 +536,6 @@ async function handleIgnorePending(row: CaregiverDTO) {
   }
 }
 
-async function handleLinkSite(row: CaregiverDTO, siteId: string) {
-  if (!siteId) return
-  try {
-    await linkCaregiverSite(row.id, siteId)
-    ElMessage.success(`照護人員「${row.name}」已完成單位關聯`)
-    executeFetch()
-    if (activeTab.value === 'pending') {
-      await fetchPending()
-    }
-  } catch {
-    // 全域攔截器負責顯示 API 錯誤。
-  }
-}
-
-// 新增單位並立即關聯
-const quickCreateSiteVisible = ref(false)
-const quickCreateSiteSaving = ref(false)
-const quickCreateTarget = ref<CaregiverDTO | null>(null)
-const quickCreateSiteForm = reactive({ name: '', region: '', address: '' })
-
-// 單位名稱預先帶入匯入時的原始名稱，使用者只需確認區域與地址即可送出，不必重打一次名稱
-function openQuickCreateSite(row: CaregiverDTO) {
-  quickCreateTarget.value = row
-  quickCreateSiteForm.name = row.siteNameRaw || ''
-  quickCreateSiteForm.region = ''
-  quickCreateSiteForm.address = ''
-  quickCreateSiteVisible.value = true
-}
-
-async function handleQuickCreateSiteAndLink() {
-  if (!quickCreateTarget.value) return
-  quickCreateSiteSaving.value = true
-  try {
-    const site = await createSite(quickCreateSiteForm)
-    availableSites.value.push(site)
-    await handleLinkSite(quickCreateTarget.value, site.id)
-    quickCreateSiteVisible.value = false
-  } catch {
-    // 全域攔截器負責顯示 API 錯誤。
-  } finally {
-    quickCreateSiteSaving.value = false
-  }
-}
-
 // 待維護頁籤首次切入時才拉取清單，避免一般清單頁多打一次 API
 let pendingLoaded = false
 async function handleTabChange(name: string | number) {
@@ -636,7 +545,6 @@ async function handleTabChange(name: string | number) {
   }
 }
 
-loadSites()
 executeFetch()
 </script>
 
@@ -665,39 +573,13 @@ executeFetch()
 }
 
 /* el-table-column 的 min-width prop 在 table-layout="auto" 底下只會拿去算表格
-   總寬度的預算，不會變成該欄真正的 CSS min-width——欄位當筆內容比 min-width
-   短時（例如單位已直接關聯、不需要顯示原始名稱行內編輯列）欄寬會被壓到只剩
-   內容本身，跟其他撐開的欄位比例不一致。要另外補一條 :deep() min-width 才是
-   真的鎖住下限（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
-.pending-panel :deep(.pending-site-col .cell) { min-width: 220px; }
+   總寬度的預算，不會變成該欄真正的 CSS min-width，要另外補一條 :deep() min-width
+   才是真的鎖住下限（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
 .pending-panel :deep(.pending-contact-col .cell) { min-width: 140px; }
 .pending-panel :deep(.pending-action-col .cell) { min-width: 100px; }
 .pending-panel :deep(.pending-notes-col .cell) { min-width: 180px; }
 .pending-panel :deep(.pending-missing-col .cell) { min-width: 160px; }
 .pending-panel :deep(.name-col .cell) { min-width: 120px; }
-
-/* 不用 flex-wrap: wrap——欄寬不夠時會把「選擇既有單位」跟「新增單位」擠成第二行，
-   即使頁面還有空間也一樣。改成 nowrap，搭配 el-table 的 table-layout="auto"，
-   讓這欄依這一整行內容自然撐寬，有空間就單行顯示，不主動換行。 */
-.unresolved-slot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
-}
-
-.unresolved-slot > * {
-  flex-shrink: 0;
-}
-
-/* flex-wrap: nowrap 跟 .unresolved-slot > * 的 flex-shrink: 0 只防止各元素被擠壓，
-   這個 span 沒有固定寬度時，文字本身還是會照 flex 容器目前的寬度自己換行——
-   要另外鎖 white-space: nowrap 才能讓整段名稱維持單行。 */
-.unresolved-raw-name {
-  color: var(--app-status-warning-fg);
-  font-size: 13px;
-  white-space: nowrap;
-}
 
 .missing-fields {
   color: var(--app-status-danger-fg);
@@ -717,7 +599,7 @@ executeFetch()
   min-width: 120px;
 }
 
-/* 主表格「單位／聯絡方式／備註」欄同樣沒有 class-name 鎖 min-width 下限，
+/* 主表格「據點／聯絡方式／備註」欄同樣沒有 class-name 鎖 min-width 下限，
    會被 table-layout="auto" 壓窄或被其他欄擠壓（見待維護子表格同一段說明）。 */
 :deep(.site-col .cell) {
   white-space: nowrap;

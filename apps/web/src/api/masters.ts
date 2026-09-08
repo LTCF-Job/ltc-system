@@ -32,7 +32,7 @@ async function collectAllPages<T>(fetchPage: (page: number, pageSize: number) =>
   return items
 }
 
-// 單位 Sites
+// 據點 Sites
 export async function listSites(params?: {
   page?: number
   pageSize?: number
@@ -67,8 +67,6 @@ export async function deleteSite(id: string): Promise<void> {
 export async function listVehicles(params?: {
   page?: number
   pageSize?: number
-  siteId?: string
-  region?: string
   status?: string
   q?: string
 }): Promise<Paged<VehicleDTO>> {

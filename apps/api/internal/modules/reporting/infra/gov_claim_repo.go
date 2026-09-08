@@ -20,9 +20,10 @@ func NewGovClaimRepository(db *pgxpool.Pool) *GovClaimRepository {
 }
 
 // govClaimSourceQuery 一次撈齊組列所需欄位。
-// case_schedules／sites／schedule_legs 全部改 LEFT JOIN：個案在該服務日沒有排班時，
+// case_schedules／schedule_legs 全部改 LEFT JOIN：個案在該服務日沒有排班時，
 // direction 等排班衍生欄位一併變 NULL，交由 app 的 validateSource 計入跳過清單，
-// 而不是被 INNER JOIN 整列濾掉、讓「缺排班」在匯出結果上完全看不見。
+// 而不是被 INNER JOIN 整列濾掉、讓「缺排班」在匯出結果上完全看不見。據點已改由
+// 個案本身持有（c.site_id），缺據點與缺排班是兩件互不相關的事。
 const govClaimSourceQuery = `
 	SELECT
 		c.id, c.name,
@@ -38,8 +39,8 @@ const govClaimSourceQuery = `
 	FROM ride_records r
 	JOIN cases c ON c.id = r.case_id
 	JOIN case_pending_status ps ON ps.case_id = c.id
+	LEFT JOIN sites st ON st.id = c.site_id
 	LEFT JOIN case_schedules s ON s.case_id = c.id AND s.effective_range @> r.service_date
-	LEFT JOIN sites st ON st.id = s.site_id
 	LEFT JOIN schedule_legs l ON l.schedule_id = s.id AND l.leg_seq = r.leg_seq
 	LEFT JOIN vehicles v ON v.id = r.vehicle_id AND v.deleted_at IS NULL
 	LEFT JOIN drivers d ON d.id = r.driver_id

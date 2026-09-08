@@ -1,4 +1,4 @@
--- Migration: 000045_masterdata_field_changes.up.sql
+-- Migration: 000049_masterdata_field_changes.up.sql
 -- Description: 主檔欄位調整
 --   - 單位主檔移除開放星期 (sites.open_days)，單位地址保留。
 --   - 司機主檔移除驗車日 (drivers.inspection_date)；驗車資訊屬於車輛，車輛已有 last_inspection_date。

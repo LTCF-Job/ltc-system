@@ -9,7 +9,7 @@ import (
 // 本檔的型別是 masterdata 的 application model：不帶任何 struct tag，由 infra 自
 // persistence row 轉入、由 transport 轉為 API DTO。
 
-// Site 代表一個服務單位。
+// Site 代表一個服務據點。
 type Site struct {
 	ID        uuid.UUID
 	Name      string
@@ -20,7 +20,7 @@ type Site struct {
 	UpdatedAt time.Time
 }
 
-// SiteAuditSnapshot 是單位主檔異動的明確快照。
+// SiteAuditSnapshot 是據點主檔異動的明確快照。
 type SiteAuditSnapshot struct {
 	ID      uuid.UUID `json:"id"`
 	Name    string    `json:"name"`
@@ -29,7 +29,7 @@ type SiteAuditSnapshot struct {
 	Status  string    `json:"status"`
 }
 
-// AuditSnapshot 產生單位主檔的明確稽核快照。
+// AuditSnapshot 產生據點主檔的明確稽核快照。
 func (s Site) AuditSnapshot() SiteAuditSnapshot {
 	return SiteAuditSnapshot{
 		ID:      s.ID,
@@ -45,10 +45,8 @@ type Vehicle struct {
 	ID          uuid.UUID
 	PlateNo     string
 	DisplayName string
-	SiteID      *uuid.UUID
-	SiteName    string
-	// Region 由所屬單位帶出，車輛本身不自存區域；未指定單位時為空字串。
-	Region                    string
+	// SiteName 是車輛自己的據點文字註記，非必填，不關聯據點主檔。
+	SiteName                  string
 	Brand                     string
 	Model                     string
 	ManufactureYM             string
@@ -70,8 +68,6 @@ type Vehicle struct {
 
 // VehicleFilter 是車輛清單的查詢條件，零值欄位代表不篩選。
 type VehicleFilter struct {
-	SiteID *uuid.UUID
-	Region string
 	Q      string
 	Status string
 }
@@ -88,7 +84,7 @@ type VehicleAuditSnapshot struct {
 	ID                        uuid.UUID  `json:"id"`
 	PlateNo                   string     `json:"plateNo"`
 	DisplayName               string     `json:"displayName"`
-	SiteID                    *uuid.UUID `json:"siteId,omitempty"`
+	SiteName                  string     `json:"siteName,omitempty"`
 	Brand                     string     `json:"brand"`
 	Model                     string     `json:"model"`
 	ManufactureYM             string     `json:"manufactureYm"`
@@ -110,7 +106,7 @@ func (v Vehicle) AuditSnapshot() VehicleAuditSnapshot {
 		ID:                        v.ID,
 		PlateNo:                   v.PlateNo,
 		DisplayName:               v.DisplayName,
-		SiteID:                    v.SiteID,
+		SiteName:                  v.SiteName,
 		Brand:                     v.Brand,
 		Model:                     v.Model,
 		ManufactureYM:             v.ManufactureYM,

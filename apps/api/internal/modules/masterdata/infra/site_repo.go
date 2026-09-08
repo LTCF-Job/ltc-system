@@ -48,7 +48,7 @@ func NewSiteRepository(db *pgxpool.Pool) *SiteRepository {
 	return &SiteRepository{db: db}
 }
 
-// List 取得單位清單並支援區域、狀態與關鍵字篩選。
+// List 取得據點清單並支援區域、狀態與關鍵字篩選。
 func (r *SiteRepository) List(ctx context.Context, region, q, status string, page, pageSize int) ([]app.Site, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
@@ -92,12 +92,12 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 	return sites, total, nil
 }
 
-// GetByID 依 UUID 取得單位。
+// GetByID 依 UUID 取得據點。
 func (r *SiteRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Site, error) {
 	return r.getOne(ctx, `SELECT `+siteColumns+` FROM sites WHERE id = $1`, id)
 }
 
-// GetByName 依單位名稱尋找（支援匯入比對）。
+// GetByName 依據點名稱尋找（支援匯入比對）。
 func (r *SiteRepository) GetByName(ctx context.Context, name string) (*app.Site, error) {
 	return r.getOne(ctx, `SELECT `+siteColumns+` FROM sites WHERE name = $1 LIMIT 1`, name)
 }
@@ -116,7 +116,7 @@ func (r *SiteRepository) getOne(ctx context.Context, query string, arg interface
 	return &site, nil
 }
 
-// Create 新增單位。
+// Create 新增據點。
 func (r *SiteRepository) Create(ctx context.Context, s *app.Site) error {
 	query := `
 		INSERT INTO sites (id, name, address, region, status)
@@ -138,7 +138,7 @@ func (r *SiteRepository) Create(ctx context.Context, s *app.Site) error {
 	return nil
 }
 
-// Update 修改單位。
+// Update 修改據點。
 func (r *SiteRepository) Update(ctx context.Context, s *app.Site) error {
 	query := `
 		UPDATE sites
@@ -158,7 +158,7 @@ func (r *SiteRepository) Update(ctx context.Context, s *app.Site) error {
 	return nil
 }
 
-// Delete 刪除單位。若該單位仍被個案排班參照，資料庫外鍵限制會回傳錯誤。
+// Delete 刪除據點。若該據點仍被個案排班參照，資料庫外鍵限制會回傳錯誤。
 func (r *SiteRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	if r.db == nil {
 		return fmt.Errorf("database not connected")

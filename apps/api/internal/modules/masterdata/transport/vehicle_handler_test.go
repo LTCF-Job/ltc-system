@@ -51,7 +51,6 @@ func newTestVehicleHandler(store *fakeVehicleStore) *VehicleHandler {
 
 func TestVehicleHandler_Create_RequiresDisplayName(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	siteID := uuid.New()
 
 	t.Run("未提供車別時驗證失敗回傳 400", func(t *testing.T) {
 		store := &fakeVehicleStore{}
@@ -59,7 +58,7 @@ func TestVehicleHandler_Create_RequiresDisplayName(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		body := `{"plateNo":"BZG-7915","siteId":"` + siteID.String() + `"}`
+		body := `{"plateNo":"BZG-7915","siteName":"竹南日照據點"}`
 		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/vehicles", strings.NewReader(body))
 		c.Request.Header.Set("Content-Type", "application/json")
 
@@ -76,7 +75,7 @@ func TestVehicleHandler_Create_RequiresDisplayName(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		body := `{"plateNo":"BZG-7915","displayName":"","siteId":"` + siteID.String() + `"}`
+		body := `{"plateNo":"BZG-7915","displayName":"","siteName":"竹南日照據點"}`
 		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/vehicles", strings.NewReader(body))
 		c.Request.Header.Set("Content-Type", "application/json")
 
@@ -87,13 +86,13 @@ func TestVehicleHandler_Create_RequiresDisplayName(t *testing.T) {
 		assert.Nil(t, store.created)
 	})
 
-	t.Run("提供車別時建立成功並寫入車別", func(t *testing.T) {
+	t.Run("提供車別時建立成功並寫入車別與據點", func(t *testing.T) {
 		store := &fakeVehicleStore{}
 		h := newTestVehicleHandler(store)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		body := `{"plateNo":"BZG-7915","displayName":"竹南2車","siteId":"` + siteID.String() + `"}`
+		body := `{"plateNo":"BZG-7915","displayName":"竹南2車","siteName":"竹南日照據點"}`
 		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/vehicles", strings.NewReader(body))
 		c.Request.Header.Set("Content-Type", "application/json")
 
@@ -103,14 +102,30 @@ func TestVehicleHandler_Create_RequiresDisplayName(t *testing.T) {
 		require.NotNil(t, store.created)
 		assert.Equal(t, "BZG-7915", store.created.PlateNo)
 		assert.Equal(t, "竹南2車", store.created.DisplayName)
-		assert.Equal(t, siteID, *store.created.SiteID)
+		assert.Equal(t, "竹南日照據點", store.created.SiteName)
+	})
+
+	t.Run("不提供據點時可正常建立", func(t *testing.T) {
+		store := &fakeVehicleStore{}
+		h := newTestVehicleHandler(store)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		body := `{"plateNo":"BZG-7916","displayName":"竹南3車"}`
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/vehicles", strings.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		h.Create(c)
+
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.NotNil(t, store.created)
+		assert.Empty(t, store.created.SiteName)
 	})
 }
 
 func TestVehicleHandler_Update_RequiresDisplayName(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	vehicleID := uuid.New()
-	siteID := uuid.New()
 
 	t.Run("更新時未提供車別回傳 400", func(t *testing.T) {
 		store := &fakeVehicleStore{}
@@ -118,7 +133,7 @@ func TestVehicleHandler_Update_RequiresDisplayName(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		body := `{"plateNo":"BZG-7915","siteId":"` + siteID.String() + `"}`
+		body := `{"plateNo":"BZG-7915","siteName":"竹南日照據點"}`
 		c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/vehicles/"+vehicleID.String(), strings.NewReader(body))
 		c.Request.Header.Set("Content-Type", "application/json")
 		c.Params = gin.Params{{Key: "id", Value: vehicleID.String()}}
@@ -136,7 +151,7 @@ func TestVehicleHandler_Update_RequiresDisplayName(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		body := `{"plateNo":"BZG-7915","displayName":"竹南2車(改)","siteId":"` + siteID.String() + `"}`
+		body := `{"plateNo":"BZG-7915","displayName":"竹南2車(改)","siteName":"竹南日照據點"}`
 		c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/vehicles/"+vehicleID.String(), strings.NewReader(body))
 		c.Request.Header.Set("Content-Type", "application/json")
 		c.Params = gin.Params{{Key: "id", Value: vehicleID.String()}}

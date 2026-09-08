@@ -59,6 +59,21 @@
           </el-row>
 
           <el-row :gutter="16">
+            <el-col :xs="24" :lg="12">
+              <el-form-item label="所屬據點" prop="siteId">
+                <el-select v-model="editForm.siteId" filterable style="width: 100%">
+                  <el-option
+                    v-for="site in availableSites"
+                    :key="site.id"
+                    :value="site.id"
+                    :label="site.name"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-row :gutter="16">
             <el-col :span="24">
               <el-form-item label="住家地址" prop="homeAddress">
                 <el-input v-model="editForm.homeAddress" />
@@ -167,18 +182,6 @@
         <el-form label-width="140px" :disabled="!authStore.hasPermission('masters_cases', 'edit')">
           <el-row :gutter="16">
             <el-col :xs="24" :sm="12" :lg="8">
-              <el-form-item label="所屬單位">
-                <el-select v-model="transportForm.siteId" filterable style="width: 100%">
-                  <el-option
-                    v-for="site in availableSites"
-                    :key="site.id"
-                    :value="site.id"
-                    :label="site.name"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :xs="24" :sm="12" :lg="8">
               <el-form-item label="去程車輛">
                 <el-select v-model="transportForm.outboundVehicleId" filterable style="width: 100%">
                   <el-option
@@ -254,6 +257,7 @@ const availableVehicles = ref<VehicleDTO[]>([])
 
 const editForm = reactive<UpdateCaseRequest>({
   name: '',
+  siteId: undefined,
   homeAddress: '',
   serviceCategory: undefined,
   serviceUsageType: undefined,
@@ -269,7 +273,6 @@ const editForm = reactive<UpdateCaseRequest>({
 })
 
 const transportForm = reactive<UpdateCaseTransportPreferenceRequest>({
-  siteId: '',
   outboundVehicleId: '',
   inboundVehicleId: ''
 })
@@ -295,6 +298,7 @@ async function fetchDetail() {
 
     caseData.value = res
     editForm.name = res.name || ''
+    editForm.siteId = res.siteId || undefined
     editForm.homeAddress = res.homeAddress || ''
     editForm.serviceCategory = res.serviceCategory
     editForm.serviceUsageType = res.serviceUsageType
@@ -307,7 +311,6 @@ async function fetchDetail() {
     editForm.careContactName = res.careContactName || ''
     editForm.registeredAddress = res.registeredAddress || ''
     editForm.remarks = res.remarks || ''
-    transportForm.siteId = res.siteId || ''
     transportForm.outboundVehicleId = res.outboundVehicleId || ''
     transportForm.inboundVehicleId = res.inboundVehicleId || ''
   } catch {
@@ -340,13 +343,11 @@ async function handleUpdateCase() {
 async function handleUpdateTransportPreference() {
   savingTransportPreference.value = true
   try {
-    // 三個欄位皆選填：只送出有值的欄位，避免把使用者未異動、原本為空的欄位當成「明確清空」送出。
-    // 這支 API 是完整替換，仍未關聯那幾欄的匯入原始名稱必須原樣回送，否則個案會無聲離開待維護清單
+    // 兩個欄位皆選填：只送出有值的欄位，避免把使用者未異動、原本為空的欄位當成「明確清空」送出。
+    // 這支 API 是完整替換，仍未關聯那欄的匯入原始名稱必須原樣回送，否則個案會無聲離開待維護清單
     const payload: UpdateCaseTransportPreferenceRequest = {
-      siteId: transportForm.siteId || null,
       outboundVehicleId: transportForm.outboundVehicleId || null,
       inboundVehicleId: transportForm.inboundVehicleId || null,
-      siteNameRaw: transportForm.siteId ? '' : caseData.value?.siteNameRaw || '',
       outboundVehicleNameRaw: transportForm.outboundVehicleId ? '' : caseData.value?.outboundVehicleNameRaw || '',
       inboundVehicleNameRaw: transportForm.inboundVehicleId ? '' : caseData.value?.inboundVehicleNameRaw || ''
     }

@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// SiteStore 定義單位主檔的讀寫邊界。
+// SiteStore 定義據點主檔的讀寫邊界。
 type SiteStore interface {
 	List(ctx context.Context, region, q, status string, page, pageSize int) ([]Site, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Site, error)

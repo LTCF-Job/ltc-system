@@ -11,7 +11,6 @@ import (
 type CaseSchedule struct {
 	ID          uuid.UUID
 	CaseID      uuid.UUID
-	SiteID      uuid.UUID
 	Weekdays    []int16
 	TripPattern int16
 	Legs        []ScheduleLeg

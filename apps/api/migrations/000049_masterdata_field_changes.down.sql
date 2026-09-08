@@ -1,4 +1,4 @@
--- Migration: 000045_masterdata_field_changes.down.sql
+-- Migration: 000049_masterdata_field_changes.down.sql
 -- Description: 還原主檔欄位調整。
 --
 -- 限制：sites.open_days 與 drivers.inspection_date 的原始值在 up 已被刪除，

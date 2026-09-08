@@ -11,7 +11,7 @@ import (
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
-// SiteHandler 處理單位相關請求。
+// SiteHandler 處理據點相關請求。
 type SiteHandler struct {
 	svc *app.SiteService
 }
@@ -21,7 +21,7 @@ func NewSiteHandler(svc *app.SiteService) *SiteHandler {
 	return &SiteHandler{svc: svc}
 }
 
-// List 查詢單位清單。
+// List 查詢據點清單。
 func (h *SiteHandler) List(c *gin.Context) {
 	page, pageSize, err := httpx.ParsePagination(c)
 	if err != nil {
@@ -31,7 +31,7 @@ func (h *SiteHandler) List(c *gin.Context) {
 
 	sites, total, err := h.svc.List(c.Request.Context(), c.Query("region"), c.Query("q"), c.Query("status"), page, pageSize)
 	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢單位失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢據點失敗", nil)
 		return
 	}
 
@@ -42,7 +42,7 @@ func (h *SiteHandler) List(c *gin.Context) {
 	})
 }
 
-// Create 新增單位。
+// Create 新增據點。
 func (h *SiteHandler) Create(c *gin.Context) {
 	var req CreateSiteRequest
 	if err := httpx.BindJSONStrict(c, &req); err != nil {
@@ -69,34 +69,34 @@ func (h *SiteHandler) Create(c *gin.Context) {
 		}
 		if errors.Is(err, app.ErrSiteNameRequired) {
 			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "name", Reason: "請輸入單位名稱"},
+				{Field: "name", Reason: "請輸入據點名稱"},
 			})
 			return
 		}
 		if errors.Is(err, app.ErrSiteAddressRequired) {
 			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "address", Reason: "請輸入單位地址"},
+				{Field: "address", Reason: "請輸入據點地址"},
 			})
 			return
 		}
 		if errors.Is(err, app.ErrDuplicateSiteName) {
 			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "name", Reason: "該區域已存在相同名稱的單位"},
+				{Field: "name", Reason: "該區域已存在相同名稱的據點"},
 			})
 			return
 		}
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "建立單位失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "建立據點失敗", nil)
 		return
 	}
 
 	httpx.RespondSuccess(c, http.StatusCreated, newSiteResponse(*site), nil)
 }
 
-// Update 更新單位。
+// Update 更新據點。
 func (h *SiteHandler) Update(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		respondInvalidID(c, "無效的單位 ID")
+		respondInvalidID(c, "無效的據點 ID")
 		return
 	}
 
@@ -124,39 +124,39 @@ func (h *SiteHandler) Update(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, app.ErrSiteNotFound) {
-			respondNotFound(c, "查無此單位")
+			respondNotFound(c, "查無此據點")
 			return
 		}
 		if errors.Is(err, app.ErrSiteNameRequired) {
 			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "name", Reason: "請輸入單位名稱"},
+				{Field: "name", Reason: "請輸入據點名稱"},
 			})
 			return
 		}
 		if errors.Is(err, app.ErrSiteAddressRequired) {
 			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "address", Reason: "請輸入單位地址"},
+				{Field: "address", Reason: "請輸入據點地址"},
 			})
 			return
 		}
 		if errors.Is(err, app.ErrDuplicateSiteName) {
 			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "name", Reason: "該區域已存在相同名稱的單位"},
+				{Field: "name", Reason: "該區域已存在相同名稱的據點"},
 			})
 			return
 		}
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "更新單位失敗", nil)
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "更新據點失敗", nil)
 		return
 	}
 
 	httpx.RespondSuccess(c, http.StatusOK, newSiteResponse(*site), nil)
 }
 
-// Delete 刪除單位。
+// Delete 刪除據點。
 func (h *SiteHandler) Delete(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		respondInvalidID(c, "無效的單位 ID")
+		respondInvalidID(c, "無效的據點 ID")
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 		UserAgent: c.Request.UserAgent(),
 	}); err != nil {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-			{Field: "id", Reason: "該單位仍有相關資料參照，無法刪除"},
+			{Field: "id", Reason: "該據點仍有相關資料參照，無法刪除"},
 		})
 		return
 	}

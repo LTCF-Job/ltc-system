@@ -20,7 +20,6 @@ type ActiveSchedule struct {
 	CaseID        uuid.UUID
 	CaseName      string
 	ClaimEndDate  *time.Time
-	SiteID        uuid.UUID
 	EffectiveFrom time.Time
 	EffectiveTo   *time.Time
 	Weekdays      []int16

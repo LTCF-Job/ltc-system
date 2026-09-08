@@ -10,7 +10,7 @@ import (
 
 var ErrLookupNotFound = errors.New("lookup not found")
 
-// SiteRef 是匯入比對單位時需要的最小資訊。
+// SiteRef 是匯入比對據點時需要的最小資訊。
 type SiteRef struct {
 	ID   uuid.UUID
 	Name string
@@ -21,7 +21,7 @@ type VehicleRef struct {
 	ID uuid.UUID
 }
 
-// SiteLookup 提供以名稱或區域比對單位的查詢。
+// SiteLookup 提供以名稱或區域比對據點的查詢。
 type SiteLookup interface {
 	GetByName(ctx context.Context, name string) (*SiteRef, error)
 	List(ctx context.Context, page, pageSize int) ([]SiteRef, error)
@@ -32,13 +32,15 @@ type VehicleLookup interface {
 	GetByDisplayName(ctx context.Context, displayName string) (*VehicleRef, error)
 }
 
-// TransportPreferenceWriter 以 PUT 完整替換個案的單位與去回程車輛偏好。
+// TransportPreferenceWriter 以 PUT 完整替換個案的去回程車輛偏好。據點已改由個案本身
+// 持有，隨 NewCase 一併寫入。
 type TransportPreferenceWriter interface {
-	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
+	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 }
 
 // NewCase 是建立個案所需的輸入，僅 Name 為必要欄位。AllowInvalidNationalID 讓身分證字號
 // 格式錯誤時不擋列，改由 casemgmt 標記待維護；BirthDateRaw 是生日解析失敗時的原始字串。
+// SiteID 為 nil 且 SiteNameRaw 有值時，表示據點名稱未比對到主檔，待人工於待維護畫面補齊。
 type NewCase struct {
 	ID                     uuid.UUID
 	Name                   string
@@ -56,6 +58,8 @@ type NewCase struct {
 	ServiceUsageType       int
 	Status                 string
 	Remarks                *string
+	SiteID                 *uuid.UUID
+	SiteNameRaw            string
 }
 
 // Actor 代表發動匯入的操作者與來源資訊，供稽核留痕使用。

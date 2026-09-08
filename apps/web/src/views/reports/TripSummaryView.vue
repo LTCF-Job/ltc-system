@@ -23,7 +23,6 @@
               @keyup.enter="fetchReport"
             />
 
-
             <el-select
               v-model="queryVehicle"
               placeholder="指定車輛"
@@ -138,7 +137,6 @@ import { listAllVehicles } from '@/api/masters'
 import type { TripSummaryReportDTO, VehicleDTO } from '@/types/api'
 import { downloadBlob } from '@/utils/download'
 import { currentLocalMonth } from '@/utils/formatters'
-
 
 const queryMonth = ref(currentLocalMonth())
 const queryKeyword = ref('')

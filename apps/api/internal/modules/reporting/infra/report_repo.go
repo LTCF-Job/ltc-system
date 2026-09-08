@@ -21,7 +21,8 @@ func NewReportRepository(db *pgxpool.Pool) *ReportRepository {
 	return &ReportRepository{db: db}
 }
 
-// QueryTripSummaryData 查詢車輛趟數表所需之資料庫聚合資料。
+// QueryTripSummaryData 查詢車輛趟數表所需之資料庫聚合資料。車輛已不再關聯據點主檔，
+// 不支援區域篩選。
 func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, endDate time.Time, vehicleID *uuid.UUID) ([]app.ReportVehicleTripSummary, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("report database is not configured")
@@ -33,11 +34,9 @@ func (r *ReportRepository) QueryTripSummaryData(ctx context.Context, startDate, 
 		WHERE v.deleted_at IS NULL
 	`
 	var args []interface{}
-	argIdx := 1
 	if vehicleID != nil {
-		vehQuery += fmt.Sprintf(" AND v.id = $%d", argIdx)
 		args = append(args, *vehicleID)
-		argIdx++
+		vehQuery += fmt.Sprintf(" AND v.id = $%d", len(args))
 	}
 	vehQuery += " ORDER BY v.display_name ASC"
 
@@ -121,17 +120,17 @@ func (r *ReportRepository) QueryHsinchuScheduleDataAsOf(ctx context.Context, asO
 	}
 
 	query := `
-		SELECT 
+		SELECT
 			l.direction, l.run_no, c.name, cs.note,
 			to_char(l.depart_time, 'HH24:MI') as depart_time,
 			to_char(l.arrive_time, 'HH24:MI') as arrive_time,
-			COALESCE(c.home_address, ''), s.address as site_address,
+			COALESCE(c.home_address, ''), COALESCE(s.address, '') as site_address,
 			COALESCE(v.display_name, '') as vehicle_name,
-			s.name as site_name
+			COALESCE(s.name, '') as site_name
 		FROM schedule_legs l
 		JOIN case_schedules cs ON cs.id = l.schedule_id
 		JOIN cases c ON c.id = cs.case_id
-		JOIN sites s ON s.id = cs.site_id
+		LEFT JOIN sites s ON s.id = c.site_id
 		LEFT JOIN vehicles v ON v.id = l.vehicle_id AND v.deleted_at IS NULL
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.status = 'active'

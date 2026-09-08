@@ -18,9 +18,10 @@ type CaseStore interface {
 	CreateSchedule(ctx context.Context, s *CaseSchedule) error
 	GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*CaseSchedule, error)
 	GetActiveSchedulesForMonth(ctx context.Context, year, month int) ([]ActiveCaseScheduleInfo, error)
-	// UpsertTransportPreference 以 PUT 完整替換個案的單位與去回程車輛偏好。nil 的 ID
-	// 代表清除欄位；raw name 僅在沒有對應 ID 時保留來源名稱供人工關聯。
-	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, siteID, outboundVehicleID, inboundVehicleID *uuid.UUID, siteNameRaw, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
+	// UpsertTransportPreference 以 PUT 完整替換個案的去回程車輛偏好。nil 的 ID
+	// 代表清除欄位；raw name 僅在沒有對應 ID 時保留來源名稱供人工關聯。據點已改由
+	// 個案本身持有（見 Update），不在此處理。
+	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 	SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error)
 	CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error
 }
@@ -35,16 +36,6 @@ type DuplicateStagingStore interface {
 	Resolve(ctx context.Context, id uuid.UUID, status string, resolvedBy uuid.UUID, resultingCaseID *uuid.UUID) (rowsAffected int64, err error)
 	// Delete 移除尚未裁決的暫存列；rowsAffected=0 代表該列不存在或已被裁決過。
 	Delete(ctx context.Context, id uuid.UUID) (rowsAffected int64, err error)
-}
-
-// SiteRef 是驗證個案交通偏好所需的最小單位資訊。
-type SiteRef struct {
-	ID uuid.UUID
-}
-
-// SiteFinder 提供個案交通偏好驗證所需的單筆單位查詢。
-type SiteFinder interface {
-	GetByID(ctx context.Context, id uuid.UUID) (*SiteRef, error)
 }
 
 // AuditWriter 定義個案異動留痕的寫入邊界。

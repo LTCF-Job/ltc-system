@@ -12,6 +12,11 @@
       <el-form-item label="身分證字號" prop="nationalId">
         <el-input v-model="form.nationalId" placeholder="1 碼英文字母 + 9 碼數字" />
       </el-form-item>
+      <el-form-item label="所屬據點" prop="siteId">
+        <el-select v-model="form.siteId" placeholder="請選擇據點" filterable style="width: 100%">
+          <el-option v-for="site in availableSites" :key="site.id" :label="site.name" :value="site.id" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="住家地址" prop="homeAddress">
         <el-input v-model="form.homeAddress" placeholder="請輸入住家地址" />
       </el-form-item>
@@ -40,11 +45,17 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { reactive, ref, watch, onMounted } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { createCase } from '@/api/cases'
-import type { CaseDTO, CreateCaseRequest } from '@/types/api'
+import { listAllSites } from '@/api/masters'
+import type { CaseDTO, CreateCaseRequest, SiteDTO } from '@/types/api'
+
+const availableSites = ref<SiteDTO[]>([])
+onMounted(async () => {
+  availableSites.value = await listAllSites({ status: 'active' })
+})
 
 // 跟個案清單頁「新增個案基本資料」共用同一份欄位與 API，避免兩邊各自維護造成落差；
 // 呼叫端只在成功後拿到新建立的個案，趟次等匯報表專屬綁定資訊由呼叫端自行處理。
@@ -62,6 +73,7 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 const form = reactive<CreateCaseRequest>({
   name: '',
+  siteId: '',
   nationalId: '',
   homeAddress: '',
   serviceCategory: undefined,
@@ -70,9 +82,10 @@ const form = reactive<CreateCaseRequest>({
   remarks: ''
 })
 
-// 除姓名外全部欄位選填：身分證字號、居住地不再是硬性阻擋條件
+// 姓名與所屬據點為必填；身分證字號與居住地仍為選填
 const rules = {
-  name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }]
+  name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }],
+  siteId: [{ required: true, message: '請選擇所屬據點', trigger: 'change' }]
 }
 
 watch(
@@ -80,6 +93,7 @@ watch(
   (visible) => {
     if (!visible) return
     form.name = props.prefillName || ''
+    form.siteId = ''
     form.nationalId = ''
     form.homeAddress = ''
     form.serviceCategory = undefined

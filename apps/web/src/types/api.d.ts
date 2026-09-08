@@ -161,8 +161,6 @@ export interface ScheduleLegDTO {
 export interface CaseScheduleDTO {
   id: string;
   caseId: string;
-  siteId: string;
-  siteName?: string;
   effectiveFrom: string;
   effectiveTo?: string;
   weekdays: number[];
@@ -216,6 +214,7 @@ export interface CaseDTO {
 
 export interface CreateCaseRequest {
   name: string;
+  siteId: string;
   nationalId?: string;
   homeAddress?: string;
   region?: Region | null;
@@ -233,14 +232,13 @@ export interface CreateCaseRequest {
   remarks?: string;
 }
 
-// 三欄位皆選填：未帶入的欄位維持既有關聯不變，僅更新有帶值的那一項
+// 兩欄位皆選填：未帶入的欄位維持既有關聯不變，僅更新有帶值的那一項
 // PUT 為完整替換語意：未帶上的 *NameRaw 會被後端清成 NULL。呼叫端必須把該欄
 // 尚未完成關聯的匯入原始名稱一併回送，只有真的關聯成功的那一欄才送空字串。
+// 據點已改由個案本身持有，請改用 UpdateCaseRequest 的 siteId。
 export interface UpdateCaseTransportPreferenceRequest {
-  siteId: string | null;
   outboundVehicleId: string | null;
   inboundVehicleId: string | null;
-  siteNameRaw?: string;
   outboundVehicleNameRaw?: string;
   inboundVehicleNameRaw?: string;
 }
@@ -248,7 +246,6 @@ export interface UpdateCaseTransportPreferenceRequest {
 export interface UpdateCaseRequest extends Partial<CreateCaseRequest> {}
 
 export interface SaveScheduleRequest {
-  siteId: string;
   effectiveFrom: string;
   effectiveTo?: string;
   weekdays: number[];
@@ -271,7 +268,7 @@ export interface SaveScheduleRequest {
   }>;
 }
 
-// 主檔：單位、車輛、司機
+// 主檔：據點、車輛、司機
 export interface SiteDTO {
   id: string;
   name: string;
@@ -295,10 +292,8 @@ export interface VehicleDTO {
   id: string;
   plateNo: string;
   displayName: string;
-  siteId: string | null;
+  // 據點是車輛自己的自由輸入文字，非必填，不關聯據點主檔
   siteName: string;
-  // 由所屬單位帶出的唯讀區域，車輛本身不再自存
-  region: string;
   brand: string;
   model: string;
   // 出廠年月，格式為 YYYY-MM
@@ -328,7 +323,7 @@ export interface VehicleDriverDTO {
 export interface CreateVehicleRequest {
   plateNo: string;
   displayName: string;
-  siteId: string;
+  siteName?: string;
   brand?: string | null;
   model?: string | null;
   manufactureYm?: string | null;
@@ -405,12 +400,10 @@ export interface UpdateDriverRequest {
   licenseExpiryDate?: string | null;
 }
 
-// 照護人員：siteId 為空但 siteNameRaw 有值時，代表匯入時的單位名稱尚未關聯既有單位
+// 照護人員：據點是自由輸入的文字註記，非必填，不關聯據點主檔
 export interface CaregiverDTO {
   id: string;
-  siteId?: string;
   siteName?: string;
-  siteNameRaw?: string;
   name: string;
   type: CaregiverType;
   contact?: string;
@@ -421,7 +414,7 @@ export interface CaregiverDTO {
 }
 
 export interface CreateCaregiverRequest {
-  siteId?: string;
+  siteName?: string;
   name: string;
   type: CaregiverType;
   contact?: string;
@@ -1085,7 +1078,6 @@ export interface TripSummaryVehicleDTO {
 
 export interface TripSummaryReportDTO {
   periodYm: string;
-  region?: Region | null;
   generatedAt: string;
   vehicles: TripSummaryVehicleDTO[];
   grandTotalOutbound: number;

@@ -71,12 +71,12 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			}
 		}
 
-		// 單位／去回程車輛各自獨立比對：比對到則寫入 ID，比對不到但有填名稱則保留
+		// 據點／去回程車輛各自獨立比對：比對到則寫入 ID，比對不到但有填名稱則保留
 		// 原始名稱待人工關聯，兩種情況都不影響個案主檔本身的建立。
 		siteID, siteNameRaw, siteWarning, err := s.resolveSite(ctx, row.SiteName)
 		if err != nil {
 			slog.Error("case import site lookup failed", "row_index", row.RowIndex, "error", err)
-			recordFailed(caseImportFailureRow(row, "單位查詢失敗，請稍後重試"))
+			recordFailed(caseImportFailureRow(row, "據點查詢失敗，請稍後重試"))
 			continue
 		}
 		outboundID, outboundNameRaw, outboundWarning, err := s.resolveVehicle(ctx, row.OutboundVehicle, "接送車輛(去)")
@@ -159,6 +159,8 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			ServiceUsageType:       row.ServiceUsageType,
 			Status:                 "active",
 			Remarks:                stringPointer(row.Remarks),
+			SiteID:                 siteID,
+			SiteNameRaw:            siteNameRaw,
 		}
 
 		txErr := s.txRunner.WithTx(ctx, func(txCtx context.Context) error {
@@ -179,11 +181,11 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 				return fmt.Errorf("個案建立失敗：%w", err)
 			}
 
-			if siteID != nil || outboundID != nil || inboundID != nil || siteNameRaw != "" || outboundNameRaw != "" || inboundNameRaw != "" {
+			if outboundID != nil || inboundID != nil || outboundNameRaw != "" || inboundNameRaw != "" {
 				if s.prefRepo == nil {
 					return errors.New("transport preference writer not configured")
 				}
-				if err := s.prefRepo.UpsertTransportPreference(txCtx, caseID, siteID, outboundID, inboundID, siteNameRaw, outboundNameRaw, inboundNameRaw); err != nil {
+				if err := s.prefRepo.UpsertTransportPreference(txCtx, caseID, outboundID, inboundID, outboundNameRaw, inboundNameRaw); err != nil {
 					return fmt.Errorf("儲存接送車輛偏好失敗：%w", err)
 				}
 			}
@@ -221,20 +223,29 @@ func parseBirthDate(value string) *time.Time {
 	return nil
 }
 
-// resolveSite 依名稱比對既有單位；查無資料時回傳空 ID 與原始名稱，並附上待人工關聯的提示。
+// sitePendingPlaceholder 是據點欄位完全空白時的哨兵值，與 migration 000044 對既有資料
+// 使用的佔位字串一致；cases.site_id 與 site_name_raw 不可同時為 NULL（ck_cases_site_present），
+// 若在此直接回傳空字串會讓建立個案時違反該約束，因此空白一律視為「待補齊」而非「無需處理」。
+const sitePendingPlaceholder = "（待補齊據點）"
+
+// resolveSite 依名稱比對既有據點；查無資料時回傳空 ID 與原始名稱，並附上待人工關聯的提示。
+// 完全空白時同樣落入待維護，不可回傳空字串（見 sitePendingPlaceholder 說明）。
 func (s *ImportService) resolveSite(ctx context.Context, name string) (id *uuid.UUID, nameRaw string, warning string, err error) {
-	if name == "" || s.siteRepo == nil {
-		return nil, "", "", nil
+	if name == "" {
+		return nil, sitePendingPlaceholder, "據點未填寫，已建立個案並列入待維護，補齊據點後即可離開待維護清單", nil
+	}
+	if s.siteRepo == nil {
+		return nil, name, "", nil
 	}
 	site, err := s.siteRepo.GetByName(ctx, name)
 	if err != nil {
 		if errors.Is(err, ErrLookupNotFound) {
-			return nil, name, fmt.Sprintf("單位「%s」未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", name), nil
+			return nil, name, fmt.Sprintf("據點「%s」未於據點管理中找到，已建立個案並保留原始名稱待人工關聯", name), nil
 		}
 		return nil, "", "", err
 	}
 	if site == nil {
-		return nil, name, fmt.Sprintf("單位「%s」未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", name), nil
+		return nil, name, fmt.Sprintf("據點「%s」未於據點管理中找到，已建立個案並保留原始名稱待人工關聯", name), nil
 	}
 	return &site.ID, "", "", nil
 }
@@ -247,12 +258,12 @@ func (s *ImportService) resolveVehicle(ctx context.Context, name, fieldLabel str
 	vehicle, err := s.vehicleRepo.GetByDisplayName(ctx, name)
 	if err != nil {
 		if errors.Is(err, ErrLookupNotFound) {
-			return nil, name, fmt.Sprintf("%s『%s』未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name), nil
+			return nil, name, fmt.Sprintf("%s『%s』未於車輛管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name), nil
 		}
 		return nil, "", "", err
 	}
 	if vehicle == nil {
-		return nil, name, fmt.Sprintf("%s『%s』未於車輛/單位管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name), nil
+		return nil, name, fmt.Sprintf("%s『%s』未於車輛管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name), nil
 	}
 	return &vehicle.ID, "", "", nil
 }

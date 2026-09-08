@@ -18,9 +18,13 @@
 判定下沉到資料庫成為單一來源：
 
 - `cases.profile_pending`（生日或身分證字號格式錯誤）
-- `case_transport_preferences.link_pending`（單位／去程車輛／回程車輛比對不到主檔）
-- `case_pending_status` view 合併上述兩者成單一 `is_pending`
+- `case_transport_preferences.link_pending`（去程車輛／回程車輛比對不到主檔）
 - `caregivers.is_pending`（姓名或類型未填寫）
+
+> 據點（單位）比對不到主檔另外獨立成 `cases.site_pending`，`case_pending_status` view 合併
+> `profile_pending`／`site_pending`／`link_pending` 三者成單一 `is_pending`。這是後來（2026-09-09）
+> 「個案 → 據點」關聯重構帶來的變化，見 [site-link-restructure.md](site-link-restructure.md)；
+> 車輛與照護人員的據點同時期改為自由文字，不再參與待維護判定。
 
 所有讀取個案的查詢一律 `JOIN case_pending_status` 並排除 `is_pending`。新增查詢時沿用這個 view，
 不要複製條件——條件散落各處正是這次要修掉的問題。
@@ -74,5 +78,8 @@ HTTP 契約同步改為預設安全：`GET /cases` 與 `GET /caregivers` 預設�
 - 忽略是不可復原的刪除，暫存列刪除後只能靠 audit log 回溯，誤刪只能重新匯入原始檔案。
 - 同車同個案值衝突的判斷基準是 `ride_sources` 的現值而非衝突表，因此重傳且值仍不同時會重新產生
   一筆衝突。這與「每次上傳都重新判斷、不記住裁決來消音」的既有設計一致，不是本次要改的行為。
-- 既有 `site_name_raw` 有值的照護人員在新規則下不再是待維護，會回到主清單。欄位與資料保留不動，
-  不做一次性清理。
+- 既有 `site_name_raw` 有值的照護人員在新規則下不再是待維護，會回到主清單。當時決定欄位與資料
+  保留不動、不做一次性清理；後來（2026-09-09）的據點關聯重構把 `caregivers.site_id`／
+  `site_name_raw` 一併換成自由文字 `site_name`（migration `000047`，回填優先序：主檔名稱 →
+  舊 `site_name_raw`），這裡等於補做了那次刻意不做的清理，見
+  [site-link-restructure.md](site-link-restructure.md)。

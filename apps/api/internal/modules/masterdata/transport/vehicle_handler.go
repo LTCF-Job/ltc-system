@@ -30,15 +30,7 @@ func (h *VehicleHandler) List(c *gin.Context) {
 		return
 	}
 
-	filter := app.VehicleFilter{Region: c.Query("region"), Q: c.Query("q"), Status: c.Query("status")}
-	if raw := c.Query("siteId"); raw != "" {
-		siteID, err := uuid.Parse(raw)
-		if err != nil {
-			respondInvalidID(c, "無效的單位 ID")
-			return
-		}
-		filter.SiteID = &siteID
-	}
+	filter := app.VehicleFilter{Q: c.Query("q"), Status: c.Query("status")}
 
 	vehicles, total, err := h.svc.List(c.Request.Context(), filter, page, pageSize)
 	if err != nil {

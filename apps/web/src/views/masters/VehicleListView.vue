@@ -20,18 +20,6 @@
         />
 
         <el-select
-          v-model="filters.siteId"
-          placeholder="全部單位"
-          clearable
-          filterable
-          style="width: 200px"
-          @change="handleSearch"
-        >
-          <el-option label="全部單位" value="" />
-          <el-option v-for="s in allSites" :key="s.id" :label="s.name" :value="s.id" />
-        </el-select>
-
-        <el-select
           v-model="filters.status"
           placeholder="狀態"
           clearable
@@ -78,7 +66,7 @@
 
           <el-table-column prop="displayName" label="車別" min-width="180" class-name="vehicle-nowrap-col vehicle-displayname-col" />
 
-          <el-table-column prop="siteName" label="所屬單位" min-width="160" class-name="vehicle-nowrap-col vehicle-sitename-col">
+          <el-table-column prop="siteName" label="據點" min-width="160" class-name="vehicle-nowrap-col vehicle-sitename-col">
             <template #default="{ row }">
               <span v-if="row.siteName">{{ row.siteName }}</span>
               <span v-else class="vehicle-empty-text">未指定</span>
@@ -230,7 +218,7 @@
       width="min(620px, calc(100vw - 32px))"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="150px">
-        <VehicleFormFields :form="form" :sites="allSites" show-status />
+        <VehicleFormFields :form="form" show-status />
       </el-form>
       <template #footer>
         <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
@@ -293,19 +281,17 @@ import {
   updateVehicle,
   deleteVehicle,
   listAllDrivers,
-  listAllSites,
   setVehicleDrivers
 } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { formatDateTime, formatRocDate, formatYearMonth, todayLocal } from '@/utils/formatters'
 import { emptyVehicleForm, vehicleFormRules } from '@/utils/vehicleForm'
-import type { VehicleDTO, CreateVehicleRequest, DriverDTO, SiteDTO } from '@/types/api'
+import type { VehicleDTO, CreateVehicleRequest, DriverDTO } from '@/types/api'
 
 const authStore = useAuthStore()
 const vehicles = ref<VehicleDTO[]>([])
 const allDrivers = ref<DriverDTO[]>([])
-const allSites = ref<SiteDTO[]>([])
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 const driverDialogVisible = ref(false)
@@ -336,7 +322,6 @@ const {
 } = useListQuery({
   defaultFilters: {
     q: '',
-    siteId: '',
     status: ''
   },
   onFetch: async () => {
@@ -344,7 +329,6 @@ const {
       page: page.value,
       pageSize: pageSize.value,
       q: filters.q,
-      siteId: filters.siteId,
       status: filters.status || undefined
     })
     vehicles.value = res.data
@@ -365,17 +349,8 @@ async function loadDrivers() {
   }
 }
 
-async function loadSites() {
-  try {
-    allSites.value = await listAllSites({ status: 'active' })
-  } catch {
-    allSites.value = []
-  }
-}
-
 onMounted(() => {
   loadDrivers()
-  loadSites()
 })
 
 function openDriverDialog(row: VehicleDTO) {
@@ -431,7 +406,7 @@ function openEditDialog(row: VehicleDTO) {
   Object.assign(form, emptyVehicleForm(), {
     plateNo: row.plateNo,
     displayName: row.displayName,
-    siteId: row.siteId || '',
+    siteName: row.siteName || '',
     brand: row.brand,
     model: row.model,
     manufactureYm: row.manufactureYm,
@@ -480,7 +455,7 @@ async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
     await updateVehicle(row.id, {
       plateNo: row.plateNo,
       displayName: row.displayName,
-      siteId: row.siteId || '',
+      siteName: row.siteName || '',
       brand: row.brand,
       model: row.model,
       manufactureYm: row.manufactureYm,

@@ -41,17 +41,6 @@ type CaregiverStore interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
-// SiteRef 是匯入或關聯比對單位時需要的最小資訊。
-type SiteRef struct {
-	ID   uuid.UUID
-	Name string
-}
-
-// SiteLookup 提供以名稱比對單位的查詢，供批次匯入比對「單位」欄位使用。
-type SiteLookup interface {
-	GetByName(ctx context.Context, name string) (*SiteRef, error)
-}
-
 // SpreadsheetReader 將上傳的 Excel 位元組解碼為逐工作表的儲存格文字。
 type SpreadsheetReader interface {
 	ReadTables(data []byte) (tables [][][]string, sheetNames []string, err error)

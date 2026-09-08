@@ -1,4 +1,4 @@
--- Migration: 000044_drop_region_master.down.sql
+-- Migration: 000048_drop_region_master.down.sql
 -- Description: 還原地區主檔與 region 欄位。
 --
 -- 限制：drivers / cases / holidays / export_jobs 的原始 region 值在 up 已被刪除，

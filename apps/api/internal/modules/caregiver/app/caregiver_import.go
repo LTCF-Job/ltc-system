@@ -11,7 +11,7 @@ import (
 	"ltc-system/apps/api/internal/domain/namenorm"
 )
 
-// ParseCaregivers 僅支援解析 .xlsx 檔案，對齊「類型／單位／姓名／聯絡方式／備註」欄位格式。
+// ParseCaregivers 僅支援解析 .xlsx 檔案，對齊「類型／據點／姓名／聯絡方式／備註」欄位格式。
 func (s *CaregiverService) ParseCaregivers(ctx context.Context, r io.Reader, fileName string) (*CaregiverImportPreviewResult, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -35,7 +35,7 @@ func (s *CaregiverService) ParseCaregivers(ctx context.Context, r io.Reader, fil
 
 // caregiverColumns 是表頭關鍵字對應的欄位名稱，依序嘗試比對第一列儲存格內容。
 var caregiverColumns = map[string][]string{
-	"site":    {"單位"},
+	"site":    {"據點"},
 	"name":    {"姓名"},
 	"type":    {"類型"},
 	"contact": {"聯絡方式"},
@@ -130,7 +130,7 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 			totalRows++
 			actualRowIndex := rIdx + 1
 			rowID := fmt.Sprintf("%s:%d", sheetName, actualRowIndex)
-			rawValues := map[string]string{"單位": siteName, "姓名": name, "類型": typeLabel, "聯絡方式": contact, "備註": notes}
+			rawValues := map[string]string{"據點": siteName, "姓名": name, "類型": typeLabel, "聯絡方式": contact, "備註": notes}
 
 			// 姓名與類型缺漏不再擋列：以空白建立並列入待維護，讓使用者在待維護頁籤補齊，
 			// 避免整列連同其他已填欄位一起被丟棄。類型比對不到固定選項時同樣存成空字串。
@@ -143,15 +143,6 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 			}
 			if typeCode == "" {
 				rowRes.WarningMessage = appendCaregiverMessage(rowRes.WarningMessage, "類型未填寫或不是「個管」／「照專」，將以空白建立並列入待維護")
-			}
-			// 單位比對到就自動關聯，比對不到只留白，不寫入原始名稱也不列入待維護；
-			// 查詢本身失敗仍要中止，避免把「查詢故障」誤判成「查無單位」。
-			if siteName != "" {
-				if site, err := s.sites.GetByName(ctx, siteName); err == nil && site != nil {
-					rowRes.SiteID = &site.ID
-				} else if !errors.Is(err, ErrCaregiverSiteNotFound) && err != nil {
-					return nil, fmt.Errorf("查詢單位「%s」失敗：%w", siteName, err)
-				}
 			}
 			// 姓名為空時不查重：ILIKE '%%' 會撈回任意資料列，且正規化後的空字串會與既有
 			// 空姓名資料互相命中，導致每一列都被誤判為重複而預設不匯入。
@@ -249,8 +240,7 @@ func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *Caregi
 			continue
 		}
 
-		// 單位比對不到時保持空白，不保留原始名稱：單位已不是待維護的判定條件。
-		c := Caregiver{Name: row.Name, Type: row.Type, Contact: row.Contact, Notes: row.Notes, SiteID: row.SiteID, Status: "active"}
+		c := Caregiver{Name: row.Name, Type: row.Type, Contact: row.Contact, Notes: row.Notes, SiteName: row.SiteName, Status: "active"}
 
 		if err := s.store.Create(ctx, &c); err != nil {
 			slog.Error("caregiver import row failed", "row_index", row.RowIndex, "error", err)

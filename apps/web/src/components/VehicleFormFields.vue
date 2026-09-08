@@ -5,10 +5,8 @@
   <el-form-item label="車別" prop="displayName">
     <el-input v-model="form.displayName" placeholder="請輸入車別" />
   </el-form-item>
-  <el-form-item label="所屬單位" prop="siteId">
-    <el-select v-model="form.siteId" placeholder="請選擇單位" filterable style="width: 100%">
-      <el-option v-for="s in sites" :key="s.id" :label="s.name" :value="s.id" />
-    </el-select>
+  <el-form-item label="據點" prop="siteName">
+    <el-input v-model="form.siteName" placeholder="請輸入所屬據點（選填）" />
   </el-form-item>
   <el-form-item label="廠牌" prop="brand">
     <el-input v-model="form.brand" placeholder="如：中華" />
@@ -76,12 +74,11 @@
 <script setup lang="ts">
 import { formatRocDate } from '@/utils/formatters'
 import { VEHICLE_DATE_FIELDS } from '@/utils/vehicleForm'
-import type { CreateVehicleRequest, SiteDTO } from '@/types/api'
+import type { CreateVehicleRequest } from '@/types/api'
 
 // form 是父層 el-form 綁定的同一個 reactive 物件，直接就地修改，不再另做一層 v-model 轉發
-const { form, sites, showStatus = false } = defineProps<{
+const { form, showStatus = false } = defineProps<{
   form: CreateVehicleRequest
-  sites: SiteDTO[]
   showStatus?: boolean
 }>()
 </script>

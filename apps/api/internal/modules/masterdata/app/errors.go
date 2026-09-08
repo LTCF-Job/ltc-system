@@ -19,13 +19,13 @@ var (
 	ErrInvalidStatus          = errors.New("invalid status")
 	ErrInvalidAssignmentRange = errors.New("invalid driver assignment date range")
 
-	// ErrSiteNameRequired 代表未提供單位名稱。
+	// ErrSiteNameRequired 代表未提供據點名稱。
 	ErrSiteNameRequired = errors.New("site name is required")
-	// ErrSiteAddressRequired 代表未提供單位地址。
+	// ErrSiteAddressRequired 代表未提供據點地址。
 	ErrSiteAddressRequired = errors.New("site address is required")
-	// ErrDuplicateSiteName 代表該區域已存在相同名稱的單位。
+	// ErrDuplicateSiteName 代表該區域已存在相同名稱的據點。
 	ErrDuplicateSiteName = errors.New("site name already exists in region")
-	// ErrSiteNotFound 代表查無單位資料。
+	// ErrSiteNotFound 代表查無據點資料。
 	ErrSiteNotFound = errors.New("site not found")
 
 	// ErrDuplicateVehiclePlateNo 代表車號已存在。
