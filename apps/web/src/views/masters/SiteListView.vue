@@ -151,11 +151,11 @@
         <el-form-item label="據點名稱" prop="name">
           <el-input v-model="form.name" placeholder="如：竹北日照中心" />
         </el-form-item>
-        <el-form-item label="所屬區域" prop="region">
-          <el-input v-model="form.region" placeholder="請輸入區域，例如：新竹縣（選填）" clearable />
+        <el-form-item label="區域" prop="region">
+          <el-input v-model="form.region" placeholder="請輸入區域，例如：新竹、苗栗、竹南頭份" clearable />
         </el-form-item>
         <el-form-item label="據點地址" prop="address">
-          <el-input v-model="form.address" placeholder="請輸入完整地址（選填）" clearable />
+          <el-input v-model="form.address" placeholder="請輸入完整地址" clearable />
         </el-form-item>
         <el-form-item label="備註" prop="remarks">
           <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
@@ -234,7 +234,8 @@ async function handleToggleStatus(row: SiteDTO, newActive: boolean) {
 }
 
 const rules = {
-  name: [{ required: true, message: '請輸入據點名稱', trigger: 'blur' }]
+  name: [{ required: true, message: '請輸入據點名稱', trigger: 'blur' }],
+  region: [{ required: true, message: '請輸入區域', trigger: 'blur' }]
 }
 
 const {

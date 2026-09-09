@@ -6,7 +6,7 @@
     <el-input v-model="form.displayName" placeholder="請輸入車別" />
   </el-form-item>
   <el-form-item label="據點" prop="siteName">
-    <el-input v-model="form.siteName" placeholder="請輸入所屬據點（選填）" />
+    <el-input v-model="form.siteName" placeholder="請輸入所屬據點" />
   </el-form-item>
   <el-form-item label="廠牌" prop="brand">
     <el-input v-model="form.brand" placeholder="如：中華" />

@@ -13,7 +13,7 @@
         <el-input v-model="form.nationalId" placeholder="1 碼英文 + 9 碼數字" />
       </el-form-item>
       <el-form-item label="性別" prop="gender">
-        <el-select v-model="form.gender" placeholder="請選擇性別（選填）" clearable style="width: 100%">
+        <el-select v-model="form.gender" placeholder="請選擇性別" clearable style="width: 100%">
           <el-option value="男" label="男" />
           <el-option value="女" label="女" />
         </el-select>
@@ -23,26 +23,26 @@
           v-model="form.birthDate"
           type="date"
           value-format="YYYY-MM-DD"
-          placeholder="請選擇出生日期（選填）"
+          placeholder="請選擇出生日期"
           clearable
           style="width: 100%"
         />
       </el-form-item>
       <el-form-item label="電子信箱" prop="email">
-        <el-input v-model="form.email" placeholder="通知寄送用信箱（選填）" clearable />
+        <el-input v-model="form.email" placeholder="通知寄送用信箱" clearable />
       </el-form-item>
       <el-form-item label="到職日" prop="employmentDate">
         <el-date-picker
           v-model="form.employmentDate"
           type="date"
           value-format="YYYY-MM-DD"
-          placeholder="請選擇到職日（選填）"
+          placeholder="請選擇到職日"
           clearable
           style="width: 100%"
         />
       </el-form-item>
       <el-form-item label="駕照類別" prop="licenseClass">
-        <el-select v-model="form.licenseClass" placeholder="請選擇駕照類別（選填）" clearable style="width: 100%">
+        <el-select v-model="form.licenseClass" placeholder="請選擇駕照類別" clearable style="width: 100%">
           <el-option
             v-for="(label, value) in DRIVER_LICENSE_CLASS_LABELS"
             :key="value"
@@ -56,7 +56,7 @@
           v-model="form.licenseExpiryDate"
           type="date"
           value-format="YYYY-MM-DD"
-          placeholder="請選擇駕照有效日期（選填）"
+          placeholder="請選擇駕照有效日期"
           clearable
           style="width: 100%"
         />
@@ -68,7 +68,7 @@
       <el-form-item label="指派車輛" prop="vehicleId">
         <el-select
           v-model="form.vehicleId"
-          placeholder="請選擇指派車輛（選填）"
+          placeholder="請選擇指派車輛"
           clearable
           filterable
           :loading="loadingVehicles"
