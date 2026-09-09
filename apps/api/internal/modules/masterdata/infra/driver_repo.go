@@ -2,14 +2,11 @@ package infra
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/masterdata/app"
 	"ltc-system/apps/api/internal/platform/clock"
@@ -25,6 +22,7 @@ type driverRow struct {
 	NationalIDHMAC         []byte
 	NationalIDMasked       string
 	Email                  *string
+	Region                 string
 	Status                 string
 	LicenseClass           *string
 	LicenseExpiryDate      *time.Time
@@ -33,6 +31,7 @@ type driverRow struct {
 	HasProfessionalLicense bool
 	EmploymentDate         *time.Time
 	HasTransferCert        bool
+	InspectionDate         *time.Time
 	Remarks                *string
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
@@ -47,6 +46,7 @@ func (r driverRow) toApp() app.Driver {
 		NationalIDHMAC:         r.NationalIDHMAC,
 		NationalIDMasked:       r.NationalIDMasked,
 		Email:                  r.Email,
+		Region:                 r.Region,
 		Status:                 r.Status,
 		LicenseClass:           r.LicenseClass,
 		LicenseExpiryDate:      r.LicenseExpiryDate,
@@ -55,6 +55,7 @@ func (r driverRow) toApp() app.Driver {
 		HasProfessionalLicense: r.HasProfessionalLicense,
 		EmploymentDate:         r.EmploymentDate,
 		HasTransferCert:        r.HasTransferCert,
+		InspectionDate:         r.InspectionDate,
 		Remarks:                r.Remarks,
 		CreatedAt:              r.CreatedAt,
 		UpdatedAt:              r.UpdatedAt,
@@ -64,20 +65,20 @@ func (r driverRow) toApp() app.Driver {
 func (r *driverRow) scanTargets() []interface{} {
 	return []interface{}{
 		&r.ID, &r.Name, &r.NameNormalized, &r.NationalIDCipher, &r.NationalIDHMAC, &r.NationalIDMasked,
-		&r.Email, &r.Status, &r.LicenseClass, &r.LicenseExpiryDate,
-		&r.Gender, &r.BirthDate, &r.HasProfessionalLicense, &r.EmploymentDate, &r.HasTransferCert, &r.Remarks,
+		&r.Email, &r.Region, &r.Status, &r.LicenseClass, &r.LicenseExpiryDate,
+		&r.Gender, &r.BirthDate, &r.HasProfessionalLicense, &r.EmploymentDate, &r.HasTransferCert, &r.InspectionDate, &r.Remarks,
 		&r.CreatedAt, &r.UpdatedAt,
 	}
 }
 
 const driverColumns = `id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-	       email, status, license_class, license_expiry_date,
-	       gender, birth_date, has_professional_license, employment_date, has_transfer_cert, remarks,
+	       email, COALESCE(region, ''), status, license_class, license_expiry_date,
+	       gender, birth_date, has_professional_license, employment_date, has_transfer_cert, inspection_date, remarks,
 	       created_at, updated_at`
 
 const driverColumnsWithAlias = `d.id, d.name, d.name_normalized, d.national_id_cipher, d.national_id_hmac,
-	       d.national_id_masked, d.email, d.status, d.license_class, d.license_expiry_date,
-	       d.gender, d.birth_date, d.has_professional_license, d.employment_date, d.has_transfer_cert, d.remarks,
+	       d.national_id_masked, d.email, COALESCE(d.region, ''), d.status, d.license_class, d.license_expiry_date,
+	       d.gender, d.birth_date, d.has_professional_license, d.employment_date, d.has_transfer_cert, d.inspection_date, d.remarks,
 	       d.created_at, d.updated_at`
 
 // DriverRepository 提供 drivers 與 driver_assignments 資料表之存取操作。
@@ -91,7 +92,7 @@ func NewDriverRepository(db *pgxpool.Pool) *DriverRepository {
 }
 
 // List 取得司機清單。
-func (r *DriverRepository) List(ctx context.Context, q, status string, page, pageSize int) ([]app.Driver, int64, error) {
+func (r *DriverRepository) List(ctx context.Context, region, q, status string, page, pageSize int) ([]app.Driver, int64, error) {
 	if r.db == nil {
 		return nil, 0, fmt.Errorf("driver database is not configured")
 	}
@@ -100,12 +101,13 @@ func (r *DriverRepository) List(ctx context.Context, q, status string, page, pag
 		SELECT ` + driverColumns + `
 		FROM drivers
 		WHERE deleted_at IS NULL
-		  AND ($1 = '' OR name ILIKE '%' || $1 || '%' OR COALESCE(email, '') ILIKE '%' || $1 || '%')
-		  AND ($2 = '' OR status = $2)
+		  AND ($1 = '' OR region = $1)
+		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
+		  AND ($3 = '' OR status = $3)
 		ORDER BY name ASC
-		LIMIT $3 OFFSET $4
+		LIMIT $4 OFFSET $5
 	`
-	rows, err := r.db.Query(ctx, query, q, status, pageSize, offset)
+	rows, err := r.db.Query(ctx, query, region, q, status, pageSize, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query drivers: %w", err)
 	}
@@ -127,10 +129,11 @@ func (r *DriverRepository) List(ctx context.Context, q, status string, page, pag
 	countQuery := `
 		SELECT COUNT(*) FROM drivers
 		WHERE deleted_at IS NULL
-		  AND ($1 = '' OR name ILIKE '%' || $1 || '%' OR COALESCE(email, '') ILIKE '%' || $1 || '%')
-		  AND ($2 = '' OR status = $2)
+		  AND ($1 = '' OR region = $1)
+		  AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR COALESCE(email, '') ILIKE '%' || $2 || '%')
+		  AND ($3 = '' OR status = $3)
 	`
-	if err := r.db.QueryRow(ctx, countQuery, q, status).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx, countQuery, region, q, status).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count drivers: %w", err)
 	}
 
@@ -214,54 +217,37 @@ func (r *DriverRepository) Create(ctx context.Context, d *app.Driver) error {
 	query := `
 		INSERT INTO drivers (
 			id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-			email, status, license_class, license_expiry_date,
-			gender, birth_date, has_professional_license, employment_date, has_transfer_cert, remarks
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			email, region, status, license_class, license_expiry_date,
+			gender, birth_date, has_professional_license, employment_date, has_transfer_cert, inspection_date, remarks
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		RETURNING created_at, updated_at
 	`
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
 	}
-	err := r.db.QueryRow(ctx, query,
+	return r.db.QueryRow(ctx, query,
 		d.ID, d.Name, d.NameNormalized, d.NationalIDCipher, d.NationalIDHMAC, d.NationalIDMasked,
-		d.Email, d.Status, d.LicenseClass, d.LicenseExpiryDate,
-		d.Gender, d.BirthDate, d.HasProfessionalLicense, d.EmploymentDate, d.HasTransferCert, d.Remarks,
+		d.Email, d.Region, d.Status, d.LicenseClass, d.LicenseExpiryDate,
+		d.Gender, d.BirthDate, d.HasProfessionalLicense, d.EmploymentDate, d.HasTransferCert, d.InspectionDate, d.Remarks,
 	).Scan(&d.CreatedAt, &d.UpdatedAt)
-	return handleDriverDBError(err)
 }
 
 // Update 修改司機基本資料。
 func (r *DriverRepository) Update(ctx context.Context, d *app.Driver) error {
 	query := `
 		UPDATE drivers
-		SET name = $2, name_normalized = $3, email = $4, status = $5,
-		    national_id_cipher = $6, national_id_hmac = $7, national_id_masked = $8,
-		    license_class = $9, license_expiry_date = $10,
-		    gender = $11, birth_date = $12, has_professional_license = $13, employment_date = $14,
-		    has_transfer_cert = $15, remarks = $16,
+		SET name = $2, name_normalized = $3, email = $4, region = NULLIF($5, ''), status = $6,
+		    license_class = $7, license_expiry_date = $8,
+		    gender = $9, birth_date = $10, has_professional_license = $11, employment_date = $12,
+		    has_transfer_cert = $13, inspection_date = $14, remarks = $15,
 		    updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING updated_at
 	`
-	err := r.db.QueryRow(ctx, query, d.ID, d.Name, d.NameNormalized, d.Email, d.Status,
-		d.NationalIDCipher, d.NationalIDHMAC, d.NationalIDMasked,
+	return r.db.QueryRow(ctx, query, d.ID, d.Name, d.NameNormalized, d.Email, d.Region, d.Status,
 		d.LicenseClass, d.LicenseExpiryDate,
-		d.Gender, d.BirthDate, d.HasProfessionalLicense, d.EmploymentDate, d.HasTransferCert, d.Remarks).
+		d.Gender, d.BirthDate, d.HasProfessionalLicense, d.EmploymentDate, d.HasTransferCert, d.InspectionDate, d.Remarks).
 		Scan(&d.UpdatedAt)
-	return handleDriverDBError(err)
-}
-
-// handleDriverDBError 把身分證唯一索引的衝突轉成業務錯誤；
-// 沒有對映時，重複身分證會以 500 冒出去而不是可讀的欄位錯誤。
-func handleDriverDBError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "national_id_hmac") {
-		return app.ErrDuplicateNationalID
-	}
-	return err
 }
 
 // AssignVehicle 建立司機車輛指派期間。
@@ -436,21 +422,11 @@ func (r *DriverRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUID
 }
 
 // CloseActiveAssignments 收斂該司機所有生效中車輛指派的區間至今天。
-// 今天（含）之後才起算的指派直接刪除：把它們收斂到今天會產生 lower > upper 的
-// 非法區間，而且那段期間本來就還沒發生，沒有需要保留的歷史。
 func (r *DriverRepository) CloseActiveAssignments(ctx context.Context, driverID uuid.UUID) error {
-	db := pgxdb.FromContext(ctx, r.db)
-	today := clock.Today()
-	if _, err := db.Exec(ctx, `
-		DELETE FROM driver_assignments
-		WHERE driver_id = $1 AND lower(effective_range) >= $2::date
-	`, driverID, today); err != nil {
-		return err
-	}
-	_, err := db.Exec(ctx, `
+	_, err := r.db.Exec(ctx, `
 		UPDATE driver_assignments
 		SET effective_range = daterange(lower(effective_range), $2::date, '[)')
 		WHERE driver_id = $1 AND upper_inf(effective_range)
-	`, driverID, today)
+	`, driverID, clock.Today())
 	return err
 }

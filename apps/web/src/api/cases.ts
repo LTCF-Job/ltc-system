@@ -16,6 +16,7 @@ import type {
 export async function listCases(params?: {
   page?: number
   pageSize?: number
+  region?: string
   status?: string
   q?: string
   // 待維護個案預設不會回傳；unresolvedLink 只取待維護，includePending 取全部。

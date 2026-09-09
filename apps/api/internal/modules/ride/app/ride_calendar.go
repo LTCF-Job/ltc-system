@@ -47,6 +47,7 @@ type CalendarCell struct {
 type CalendarRow struct {
 	CaseID      string                  `json:"caseId"`
 	CaseName    string                  `json:"caseName"`
+	Region      string                  `json:"region"`
 	TripPattern int16                   `json:"tripPattern"`
 	Days        map[string]CalendarCell `json:"days"`
 }
@@ -63,17 +64,17 @@ type CalendarMatrix struct {
 //
 // 沒有排班的個案不會出現在月曆上；有排班但當日無紀錄的格子維持 isExpected 而
 // records 為空，前端據此顯示「未回報」。
-func (s *RideService) GetCalendar(ctx context.Context, year, month int, keyword string) (*CalendarMatrix, error) {
+func (s *RideService) GetCalendar(ctx context.Context, year, month int, region, keyword string) (*CalendarMatrix, error) {
 	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	end := start.AddDate(0, 1, 0)
 	daysInMonth := end.AddDate(0, 0, -1).Day()
 
-	cases, err := s.formRepo.ListCalendarCases(ctx, start, end, keyword)
+	cases, err := s.formRepo.ListCalendarCases(ctx, start, end, region, keyword)
 	if err != nil {
 		return nil, err
 	}
 
-	records, err := s.formRepo.ListRideRecordsInRange(ctx, start, end, keyword)
+	records, err := s.formRepo.ListRideRecordsInRange(ctx, start, end, region, keyword)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +95,7 @@ func (s *RideService) GetCalendar(ctx context.Context, year, month int, keyword 
 		row := CalendarRow{
 			CaseID:      c.ID.String(),
 			CaseName:    c.Name,
+			Region:      c.Region,
 			TripPattern: c.TripPattern,
 			Days:        map[string]CalendarCell{},
 		}
@@ -111,6 +113,7 @@ func (s *RideService) GetCalendar(ctx context.Context, year, month int, keyword 
 			EffectiveFrom: c.EffectiveFrom,
 			EffectiveTo:   c.EffectiveTo,
 			Weekdays:      c.Weekdays,
+			SiteOpenDays:  c.SiteOpenDays,
 			Legs:          legs,
 		})
 		if err != nil {

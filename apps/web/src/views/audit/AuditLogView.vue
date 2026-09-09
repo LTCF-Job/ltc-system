@@ -200,6 +200,7 @@ import {
   AUDIT_FIELD_SECTIONS,
   AUDIT_VALUE_LABELS,
   ROLE_LABELS,
+  REGION_LABELS,
   SERVICE_CATEGORY_LABELS,
   SERVICE_USAGE_TYPE_LABELS,
   NOTIFICATION_TOPIC_LABELS,
@@ -207,33 +208,6 @@ import {
   type AuditAction,
   type AuditEntityType
 } from '@/types/domain'
-
-// 地區管理已下架，但稽核紀錄仍保存著當時寫入的 region 代碼。這份對照表只供
-// 歷史紀錄解碼顯示，不是任何新資料的值域來源。
-const LEGACY_REGION_LABELS: Record<string, string> = {
-  hsinchu: '新竹縣',
-  hsinchu_city: '新竹市',
-  miaoli: '苗栗縣',
-  taipei: '臺北市',
-  new_taipei: '新北市',
-  keelung: '基隆市',
-  taoyuan: '桃園市',
-  taichung: '臺中市',
-  changhua: '彰化縣',
-  nantou: '南投縣',
-  yunlin: '雲林縣',
-  chiayi_city: '嘉義市',
-  chiayi: '嘉義縣',
-  tainan: '臺南市',
-  kaohsiung: '高雄市',
-  pingtung: '屏東縣',
-  yilan: '宜蘭縣',
-  hualien: '花蓮縣',
-  taitung: '臺東縣',
-  penghu: '澎湖縣',
-  kinmen: '金門縣',
-  lienchiang: '連江縣'
-}
 import { DocumentCopy } from '@element-plus/icons-vue'
 
 const auditList = ref<AuditLogDTO[]>([])
@@ -348,7 +322,7 @@ function getEntityDisplayName(row?: AuditLogDTO | null): string {
     }
 
     case 'regions': {
-      const name = data.name || (data.region && LEGACY_REGION_LABELS[data.region as string])
+      const name = data.name || (data.region && REGION_LABELS[data.region as keyof typeof REGION_LABELS])
       if (name) return `${name} (地區)`
       return '地區主檔'
     }
@@ -406,7 +380,7 @@ function getEntityDisplayName(row?: AuditLogDTO | null): string {
 
     case 'export_jobs': {
       const ym = data.periodYm || data.period_ym
-      const reg = data.region ? (LEGACY_REGION_LABELS[data.region as string] || data.region) : '全區'
+      const reg = data.region ? (REGION_LABELS[data.region as keyof typeof REGION_LABELS] || data.region) : '全區'
       return `${ym || ''} ${reg} 申報匯出`
     }
 
@@ -457,7 +431,7 @@ function formatFieldValue(val: any, key?: string): string {
       return (ROLE_LABELS as any)[strVal] || strVal
     }
     if (key === 'region') {
-      return LEGACY_REGION_LABELS[strVal] || strVal
+      return (REGION_LABELS as any)[strVal] || strVal
     }
     if (key === 'serviceCategory' || key === 'service_category') {
       return (SERVICE_CATEGORY_LABELS as any)[Number(strVal)] ? `類別 ${strVal} (${(SERVICE_CATEGORY_LABELS as any)[Number(strVal)]})` : strVal
@@ -474,9 +448,9 @@ function formatFieldValue(val: any, key?: string): string {
       return AUDIT_VALUE_LABELS[strVal]
     }
 
-    // 地區對照（歷史紀錄）
-    if (LEGACY_REGION_LABELS[strVal]) {
-      return LEGACY_REGION_LABELS[strVal]
+    // 地區對照
+    if (REGION_LABELS[strVal]) {
+      return REGION_LABELS[strVal]
     }
 
     // 角色對照

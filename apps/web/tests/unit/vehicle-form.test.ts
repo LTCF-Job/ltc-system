@@ -91,23 +91,3 @@ test('vehicle date fields cover every date column on the form', () => {
     assert.notEqual(field.label, '', `${field.prop} 必須有標籤`)
   }
 })
-
-test('vehicle document flags default to false and survive sanitizing', () => {
-  const form = emptyVehicleForm()
-  assert.equal(form.hasVehicleLicense, false)
-  assert.equal(form.hasPurchaseContract, false)
-  assert.equal(form.hasPlateRegistration, false)
-  assert.equal(form.hasTransferRegistration, false)
-
-  // sanitize 的職責是把空字串轉成 null；布林的 false 必須原樣通過，
-  // 寫成 `form.hasVehicleLicense || null` 會讓「未持有」被送成 null。
-  const sanitized = sanitizeVehiclePayload({
-    ...form,
-    hasVehicleLicense: true,
-    hasPurchaseContract: false
-  })
-  assert.equal(sanitized.hasVehicleLicense, true)
-  assert.equal(sanitized.hasPurchaseContract, false)
-  assert.equal(sanitized.hasPlateRegistration, false)
-  assert.equal(sanitized.hasTransferRegistration, false)
-})

@@ -24,10 +24,6 @@ export function emptyVehicleForm(): CreateVehicleRequest {
     thirdPartyInsuranceExpiry: '',
     lastInspectionDate: '',
     wheelchairAccessible: true,
-    hasVehicleLicense: false,
-    hasPurchaseContract: false,
-    hasPlateRegistration: false,
-    hasTransferRegistration: false,
     status: 'active'
   }
 }

@@ -74,7 +74,7 @@ Transport DTO、Domain Model、Persistence Model 與 Frontend TypeScript Type �
 | 查詢情境 | API 類型範例 | 預期 HTTP 狀態碼 | 回傳 Payload 格式 | 說明 |
 | :--- | :--- | :---: | :--- | :--- |
 | **特定單一資源** | `GET /cases/:id`<br>`PUT /vehicles/:id` | **404 Not Found** | 錯誤 Envelope<br>`code: "NOT_FOUND"` | 該資源明確指向特定主鍵，查無此人屬於異常情況。 |
-| **集合／清單搜尋** | `GET /cases?q=王`<br>`GET /drivers?status=active` | **200 OK** | 成功 Envelope<br>`data: []` | 搜尋或過濾結果為空屬於正常查詢業務分支，非錯誤。 |
+| **集合／清單搜尋** | `GET /cases?region=X`<br>`GET /drivers?status=active` | **200 OK** | 成功 Envelope<br>`data: []` | 搜尋或過濾結果為空屬於正常查詢業務分支，非錯誤。 |
 | **可選子資源** | `GET /cases/:id/schedule` | **200 OK** | 成功 Envelope<br>`data: null` | 個案尚未設定排班屬於合法狀態，不應當作 404 報錯。 |
 
 ---

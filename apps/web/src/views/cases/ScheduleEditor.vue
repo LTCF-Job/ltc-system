@@ -515,9 +515,11 @@ import type {
   ScheduleMode,
   DayScheduleConfig
 } from '@/types/api'
+import type { Region } from '@/types/domain'
 
 const props = defineProps<{
   caseId: string
+  region: Region
   schedule?: CaseScheduleDTO | null
 }>()
 
@@ -695,6 +697,7 @@ async function loadHolidays() {
   const response = await listHolidays({
     startDate: `${selectedMonth.value}-01`,
     endDate: `${selectedMonth.value}-${String(daysInSelectedMonth.value).padStart(2, '0')}`,
+    region: props.region
   })
   holidayMap.value = Object.fromEntries(response.map((item) => [item.holidayDate, item]))
   buildMonthDaysList()
@@ -851,6 +854,13 @@ async function loadVehicles() {
 
   buildMonthDaysList()
 }
+
+watch(
+  () => props.region,
+  () => {
+    loadVehicles()
+  }
+)
 
 onMounted(async () => {
   await loadVehicles()

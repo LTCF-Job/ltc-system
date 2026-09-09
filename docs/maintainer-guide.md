@@ -165,7 +165,7 @@ Response envelope
 /login
 /
 /cases                  /cases/:id
-/masters/sites
+/masters/regions        /masters/sites
 /masters/vehicles       /masters/drivers       /masters/caregivers
 /driver-reports         /driver-reports/status /driver-reports/import
 /driver-reports/mappings

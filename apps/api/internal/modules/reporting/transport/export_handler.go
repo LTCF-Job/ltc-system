@@ -33,6 +33,7 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 	if periodYM == "" {
 		periodYM = c.DefaultQuery("month", "11507")
 	}
+	region := c.Query("region")
 	caseIDValues := c.QueryArray("caseIds")
 	if len(caseIDValues) == 0 && c.Query("caseIds") != "" {
 		caseIDValues = strings.Split(c.Query("caseIds"), ",")
@@ -41,6 +42,7 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 	if c.Request.Method == http.MethodPost {
 		var req struct {
 			PeriodYM string   `json:"periodYm"`
+			Region   string   `json:"region"`
 			CaseIDs  []string `json:"caseIds"`
 		}
 		if err := httpx.BindJSONStrict(c, &req); err != nil {
@@ -50,6 +52,7 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 		if req.PeriodYM != "" {
 			periodYM = req.PeriodYM
 		}
+		region = req.Region
 		caseIDValues = req.CaseIDs
 	}
 
@@ -72,7 +75,7 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
-	report, err := h.precheckService.RunPrecheck(c.Request.Context(), app.NewClaimScope(start, end, caseIDs))
+	report, err := h.precheckService.RunPrecheck(c.Request.Context(), app.NewClaimScope(start, end, region, caseIDs))
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
@@ -128,6 +131,7 @@ func (h *ExportHandler) Create(c *gin.Context) {
 
 	job, err := h.govClaimService.CreateGovClaimJob(c.Request.Context(), app.CreateGovClaimInput{
 		PeriodYM:      req.PeriodYM,
+		Region:        req.Region,
 		CaseIDs:       caseIDs,
 		Mode:          app.GovClaimMode(req.Mode),
 		CreatedBy:     auth.GetActorID(c),

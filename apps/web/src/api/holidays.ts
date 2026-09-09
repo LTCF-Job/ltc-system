@@ -4,6 +4,7 @@ export interface HolidayItem {
   holidayDate: string
   name: string
   /** 全區假日為 null。 */
+  region?: string | null
   source: string
   isDayOff: boolean
   createdAt?: string
@@ -12,6 +13,7 @@ export interface HolidayItem {
 export async function listHolidays(params?: {
   startDate?: string
   endDate?: string
+  region?: string
 }): Promise<HolidayItem[]> {
   const res = await apiClient.get('/holidays', { params })
   return unwrapData<HolidayItem[]>(res) ?? []
@@ -20,6 +22,7 @@ export async function listHolidays(params?: {
 export async function createHoliday(data: {
   holidayDate: string
   name: string
+  region?: string
   source?: string
   isDayOff?: boolean
 }): Promise<HolidayItem> {

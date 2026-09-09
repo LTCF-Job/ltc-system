@@ -167,8 +167,9 @@ func (m MaintenanceLog) AuditSnapshot() MaintenanceAuditSnapshot {
 
 // DriverRef 是出勤月報與維修紀錄需要的最小司機／車輛資訊。
 type DriverRef struct {
-	ID   uuid.UUID
-	Name string
+	ID     uuid.UUID
+	Name   string
+	Region string
 }
 
 // VehicleRef 是維修紀錄組裝顯示名稱所需的最小車輛資訊。
@@ -205,7 +206,7 @@ type AuditWriter interface {
 
 // DriverLister 提供出勤月報所需的司機清單。
 type DriverLister interface {
-	List(ctx context.Context, q string, page, pageSize int) ([]DriverRef, int64, error)
+	List(ctx context.Context, region, q string, page, pageSize int) ([]DriverRef, int64, error)
 	ListAllActive(ctx context.Context) ([]DriverRef, error)
 }
 
@@ -217,7 +218,7 @@ type ActiveDriverQueryLister interface {
 
 // VehicleLister 提供維修紀錄組裝車輛顯示名稱所需的車輛清單。
 type VehicleLister interface {
-	List(ctx context.Context, q string, page, pageSize int) ([]VehicleRef, int64, error)
+	List(ctx context.Context, region, q string, page, pageSize int) ([]VehicleRef, int64, error)
 }
 
 // AttendanceStore 定義司機出勤紀錄的讀寫邊界。
@@ -240,7 +241,7 @@ type AttendanceStore interface {
 
 // HolidayReader 提供出勤月曆判斷休假日所需之最小介面。
 type HolidayReader interface {
-	GetHolidayMap(ctx context.Context, year, month int) (map[string]bool, error)
+	GetHolidayMap(ctx context.Context, year, month int, region string) (map[string]bool, error)
 }
 
 // FuelStore 定義油資紀錄的讀寫邊界。

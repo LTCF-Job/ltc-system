@@ -80,7 +80,7 @@ local 的登入表單與其他環境完全一樣：照常輸入帳號密碼、�
 
 代稱只是輸入上的方便，不代表帳號存在，也不代表有預設密碼：
 
-- **沒有任何 migration 會建立登入帳號。** `apps/api/migrations/000002_seed_reference_data.up.sql` 曾寫入 22 個縣市的 `regions`，該表已由 `000044_drop_region_master` 移除；`000011_backfill_admin_identity.up.sql` 已改成 `SELECT 1;` 的 no-op。管理員帳號必須另行 bootstrap（見 [environment-bootstrap.md](environment-bootstrap.md)），密碼只存在於建立當下使用的 secret 或密碼管理工具，不寫進程式碼、環境變數範本或任何文件。
+- **沒有任何 migration 會建立登入帳號。** `apps/api/migrations/000002_seed_reference_data.up.sql` 現在只寫入 22 個縣市的 `regions`，`000011_backfill_admin_identity.up.sql` 已改成 `SELECT 1;` 的 no-op。管理員帳號必須另行 bootstrap（見 [environment-bootstrap.md](environment-bootstrap.md)），密碼只存在於建立當下使用的 secret 或密碼管理工具，不寫進程式碼、環境變數範本或任何文件。
 - 正式 Supabase 權限來自 JWT 的 `app_metadata.role`；local mock session 的角色則由登入帳號是否含有 `viewer` 字樣推斷。
 
 ## 狀態管理

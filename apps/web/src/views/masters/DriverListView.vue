@@ -104,6 +104,16 @@
               <span class="driver-data">{{ formatDate(row.employmentDate) }}</span>
             </template>
           </el-table-column>
+          <el-table-column prop="inspectionDate" label="驗車日" width="120" align="center">
+            <template #default="{ row }">
+              <span class="driver-data">{{ formatDate(row.inspectionDate) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="region" label="區域" width="100" align="center">
+            <template #default="{ row }">
+              <span class="driver-data">{{ row.region ? regionLabel(row.region) : '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="phone" label="聯絡電話" width="130" align="center">
             <template #default="{ row }">
               <span class="driver-data">{{ row.phone || '-' }}</span>
@@ -200,13 +210,6 @@
         <el-form-item label="司機姓名" prop="name">
           <el-input v-model="form.name" placeholder="請輸入姓名" />
         </el-form-item>
-        <el-form-item label="身分證字號" prop="nationalId">
-          <el-input
-            v-model="form.nationalId"
-            :placeholder="`目前為 ${editingMasked || '未設定'}，留空表示不變更`"
-            clearable
-          />
-        </el-form-item>
         <el-form-item label="性別" prop="gender">
           <el-select v-model="form.gender" placeholder="請選擇性別（選填）" clearable style="width: 100%">
             <el-option value="男" label="男" />
@@ -222,6 +225,16 @@
             clearable
             style="width: 100%"
           />
+        </el-form-item>
+        <el-form-item label="所屬區域" prop="region">
+          <el-select v-model="form.region" placeholder="請選擇區域（選填）" clearable filterable style="width: 100%">
+            <el-option
+              v-for="opt in regionOptions"
+              :key="opt.code"
+              :label="opt.name"
+              :value="opt.code"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="電子信箱" prop="email">
           <el-input v-model="form.email" placeholder="通知寄送用信箱（選填）" clearable />
@@ -265,6 +278,16 @@
           <el-checkbox v-model="form.hasProfessionalLicense">職業駕照</el-checkbox>
           <el-checkbox v-model="form.hasTransferCert">異動登記書</el-checkbox>
         </el-form-item>
+        <el-form-item label="驗車日" prop="inspectionDate">
+          <el-date-picker
+            v-model="form.inspectionDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="請選擇驗車日（選填）"
+            clearable
+            style="width: 100%"
+          />
+        </el-form-item>
         <el-form-item label="備註" prop="remarks">
           <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
         </el-form-item>
@@ -303,6 +326,23 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="起始日期" prop="startDate">
+          <el-date-picker
+            v-model="assignForm.startDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="結束日期">
+          <el-date-picker
+            v-model="assignForm.endDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="留空代表持續有效"
+            style="width: 100%"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <DialogFooter
@@ -333,14 +373,17 @@ import {
 } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
-import { formatDate } from '@/utils/formatters'
+import { formatDate, todayLocal } from '@/utils/formatters'
 import { DRIVER_LICENSE_CLASS_LABELS, type DriverLicenseClass } from '@/types/domain'
 import type { DriverDTO, CreateDriverRequest, UpdateDriverRequest, VehicleDTO } from '@/types/api'
 
-import { nationalIdRules } from '@/utils/driverForm'
+import { fetchRegionOptions, regionLabel, type RegionOption } from '@/api/regionOptions'
 
-// 編輯時顯示目前的遮罩身分證；表單留空代表不變更，不可用遮罩值預填欄位。
-const editingMasked = ref('')
+// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
+const regionOptions = ref<RegionOption[]>([])
+onMounted(async () => {
+  regionOptions.value = await fetchRegionOptions()
+})
 
 const authStore = useAuthStore()
 const drivers = ref<DriverDTO[]>([])
@@ -356,22 +399,27 @@ const assignDialogVisible = ref(false)
 const selectedDriverId = ref<string | null>(null)
 const assignFormRef = ref<FormInstance>()
 const assignForm = reactive({
-  vehicleId: ''
+  vehicleId: '',
+  startDate: todayLocal(),
+  endDate: ''
 })
 
 const assignRules = {
-  vehicleId: [{ required: true, message: '請選擇車輛', trigger: 'change' }]
+  vehicleId: [{ required: true, message: '請選擇車輛', trigger: 'change' }],
+  startDate: [{ required: true, message: '請選擇起始日期', trigger: 'change' }]
 }
 
 const form = reactive<CreateDriverRequest & UpdateDriverRequest>({
   name: '',
   nationalId: '',
+  region: '',
   email: '',
   gender: '',
   birthDate: null,
   hasProfessionalLicense: false,
   employmentDate: null,
   hasTransferCert: false,
+  inspectionDate: null,
   remarks: '',
   status: 'active',
   licenseClass: null,
@@ -379,8 +427,7 @@ const form = reactive<CreateDriverRequest & UpdateDriverRequest>({
 })
 
 const rules = {
-  name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }],
-  nationalId: nationalIdRules(false)
+  name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }]
 }
 
 const {
@@ -450,14 +497,14 @@ function handleDriverCreated() {
 function openEditDialog(row: any) {
   editingId.value = row.id
   form.name = row.name
-  form.nationalId = ''
-  editingMasked.value = row.nationalIdMasked || ''
+  form.region = row.region || ''
   form.email = row.email || ''
   form.gender = row.gender || ''
   form.birthDate = row.birthDate ? row.birthDate.substring(0, 10) : null
   form.hasProfessionalLicense = !!row.hasProfessionalLicense
   form.employmentDate = row.employmentDate ? row.employmentDate.substring(0, 10) : null
   form.hasTransferCert = !!row.hasTransferCert
+  form.inspectionDate = row.inspectionDate ? row.inspectionDate.substring(0, 10) : null
   form.remarks = row.remarks || ''
   form.status = row.status
   form.licenseClass = row.licenseClass ?? null
@@ -490,6 +537,8 @@ function openAssignDialog(row: any) {
   selectedDriverId.value = row.id
   const assignment = row.assignments?.[row.assignments.length - 1]
   assignForm.vehicleId = assignment?.vehicleId || ''
+  assignForm.startDate = todayLocal()
+  assignForm.endDate = ''
   assignDialogVisible.value = true
 }
 
@@ -501,14 +550,14 @@ async function handleSubmit() {
     try {
       await updateDriver(editingId.value!, {
         name: form.name,
-        // 留空代表不變更身分證，避免把遮罩值或空字串送成新的身分證。
-        nationalId: form.nationalId?.trim() || undefined,
+        region: form.region,
         email: form.email,
         gender: form.gender,
         birthDate: form.birthDate,
         hasProfessionalLicense: form.hasProfessionalLicense,
         employmentDate: form.employmentDate,
         hasTransferCert: form.hasTransferCert,
+        inspectionDate: form.inspectionDate,
         remarks: form.remarks,
         status: form.status,
         licenseClass: form.licenseClass,

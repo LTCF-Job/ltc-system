@@ -21,6 +21,7 @@ covers: ["apps/api/internal/modules/casemgmt/transport/case_handler.go", "apps/a
 |---|---|---|
 | `page` | int | 頁碼，由 `httpx.ParsePagination` 解析 |
 | `pageSize` | int | 每頁筆數，同上 |
+| `region` | string | 區域完全比對；空字串不過濾 |
 | `status` | string | 個案狀態完全比對；空字串不過濾 |
 | `q` | string | 對 `name` 與 `home_address` 做 `ILIKE` 模糊比對 |
 | `unresolvedLink` | `"true"` | 只回傳待維護個案（定義見下方 gotchas） |
@@ -56,6 +57,7 @@ covers: ["apps/api/internal/modules/casemgmt/transport/case_handler.go", "apps/a
   "inboundVehicle": "string",
   "inboundVehicleNameRaw": "string | null",
   "homeAddress": "string | null",
+  "region": "string | null",
   "ltcLevel": "string | null",
   "serviceCategory": 0,
   "serviceUsageType": 0,

@@ -39,6 +39,7 @@ type CaseImportRowResult struct {
 	CareContactName   string            `json:"careContactName,omitempty"`
 	RegisteredAddress string            `json:"registeredAddress,omitempty"`
 	HomeAddress       string            `json:"homeAddress,omitempty"`
+	Region            string            `json:"region"`
 	ServiceCategory   int               `json:"serviceCategory"`
 	ServiceUsageType  int               `json:"serviceUsageType"`
 	SiteName          string            `json:"siteName"`

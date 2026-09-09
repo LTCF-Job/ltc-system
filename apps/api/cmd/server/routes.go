@@ -32,6 +32,7 @@ import (
 
 // handlers 收集所有要註冊到路由的 delivery adapter。
 type handlers struct {
+	region       *mastertransport.RegionHandler
 	kase         *casetransport.CaseHandler
 	caseImport   *importtransport.ImportHandler
 	site         *mastertransport.SiteHandler
@@ -113,6 +114,13 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		// 不再有寫死角色字面值的路由；自訂角色在「角色身分管理」頁調整矩陣後，API 存取範圍會
 		// 跟著變（見 docs/decisions/role-permission-api-authorization.md）。模組 key 的權威清單
 		// 在 identityapp.ModuleKeys。
+
+		// 0. 區域主檔
+		apiV1.GET("/regions", auth.RequirePermission(perm, customPerm, "masters_regions", "view"), h.region.List)
+		apiV1.GET("/regions/:id", auth.RequirePermission(perm, customPerm, "masters_regions", "view"), h.region.Get)
+		apiV1.POST("/regions", auth.RequirePermission(perm, customPerm, "masters_regions", "edit"), h.region.Create)
+		apiV1.PATCH("/regions/:id", auth.RequirePermission(perm, customPerm, "masters_regions", "edit"), h.region.Update)
+		apiV1.DELETE("/regions/:id", auth.RequirePermission(perm, customPerm, "masters_regions", "delete"), h.region.Delete)
 
 		// 1. 個案主檔與排班
 

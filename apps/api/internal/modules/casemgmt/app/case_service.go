@@ -85,6 +85,7 @@ type CreateCaseRequest struct {
 	CareContactName        *string
 	RegisteredAddress      *string
 	HomeAddress            *string
+	Region                 *string
 	LTCLevel               *string
 	ServiceCategory        *int
 	ServiceUsageType       *int
@@ -154,6 +155,7 @@ func (s *CaseService) buildCaseEntity(req CreateCaseRequest) (Case, error) {
 		CareContactName:   req.CareContactName,
 		RegisteredAddress: req.RegisteredAddress,
 		HomeAddress:       req.HomeAddress,
+		Region:            req.Region,
 		LTCLevel:          req.LTCLevel,
 		ServiceCategory:   req.ServiceCategory,
 		ServiceUsageType:  req.ServiceUsageType,
@@ -200,8 +202,8 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 // ListCases 查詢個案清單（回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳
 // 據點／去回程車輛任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案；
 // excludePending 為 true 時排除這類待維護個案。
-func (s *CaseService) ListCases(ctx context.Context, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
-	return s.caseRepo.List(ctx, status, q, page, pageSize, unresolvedLink, excludePending)
+func (s *CaseService) ListCases(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
+	return s.caseRepo.List(ctx, region, status, q, page, pageSize, unresolvedLink, excludePending)
 }
 
 // GetCaseByID 取得單筆個案主檔明細。
@@ -214,6 +216,7 @@ func (s *CaseService) GetCaseByID(ctx context.Context, id uuid.UUID) (*Case, err
 type UpdateCaseInput struct {
 	Name                *string
 	HomeAddress         *string
+	Region              *string
 	LTCLevel            *string
 	ServiceCategory     *int
 	ServiceUsageType    *int
@@ -236,6 +239,7 @@ type UpdateCaseInput struct {
 // 身分證密文、HMAC、明文身分證、地址或照護聯絡資訊寫入長期保存的 audit_log。
 type caseAuditSnapshot struct {
 	NameMasked        string     `json:"nameMasked"`
+	Region            *string    `json:"region,omitempty"`
 	LTCLevel          *string    `json:"ltcLevel,omitempty"`
 	HouseholdType     *string    `json:"householdType,omitempty"`
 	Gender            *string    `json:"gender,omitempty"`
@@ -256,6 +260,7 @@ func newCaseAuditSnapshot(c *Case) caseAuditSnapshot {
 	}
 	return caseAuditSnapshot{
 		NameMasked:        maskAuditName(c.Name),
+		Region:            c.Region,
 		LTCLevel:          c.LTCLevel,
 		HouseholdType:     c.HouseholdType,
 		Gender:            c.Gender,
@@ -289,6 +294,9 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 	}
 	if in.HomeAddress != nil {
 		entity.HomeAddress = in.HomeAddress
+	}
+	if in.Region != nil {
+		entity.Region = in.Region
 	}
 	if in.LTCLevel != nil {
 		entity.LTCLevel = in.LTCLevel
@@ -507,6 +515,7 @@ type StageDuplicateCandidateInput struct {
 	CareContactName        *string
 	RegisteredAddress      *string
 	HomeAddress            *string
+	Region                 *string
 	ServiceCategory        *int
 	ServiceUsageType       *int
 	SiteID                 *uuid.UUID
@@ -574,6 +583,7 @@ func (s *CaseService) StageDuplicateCandidate(ctx context.Context, in StageDupli
 		CareContactName:        in.CareContactName,
 		RegisteredAddress:      in.RegisteredAddress,
 		HomeAddress:            in.HomeAddress,
+		Region:                 in.Region,
 		ServiceCategory:        in.ServiceCategory,
 		ServiceUsageType:       in.ServiceUsageType,
 		SiteID:                 in.SiteID,
@@ -769,6 +779,7 @@ func (s *CaseService) resolveDuplicateAsNewCase(ctx context.Context, cand *Dupli
 		CareContactName:   cand.CareContactName,
 		RegisteredAddress: cand.RegisteredAddress,
 		HomeAddress:       cand.HomeAddress,
+		Region:            cand.Region,
 		ServiceCategory:   cand.ServiceCategory,
 		ServiceUsageType:  cand.ServiceUsageType,
 		Status:            "active",
@@ -829,6 +840,9 @@ func (s *CaseService) mergeDuplicateIntoExisting(ctx context.Context, targetCase
 	}
 	if entity.HomeAddress == nil {
 		entity.HomeAddress = cand.HomeAddress
+	}
+	if entity.Region == nil {
+		entity.Region = cand.Region
 	}
 	if entity.SiteID == nil && entity.SiteNameRaw == nil {
 		entity.SiteID = cand.SiteID

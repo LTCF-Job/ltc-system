@@ -46,6 +46,7 @@ const (
 type GovClaimSource struct {
 	CaseID               uuid.UUID
 	CaseName             string
+	Region               string
 	CaseNationalIDCipher []byte
 	CaseNationalIDMasked string
 	HomeAddress          string
@@ -93,6 +94,7 @@ type ExportLine struct {
 type GovClaimCaseFile struct {
 	CaseID   uuid.UUID
 	CaseName string
+	Region   string
 	FileName string
 	RowCount int
 	Checksum string
@@ -113,6 +115,7 @@ type GovClaimJob struct {
 	ID            uuid.UUID
 	JobType       string
 	PeriodYM      string
+	Region        string
 	Mode          GovClaimMode
 	Status        string
 	TotalCases    int
@@ -130,6 +133,7 @@ type GovClaimJob struct {
 type ExportJobCreate struct {
 	JobType       string
 	PeriodYM      string
+	Region        string
 	Format        string
 	CaseIDs       []uuid.UUID
 	Precheck      *PrecheckReport
@@ -154,6 +158,7 @@ type AuditEntry struct {
 type ExportJobAuditSnapshot struct {
 	Status     string                   `json:"status"`
 	PeriodYM   string                   `json:"periodYm"`
+	Region     string                   `json:"region"`
 	Mode       string                   `json:"mode"`
 	TotalCases int                      `json:"totalCases"`
 	TotalRows  int                      `json:"totalRows"`
@@ -163,6 +168,7 @@ type ExportJobAuditSnapshot struct {
 // ExportJobAuditCaseFile 是稽核快照中單一個案的匯出檔案摘要。
 type ExportJobAuditCaseFile struct {
 	CaseName string `json:"caseName"`
+	Region   string `json:"region"`
 	FileName string `json:"fileName"`
 	RowCount int    `json:"rowCount"`
 }

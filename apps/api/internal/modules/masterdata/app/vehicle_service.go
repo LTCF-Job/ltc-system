@@ -81,10 +81,6 @@ type VehicleInput struct {
 	ThirdPartyInsuranceExpiry *time.Time
 	LastInspectionDate        *time.Time
 	WheelchairAccessible      *bool
-	HasVehicleLicense         bool
-	HasPurchaseContract       bool
-	HasPlateRegistration      bool
-	HasTransferRegistration   bool
 	Status                    string
 }
 
@@ -100,10 +96,6 @@ func (in VehicleInput) apply(v *Vehicle) error {
 	v.ThirdPartyInsuranceExpiry = in.ThirdPartyInsuranceExpiry
 	v.LastInspectionDate = in.LastInspectionDate
 	v.WheelchairAccessible = in.WheelchairAccessible
-	v.HasVehicleLicense = in.HasVehicleLicense
-	v.HasPurchaseContract = in.HasPurchaseContract
-	v.HasPlateRegistration = in.HasPlateRegistration
-	v.HasTransferRegistration = in.HasTransferRegistration
 	// 未提供狀態時預設 active；非法值不可靜默改寫。
 	status := strings.TrimSpace(in.Status)
 	if status == "" {

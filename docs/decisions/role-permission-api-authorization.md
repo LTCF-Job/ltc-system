@@ -19,7 +19,7 @@ covers:
 
 `auth.RequireRoles` 過去是逐路由寫死 `"viewer"`／`"staff"`／`"admin"` 三個字面值的白名單。但 Supabase JWT 的 `app_metadata.role` 寫入的其實是角色的 `key`（例如 `"dispatcher"`），不是 `roles.base_role`。兩者疊加的結果是：連系統內建的「調度員」角色，在真實環境 API 層一律被打 403——因為它的 JWT 角色字串永遠對不上任何路由要求的三個字面值之一。`roles` 表的 `permissions` JSONB（`view`／`edit` 兩軸模組矩陣）在「角色身分管理」頁可以精細設定，但這個設定從未真正影響 API 層的存取判斷；`docs/tech/frontend-permission-logic.md` 已把這件事定性為「已知落差」。
 
-翻查現有路由發現後端的授權粒度其實比矩陣的兩軸更細：`masters_cases`／`masters_sites`／`masters_vehicles`／`masters_drivers`／`masters_caregivers`／`settings_notifications` 的刪除路由僅限 `admin`，但 `driver_reports`／`vehicles_maintenance`／`attendance_fuel` 的刪除路由跟編輯同層級（`staff`＋`admin`）。矩陣若只有兩軸，套用矩陣會讓前者的刪除權限意外鬆綁給所有能編輯的角色。
+翻查現有路由發現後端的授權粒度其實比矩陣的兩軸更細：`masters_cases`／`masters_sites`／`masters_vehicles`／`masters_drivers`／`masters_caregivers`／`masters_regions`／`settings_notifications` 的刪除路由僅限 `admin`，但 `driver_reports`／`vehicles_maintenance`／`attendance_fuel` 的刪除路由跟編輯同層級（`staff`＋`admin`）。矩陣若只有兩軸，套用矩陣會讓前者的刪除權限意外鬆綁給所有能編輯的角色。
 
 ## Decision
 

@@ -75,8 +75,8 @@ func (a rideScheduleReader) GetActiveScheduleForCaseOnDate(ctx context.Context, 
 // rideMissingReportProvider 讓 ride 的異常集中清單取得整月未回報趟次，不觸發告警通知。
 type rideMissingReportProvider struct{ svc *taskapp.TaskService }
 
-func (a rideMissingReportProvider) ListMissingForMonth(ctx context.Context, year, month int) ([]rideapp.MissingRide, error) {
-	items, err := a.svc.ListMissingReportsForMonth(ctx, year, month)
+func (a rideMissingReportProvider) ListMissingForMonth(ctx context.Context, year, month int, region string) ([]rideapp.MissingRide, error) {
+	items, err := a.svc.ListMissingReportsForMonth(ctx, year, month, region)
 	if err != nil {
 		return nil, err
 	}
@@ -99,8 +99,8 @@ func (a rideMissingReportProvider) ListMissingForMonth(ctx context.Context, year
 // taskScheduleReader 讓 task 的月結作業取得整月有效排班。
 type taskScheduleReader struct{ repo *caseinfra.CaseRepository }
 
-func (a taskScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year, month int) ([]taskapp.ActiveSchedule, error) {
-	list, err := a.repo.GetActiveSchedulesForMonth(ctx, year, month)
+func (a taskScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]taskapp.ActiveSchedule, error) {
+	list, err := a.repo.GetActiveSchedulesForMonth(ctx, year, month, region)
 	if err != nil {
 		return nil, err
 	}
@@ -111,9 +111,9 @@ func (a taskScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year
 			legs = append(legs, taskapp.ScheduleLeg{LegSeq: l.LegSeq, Direction: l.Direction, DepartTime: l.DepartTime, VehicleID: l.VehicleID})
 		}
 		out = append(out, taskapp.ActiveSchedule{
-			CaseID: s.CaseID, CaseName: s.CaseName,
-			ClaimEndDate:  s.ClaimEndDate,
-			EffectiveFrom: s.EffectiveFrom, EffectiveTo: s.EffectiveTo,
+			CaseID: s.CaseID, CaseName: s.CaseName, Region: s.Region,
+			ClaimEndDate: s.ClaimEndDate,
+			SiteOpenDays: s.SiteOpenDays, EffectiveFrom: s.EffectiveFrom, EffectiveTo: s.EffectiveTo,
 			Weekdays: s.Weekdays, TripPattern: s.TripPattern, Legs: legs,
 		})
 	}
@@ -123,14 +123,14 @@ func (a taskScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year
 // opsDriverLister 讓 ops 的出勤月報取得司機清單。
 type opsDriverLister struct{ repo *masterinfra.DriverRepository }
 
-func (a opsDriverLister) List(ctx context.Context, q string, page, pageSize int) ([]opsapp.DriverRef, int64, error) {
-	list, total, err := a.repo.List(ctx, q, "", page, pageSize)
+func (a opsDriverLister) List(ctx context.Context, region, q string, page, pageSize int) ([]opsapp.DriverRef, int64, error) {
+	list, total, err := a.repo.List(ctx, region, q, "", page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
 	out := make([]opsapp.DriverRef, 0, len(list))
 	for _, d := range list {
-		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name})
+		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name, Region: d.Region})
 	}
 	return out, total, nil
 }
@@ -142,7 +142,7 @@ func (a opsDriverLister) ListAllActive(ctx context.Context) ([]opsapp.DriverRef,
 	}
 	out := make([]opsapp.DriverRef, 0, len(list))
 	for _, d := range list {
-		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name})
+		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name, Region: d.Region})
 	}
 	return out, nil
 }
@@ -154,7 +154,7 @@ func (a opsDriverLister) ListAllActiveByQuery(ctx context.Context, q string) ([]
 	}
 	out := make([]opsapp.DriverRef, 0, len(list))
 	for _, d := range list {
-		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name})
+		out = append(out, opsapp.DriverRef{ID: d.ID, Name: d.Name, Region: d.Region})
 	}
 	return out, nil
 }
@@ -164,7 +164,8 @@ type opsVehicleLister struct {
 	repo *masterinfra.VehicleRepository
 }
 
-func (a opsVehicleLister) List(ctx context.Context, q string, page, pageSize int) ([]opsapp.VehicleRef, int64, error) {
+func (a opsVehicleLister) List(ctx context.Context, region, q string, page, pageSize int) ([]opsapp.VehicleRef, int64, error) {
+	_ = region
 	list, total, err := a.repo.List(ctx, masterapp.VehicleFilter{Q: q}, page, pageSize)
 	if err != nil {
 		return nil, 0, err
@@ -188,7 +189,7 @@ func (a opsVehicleLister) ListAll(ctx context.Context) ([]opsapp.VehicleRef, err
 	return out, nil
 }
 
-// importSiteLookup 讓 caseimport 以名稱比對據點。
+// importSiteLookup 讓 caseimport 以名稱或區域比對據點。
 type importSiteLookup struct{ repo *masterinfra.SiteRepository }
 
 func (a importSiteLookup) GetByName(ctx context.Context, name string) (*importapp.SiteRef, error) {
@@ -205,8 +206,8 @@ func (a importSiteLookup) GetByName(ctx context.Context, name string) (*importap
 	return &importapp.SiteRef{ID: s.ID, Name: s.Name}, nil
 }
 
-func (a importSiteLookup) List(ctx context.Context, page, pageSize int) ([]importapp.SiteRef, error) {
-	list, _, err := a.repo.List(ctx, "", "", "", page, pageSize)
+func (a importSiteLookup) List(ctx context.Context, region string, page, pageSize int) ([]importapp.SiteRef, error) {
+	list, _, err := a.repo.List(ctx, region, "", "", page, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +246,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		Name: in.Name, NationalID: in.NationalID, AllowInvalidNationalID: in.AllowInvalidNationalID,
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate, BirthDateRaw: in.BirthDateRaw,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
-		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress,
+		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
 		ServiceCategory:  intPointerOrNil(in.ServiceCategory),
 		ServiceUsageType: intPointerOrNil(in.ServiceUsageType), Status: in.Status, Remarks: in.Remarks,
 		SiteID: in.SiteID, SiteNameRaw: nullableStringPtr(in.SiteNameRaw),
@@ -273,7 +274,7 @@ func (a caseDuplicateStager) StageDuplicateRow(ctx context.Context, fileHash, ro
 		Name: in.Name, NationalID: in.NationalID,
 		HouseholdType: in.HouseholdType, Gender: in.Gender, BirthDate: in.BirthDate, BirthDateRaw: in.BirthDateRaw,
 		CareContactRole: in.CareContactRole, CareContactName: in.CareContactName,
-		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress,
+		RegisteredAddress: in.RegisteredAddress, HomeAddress: in.HomeAddress, Region: in.Region,
 		ServiceCategory:  intPointerOrNil(in.ServiceCategory),
 		ServiceUsageType: intPointerOrNil(in.ServiceUsageType),
 		Remarks:          in.Remarks,
@@ -300,6 +301,7 @@ func nullableStringPtr(v string) *string {
 	}
 	return &v
 }
+
 
 // driverReportCaseLookup 讓 driverreport 以姓名相似度推薦欄位要對應的個案。
 type driverReportCaseLookup struct{ repo *caseinfra.CaseRepository }

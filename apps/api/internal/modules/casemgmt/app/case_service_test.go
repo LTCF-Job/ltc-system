@@ -31,8 +31,8 @@ type fakeCaseStore struct {
 	createErr      error
 	lastCreate     *Case
 	lastUpsertPref struct {
-		caseID                                        uuid.UUID
-		outboundVehicleID, inboundVehicleID           *uuid.UUID
+		caseID                                       uuid.UUID
+		outboundVehicleID, inboundVehicleID          *uuid.UUID
 		outboundVehicleNameRaw, inboundVehicleNameRaw string
 	}
 	deleted            map[uuid.UUID]bool
@@ -49,7 +49,7 @@ func newFakeCaseStore() *fakeCaseStore {
 	}
 }
 
-func (f *fakeCaseStore) List(ctx context.Context, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
+func (f *fakeCaseStore) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
 	return nil, 0, nil
 }
 
@@ -102,7 +102,7 @@ func (f *fakeCaseStore) GetActiveScheduleForCaseOnDate(ctx context.Context, case
 	return nil, nil
 }
 
-func (f *fakeCaseStore) GetActiveSchedulesForMonth(ctx context.Context, year, month int) ([]ActiveCaseScheduleInfo, error) {
+func (f *fakeCaseStore) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]ActiveCaseScheduleInfo, error) {
 	return nil, nil
 }
 
@@ -262,6 +262,7 @@ func TestCreateCase_OnlyNameSucceeds(t *testing.T) {
 	assert.Equal(t, "只填姓名", entity.Name)
 	assert.Nil(t, entity.NationalIDCipher)
 	assert.Nil(t, entity.HomeAddress)
+	assert.Nil(t, entity.Region)
 	assert.Equal(t, "active", entity.Status)
 }
 

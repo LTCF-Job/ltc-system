@@ -39,6 +39,7 @@ func TestExportHandler_CreateReturnsPerCaseDownloadLinks(t *testing.T) {
 	w := performRequest(h, http.MethodPost, "/api/v1/exports", map[string]interface{}{
 		"jobType":  "gov_claim",
 		"periodYm": "11507",
+		"region":   "hsinchu",
 		"mode":     "direct",
 		"caseIds":  []string{testCaseID.String(), testCaseID2.String()},
 	})
@@ -99,6 +100,7 @@ func TestExportHandler_CreateBlockedByPrecheck(t *testing.T) {
 
 	w := performRequest(h, http.MethodPost, "/api/v1/exports", map[string]interface{}{
 		"periodYm": "11507",
+		"region":   "hsinchu",
 		"mode":     "direct",
 		"caseIds":  []string{testCaseID.String()},
 	})
@@ -169,7 +171,7 @@ func TestExportHandler_DownloadZip(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "application/zip", w.Header().Get("Content-Type"))
-	assert.Contains(t, w.Header().Get("Content-Disposition"), "gov-claim-11507.zip")
+	assert.Contains(t, w.Header().Get("Content-Disposition"), "gov-claim-hsinchu-11507.zip")
 
 	archive := w.Body.Bytes()
 	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
@@ -249,6 +251,7 @@ func newTestExportHandler(t *testing.T, mode app.GovClaimMode) (*ExportHandler, 
 
 	job, err := svc.CreateGovClaimJob(context.Background(), app.CreateGovClaimInput{
 		PeriodYM:      "11507",
+		Region:        "hsinchu",
 		CaseIDs:       []uuid.UUID{testCaseID, testCaseID2},
 		Mode:          mode,
 		CreatedBy:     uuid.New(),
@@ -353,6 +356,7 @@ func (m *memoryExportStore) CreateJob(_ context.Context, job app.ExportJobCreate
 		ID:            uuid.New(),
 		JobType:       job.JobType,
 		PeriodYM:      job.PeriodYM,
+		Region:        job.Region,
 		Mode:          mode,
 		Status:        app.ExportStatusRunning,
 		CreatedBy:     job.CreatedBy,
@@ -421,6 +425,7 @@ func newTestSource(caseID uuid.UUID, name string, day int, legSeq int16, directi
 	return app.GovClaimSource{
 		CaseID:                 caseID,
 		CaseName:               name,
+		Region:                 "hsinchu",
 		CaseNationalIDCipher:   mustEncrypt("A202559750"),
 		CaseNationalIDMasked:   "A2****9750",
 		HomeAddress:            "新竹縣竹北市光明六路264號",

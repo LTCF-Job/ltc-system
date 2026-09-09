@@ -120,7 +120,7 @@ func (s *MaintenanceService) Delete(ctx context.Context, id uuid.UUID, actorID *
 func (s *MaintenanceService) GenerateBlankMaintenanceExcel(ctx context.Context) ([]byte, error) {
 	// 空白表格上的車輛一律取自車輛主檔。先前在查無車輛時填入五組寫死的車號，
 	// 會讓人拿到一份印著不存在車輛的正式表單；查無資料時就產生沒有車輛列的空表。
-	vehicles, _, err := s.vehicleRepo.List(ctx, "", 1, 100)
+	vehicles, _, err := s.vehicleRepo.List(ctx, "", "", 1, 100)
 	if err != nil {
 		return nil, err
 	}

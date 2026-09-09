@@ -1,7 +1,7 @@
 exports.name = '檢視人員（viewer）權限：唯讀是否真的唯讀'
 
 // 這支 suite 必須以 viewer 身分登入才有意義：QA_LOGIN_EMAIL=viewer@example.com node tests/qa-crud/run.cjs 24-viewer
-const PAGES = ['/cases', '/masters/sites', '/masters/vehicles', '/masters/drivers',
+const PAGES = ['/cases', '/masters/regions', '/masters/sites', '/masters/vehicles', '/masters/drivers',
   '/masters/caregivers', '/vehicles/maintenance', '/settings/holidays', '/settings/notifications',
   '/settings/roles', '/settings/users', '/audit', '/exports']
 

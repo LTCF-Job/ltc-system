@@ -85,6 +85,7 @@ type CreateCaseRequest struct {
 	CareContactName   *string    `json:"careContactName"`
 	RegisteredAddress *string    `json:"registeredAddress"`
 	HomeAddress       *string    `json:"homeAddress"`
+	Region            *string    `json:"region"`
 	LTCLevel          *string    `json:"ltcLevel"`
 	ServiceCategory   *int       `json:"serviceCategory"`
 	ServiceUsageType  *int       `json:"serviceUsageType"`
@@ -107,6 +108,7 @@ func (r CreateCaseRequest) ToService() app.CreateCaseRequest {
 		CareContactName:   r.CareContactName,
 		RegisteredAddress: r.RegisteredAddress,
 		HomeAddress:       r.HomeAddress,
+		Region:            r.Region,
 		LTCLevel:          r.LTCLevel,
 		ServiceCategory:   r.ServiceCategory,
 		ServiceUsageType:  r.ServiceUsageType,
@@ -224,6 +226,7 @@ type CaseResponse struct {
 	InboundVehicle         string     `json:"inboundVehicle"`
 	InboundVehicleNameRaw  *string    `json:"inboundVehicleNameRaw"`
 	HomeAddress            *string    `json:"homeAddress"`
+	Region                 *string    `json:"region"`
 	LTCLevel               *string    `json:"ltcLevel"`
 	ServiceCategory        *int       `json:"serviceCategory"`
 	ServiceUsageType       *int       `json:"serviceUsageType"`
@@ -258,6 +261,7 @@ func newCaseResponse(c app.Case) CaseResponse {
 		InboundVehicle:         c.InboundVehicle,
 		InboundVehicleNameRaw:  c.InboundVehicleNameRaw,
 		HomeAddress:            c.HomeAddress,
+		Region:                 c.Region,
 		LTCLevel:               c.LTCLevel,
 		ServiceCategory:        c.ServiceCategory,
 		ServiceUsageType:       c.ServiceUsageType,
@@ -286,6 +290,7 @@ type DuplicateCandidateResponse struct {
 	CareContactName        *string    `json:"careContactName"`
 	RegisteredAddress      *string    `json:"registeredAddress"`
 	HomeAddress            *string    `json:"homeAddress"`
+	Region                 *string    `json:"region"`
 	SiteID                 *uuid.UUID `json:"siteId"`
 	SiteName               string     `json:"siteName"`
 	SiteNameRaw            *string    `json:"siteNameRaw"`
@@ -318,6 +323,7 @@ func newDuplicateCandidateResponse(c app.DuplicateCandidate) DuplicateCandidateR
 		CareContactName:        c.CareContactName,
 		RegisteredAddress:      c.RegisteredAddress,
 		HomeAddress:            c.HomeAddress,
+		Region:                 c.Region,
 		SiteID:                 c.SiteID,
 		SiteName:               c.SiteName,
 		SiteNameRaw:            c.SiteNameRaw,

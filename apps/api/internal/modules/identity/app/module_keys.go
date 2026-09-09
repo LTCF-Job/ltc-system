@@ -11,6 +11,7 @@ import (
 // 必須同時在此登記並以 migration 回填既有角色，否則該模組對所有角色都會是拒絕。
 var ModuleKeys = []string{
 	"dashboard",
+	"masters_regions",
 	"masters_cases",
 	"masters_sites",
 	"masters_vehicles",

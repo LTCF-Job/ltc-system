@@ -30,6 +30,7 @@ type DriverDayAttendanceDTO struct {
 type DriverMonthAttendanceDTO struct {
 	DriverID   string                            `json:"driverId"`
 	DriverName string                            `json:"driverName"`
+	Region     string                            `json:"region"`
 	Days       map[string]DriverDayAttendanceDTO `json:"days"`
 	WorkDays   int                               `json:"workDays"`
 	LeaveDays  int                               `json:"leaveDays"`
@@ -158,7 +159,7 @@ func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm str
 	if s.holidayRepo == nil {
 		return nil, errors.New("holiday repository is not configured")
 	}
-	holidayMap, err := s.holidayRepo.GetHolidayMap(ctx, startDate.Year(), int(startDate.Month()))
+	holidayMap, err := s.holidayRepo.GetHolidayMap(ctx, startDate.Year(), int(startDate.Month()), "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get holiday map: %w", err)
 	}
@@ -188,6 +189,7 @@ func (s *AttendanceService) GetMonthAttendance(ctx context.Context, periodYm str
 		dDTO := DriverMonthAttendanceDTO{
 			DriverID:   d.ID.String(),
 			DriverName: d.Name,
+			Region:     d.Region,
 			Days:       make(map[string]DriverDayAttendanceDTO),
 		}
 

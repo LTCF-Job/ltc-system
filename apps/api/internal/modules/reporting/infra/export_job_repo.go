@@ -48,10 +48,10 @@ func (r *ExportJobRepository) CreateJob(ctx context.Context, job app.ExportJobCr
 
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO export_jobs (job_type, period_ym, format, filter_case_ids, status, precheck, created_by, created_by_name)
+		INSERT INTO export_jobs (job_type, period_ym, region, format, filter_case_ids, status, precheck, created_by, created_by_name)
 		VALUES ($1, $2, NULLIF($3, ''), $4, $5::uuid[], 'running', $6::jsonb, $7, $8)
 		RETURNING id
-	`, job.JobType, job.PeriodYM, job.Format, pgxdb.UUIDStrings(job.CaseIDs), precheckJSON, job.CreatedBy, job.CreatedByName).Scan(&id)
+	`, job.JobType, job.PeriodYM, job.Region, job.Format, pgxdb.UUIDStrings(job.CaseIDs), precheckJSON, job.CreatedBy, job.CreatedByName).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("insert export job: %w", err)
 	}
@@ -113,9 +113,9 @@ func (r *ExportJobRepository) CompleteJob(ctx context.Context, jobID uuid.UUID, 
 			fileContent = nil
 		}
 		batch.Queue(`
-			INSERT INTO export_job_files (job_id, case_id, seq, case_name, file_name, row_count, file_checksum, storage_path, file_content, file_size)
+			INSERT INTO export_job_files (job_id, case_id, seq, case_name, region, file_name, row_count, file_checksum, storage_path, file_content, file_size)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		`, jobID, file.CaseID, seq+1, file.CaseName, file.FileName, file.RowCount, file.Checksum,
+		`, jobID, file.CaseID, seq+1, file.CaseName, file.Region, file.FileName, file.RowCount, file.Checksum,
 			storagePath, fileContent, len(file.Bytes))
 	}
 	batch.Queue(`UPDATE export_jobs SET status = 'succeeded', finished_at = now() WHERE id = $1`, jobID)
@@ -155,10 +155,10 @@ func (r *ExportJobRepository) GetJob(ctx context.Context, jobID uuid.UUID) (app.
 
 	var row exportJobRow
 	err := r.db.QueryRow(ctx, `
-		SELECT id, job_type, period_ym, format, status, error_message, created_by, created_by_name, created_at, finished_at
+		SELECT id, job_type, period_ym, COALESCE(region, ''), format, status, error_message, created_by, created_by_name, created_at, finished_at
 		FROM export_jobs WHERE id = $1
 	`, jobID).Scan(
-		&row.ID, &row.JobType, &row.PeriodYM, &row.Format,
+		&row.ID, &row.JobType, &row.PeriodYM, &row.Region, &row.Format,
 		&row.Status, &row.ErrorMessage, &row.CreatedBy, &row.CreatedByName, &row.CreatedAt, &row.FinishedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -194,7 +194,7 @@ func (r *ExportJobRepository) ListJobs(ctx context.Context, page, pageSize int) 
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT j.id, j.job_type, j.period_ym, j.format, j.status, j.error_message,
+		SELECT j.id, j.job_type, j.period_ym, COALESCE(j.region, ''), j.format, j.status, j.error_message,
 		       j.created_by, j.created_by_name, j.created_at, j.finished_at,
 		       COALESCE(f.file_count, 0)::int, COALESCE(f.row_total, 0)::int
 		FROM export_jobs j
@@ -214,7 +214,7 @@ func (r *ExportJobRepository) ListJobs(ctx context.Context, page, pageSize int) 
 	for rows.Next() {
 		var row exportJobRow
 		if err := rows.Scan(
-			&row.ID, &row.JobType, &row.PeriodYM, &row.Format,
+			&row.ID, &row.JobType, &row.PeriodYM, &row.Region, &row.Format,
 			&row.Status, &row.ErrorMessage, &row.CreatedBy, &row.CreatedByName, &row.CreatedAt, &row.FinishedAt,
 			&row.TotalCases, &row.TotalRows,
 		); err != nil {
@@ -329,7 +329,7 @@ func (r *ExportJobRepository) LoadNationalIDCiphers(ctx context.Context, caseID 
 
 func (r *ExportJobRepository) listJobFiles(ctx context.Context, jobID uuid.UUID) ([]app.GovClaimCaseFile, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT case_id, case_name, file_name, row_count, COALESCE(file_checksum, '')
+		SELECT case_id, case_name, region, file_name, row_count, COALESCE(file_checksum, '')
 		FROM export_job_files WHERE job_id = $1 ORDER BY seq
 	`, jobID)
 	if err != nil {
@@ -341,7 +341,7 @@ func (r *ExportJobRepository) listJobFiles(ctx context.Context, jobID uuid.UUID)
 	for rows.Next() {
 		var file app.GovClaimCaseFile
 		if err := rows.Scan(
-			&file.CaseID, &file.CaseName,
+			&file.CaseID, &file.CaseName, &file.Region,
 			&file.FileName, &file.RowCount, &file.Checksum,
 		); err != nil {
 			return nil, fmt.Errorf("scan export job file: %w", err)

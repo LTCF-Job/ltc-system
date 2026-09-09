@@ -22,10 +22,11 @@ func NewHolidayHandler(svc *app.HolidayService) *HolidayHandler {
 
 // CreateHolidayRequest 定義新增假日請求結構。
 type CreateHolidayRequest struct {
-	HolidayDate string `json:"holidayDate" binding:"required"` // YYYY-MM-DD
-	Name        string `json:"name" binding:"required"`
-	Source      string `json:"source"`
-	IsDayOff    *bool  `json:"isDayOff"`
+	HolidayDate string  `json:"holidayDate" binding:"required"` // YYYY-MM-DD
+	Name        string  `json:"name" binding:"required"`
+	Region      *string `json:"region"`
+	Source      string  `json:"source"`
+	IsDayOff    *bool   `json:"isDayOff"`
 }
 
 // ImportHolidayRequest 定義批次匯入年份行事曆請求。
@@ -37,6 +38,7 @@ type ImportHolidayRequest struct {
 func (h *HolidayHandler) List(c *gin.Context) {
 	startStr := c.DefaultQuery("startDate", time.Now().Format(holidayDateLayout))
 	endStr := c.DefaultQuery("endDate", time.Now().AddDate(1, 0, 0).Format(holidayDateLayout))
+	region := c.Query("region")
 
 	start, err1 := time.Parse("2006-01-02", startStr)
 	end, err2 := time.Parse("2006-01-02", endStr)
@@ -45,7 +47,7 @@ func (h *HolidayHandler) List(c *gin.Context) {
 		return
 	}
 
-	holidays, err := h.svc.ListHolidays(c.Request.Context(), start, end)
+	holidays, err := h.svc.ListHolidays(c.Request.Context(), start, end, region)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢國定假日失敗", nil)
 		return
@@ -83,6 +85,7 @@ func (h *HolidayHandler) Create(c *gin.Context) {
 	item, err := h.svc.UpsertHoliday(c.Request.Context(), app.UpsertHolidayInput{
 		HolidayDate: date,
 		Name:        req.Name,
+		Region:      req.Region,
 		Source:      source,
 		IsDayOff:    isDayOff,
 	}, actorID, actorRole)

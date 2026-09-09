@@ -29,10 +29,11 @@ func (s *SiteService) List(ctx context.Context, region, q, status string, page, 
 
 // CreateSiteInput 代表新增據點所需之輸入。
 type CreateSiteInput struct {
-	Name    string
-	Address string
-	Region  string
-	Status  string
+	Name     string
+	Address  string
+	Region   string
+	OpenDays []int16
+	Status   string
 }
 
 // Create 新增據點主檔。
@@ -52,11 +53,17 @@ func (s *SiteService) Create(ctx context.Context, in CreateSiteInput, actors ...
 		return nil, ErrInvalidStatus
 	}
 
+	openDays := in.OpenDays
+	if len(openDays) == 0 {
+		openDays = []int16{1, 2, 3, 4, 5}
+	}
+
 	site := Site{
-		Name:    name,
-		Address: address,
-		Region:  region,
-		Status:  status,
+		Name:     name,
+		Address:  address,
+		Region:   region,
+		OpenDays: openDays,
+		Status:   status,
 	}
 	if err := s.store.Create(ctx, &site); err != nil {
 		return nil, err
@@ -67,10 +74,11 @@ func (s *SiteService) Create(ctx context.Context, in CreateSiteInput, actors ...
 
 // UpdateSiteInput 代表更新據點所需之輸入。
 type UpdateSiteInput struct {
-	Name    string
-	Address string
-	Region  string
-	Status  string
+	Name     string
+	Address  string
+	Region   string
+	OpenDays []int16
+	Status   string
 }
 
 // Update 更新據點主檔。
@@ -89,6 +97,11 @@ func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInp
 		return nil, ErrInvalidStatus
 	}
 
+	openDays := in.OpenDays
+	if len(openDays) == 0 {
+		openDays = []int16{1, 2, 3, 4, 5}
+	}
+
 	var before interface{}
 	if s.auditRepo != nil {
 		existing, err := s.store.GetByID(ctx, id)
@@ -102,11 +115,12 @@ func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInp
 	}
 
 	site := Site{
-		ID:      id,
-		Name:    name,
-		Address: address,
-		Region:  region,
-		Status:  status,
+		ID:       id,
+		Name:     name,
+		Address:  address,
+		Region:   region,
+		OpenDays: openDays,
+		Status:   status,
 	}
 	if err := s.store.Update(ctx, &site); err != nil {
 		return nil, err

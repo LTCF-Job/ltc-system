@@ -19,7 +19,9 @@ type ScheduleLeg struct {
 type ActiveSchedule struct {
 	CaseID        uuid.UUID
 	CaseName      string
+	Region        string
 	ClaimEndDate  *time.Time
+	SiteOpenDays  []int16
 	EffectiveFrom time.Time
 	EffectiveTo   *time.Time
 	Weekdays      []int16
@@ -35,12 +37,12 @@ type TaskStore interface {
 
 // MonthScheduleReader 提供整月有效排班，由擁有個案能力的模組實作。
 type MonthScheduleReader interface {
-	GetActiveSchedulesForMonth(ctx context.Context, year, month int) ([]ActiveSchedule, error)
+	GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]ActiveSchedule, error)
 }
 
 // HolidayMapReader 提供排除假日所需的日期對照表。
 type HolidayMapReader interface {
-	GetHolidayMap(ctx context.Context, year, month int) (map[string]bool, error)
+	GetHolidayMap(ctx context.Context, year, month int, region string) (map[string]bool, error)
 }
 
 // Notifier 定義月結與缺報告警的通知發送邊界。

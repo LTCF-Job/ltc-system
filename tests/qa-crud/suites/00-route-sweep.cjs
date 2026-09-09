@@ -1,5 +1,5 @@
 const ROUTES = [
-  '/', '/cases', '/masters/sites', '/masters/vehicles',
+  '/', '/cases', '/masters/regions', '/masters/sites', '/masters/vehicles',
   '/masters/drivers', '/masters/caregivers', '/driver-reports/status',
   '/driver-reports/import', '/rides', '/rides/issues', '/rides/missing',
   '/reports/trip-summary', '/reports/hsinchu-schedule', '/vehicles/maintenance',

@@ -20,14 +20,22 @@
           @keyup.enter="handleSearch"
         />
 
-        <el-input
+        <el-select
           v-model="filters.region"
-          placeholder="搜尋區域"
+          placeholder="全部區域"
           clearable
+          filterable
           style="width: 140px"
-          @keyup.enter="handleSearch"
-          @clear="handleSearch"
-        />
+          @change="handleSearch"
+        >
+          <el-option label="全部區域" value="" />
+          <el-option
+            v-for="opt in regionOptions"
+            :key="opt.code"
+            :label="opt.name"
+            :value="opt.code"
+          />
+        </el-select>
 
         <el-select
           v-model="filters.status"
@@ -62,12 +70,17 @@
           <el-table-column prop="name" label="據點名稱" min-width="140" class-name="site-name-col" />
           <el-table-column prop="region" label="區域" width="120" align="center">
             <template #default="{ row }">
-              <span>{{ row.region || '-' }}</span>
+              <span>{{ row.region ? regionLabel(row.region) : '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="address" label="據點地址" min-width="180" class-name="site-address-col" show-overflow-tooltip>
             <template #default="{ row }">
               <span>{{ row.address || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="開放時間" width="260" class-name="open-days-column">
+            <template #default="{ row }">
+              {{ row.openDays?.map((d: number) => `週${'一二三四五六日'[d-1]}`).join('、') || '未設定' }}
             </template>
           </el-table-column>
 
@@ -147,10 +160,34 @@
           <el-input v-model="form.name" placeholder="如：竹北日照中心" />
         </el-form-item>
         <el-form-item label="所屬區域" prop="region">
-          <el-input v-model="form.region" placeholder="請輸入區域，例如：新竹縣（選填）" clearable />
+          <el-select
+            v-model="form.region"
+            placeholder="請選擇區域（選填）"
+            clearable
+            filterable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="opt in regionOptions"
+              :key="opt.code"
+              :label="opt.name"
+              :value="opt.code"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="據點地址" prop="address">
           <el-input v-model="form.address" placeholder="請輸入完整地址（選填）" clearable />
+        </el-form-item>
+        <el-form-item label="開放星期" prop="openDays">
+          <el-checkbox-group v-model="form.openDays">
+            <el-checkbox :value="1">週一</el-checkbox>
+            <el-checkbox :value="2">週二</el-checkbox>
+            <el-checkbox :value="3">週三</el-checkbox>
+            <el-checkbox :value="4">週四</el-checkbox>
+            <el-checkbox :value="5">週五</el-checkbox>
+            <el-checkbox :value="6">週六</el-checkbox>
+            <el-checkbox :value="7">週日</el-checkbox>
+          </el-checkbox-group>
         </el-form-item>
         <el-form-item label="狀態" prop="status">
           <el-radio-group v-model="form.status" class="status-radio-group">
@@ -192,6 +229,14 @@ import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import type { SiteDTO, CreateSiteRequest } from '@/types/api'
 
+import { fetchRegionOptions, regionLabel, type RegionOption } from '@/api/regionOptions'
+
+// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
+const regionOptions = ref<RegionOption[]>([])
+onMounted(async () => {
+  regionOptions.value = await fetchRegionOptions()
+})
+
 const authStore = useAuthStore()
 const sites = ref<SiteDTO[]>([])
 const dialogVisible = ref(false)
@@ -203,6 +248,7 @@ const form = reactive<CreateSiteRequest>({
   name: '',
   region: '',
   address: '',
+  openDays: [1, 2, 3, 4, 5],
   status: 'active'
 })
 
@@ -214,6 +260,7 @@ async function handleToggleStatus(row: SiteDTO, newActive: boolean) {
       name: row.name,
       region: row.region,
       address: row.address,
+      openDays: row.openDays,
       status: newStatus
     })
     row.status = newStatus
@@ -260,8 +307,9 @@ const {
 function openCreateDialog() {
   editingId.value = null
   form.name = ''
-  form.region = ''
+  form.region = '' as any
   form.address = ''
+  form.openDays = [1, 2, 3, 4, 5]
   form.status = 'active'
   dialogVisible.value = true
 }
@@ -271,6 +319,7 @@ function openEditDialog(row: any) {
   form.name = row.name
   form.region = row.region || ''
   form.address = row.address || ''
+  form.openDays = [...row.openDays]
   form.status = row.status || 'active'
   dialogVisible.value = true
 }

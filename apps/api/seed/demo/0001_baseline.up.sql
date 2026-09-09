@@ -6,6 +6,7 @@
 -- 規則：
 --   * 全部使用固定 UUID，搭配 ON CONFLICT 讓本檔案可重複執行（idempotent）。
 --   * 不寫入 auth.* — Demo 測試帳號由共用 Supabase Auth 資料庫另外建立。
+--   * 不重複寫入 regions — 已由 000002_seed_reference_data 對所有環境一致播種。
 --   * national_id_cipher / national_id_hmac 為 AES-256-GCM 加密與 HMAC 索引，
 --     只有執行中的 Go 應用程式持有加密金鑰才能產生真正的密文。這裡改用可讀的
 --     佔位位元組（demo-cipher-<code> / demo-hmac-<code> 轉成的 bytea），僅滿足
@@ -19,27 +20,26 @@
 -- ============================================================
 -- 1. 據點 (sites)
 -- ============================================================
-INSERT INTO sites (id, name, address, region, status) VALUES
-('10000000-0000-4000-8000-000000000001', '新竹縣站', '新竹縣竹北市光明六路100號', '新竹縣', 'active'),
-('10000000-0000-4000-8000-000000000002', '苗栗縣站', '苗栗縣苗栗市自治路50號', '苗栗縣', 'active'),
-('10000000-0000-4000-8000-000000000003', '新竹市站', '新竹市東區中央路200號', '新竹市', 'active')
+INSERT INTO sites (id, name, address, region, open_days, status) VALUES
+('10000000-0000-4000-8000-000000000001', '新竹縣站', '新竹縣竹北市光明六路100號', '新竹縣', '{1,2,3,4,5}', 'active'),
+('10000000-0000-4000-8000-000000000002', '苗栗縣站', '苗栗縣苗栗市自治路50號', '苗栗縣', '{1,2,3,4,5}', 'active'),
+('10000000-0000-4000-8000-000000000003', '新竹市站', '新竹市東區中央路200號', '新竹市', '{1,2,3,4,5}', 'active')
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name, address = EXCLUDED.address,
-  region = EXCLUDED.region, status = EXCLUDED.status;
+  region = EXCLUDED.region, open_days = EXCLUDED.open_days, status = EXCLUDED.status;
 
 -- ============================================================
 -- 2. 車輛 (vehicles)
 -- ============================================================
 INSERT INTO vehicles (id, plate_no, display_name, status, site_name, brand, model, manufacture_ym,
     compulsory_insurance_expiry, passenger_insurance_expiry, third_party_insurance_expiry,
-    last_inspection_date, wheelchair_accessible,
-    has_vehicle_license, has_purchase_contract, has_plate_registration, has_transfer_registration) VALUES
-('20000000-0000-4000-8000-000000000001', 'AAA-1688', '新竹一號車', 'active', '新竹縣站', '豐田', 'Hiace', '2021-05', '2027-05-01', '2027-05-01', '2027-05-01', '2026-03-15', true, true, true, true, false),
-('20000000-0000-4000-8000-000000000002', 'AAB-2288', '新竹二號車', 'active', '新竹縣站', '福特', 'Transit', '2020-09', '2027-02-01', '2027-02-01', '2027-02-01', '2026-02-20', false, true, true, false, false),
-('20000000-0000-4000-8000-000000000003', 'ABC-3399', '苗栗一號車', 'active', '苗栗縣站', '豐田', 'Hiace', '2022-03', '2027-08-01', '2027-08-01', '2027-08-01', '2026-04-10', true, true, false, true, false),
-('20000000-0000-4000-8000-000000000004', 'ABD-4410', '苗栗二號車', 'maintenance', '苗栗縣站', '日產', 'NV350', '2019-11', '2026-11-01', '2026-11-01', '2026-11-01', '2025-12-01', false, true, false, false, false),
-('20000000-0000-4000-8000-000000000005', 'ABE-5521', '竹市一號車', 'active', '新竹市站', '豐田', 'Hiace', '2023-01', '2028-01-01', '2028-01-01', '2028-01-01', '2026-06-01', true, true, true, true, true),
-('20000000-0000-4000-8000-000000000006', 'OLD-9001', '除役備用車', 'retired', NULL, '福特', 'Transit', '2015-06', NULL, NULL, NULL, NULL, false, false, false, false, false)
+    last_inspection_date, wheelchair_accessible) VALUES
+('20000000-0000-4000-8000-000000000001', 'AAA-1688', '新竹一號車', 'active', '新竹縣站', '豐田', 'Hiace', '2021-05', '2027-05-01', '2027-05-01', '2027-05-01', '2026-03-15', true),
+('20000000-0000-4000-8000-000000000002', 'AAB-2288', '新竹二號車', 'active', '新竹縣站', '福特', 'Transit', '2020-09', '2027-02-01', '2027-02-01', '2027-02-01', '2026-02-20', false),
+('20000000-0000-4000-8000-000000000003', 'ABC-3399', '苗栗一號車', 'active', '苗栗縣站', '豐田', 'Hiace', '2022-03', '2027-08-01', '2027-08-01', '2027-08-01', '2026-04-10', true),
+('20000000-0000-4000-8000-000000000004', 'ABD-4410', '苗栗二號車', 'maintenance', '苗栗縣站', '日產', 'NV350', '2019-11', '2026-11-01', '2026-11-01', '2026-11-01', '2025-12-01', false),
+('20000000-0000-4000-8000-000000000005', 'ABE-5521', '竹市一號車', 'active', '新竹市站', '豐田', 'Hiace', '2023-01', '2028-01-01', '2028-01-01', '2028-01-01', '2026-06-01', true),
+('20000000-0000-4000-8000-000000000006', 'OLD-9001', '除役備用車', 'retired', NULL, '福特', 'Transit', '2015-06', NULL, NULL, NULL, NULL, false)
 ON CONFLICT (id) DO UPDATE SET
   plate_no = EXCLUDED.plate_no, display_name = EXCLUDED.display_name, status = EXCLUDED.status,
   site_name = EXCLUDED.site_name, brand = EXCLUDED.brand, model = EXCLUDED.model,
@@ -48,26 +48,22 @@ ON CONFLICT (id) DO UPDATE SET
   passenger_insurance_expiry = EXCLUDED.passenger_insurance_expiry,
   third_party_insurance_expiry = EXCLUDED.third_party_insurance_expiry,
   last_inspection_date = EXCLUDED.last_inspection_date,
-  wheelchair_accessible = EXCLUDED.wheelchair_accessible,
-  has_vehicle_license = EXCLUDED.has_vehicle_license,
-  has_purchase_contract = EXCLUDED.has_purchase_contract,
-  has_plate_registration = EXCLUDED.has_plate_registration,
-  has_transfer_registration = EXCLUDED.has_transfer_registration;
+  wheelchair_accessible = EXCLUDED.wheelchair_accessible;
 
 -- ============================================================
 -- 3. 司機 (drivers)
 -- ============================================================
 INSERT INTO drivers (id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-    email, status, license_class, license_expiry_date) VALUES
-('30000000-0000-4000-8000-000000000001', '林建成', '林建成', convert_to('demo-cipher-DRV-001','UTF8'), convert_to('demo-hmac-DRV-001','UTF8'), 'A12***0001', 'driver001@ltc.example.com', 'active', 'sedan', '2028-06-30'),
-('30000000-0000-4000-8000-000000000002', '陳美惠', '陳美惠', convert_to('demo-cipher-DRV-002','UTF8'), convert_to('demo-hmac-DRV-002','UTF8'), 'A22***0002', 'driver002@ltc.example.com', 'active', 'bus', '2027-11-20'),
-('30000000-0000-4000-8000-000000000003', '黃志豪', '黃志豪', convert_to('demo-cipher-DRV-003','UTF8'), convert_to('demo-hmac-DRV-003','UTF8'), 'A32***0003', 'driver003@ltc.example.com', 'active', 'sedan', '2026-12-01'),
-('30000000-0000-4000-8000-000000000004', '張淑芬', '張淑芬', convert_to('demo-cipher-DRV-004','UTF8'), convert_to('demo-hmac-DRV-004','UTF8'), 'A42***0004', 'driver004@ltc.example.com', 'active', NULL, NULL),
-('30000000-0000-4000-8000-000000000005', '吳國棟', '吳國棟', convert_to('demo-cipher-DRV-005','UTF8'), convert_to('demo-hmac-DRV-005','UTF8'), 'A52***0005', 'driver005@ltc.example.com', 'resigned', 'sedan', '2025-01-01')
+    email, region, status, license_class, license_expiry_date) VALUES
+('30000000-0000-4000-8000-000000000001', '林建成', '林建成', convert_to('demo-cipher-DRV-001','UTF8'), convert_to('demo-hmac-DRV-001','UTF8'), 'A12***0001', 'driver001@ltc.example.com', '新竹縣', 'active', 'sedan', '2028-06-30'),
+('30000000-0000-4000-8000-000000000002', '陳美惠', '陳美惠', convert_to('demo-cipher-DRV-002','UTF8'), convert_to('demo-hmac-DRV-002','UTF8'), 'A22***0002', 'driver002@ltc.example.com', '新竹縣', 'active', 'bus', '2027-11-20'),
+('30000000-0000-4000-8000-000000000003', '黃志豪', '黃志豪', convert_to('demo-cipher-DRV-003','UTF8'), convert_to('demo-hmac-DRV-003','UTF8'), 'A32***0003', 'driver003@ltc.example.com', '苗栗縣', 'active', 'sedan', '2026-12-01'),
+('30000000-0000-4000-8000-000000000004', '張淑芬', '張淑芬', convert_to('demo-cipher-DRV-004','UTF8'), convert_to('demo-hmac-DRV-004','UTF8'), 'A42***0004', 'driver004@ltc.example.com', '苗栗縣', 'active', NULL, NULL),
+('30000000-0000-4000-8000-000000000005', '吳國棟', '吳國棟', convert_to('demo-cipher-DRV-005','UTF8'), convert_to('demo-hmac-DRV-005','UTF8'), 'A52***0005', 'driver005@ltc.example.com', '新竹市', 'resigned', 'sedan', '2025-01-01')
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name, name_normalized = EXCLUDED.name_normalized,
   national_id_cipher = EXCLUDED.national_id_cipher, national_id_hmac = EXCLUDED.national_id_hmac,
-  national_id_masked = EXCLUDED.national_id_masked, email = EXCLUDED.email,
+  national_id_masked = EXCLUDED.national_id_masked, email = EXCLUDED.email, region = EXCLUDED.region,
   status = EXCLUDED.status, license_class = EXCLUDED.license_class, license_expiry_date = EXCLUDED.license_expiry_date;
 
 -- ============================================================
@@ -88,22 +84,22 @@ ON CONFLICT (id) DO UPDATE SET
 -- 5. 個案 (cases)
 -- ============================================================
 INSERT INTO cases (id, name, name_normalized, national_id_cipher, national_id_hmac, national_id_masked,
-    home_address, ltc_level, service_category, service_usage_type, claim_end_date, status,
+    home_address, region, ltc_level, service_category, service_usage_type, claim_end_date, status,
     household_type, gender, birth_date, care_contact_role, care_contact_name, registered_address, remarks,
     site_id, site_name_raw) VALUES
-('40000000-0000-4000-8000-000000000001', '王秀琴', '王秀琴', convert_to('demo-cipher-C-0001','UTF8'), convert_to('demo-hmac-C-0001','UTF8'), 'A12***0001', '新竹縣竹北市文興路一段1號', 'CMS 2', 1, 2, NULL, 'active', '一般戶', 'F', '1948-03-12', '女兒', '王小美', '新竹縣竹北市文興路一段1號', NULL, '10000000-0000-4000-8000-000000000001', NULL),
-('40000000-0000-4000-8000-000000000002', '李國華', '李國華', convert_to('demo-cipher-C-0002','UTF8'), convert_to('demo-hmac-C-0002','UTF8'), 'A22***0002', '新竹縣竹北市中正西路20號', 'CMS 4', 2, 1, NULL, 'active', '中低收入戶', 'M', '1955-07-22', '兒子', '李文彬', '新竹縣竹北市中正西路20號', NULL, '10000000-0000-4000-8000-000000000001', NULL),
-('40000000-0000-4000-8000-000000000003', '張阿蘭', '張阿蘭', convert_to('demo-cipher-C-0003','UTF8'), convert_to('demo-hmac-C-0003','UTF8'), 'A32***0003', '苗栗縣苗栗市中山路30號', 'CMS 3', 1, 3, NULL, 'active', '一般戶', 'F', '1950-11-05', '媳婦', '張林月', '苗栗縣苗栗市中山路30號', NULL, '10000000-0000-4000-8000-000000000002', NULL),
-('40000000-0000-4000-8000-000000000004', '陳福來', '陳福來', convert_to('demo-cipher-C-0004','UTF8'), convert_to('demo-hmac-C-0004','UTF8'), 'A42***0004', '苗栗縣頭份市中央路40號', 'CMS 3', 1, 2, NULL, 'suspended', '一般戶', 'M', '1952-02-18', '女兒', '陳小玉', '苗栗縣頭份市中央路40號', '暫停服務：住院治療中', '10000000-0000-4000-8000-000000000002', NULL),
-('40000000-0000-4000-8000-000000000005', '劉月娥', '劉月娥', convert_to('demo-cipher-C-0005','UTF8'), convert_to('demo-hmac-C-0005','UTF8'), 'A52***0005', '新竹市東區中央路50號', 'CMS 2', 2, 4, '2026-06-30', 'closed', '一般戶', 'F', '1945-09-30', '配偶', '劉大山', '新竹市東區中央路50號', '個案已轉住機構，結案', '10000000-0000-4000-8000-000000000003', NULL),
-('40000000-0000-4000-8000-000000000006', '許進財', '許進財', convert_to('demo-cipher-C-0006','UTF8'), convert_to('demo-hmac-C-0006','UTF8'), 'A62***0006', '新竹市北區中山路60號', NULL, NULL, NULL, NULL, 'active', '一般戶', 'M', '1958-12-01', '女兒', '許小芬', '新竹市北區中山路60號', '服務類別待社工評估後補齊', NULL, '竹市舊站（待維護）'),
-('40000000-0000-4000-8000-000000000007', '楊淑惠', '楊淑惠', convert_to('demo-cipher-C-0007','UTF8'), convert_to('demo-hmac-C-0007','UTF8'), 'A72***0007', '新竹縣竹北市光明一路70號', 'CMS 4', 1, 1, NULL, 'active', '一般戶', 'F', '1949-04-25', '兒子', '楊文宏', '新竹縣竹北市光明一路70號', NULL, '10000000-0000-4000-8000-000000000001', NULL),
-('40000000-0000-4000-8000-000000000008', '蔡明宗', '蔡明宗', NULL, NULL, NULL, '苗栗縣竹南鎮中正路80號', NULL, 2, 2, NULL, 'active', '一般戶', 'M', '1960-08-14', '配偶', '蔡林秀', NULL, '新申請個案，尚未排班', '10000000-0000-4000-8000-000000000002', NULL)
+('40000000-0000-4000-8000-000000000001', '王秀琴', '王秀琴', convert_to('demo-cipher-C-0001','UTF8'), convert_to('demo-hmac-C-0001','UTF8'), 'A12***0001', '新竹縣竹北市文興路一段1號', '新竹縣', 'CMS 2', 1, 2, NULL, 'active', '一般戶', 'F', '1948-03-12', '女兒', '王小美', '新竹縣竹北市文興路一段1號', NULL, '10000000-0000-4000-8000-000000000001', NULL),
+('40000000-0000-4000-8000-000000000002', '李國華', '李國華', convert_to('demo-cipher-C-0002','UTF8'), convert_to('demo-hmac-C-0002','UTF8'), 'A22***0002', '新竹縣竹北市中正西路20號', '新竹縣', 'CMS 4', 2, 1, NULL, 'active', '中低收入戶', 'M', '1955-07-22', '兒子', '李文彬', '新竹縣竹北市中正西路20號', NULL, '10000000-0000-4000-8000-000000000001', NULL),
+('40000000-0000-4000-8000-000000000003', '張阿蘭', '張阿蘭', convert_to('demo-cipher-C-0003','UTF8'), convert_to('demo-hmac-C-0003','UTF8'), 'A32***0003', '苗栗縣苗栗市中山路30號', '苗栗縣', 'CMS 3', 1, 3, NULL, 'active', '一般戶', 'F', '1950-11-05', '媳婦', '張林月', '苗栗縣苗栗市中山路30號', NULL, '10000000-0000-4000-8000-000000000002', NULL),
+('40000000-0000-4000-8000-000000000004', '陳福來', '陳福來', convert_to('demo-cipher-C-0004','UTF8'), convert_to('demo-hmac-C-0004','UTF8'), 'A42***0004', '苗栗縣頭份市中央路40號', '苗栗縣', 'CMS 3', 1, 2, NULL, 'suspended', '一般戶', 'M', '1952-02-18', '女兒', '陳小玉', '苗栗縣頭份市中央路40號', '暫停服務：住院治療中', '10000000-0000-4000-8000-000000000002', NULL),
+('40000000-0000-4000-8000-000000000005', '劉月娥', '劉月娥', convert_to('demo-cipher-C-0005','UTF8'), convert_to('demo-hmac-C-0005','UTF8'), 'A52***0005', '新竹市東區中央路50號', '新竹市', 'CMS 2', 2, 4, '2026-06-30', 'closed', '一般戶', 'F', '1945-09-30', '配偶', '劉大山', '新竹市東區中央路50號', '個案已轉住機構，結案', '10000000-0000-4000-8000-000000000003', NULL),
+('40000000-0000-4000-8000-000000000006', '許進財', '許進財', convert_to('demo-cipher-C-0006','UTF8'), convert_to('demo-hmac-C-0006','UTF8'), 'A62***0006', '新竹市北區中山路60號', '新竹市', NULL, NULL, NULL, NULL, 'active', '一般戶', 'M', '1958-12-01', '女兒', '許小芬', '新竹市北區中山路60號', '服務類別待社工評估後補齊', NULL, '竹市舊站（待維護）'),
+('40000000-0000-4000-8000-000000000007', '楊淑惠', '楊淑惠', convert_to('demo-cipher-C-0007','UTF8'), convert_to('demo-hmac-C-0007','UTF8'), 'A72***0007', '新竹縣竹北市光明一路70號', '新竹縣', 'CMS 4', 1, 1, NULL, 'active', '一般戶', 'F', '1949-04-25', '兒子', '楊文宏', '新竹縣竹北市光明一路70號', NULL, '10000000-0000-4000-8000-000000000001', NULL),
+('40000000-0000-4000-8000-000000000008', '蔡明宗', '蔡明宗', NULL, NULL, NULL, '苗栗縣竹南鎮中正路80號', '苗栗縣', NULL, 2, 2, NULL, 'active', '一般戶', 'M', '1960-08-14', '配偶', '蔡林秀', NULL, '新申請個案，尚未排班', '10000000-0000-4000-8000-000000000002', NULL)
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name, name_normalized = EXCLUDED.name_normalized,
   national_id_cipher = EXCLUDED.national_id_cipher, national_id_hmac = EXCLUDED.national_id_hmac,
   national_id_masked = EXCLUDED.national_id_masked, home_address = EXCLUDED.home_address,
-  ltc_level = EXCLUDED.ltc_level, service_category = EXCLUDED.service_category,
+  region = EXCLUDED.region, ltc_level = EXCLUDED.ltc_level, service_category = EXCLUDED.service_category,
   service_usage_type = EXCLUDED.service_usage_type, claim_end_date = EXCLUDED.claim_end_date,
   status = EXCLUDED.status, household_type = EXCLUDED.household_type, gender = EXCLUDED.gender,
   birth_date = EXCLUDED.birth_date, care_contact_role = EXCLUDED.care_contact_role,
@@ -323,17 +319,17 @@ ON CONFLICT (id) DO UPDATE SET
 -- ============================================================
 -- 20. 匯出工作 (export_jobs)
 -- ============================================================
-INSERT INTO export_jobs (id, job_type, period_ym, format, filter_case_ids, status, storage_path, file_checksum, error_message, created_by, created_by_name, finished_at) VALUES
-('70000000-0000-4000-8000-000000000001', 'gov_claim', '11507', 'zip',
+INSERT INTO export_jobs (id, job_type, period_ym, region, format, filter_case_ids, status, storage_path, file_checksum, error_message, created_by, created_by_name, finished_at) VALUES
+('70000000-0000-4000-8000-000000000001', 'gov_claim', '11507', '新竹縣', 'zip',
   ARRAY['40000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000002','40000000-0000-4000-8000-000000000007']::uuid[],
   'succeeded', '/exports/gov_claim/11507-hsinchu.zip', 'sha256:demo-checksum-0001', NULL,
   '00000000-0000-0000-0000-000000000002', '系統管理員', '2026-08-02 10:30:00+08'),
-('70000000-0000-4000-8000-000000000002', 'trip_summary', '11508', 'xlsx',
+('70000000-0000-4000-8000-000000000002', 'trip_summary', '11508', '苗栗縣', 'xlsx',
   ARRAY['40000000-0000-4000-8000-000000000004']::uuid[],
   'failed', NULL, NULL, '個案陳福來身分證加密欄位缺漏，請補齊後重新匯出',
   '00000000-0000-0000-0000-000000000002', '系統管理員', '2026-09-01 11:00:00+08')
 ON CONFLICT (id) DO UPDATE SET
-  job_type = EXCLUDED.job_type, period_ym = EXCLUDED.period_ym,
+  job_type = EXCLUDED.job_type, period_ym = EXCLUDED.period_ym, region = EXCLUDED.region,
   format = EXCLUDED.format, filter_case_ids = EXCLUDED.filter_case_ids, status = EXCLUDED.status,
   storage_path = EXCLUDED.storage_path, file_checksum = EXCLUDED.file_checksum,
   error_message = EXCLUDED.error_message, created_by = EXCLUDED.created_by,
@@ -353,12 +349,12 @@ ON CONFLICT (id) DO UPDATE SET
 -- ============================================================
 -- 22. 匯出個案檔案 (export_job_files)
 -- ============================================================
-INSERT INTO export_job_files (id, job_id, case_id, seq, case_code, case_name, file_name, row_count, file_checksum) VALUES
-('72000000-0000-4000-8000-000000000001', '70000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 1, 'C-0001', '王秀琴', 'C-0001_11507.xlsx', 20, 'sha256:demo-checksum-file-0001'),
-('72000000-0000-4000-8000-000000000002', '70000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000002', 2, 'C-0002', '李國華', 'C-0002_11507.xlsx', 18, 'sha256:demo-checksum-file-0002')
+INSERT INTO export_job_files (id, job_id, case_id, seq, case_code, case_name, region, file_name, row_count, file_checksum) VALUES
+('72000000-0000-4000-8000-000000000001', '70000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000001', 1, 'C-0001', '王秀琴', '新竹縣', 'C-0001_11507.xlsx', 20, 'sha256:demo-checksum-file-0001'),
+('72000000-0000-4000-8000-000000000002', '70000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000002', 2, 'C-0002', '李國華', '新竹縣', 'C-0002_11507.xlsx', 18, 'sha256:demo-checksum-file-0002')
 ON CONFLICT (id) DO UPDATE SET
   job_id = EXCLUDED.job_id, case_id = EXCLUDED.case_id, seq = EXCLUDED.seq, case_code = EXCLUDED.case_code,
-  case_name = EXCLUDED.case_name, file_name = EXCLUDED.file_name,
+  case_name = EXCLUDED.case_name, region = EXCLUDED.region, file_name = EXCLUDED.file_name,
   row_count = EXCLUDED.row_count, file_checksum = EXCLUDED.file_checksum;
 
 -- ============================================================

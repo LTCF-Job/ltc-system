@@ -13,6 +13,7 @@ covers: ["apps/web/src/router/index.ts"]
 | `/` | `views/dashboard/DashboardView.vue` | 全部 | `dashboard/*` |
 | `/cases` | `views/cases/CaseListView.vue` | admin/staff/dispatcher/viewer | `cases`、`cases/import`、`cases/template`、`cases/import/duplicates`、`cases/import/duplicates/:id/reveal`、`cases/import/duplicates/:id/resolve`、`cases/:id`（待維護補正）、`cases/:id/transport-preference`、`sites`、`vehicles` |
 | `/cases/:id` | `views/cases/CaseDetailView.vue`（含 `ScheduleEditor.vue`） | admin/staff/dispatcher/viewer | `cases/:id`、`cases/:id/reveal`、`cases/:id/schedule`、`cases/:id/transport-preference` |
+| `/masters/regions` | `views/masters/RegionListView.vue` | admin/staff/dispatcher/viewer | `regions/*` |
 | `/masters/sites` | `views/masters/SiteListView.vue` | admin/staff/dispatcher/viewer | `sites/*` |
 | `/masters/vehicles` | `views/masters/VehicleListView.vue` | 全部 | `vehicles/*` |
 | `/masters/drivers` | `views/masters/DriverListView.vue` | 全部 | `drivers/*` |

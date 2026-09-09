@@ -13,6 +13,7 @@ import (
 type Holiday struct {
 	HolidayDate time.Time
 	Name        string
+	Region      *string
 	Source      string
 	IsDayOff    bool
 	CreatedAt   time.Time
@@ -22,6 +23,7 @@ type Holiday struct {
 type HolidayAuditSnapshot struct {
 	HolidayDate time.Time `json:"holidayDate"`
 	Name        string    `json:"name"`
+	Region      *string   `json:"region,omitempty"`
 	Source      string    `json:"source"`
 	IsDayOff    bool      `json:"isDayOff"`
 }
@@ -34,7 +36,7 @@ type HolidayImportAuditSnapshot struct {
 
 // AuditSnapshot 產生假日的明確稽核快照。
 func (h Holiday) AuditSnapshot() HolidayAuditSnapshot {
-	return HolidayAuditSnapshot{HolidayDate: h.HolidayDate, Name: h.Name, Source: h.Source, IsDayOff: h.IsDayOff}
+	return HolidayAuditSnapshot{HolidayDate: h.HolidayDate, Name: h.Name, Region: h.Region, Source: h.Source, IsDayOff: h.IsDayOff}
 }
 
 // AuditEntry 是本模組寫入稽核日誌的內容。
@@ -55,7 +57,7 @@ type AuditWriter interface {
 
 // HolidayStore 定義假日同步所需的資料存取邊界。
 type HolidayStore interface {
-	List(context.Context, time.Time, time.Time) ([]Holiday, error)
+	List(context.Context, time.Time, time.Time, string) ([]Holiday, error)
 	Upsert(context.Context, *Holiday) error
 	BatchUpsert(context.Context, []Holiday) error
 	Delete(context.Context, time.Time) error
@@ -94,14 +96,15 @@ func NewHolidaySyncService(repo HolidayStore, auditRepo AuditWriter, provider Go
 	return &HolidayService{repo: repo, auditRepo: auditRepo, provider: provider}
 }
 
-func (s *HolidayService) ListHolidays(ctx context.Context, startDate, endDate time.Time) ([]Holiday, error) {
-	return s.repo.List(ctx, startDate, endDate)
+func (s *HolidayService) ListHolidays(ctx context.Context, startDate, endDate time.Time, region string) ([]Holiday, error) {
+	return s.repo.List(ctx, startDate, endDate, region)
 }
 
 // UpsertHolidayInput 代表新增或更新單一國定假日所需之輸入。
 type UpsertHolidayInput struct {
 	HolidayDate time.Time
 	Name        string
+	Region      *string
 	Source      string
 	IsDayOff    bool
 }
@@ -124,6 +127,7 @@ func (s *HolidayService) UpsertHoliday(ctx context.Context, in UpsertHolidayInpu
 	h := &Holiday{
 		HolidayDate: in.HolidayDate,
 		Name:        in.Name,
+		Region:      in.Region,
 		Source:      source,
 		IsDayOff:    in.IsDayOff,
 	}

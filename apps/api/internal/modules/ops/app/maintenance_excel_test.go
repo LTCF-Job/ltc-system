@@ -17,7 +17,7 @@ import (
 // 套件的 test double 不對外可見。
 type emptyVehicleLister struct{}
 
-func (emptyVehicleLister) List(context.Context, string, int, int) ([]app.VehicleRef, int64, error) {
+func (emptyVehicleLister) List(context.Context, string, string, int, int) ([]app.VehicleRef, int64, error) {
 	return nil, 0, nil
 }
 

@@ -41,7 +41,7 @@ covers:
 
 ## 車輛歸屬與服務車輛清冊欄位（`vehicles`）
 
-- 車輛不再關聯據點主檔：`vehicles.site_id` 已於 migration `000046` 移除，改為車輛自己的 `site_name TEXT` 自由輸入欄位，非必填、不驗證、不比對據點主檔。連帶被移除的是原本由所屬單位 JOIN 出來的唯讀 `region` 欄位，以及所有以車輛區域為篩選條件的功能：`GET /vehicles?region=` 參數（`GET /vehicles` 現在只支援 `q`／`status`／分頁）、趟次月結表（`/reports/trip-summary`）的區域篩選、新竹接送時刻表原本「只顯示新竹車輛」的篩選（現在一律顯示全部車輛，不再依區域過濾）。司機接送匯報原本走的區域 fallback 邏輯改成寫死常數 `'hsinchu'`，因為那本來就是舊 fallback 實際的值。地區主檔已於 `000048` 整個下架，區域自此只是各表自己的自由文字欄位（目前僅 `sites.region` 保留）。
+- 車輛不再關聯據點主檔：`vehicles.site_id` 已於 migration `000046` 移除，改為車輛自己的 `site_name TEXT` 自由輸入欄位，非必填、不驗證、不比對據點主檔。連帶被移除的是原本由所屬單位 JOIN 出來的唯讀 `region` 欄位，以及所有以車輛區域為篩選條件的功能：`GET /vehicles?region=` 參數（`GET /vehicles` 現在只支援 `q`／`status`／分頁）、趟次月結表（`/reports/trip-summary`）的區域篩選、新竹接送時刻表原本「只顯示新竹車輛」的篩選（現在一律顯示全部車輛，不再依區域過濾）。司機接送匯報原本走的區域 fallback 邏輯改成寫死常數 `'hsinchu'`，因為那本來就是舊 fallback 實際的值。
 - 政府「服務車輛清冊」要逐台列出廠牌、車型、出廠年月、三項責任險到期日、前次檢驗日期與是否符合輪椅載運規定，這些欄位由 migration `000010` 加在車輛主檔；車主名稱不另存，沿用車輛自己的 `site_name` 自由文字（不再由據點主檔 JOIN 帶出）。
 - 出廠年月只到年月，以 `YYYY-MM` 字串存放並由 `ck_vehicle_manufacture_ym` 把關格式；四個日期欄位存西元 `DATE`，畫面以民國年呈現。
 - 所有新欄位在資料庫皆可為 `NULL`（既有車輛沒有值），必填規則由 API 的 `VehicleWriteFields` 與前端 `vehicleFormRules` 強制，因此既有車輛在補齊資料前無法透過畫面儲存。
@@ -51,7 +51,7 @@ covers:
 
 用來回答「這個個案這個月哪幾天、哪幾趟應該要搭車」，是「未回報偵測」跟異常比對的比對基準。對月份內每一天依序檢查（**任一條件不成立就整天跳過，不看後面的條件**）：
 
-1. 當天星期幾落在「個案排班星期」內。據點不再設定開放星期（`sites.open_days` 已於 `000049` 移除），因此排班只由個案自己的星期設定決定。週日在這裡編碼為 `7`，不是 `0`。
+1. 當天星期幾同時在「個案排班星期」跟「據點開放星期」的交集內（兩邊都要有才算，只要一邊沒開就跳過）。交集這條規則本身沒變，變的只是 `open_days` 的 SQL 來源：原本從排班（`case_schedules.site_id`）JOIN 單位，`000045` 移除該欄位後改成從**個案自己的據點**（`cases.site_id`）JOIN `sites`（`CaseRepository.GetActiveSchedulesForMonth`、`ride/infra/ride_calendar_repo.go` 的 `ListCalendarCases`）。週日在這裡編碼為 `7`，不是 `0`。
 2. 當天要在「個案申報起訖日」區間內（`claim_start_date` ~ `claim_end_date`，對應規格書 R8）。
 3. 當天要在「排班本身的有效區間」內（`effective_from` ~ `effective_to`——排班可以中途換過，新排班生效前用舊排班）。
 4. 當天不是國定假日（`holidays` map 命中就跳過）。

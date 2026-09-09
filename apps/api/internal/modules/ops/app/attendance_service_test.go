@@ -13,7 +13,7 @@ import (
 
 func TestAttendanceService_GetMonthAttendance(t *testing.T) {
 	attendanceRepo := stubAttendanceStore{}
-	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機"}}}
+	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機", Region: "hsinchu"}}}
 	auditRepo := discardAuditWriter{}
 
 	svc := NewAttendanceService(attendanceRepo, driverRepo, auditRepo, stubHolidayReader{})
@@ -31,8 +31,8 @@ func TestAttendanceService_GetMonthAttendance_FiltersDriverName(t *testing.T) {
 	svc := NewAttendanceService(
 		stubAttendanceStore{},
 		activeDriverListerStub{drivers: []DriverRef{
-			{ID: matchingID, Name: "王小明"},
-			{ID: uuid.New(), Name: "陳小華"},
+			{ID: matchingID, Name: "王小明", Region: "hsinchu"},
+			{ID: uuid.New(), Name: "陳小華", Region: "hsinchu"},
 		}},
 		discardAuditWriter{},
 		stubHolidayReader{},
@@ -56,7 +56,7 @@ func TestAttendanceService_GetMonthAttendance_RejectsInvalidMonth(t *testing.T) 
 
 func TestAttendanceService_GetMonthAttendance_FlagsAbsentForPastWeekdayWithoutRecord(t *testing.T) {
 	attendanceRepo := stubAttendanceStore{}
-	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機"}}}
+	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機", Region: "hsinchu"}}}
 	auditRepo := discardAuditWriter{}
 
 	svc := NewAttendanceService(attendanceRepo, driverRepo, auditRepo, stubHolidayReader{})
@@ -86,7 +86,7 @@ func TestAttendanceService_GetMonthAttendance_FlagsAbsentForPastWeekdayWithoutRe
 
 func TestAttendanceService_GetMonthAttendance_HolidayWeekdayMarkedOff(t *testing.T) {
 	attendanceRepo := stubAttendanceStore{}
-	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機"}}}
+	driverRepo := activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "測試司機", Region: "hsinchu"}}}
 	auditRepo := discardAuditWriter{}
 
 	past := time.Now().UTC().AddDate(0, -2, 0)
@@ -122,7 +122,7 @@ func TestAttendanceService_UsesTaipeiDateAtMidnightBoundary(t *testing.T) {
 	driverID := uuid.New()
 	svc := NewAttendanceService(
 		stubAttendanceStore{},
-		activeDriverListerStub{drivers: []DriverRef{{ID: driverID, Name: "測試司機"}}},
+		activeDriverListerStub{drivers: []DriverRef{{ID: driverID, Name: "測試司機", Region: "hsinchu"}}},
 		discardAuditWriter{},
 		stubHolidayReader{},
 		WithAttendanceClock(clock),
