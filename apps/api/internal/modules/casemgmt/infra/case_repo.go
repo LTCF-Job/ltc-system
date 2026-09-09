@@ -30,7 +30,7 @@ func NewCaseRepository(db *pgxpool.Pool) *CaseRepository {
 // List 取得個案清單（預設回傳遮罩身分證）。待維護的判定由 case_pending_status view 提供，
 // 是全專案唯一一份定義；unresolvedLink 為 true 時只回傳待維護個案，excludePending 為 true 時
 // 排除待維護個案，供主列表與「待維護」分頁互斥呈現。
-func (r *CaseRepository) List(ctx context.Context, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
+func (r *CaseRepository) List(ctx context.Context, status, q, region string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
@@ -51,10 +51,11 @@ func (r *CaseRepository) List(ctx context.Context, status, q string, page, pageS
 		  AND ($2 = '' OR c.name ILIKE '%' || $2 || '%' OR c.home_address ILIKE '%' || $2 || '%')
 		  AND ($5 = false OR ps.is_pending)
 		  AND ($6 = false OR NOT ps.is_pending)
+		  AND ($7 = '' OR COALESCE(st.region, '') ILIKE '%' || $7 || '%')
 		ORDER BY c.created_at DESC, c.name ASC
 		LIMIT $3 OFFSET $4
 	`
-	rows, err := r.db.Query(ctx, query, status, q, pageSize, offset, unresolvedLink, excludePending)
+	rows, err := r.db.Query(ctx, query, status, q, pageSize, offset, unresolvedLink, excludePending, region)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to query cases: %w", err)
 	}
@@ -82,14 +83,16 @@ func (r *CaseRepository) List(ctx context.Context, status, q string, page, pageS
 	var total int64
 	countQuery := `
 		SELECT COUNT(*) FROM cases c
+		LEFT JOIN sites st ON st.id = c.site_id
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.deleted_at IS NULL
 		  AND ($1 = '' OR c.status = $1)
 		  AND ($2 = '' OR c.name ILIKE '%' || $2 || '%' OR c.home_address ILIKE '%' || $2 || '%')
 		  AND ($3 = false OR ps.is_pending)
 		  AND ($4 = false OR NOT ps.is_pending)
+		  AND ($5 = '' OR COALESCE(st.region, '') ILIKE '%' || $5 || '%')
 	`
-	if err := r.db.QueryRow(ctx, countQuery, status, q, unresolvedLink, excludePending).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx, countQuery, status, q, unresolvedLink, excludePending, region).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count cases: %w", err)
 	}
 

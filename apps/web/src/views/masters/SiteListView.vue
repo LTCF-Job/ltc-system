@@ -20,14 +20,17 @@
           @keyup.enter="handleSearch"
         />
 
-        <el-input
+        <el-select
           v-model="filters.region"
           placeholder="搜尋區域"
           clearable
+          filterable
           style="width: 140px"
-          @keyup.enter="handleSearch"
+          @change="handleSearch"
           @clear="handleSearch"
-        />
+        >
+          <el-option v-for="option in regionOptions" :key="option" :label="option" :value="option" />
+        </el-select>
 
         <el-select
           v-model="filters.status"
@@ -151,11 +154,24 @@
         <el-form-item label="據點名稱" prop="name">
           <el-input v-model="form.name" placeholder="如：竹北日照中心" />
         </el-form-item>
-        <el-form-item label="所屬區域" prop="region">
-          <el-input v-model="form.region" placeholder="請輸入區域，例如：新竹縣（選填）" clearable />
+        <el-form-item label="區域" prop="region">
+          <el-select
+            v-model="form.region"
+            placeholder="請選擇或輸入區域，例如：新竹、苗栗、竹南頭份"
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            style="width: 100%"
+          >
+            <el-option v-for="option in regionOptions" :key="option" :label="option" :value="option" />
+          </el-select>
         </el-form-item>
         <el-form-item label="據點地址" prop="address">
-          <el-input v-model="form.address" placeholder="請輸入完整地址（選填）" clearable />
+          <el-input v-model="form.address" placeholder="請輸入完整地址" clearable />
+        </el-form-item>
+        <el-form-item label="備註" prop="remarks">
+          <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
         </el-form-item>
         <el-form-item label="備註" prop="remarks">
           <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
@@ -195,13 +211,14 @@ import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
-import { listSites, createSite, updateSite, deleteSite } from '@/api/masters'
+import { listSites, listAllSites, createSite, updateSite, deleteSite } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import type { SiteDTO, CreateSiteRequest } from '@/types/api'
 
 const authStore = useAuthStore()
 const sites = ref<SiteDTO[]>([])
+const regionOptions = ref<string[]>([])
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 const submitting = ref(false)
@@ -214,6 +231,12 @@ const form = reactive<CreateSiteRequest>({
   remarks: '',
   status: 'active'
 })
+
+async function refreshRegionOptions() {
+  const allSites = await listAllSites()
+  const distinctRegions = new Set(allSites.map((site) => site.region).filter((region): region is string => !!region))
+  regionOptions.value = Array.from(distinctRegions).sort((a, b) => a.localeCompare(b, 'zh-Hant'))
+}
 
 async function handleToggleStatus(row: SiteDTO, newActive: boolean) {
   // 快速切換狀態仍送出完整據點內容：更新 API 是整筆覆寫，只送 status 會清掉其餘欄位
@@ -234,7 +257,8 @@ async function handleToggleStatus(row: SiteDTO, newActive: boolean) {
 }
 
 const rules = {
-  name: [{ required: true, message: '請輸入據點名稱', trigger: 'blur' }]
+  name: [{ required: true, message: '請輸入據點名稱', trigger: 'blur' }],
+  region: [{ required: true, message: '請輸入區域', trigger: 'blur' }]
 }
 
 const {
@@ -302,6 +326,7 @@ async function handleSubmit() {
       }
       dialogVisible.value = false
       executeFetch()
+      refreshRegionOptions()
     } finally {
       submitting.value = false
     }
@@ -319,9 +344,11 @@ async function handleDelete(row: any) {
   await deleteSite(row.id)
   ElMessage.success('據點已刪除')
   executeFetch()
+  refreshRegionOptions()
 }
 
 executeFetch()
+refreshRegionOptions()
 </script>
 
 <style scoped>

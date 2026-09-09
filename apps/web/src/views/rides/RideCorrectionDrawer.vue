@@ -173,8 +173,8 @@
             />
           </el-form-item>
 
-          <!-- 常用更正原因快選（選填） -->
-          <el-form-item label="更正原因 (選填)">
+          <!-- 常用更正原因快選 -->
+          <el-form-item label="更正原因">
             <div class="reason-quick-box">
               <el-tag
                 v-for="r in CORRECTION_REASONS"

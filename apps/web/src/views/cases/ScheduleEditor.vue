@@ -239,7 +239,7 @@
                   </template>
                 </el-table-column>
 
-                <el-table-column label="備註 (選填)" min-width="130">
+                <el-table-column label="備註" min-width="130">
                   <template #default="{ row }">
                     <el-input
                       v-model="row.note"
@@ -447,7 +447,7 @@
             </el-col>
 
             <el-col :xs="24" :sm="12" :lg="6">
-              <el-form-item label="抵達時間 (選填)">
+              <el-form-item label="抵達時間">
                 <el-time-picker
                   v-model="leg.arriveTime"
                   format="HH:mm"

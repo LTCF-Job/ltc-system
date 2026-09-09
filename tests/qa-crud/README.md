@@ -72,7 +72,7 @@ python tests/qa-crud/xlsx.py fill "tests/qa-crud/downloads/個案批次匯入範
 python tests/qa-crud/xlsx.py fill "tests/qa-crud/downloads/照護人員批次匯入範本.xlsx" tests/qa-crud/fixtures/caregiver-import-filled.xlsx tests/qa-crud/fixtures/caregiver-import-rows.json 2
 ```
 
-司機匯報測試檔不套範本，直接依欄位順序（民國日期／駕駛人／各個案欄／備註）產生，檔名要含車輛代稱才會自動比對到車輛：
+司機匯報測試檔不套範本，直接依欄位順序（民國日期／駕駛人／各個案欄／備註）產生，檔名要含車輛車次才會自動比對到車輛：
 
 ```bash
 python tests/qa-crud/xlsx.py create "tests/qa-crud/fixtures/AAA-123 (回覆).xlsx" tests/qa-crud/fixtures/driver-report-rows.json 司機接送匯報

@@ -100,7 +100,7 @@
             v-model="form.departTimeOverride"
             format="HH:mm"
             value-format="HH:mm"
-            :placeholder="isAbsent ? '沒坐無出發時間' : '如 09:00 (選填)'"
+            :placeholder="isAbsent ? '沒坐無出發時間' : '如 09:00'"
             :disabled="isAbsent"
             style="width: 100%;"
           />
@@ -141,7 +141,7 @@
             v-model="form.reason"
             type="textarea"
             :rows="2"
-            placeholder="請輸入人工填寫原因或備註 (選填)"
+            placeholder="請輸入人工填寫原因或備註"
             style="margin-top: 6px;"
           />
         </el-form-item>

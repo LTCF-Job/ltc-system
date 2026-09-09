@@ -374,7 +374,7 @@
               v-model="reportForm.reason"
               type="textarea"
               :rows="2"
-              placeholder="可填寫口頭回報說明、補登原因等（選填）"
+              placeholder="可填寫口頭回報說明、補登原因等"
               style="margin-top: 6px;"
             />
           </el-form-item>

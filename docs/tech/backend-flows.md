@@ -158,7 +158,7 @@ POST /exports（同步產檔）
 
 ## 5. 主檔批次匯入（`ImportService`）
 
-`POST /cases/import`（或相容路徑 `/masters/import`）吃使用者上傳的 Excel，`ImportService.ParseCases` 逐列解析、驗證欄位，回傳每列的解析結果與統計，成功的列才會實際寫入個案主檔。欄位版面與匯出共用同一組 A~O 15 欄（見系統邏輯規格書準則三.二）：序號與歲數只佔版面不取值，接送車輛(去)/(回) 保留欄位但不匯入、也不再寫 `case_transport_preferences`。
+`POST /cases/import`（或相容路徑 `/masters/import`）吃使用者上傳的 Excel，`ImportService.ParseCases` 逐列解析、驗證欄位，回傳每列的解析結果與統計，成功的列才會實際寫入個案主檔。欄位版面與匯出共用同一組 A~K 11 欄（見系統邏輯規格書準則三.二）；接送車輛(去)/(回) 兩欄已自範本與匯出移除。
 
 commit 階段有兩組獨立比對，兩者都不擋列：`resolveSite` 以名稱比對據點，`resolveCaregiver` 以「個管or照專」右方的姓名比對 `caregivers`——同名唯一即採用且角色以主檔為準，同名多筆才用「個管or照專」消歧；比不到就保留原始文字讓 `cases.caregiver_pending` 把該列帶進待維護。
 

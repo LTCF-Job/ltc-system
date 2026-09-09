@@ -18,6 +18,8 @@ export async function listCases(params?: {
   pageSize?: number
   status?: string
   q?: string
+  // 依已關聯據點的區域篩選（COALESCE(sites.region, '') ILIKE 比對）。
+  region?: string
   // 待維護個案預設不會回傳；unresolvedLink 只取待維護，includePending 取全部。
   unresolvedLink?: boolean
   includePending?: boolean

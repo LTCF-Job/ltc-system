@@ -15,9 +15,9 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/cases` | viewer, staff, admin | 個案清單（回傳遮罩身分證）。**待維護個案預設不回傳**：`unresolvedLink=true` 只取待維護，`includePending=true` 取全部 |
+| GET | `/cases` | viewer, staff, admin | 個案清單（回傳遮罩身分證）。**待維護個案預設不回傳**：`unresolvedLink=true` 只取待維護，`includePending=true` 取全部；`region` 依已關聯據點的區域篩選（對 `sites.region` 模糊比對） |
 | POST | `/cases` | staff, admin | 新增個案；`siteId`（所屬據點）與 `caregiverId`（照護人員）為必填 |
-| GET | `/cases/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本；欄位版面與 `/cases/export` 共用同一組 A~O 15 欄（見系統邏輯規格書準則三.二） |
+| GET | `/cases/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本；欄位版面與 `/cases/export` 共用同一組 A~K 11 欄（見系統邏輯規格書準則三.二） |
 | GET | `/cases/:id` | viewer, staff, admin | |
 | PATCH | `/cases/:id` | staff, admin | |
 | DELETE | `/cases/:id` | admin | 軟刪除（`deleted_at`/`deleted_by`），同交易內收斂生效中排班 |
@@ -25,9 +25,9 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | GET | `/cases/:id/schedule` | viewer, staff, admin | 取得排班（星期、時段、四趟制設定） |
 | PUT | `/cases/:id/schedule` | staff, admin | 覆寫排班 |
 | POST | `/cases/schedules` | staff, admin | 批次建立排班 |
-| POST | `/cases/import` | staff, admin | 批次匯入個案 Excel；疑似重複個案不建立個案，改建立為待裁決暫存列。「個管or照專」旁的姓名會比對 `caregivers` 主檔寫入 `caregiver_id`，比不到則落入待維護；接送車輛去/回兩欄保留版面但不匯入 |
+| POST | `/cases/import` | staff, admin | 批次匯入個案 Excel；疑似重複個案不建立個案，改建立為待裁決暫存列。「個管or照專」旁的姓名會比對 `caregivers` 主檔寫入 `caregiver_id`，比不到則落入待維護 |
 | POST | `/masters/import` | staff, admin | 同上，走另一條相容路徑（歷史因素，實際都打 `caseH.ImportExcel`） |
-| GET | `/cases/export?caseIds=` | viewer, staff, admin | 匯出個案彙整表；`caseIds` 為逗號分隔的個案 ID，省略則匯出全部個案。「個管or照專」與其右方姓名取自關聯的照護人員主檔，接送車輛兩欄恆為空白 |
+| GET | `/cases/export?caseIds=` | viewer, staff, admin | 匯出個案彙整表；`caseIds` 為逗號分隔的個案 ID，省略則匯出全部個案。「個管or照專」與其右方姓名取自關聯的照護人員主檔 |
 | PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定（去/回程車輛，完整替換語意：`outboundVehicleId`／`inboundVehicleId` 與對應的 `outboundVehicleNameRaw`／`inboundVehicleNameRaw` 未帶上即視為清空，尚未完成關聯的匯入原始名稱必須原樣回送）。**據點不在此端點設定**，個案的據點改由 `PATCH /cases/:id` 的 `siteId` 更新 |
 | GET | `/cases/import/duplicates` | viewer, staff, admin | 列出待裁決的疑似重複個案暫存列 |
 | POST | `/cases/import/duplicates/:id/reveal` | staff, admin | 解密單筆暫存列身分證字號供裁決比對（會寫 audit log 的 `reveal_pii`） |

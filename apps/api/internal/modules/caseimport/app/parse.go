@@ -66,14 +66,6 @@ func findHeader(rows [][]string) (headerRowIdx int, colMap map[string]int, caseN
 
 		for c, colName := range rows[r] {
 			cleanName := strings.TrimSpace(strings.ReplaceAll(colName, "*", ""))
-			if strings.Contains(cleanName, "接送車輛(去)") || strings.Contains(cleanName, "接送車輛（去）") {
-				colMap["接送車輛(去)"] = c
-				continue
-			}
-			if strings.Contains(cleanName, "接送車輛(回)") || strings.Contains(cleanName, "接送車輛（回）") {
-				colMap["接送車輛(回)"] = c
-				continue
-			}
 			cleanName = strings.Split(cleanName, "(")[0]
 			cleanName = strings.Split(cleanName, "（")[0]
 			cleanName = strings.TrimSpace(cleanName)
@@ -198,8 +190,6 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			gender := getVal("性別")
 			birthDate := parseProfileBirthDate(getVal("生日"))
 			siteName := getVal("據點")
-			// 接送車輛(去)/(回) 只保留版面：欄位仍在範本與匯出中佔位，但一律不取值，
-			// 因此不會比對車輛主檔、也不會寫入交通偏好。
 			careContactRole := getVal("個管or照專")
 			careContactName := getVal("照護人員")
 			registeredAddress := getVal("戶籍")
