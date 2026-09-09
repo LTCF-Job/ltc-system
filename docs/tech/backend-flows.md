@@ -158,7 +158,9 @@ POST /exports（同步產檔）
 
 ## 5. 主檔批次匯入（`ImportService`）
 
-`POST /cases/import`（或相容路徑 `/masters/import`）吃使用者上傳的 Excel，`ImportService.ParseCasesFromExcel` 逐列解析、驗證欄位（含 `ParseWeekdays` 解析「每週據點開放時間」這種自由文字格式），回傳每列的解析結果與統計，成功的列才會實際寫入個案主檔；另外 `ParseScheduleWorkbook` 專門解析「(參考用) 交通車接送班表」這份既有 Excel，抽出據點跟司機資訊。
+`POST /cases/import`（或相容路徑 `/masters/import`）吃使用者上傳的 Excel，`ImportService.ParseCases` 逐列解析、驗證欄位，回傳每列的解析結果與統計，成功的列才會實際寫入個案主檔。欄位版面與匯出共用同一組 A~O 15 欄（見系統邏輯規格書準則三.二）：序號與歲數只佔版面不取值，接送車輛(去)/(回) 保留欄位但不匯入、也不再寫 `case_transport_preferences`。
+
+commit 階段有兩組獨立比對，兩者都不擋列：`resolveSite` 以名稱比對據點，`resolveCaregiver` 以「個管or照專」右方的姓名比對 `caregivers`——同名唯一即採用且角色以主檔為準，同名多筆才用「個管or照專」消歧；比不到就保留原始文字讓 `cases.caregiver_pending` 把該列帶進待維護。
 
 個案與照護人員匯入目前只接受 `.xlsx`。每筆預覽列都產生 `rowId = sheetName:rowIndex`；正式 commit 的 duplicate selection 使用 `rowId`，`rowIndex` 僅供畫面顯示，避免多工作表同列號碰撞。Excel reader 會在 parser 前檢查 ZIP 項目數、解壓總量、worksheet XML 大小與壓縮倍率，超過限制即拒絕。
 

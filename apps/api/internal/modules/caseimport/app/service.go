@@ -7,6 +7,7 @@ type ImportService struct {
 	duplicateStager DuplicateCandidateStager
 	siteRepo        SiteLookup
 	vehicleRepo     VehicleLookup
+	caregiverRepo   CaregiverLookup
 	prefRepo        TransportPreferenceWriter
 	spreadsheet     SpreadsheetReader
 	template        TemplateRenderer
@@ -21,6 +22,7 @@ func NewImportService(
 	duplicateStager DuplicateCandidateStager,
 	siteRepo SiteLookup,
 	vehicleRepo VehicleLookup,
+	caregiverRepo CaregiverLookup,
 	prefRepo TransportPreferenceWriter,
 	spreadsheet SpreadsheetReader,
 	template TemplateRenderer,
@@ -32,6 +34,7 @@ func NewImportService(
 		duplicateStager: duplicateStager,
 		siteRepo:        siteRepo,
 		vehicleRepo:     vehicleRepo,
+		caregiverRepo:   caregiverRepo,
 		prefRepo:        prefRepo,
 		spreadsheet:     spreadsheet,
 		template:        template,

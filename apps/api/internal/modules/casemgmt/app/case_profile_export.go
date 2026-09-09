@@ -38,7 +38,7 @@ func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs [
 	}
 
 	rows := make([]CaseProfileRow, 0, len(cases))
-	for _, item := range cases {
+	for index, item := range cases {
 		id := ""
 		if len(item.NationalIDCipher) > 0 {
 			id, err = crypto.Decrypt(item.NationalIDCipher, s.cfg.EncryptionKey)
@@ -48,7 +48,9 @@ func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs [
 		}
 		birthday, age := "", ""
 		if item.BirthDate != nil {
-			birthday = fmt.Sprintf("%03d/%02d/%02d", item.BirthDate.Year()-1911, item.BirthDate.Month(), item.BirthDate.Day())
+			// 生日輸出西元 YYYY/MM/DD；匯入端的 parseProfileBirthDate 以「年份小於 1911 才視為民國」
+			// 判定，因此這個格式可以原樣回灌，不會被誤讀成民國年。
+			birthday = item.BirthDate.Format("2006/01/02")
 			age = fmt.Sprintf("%d", clock.Now().Year()-item.BirthDate.Year())
 		}
 		value := func(v *string) string {
@@ -58,21 +60,36 @@ func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs [
 			return *v
 		}
 		rows = append(rows, CaseProfileRow{
-			Name:              item.Name,
-			HouseholdType:     value(item.HouseholdType),
-			NationalID:        id,
-			Gender:            value(item.Gender),
-			Birthday:          birthday,
-			Age:               age,
-			SiteName:          item.SiteName,
-			OutboundVehicle:   item.OutboundVehicle,
-			InboundVehicle:    item.InboundVehicle,
-			CareContactRole:   value(item.CareContactRole),
-			CareContactName:   value(item.CareContactName),
+			Seq:           fmt.Sprintf("%d", index+1),
+			Name:          item.Name,
+			HouseholdType: value(item.HouseholdType),
+			NationalID:    id,
+			Gender:        value(item.Gender),
+			Birthday:      birthday,
+			Age:           age,
+			SiteName:      item.SiteName,
+			// 接送車輛的去回程欄位保留版面但暫不使用，兩欄一律留白。
+			OutboundVehicle:   "",
+			InboundVehicle:    "",
+			CareContactRole:   caregiverRoleLabel(item.CaregiverType),
+			CareContactName:   item.CaregiverName,
 			RegisteredAddress: value(item.RegisteredAddress),
 			HomeAddress:       value(item.HomeAddress),
+			Remarks:           value(item.Remarks),
 		})
 	}
 
 	return s.renderer.RenderCaseProfileWorkbook(rows)
+}
+
+// caregiverRoleLabel 把 caregivers.type 轉為工作表使用的中文角色；未設定類型時留白。
+func caregiverRoleLabel(caregiverType string) string {
+	switch caregiverType {
+	case "case_manager":
+		return "個管"
+	case "specialist":
+		return "照專"
+	default:
+		return ""
+	}
 }

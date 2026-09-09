@@ -87,7 +87,7 @@
 
           <el-row :gutter="16">
             <el-col :span="24">
-              <el-form-item label="住家地址" prop="homeAddress">
+              <el-form-item label="居住地址" prop="homeAddress">
                 <el-input v-model="editForm.homeAddress" />
               </el-form-item>
             </el-col>

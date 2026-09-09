@@ -103,7 +103,7 @@
               <span>{{ SERVICE_USAGE_TYPE_LABELS[row.serviceUsageType as ServiceUsageType] || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="homeAddress" label="住家地址" min-width="190" show-overflow-tooltip />
+          <el-table-column prop="homeAddress" label="居住地址" min-width="190" show-overflow-tooltip />
           <el-table-column prop="remarks" label="備註" min-width="160" show-overflow-tooltip>
             <template #default="{ row }">
               <span>{{ row.remarks || '-' }}</span>
@@ -208,7 +208,7 @@
     </el-tab-pane>
     </el-tabs>
 
-    <!-- 待維護個案編輯彈窗：只顯示該列實際缺漏的欄位（據點/車輛關聯、生日、身分證字號） -->
+    <!-- 待維護個案編輯彈窗：只顯示該列實際缺漏的欄位（據點/照護人員/車輛關聯、生日、身分證字號） -->
     <el-dialog v-model="pendingEditVisible" title="補齊個案資料" width="min(600px, calc(100vw - 32px))">
       <template v-if="pendingEditTarget">
         <p class="pending-edit-hint">
@@ -223,6 +223,23 @@
                   <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
                 </el-select>
                 <el-button link type="primary" size="small" @click="openQuickCreate('site', pendingEditTarget)">新增據點</el-button>
+              </div>
+            </div>
+          </el-form-item>
+          <el-form-item v-if="!pendingEditTarget.caregiverId && pendingEditTarget.careContactName" label="照護人員">
+            <div class="pending-edit-field">
+              <span class="pending-edit-raw">
+                原始名稱：{{ pendingEditTarget.careContactName }}{{ pendingEditTarget.careContactRole ? `（${pendingEditTarget.careContactRole}）` : '' }}
+              </span>
+              <div class="pending-edit-control">
+                <el-select v-model="pendingEditForm.caregiverId" filterable placeholder="選擇既有照護人員" class="pending-edit-input">
+                  <el-option
+                    v-for="caregiver in availableCaregivers"
+                    :key="caregiver.id"
+                    :value="caregiver.id"
+                    :label="caregiver.name + (caregiver.type ? `（${CAREGIVER_TYPE_LABELS[caregiver.type as CaregiverType] || caregiver.type}）` : '')"
+                  />
+                </el-select>
               </div>
             </div>
           </el-form-item>
@@ -346,8 +363,6 @@
         <el-table-column prop="gender" label="性別" width="60" />
         <el-table-column prop="birthDate" label="生日" width="100" :formatter="(row: any) => formatRocBirthDate(row.birthDate)" />
         <el-table-column prop="siteName" label="據點" width="110" />
-        <el-table-column prop="outboundVehicle" label="去程車" width="100" />
-        <el-table-column prop="inboundVehicle" label="回程車" width="100" />
         <el-table-column prop="careContactRole" label="個管or照專" width="100" />
         <el-table-column prop="careContactName" label="個管姓名" width="100" />
         <el-table-column prop="registeredAddress" label="戶籍" min-width="140" show-overflow-tooltip />
@@ -409,6 +424,7 @@ import {
   discardCaseDuplicateCandidate
 } from '@/api/cases'
 import { listAllSites, listAllVehicles, listSites, listVehicles, createSite, createVehicle } from '@/api/masters'
+import { listAllCaregivers } from '@/api/caregivers'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
@@ -416,11 +432,14 @@ import { formatDate } from '@/utils/formatters'
 import { emptyVehicleForm, vehicleFormRules } from '@/utils/vehicleForm'
 import {
   CASE_STATUS_LABELS,
+  CAREGIVER_TYPE_LABELS,
   SERVICE_USAGE_TYPE_LABELS,
+  type CaregiverType,
   type CaseStatus,
   type ServiceUsageType
 } from '@/types/domain'
 import type {
+  CaregiverDTO,
   CaseDTO,
   CaseDuplicateCandidateDTO,
   CreateVehicleRequest,
@@ -617,6 +636,7 @@ const unresolvedCases = ref<CaseDTO[]>([])
 const duplicateCandidates = ref<CaseDuplicateCandidateDTO[]>([])
 const availableSites = ref<SiteDTO[]>([])
 const availableVehicles = ref<VehicleDTO[]>([])
+const availableCaregivers = ref<CaregiverDTO[]>([])
 
 interface PendingCaseRow extends CaseDTO {
   kind: 'case'
@@ -635,6 +655,8 @@ type PendingRow = PendingCaseRow | PendingDuplicateRow
 function caseIssues(row: CaseDTO): string[] {
   const issues: string[] = []
   if (row.siteNameRaw) issues.push('據點待關聯')
+  // 匯入時填了照護人員姓名但比對不到主檔：後端的 caregiver_pending 就是這個條件。
+  if (!row.caregiverId && row.careContactName) issues.push('照護人員待關聯')
   if (row.outboundVehicleNameRaw) issues.push('去程車輛待關聯')
   if (row.inboundVehicleNameRaw) issues.push('回程車輛待關聯')
   if (row.birthDateRaw) issues.push('生日待補正')
@@ -672,12 +694,14 @@ async function fetchPendingData() {
 }
 
 async function loadSitesAndVehicles() {
-  const [sitesRes, vehiclesRes] = await Promise.all([
+  const [sitesRes, vehiclesRes, caregiversRes] = await Promise.all([
     listAllSites({ status: 'active' }),
-    listAllVehicles({ status: 'active' })
+    listAllVehicles({ status: 'active' }),
+    listAllCaregivers({ status: 'active' })
   ])
   availableSites.value = sitesRes
   availableVehicles.value = vehiclesRes
+  availableCaregivers.value = caregiversRes
 }
 
 type UnresolvedSlot = 'site' | 'outboundVehicle' | 'inboundVehicle'
@@ -731,16 +755,18 @@ const pendingEditTarget = ref<CaseDTO | null>(null)
 const pendingEditSaving = ref(false)
 const pendingEditForm = reactive<{
   siteId: string
+  caregiverId: string
   outboundVehicleId: string
   inboundVehicleId: string
   birthDate: string
   nationalId: string
-}>({ siteId: '', outboundVehicleId: '', inboundVehicleId: '', birthDate: '', nationalId: '' })
+}>({ siteId: '', caregiverId: '', outboundVehicleId: '', inboundVehicleId: '', birthDate: '', nationalId: '' })
 
 function openPendingCaseEdit(row: PendingCaseRow) {
   // pendingRows 是 computed 展開出來的副本，改副本不會反映到清單上；一律取回原始列物件
   pendingEditTarget.value = unresolvedCases.value.find((c) => c.id === row.id) ?? row
   pendingEditForm.siteId = ''
+  pendingEditForm.caregiverId = ''
   pendingEditForm.outboundVehicleId = ''
   pendingEditForm.inboundVehicleId = ''
   pendingEditForm.birthDate = ''
@@ -759,6 +785,11 @@ async function handlePendingEditSubmit() {
       await updateCase(row.id, { siteId: pendingEditForm.siteId })
       row.siteId = pendingEditForm.siteId
       row.siteNameRaw = undefined
+    }
+    if (pendingEditForm.caregiverId) {
+      await updateCase(row.id, { caregiverId: pendingEditForm.caregiverId })
+      row.caregiverId = pendingEditForm.caregiverId
+      row.caregiverName = availableCaregivers.value.find((c) => c.id === pendingEditForm.caregiverId)?.name
     }
     if (pendingEditForm.outboundVehicleId || pendingEditForm.inboundVehicleId) {
       const payload: UpdateCaseTransportPreferenceRequest = {
@@ -785,7 +816,8 @@ async function handlePendingEditSubmit() {
       await updateCase(row.id, { nationalId: pendingEditForm.nationalId })
       row.nationalIdInvalid = false
     }
-    if (!row.siteNameRaw && !row.outboundVehicleNameRaw && !row.inboundVehicleNameRaw && !row.birthDateRaw && !row.nationalIdInvalid) {
+    const caregiverPending = !row.caregiverId && !!row.careContactName
+    if (!row.siteNameRaw && !caregiverPending && !row.outboundVehicleNameRaw && !row.inboundVehicleNameRaw && !row.birthDateRaw && !row.nationalIdInvalid) {
       unresolvedCases.value = unresolvedCases.value.filter((c) => c.id !== row.id)
     }
     ElMessage.success(`個案「${row.name}」資料已更新`)

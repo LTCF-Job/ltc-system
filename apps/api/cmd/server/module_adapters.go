@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/rocdate"
+	caregiverinfra "ltc-system/apps/api/internal/modules/caregiver/infra"
 	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
 	caseinfra "ltc-system/apps/api/internal/modules/casemgmt/infra"
@@ -236,6 +237,23 @@ func (a importVehicleLookup) GetByDisplayName(ctx context.Context, displayName s
 	return &importapp.VehicleRef{ID: v.ID}, nil
 }
 
+// importCaregiverLookup 讓 caseimport 以姓名比對照護人員；同名多筆時的消歧留在 caseimport。
+type importCaregiverLookup struct {
+	repo *caregiverinfra.CaregiverRepository
+}
+
+func (a importCaregiverLookup) FindByName(ctx context.Context, name string) ([]importapp.CaregiverRef, error) {
+	list, err := a.repo.FindByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]importapp.CaregiverRef, 0, len(list))
+	for _, c := range list {
+		out = append(out, importapp.CaregiverRef{ID: c.ID, Name: c.Name, Type: c.Type})
+	}
+	return out, nil
+}
+
 // caseRegistrar 讓 caseimport 透過 casemgmt 寫入個案主檔。
 type caseRegistrar struct{ svc *caseapp.CaseService }
 
@@ -249,6 +267,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		ServiceCategory:  intPointerOrNil(in.ServiceCategory),
 		ServiceUsageType: intPointerOrNil(in.ServiceUsageType), Status: in.Status, Remarks: in.Remarks,
 		SiteID: in.SiteID, SiteNameRaw: nullableStringPtr(in.SiteNameRaw),
+		CaregiverID: in.CaregiverID,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {
 		return uuid.Nil, err
@@ -278,6 +297,7 @@ func (a caseDuplicateStager) StageDuplicateRow(ctx context.Context, fileHash, ro
 		ServiceUsageType: intPointerOrNil(in.ServiceUsageType),
 		Remarks:          in.Remarks,
 		SiteID:           in.SiteID, SiteNameRaw: in.SiteNameRaw,
+		CaregiverID:       in.CaregiverID,
 		OutboundVehicleID: in.OutboundVehicleID, OutboundVehicleNameRaw: in.OutboundVehicleNameRaw,
 		InboundVehicleID: in.InboundVehicleID, InboundVehicleNameRaw: in.InboundVehicleNameRaw,
 		DuplicateCaseID: in.DuplicateCaseID,

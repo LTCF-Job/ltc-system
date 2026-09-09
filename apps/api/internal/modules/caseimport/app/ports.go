@@ -21,6 +21,13 @@ type VehicleRef struct {
 	ID uuid.UUID
 }
 
+// CaregiverRef 是匯入比對照護人員時需要的最小資訊；Type 供同名多筆時消歧。
+type CaregiverRef struct {
+	ID   uuid.UUID
+	Name string
+	Type string
+}
+
 // SiteLookup 提供以名稱或區域比對據點的查詢。
 type SiteLookup interface {
 	GetByName(ctx context.Context, name string) (*SiteRef, error)
@@ -28,19 +35,26 @@ type SiteLookup interface {
 }
 
 // VehicleLookup 提供以顯示名稱比對車輛的查詢。
+// 接送車輛欄位目前保留版面但不匯入，因此 commit 路徑暫時不會呼叫這個查詢。
 type VehicleLookup interface {
 	GetByDisplayName(ctx context.Context, displayName string) (*VehicleRef, error)
 }
 
+// CaregiverLookup 以姓名取回同名的照護人員清單；同名多筆時的消歧規則屬於匯入政策，留在 app 層。
+type CaregiverLookup interface {
+	FindByName(ctx context.Context, name string) ([]CaregiverRef, error)
+}
+
 // TransportPreferenceWriter 以 PUT 完整替換個案的去回程車輛偏好。據點已改由個案本身
-// 持有，隨 NewCase 一併寫入。
+// 持有，隨 NewCase 一併寫入。接送車輛欄位目前保留版面但不匯入，commit 路徑暫時不會呼叫。
 type TransportPreferenceWriter interface {
 	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 }
 
 // NewCase 是建立個案所需的輸入，僅 Name 為必要欄位。AllowInvalidNationalID 讓身分證字號
 // 格式錯誤時不擋列，改由 casemgmt 標記待維護；BirthDateRaw 是生日解析失敗時的原始字串。
-// SiteID 為 nil 且 SiteNameRaw 有值時，表示據點名稱未比對到主檔，待人工於待維護畫面補齊。
+// SiteID 為 nil 且 SiteNameRaw 有值時，表示據點名稱未比對到主檔，待人工於待維護畫面補齊；
+// CaregiverID 為 nil 而 CareContactName 有值時同理，代表照護人員未比對到主檔。
 type NewCase struct {
 	ID                     uuid.UUID
 	Name                   string
@@ -60,6 +74,7 @@ type NewCase struct {
 	Remarks                *string
 	SiteID                 *uuid.UUID
 	SiteNameRaw            string
+	CaregiverID            *uuid.UUID
 }
 
 // Actor 代表發動匯入的操作者與來源資訊，供稽核留痕使用。
@@ -129,6 +144,7 @@ type StageDuplicateCandidate struct {
 	Remarks                *string
 	SiteID                 *uuid.UUID
 	SiteNameRaw            string
+	CaregiverID            *uuid.UUID
 	OutboundVehicleID      *uuid.UUID
 	OutboundVehicleNameRaw string
 	InboundVehicleID       *uuid.UUID

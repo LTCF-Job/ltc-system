@@ -81,9 +81,11 @@ func (r ExcelAdapter) RenderCaseImportTemplate() ([]byte, error) {
 	sheetName := "個案匯入範本"
 	f.SetSheetName("Sheet1", sheetName)
 
+	// 表頭與匯出的「進系統個案個資」逐欄一致，讓匯出檔可以直接回灌。序號與歲數只佔版面，
+	// 解析時不取值；接送車輛兩欄保留版面但暫不使用。
 	headers := []string{
-		"姓名*", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)",
-		"個管or照專", "姓名(個管/照專)", "戶籍", "居住地", "備註",
+		"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)",
+		"個管or照專", "姓名", "戶籍", "居住地", "備註",
 	}
 
 	headerStyle, _ := f.NewStyle(&excelize.Style{
@@ -100,11 +102,11 @@ func (r ExcelAdapter) RenderCaseImportTemplate() ([]byte, error) {
 	lastCol, _ := excelize.CoordinatesToCellName(len(headers), 1)
 	_ = f.SetCellStyle(sheetName, "A1", lastCol, headerStyle)
 
-	// 姓名帶「例：」前綴，解析時才會被當成示範列略過；沒有前綴的話，
-	// 使用者直接上傳未修改的範本就會匯入這兩筆假個案。
+	// 示範列是純虛構的隨機資料，不帶任何前綴標記，因此解析時會被當成一般資料列。
+	// 使用者必須先刪除這兩列再上傳，否則會匯入這兩筆假個案。
 	sampleRows := [][]interface{}{
-		{"例：張曾阿妹", "一般戶", "A202559750", "女", "034/06/15", "竹南日照據點", "竹南1車", "竹南2車", "個管", "陳小華", "苗栗縣竹南鎮戶籍地址", "苗栗縣竹南鎮大營路123號", "行動不便需輪椅"},
-		{"例：李國盛", "低收入戶", "G121806465", "男", "039/02/20", "竹北日照中心", "竹北1車", "竹北2車", "照專", "王小明", "新竹縣竹北市戶籍地址", "新竹縣竹北市文興路一段200號", ""},
+		{1, "王小明", "一般戶", "D140397675", "男", "1943/11/08", 83, "竹南日照據點", "", "", "個管", "林佩宜", "苗栗縣竹南鎮公館里5鄰12號", "苗栗縣竹南鎮大營路123號", "行動不便需輪椅"},
+		{2, "張香香", "低收入戶", "K211281700", "女", "1952/03/22", 74, "竹北日照中心", "", "", "照專", "蔡孟儒", "新竹縣竹北市斗崙里8鄰27號", "新竹縣竹北市文興路一段200號", ""},
 	}
 
 	for rIdx, rData := range sampleRows {
@@ -116,6 +118,14 @@ func (r ExcelAdapter) RenderCaseImportTemplate() ([]byte, error) {
 	}
 	lastRowCell, _ := excelize.CoordinatesToCellName(len(headers), len(sampleRows)+1)
 	_ = f.SetSheetDimension(sheetName, fmt.Sprintf("A1:%s", lastRowCell))
+
+	// 說明文字只能掛在表頭儲存格；放進資料列會被逐列 parser 讀成幽靈個案。
+	_ = f.AddComment(sheetName, excelize.Comment{
+		Cell: "B1",
+		Text: "＊姓名為必填。生日請填西元 YYYY/MM/DD（民國 045/06/15 這種寫法也接受）。" +
+			"序號與歲數僅供對照，匯入時不會使用；接送車輛(去)/(回) 目前保留欄位但不匯入。" +
+			"個管or照專與其右方的姓名，會以姓名比對照護人員主檔（同名多筆時才依個管／照專區分）。",
+	})
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {

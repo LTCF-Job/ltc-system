@@ -35,7 +35,7 @@ func (r *CaseRepository) List(ctx context.Context, status, q string, page, pageS
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
 		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
+		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), COALESCE(cg.type, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
 		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
 		       c.home_address, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
@@ -66,7 +66,7 @@ func (r *CaseRepository) List(ctx context.Context, status, q string, page, pageS
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked, &c.NationalIDInvalid,
 			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.BirthDateRaw, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
-			&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
+			&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.CaregiverType, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
 			&c.InboundVehicleID, &c.InboundVehicle, &c.InboundVehicleNameRaw,
 			&c.HomeAddress, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
 			&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
@@ -101,7 +101,7 @@ func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
 		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
+		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), COALESCE(cg.type, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
 		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
 		       c.home_address, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
@@ -128,7 +128,7 @@ func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked, &c.NationalIDInvalid,
 			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.BirthDateRaw, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
-			&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
+			&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.CaregiverType, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
 			&c.InboundVehicleID, &c.InboundVehicle, &c.InboundVehicleNameRaw,
 			&c.HomeAddress, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
 			&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
@@ -205,7 +205,7 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
 		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
+		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), COALESCE(cg.type, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
 		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
 		       c.home_address, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
@@ -222,7 +222,7 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 	err := db.QueryRow(ctx, query, id).Scan(
 		&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked, &c.NationalIDInvalid,
 		&c.HouseholdType, &c.Gender, &c.BirthDate, &c.BirthDateRaw, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
-		&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
+		&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.CaregiverType, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
 		&c.InboundVehicleID, &c.InboundVehicle, &c.InboundVehicleNameRaw,
 		&c.HomeAddress, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
 		&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,

@@ -31,11 +31,14 @@ type Case struct {
 	RegisteredAddress *string
 	// SiteID 為 nil 且 SiteNameRaw 有值時，表示匯入時的據點名稱未比對到主檔，
 	// 待人工於「待維護」畫面補齊。這是個案直接關聯的據點，排班與交通偏好不再各自持有。
-	SiteID                 *uuid.UUID
-	SiteName               string
-	SiteNameRaw            *string
-	CaregiverID            *uuid.UUID
-	CaregiverName          string
+	SiteID        *uuid.UUID
+	SiteName      string
+	SiteNameRaw   *string
+	CaregiverID   *uuid.UUID
+	CaregiverName string
+	// CaregiverType 是主檔的 case_manager／specialist，個案彙整表的「個管or照專」欄一律由它產生，
+	// 不再取用匯入時留下的 CareContactRole 文字。
+	CaregiverType          string
 	OutboundVehicleID      *uuid.UUID
 	OutboundVehicle        string
 	OutboundVehicleNameRaw *string
@@ -80,6 +83,8 @@ type DuplicateCandidate struct {
 	SiteID                 *uuid.UUID
 	SiteName               string
 	SiteNameRaw            *string
+	CaregiverID            *uuid.UUID
+	CaregiverName          string
 	OutboundVehicleID      *uuid.UUID
 	OutboundVehicle        string
 	OutboundVehicleNameRaw *string

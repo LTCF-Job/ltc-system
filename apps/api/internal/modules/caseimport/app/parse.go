@@ -167,6 +167,8 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			}
 
 			name := getIdxVal(caseNameIdx)
+			// 個案範本的示範列已改為不帶前綴的虛構資料，這裡只剩下相容既有檔案的用途：
+			// 使用者手上仍可能留著舊版範本，或自行以「例：」標註不要匯入的列。
 			if strings.HasPrefix(name, "例:") || strings.HasPrefix(name, "例：") {
 				continue
 			}
@@ -215,8 +217,8 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			gender := getVal("性別")
 			birthDate := parseProfileBirthDate(getVal("生日"))
 			siteName := getVal("據點")
-			outboundVehicle := getVal("接送車輛(去)")
-			inboundVehicle := getVal("接送車輛(回)")
+			// 接送車輛(去)/(回) 與序號、歲數同樣只保留版面：欄位仍在範本與匯出中佔位，
+			// 但一律不取值，因此不會比對車輛主檔、也不會寫入交通偏好。
 			careContactRole := getVal("個管or照專")
 			careContactName := getIdxVal(careContactNameIdx)
 			registeredAddress := getVal("戶籍")
@@ -240,8 +242,6 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 				RegisteredAddress: registeredAddress,
 				HomeAddress:       homeAddress,
 				SiteName:          siteName,
-				OutboundVehicle:   outboundVehicle,
-				InboundVehicle:    inboundVehicle,
 				Remarks:           remarks,
 				RawValues:         rawValues,
 			}
@@ -316,8 +316,6 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 				"gender":            gender,
 				"birthDate":         birthDate,
 				"siteName":          siteName,
-				"outboundVehicle":   outboundVehicle,
-				"inboundVehicle":    inboundVehicle,
 				"careContactRole":   careContactRole,
 				"careContactName":   careContactName,
 				"registeredAddress": registeredAddress,
