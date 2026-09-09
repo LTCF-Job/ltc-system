@@ -117,8 +117,8 @@ func TestDownloadTemplate_BodyIsReadableWorkbookWithSourceHeaders(t *testing.T) 
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
 	assert.Equal(t, []string{
-		"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)",
-		"個管or照專", "姓名", "戶籍", "居住地", "備註",
+		"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)",
+		"個管or照專", "照護人員", "戶籍", "居住地", "備註",
 	}, rows[0])
 }
 

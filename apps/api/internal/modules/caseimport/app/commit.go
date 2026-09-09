@@ -96,6 +96,11 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 				recordFailed(caseImportFailureRow(row, "重複個案待裁決功能尚未設定"))
 				continue
 			}
+			if row.DuplicateCaseID == nil {
+				slog.Error("case import duplicate row missing duplicate case id", "row_index", row.RowIndex)
+				recordFailed(caseImportFailureRow(row, "重複個案資料不完整，請重新整理後重試"))
+				continue
+			}
 			_, alreadyStaged, err := s.duplicateStager.StageDuplicateRow(ctx, preview.FileHash, importRowKey(row.RowID, row.RowIndex), StageDuplicateCandidate{
 				RowIndex:          row.RowIndex,
 				SheetName:         row.SheetName,
