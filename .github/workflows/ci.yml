@@ -174,11 +174,15 @@ jobs:
         # 釘 v1.1.0：浮動的 v1 仍指向以 node20 執行內部 action 的舊版。
         # go-version-input 預設 'stable'，會與 go-version-file 同時傳進 setup-go 而蓋掉 go.mod 版本，
         # 設為空字串才會真的照 go.mod 的 Go 版本掃描。
+        # cache 設為 false：本 job 前一步的 Set up Go 已用同一個 cache-dependency-path 還原過
+        # module cache，這裡的內部 setup-go 若再還原一次同 key 的快取，tar 解壓會撞到既有檔案
+        # 而以 "Cannot open: File exists" 失敗。
         uses: golang/govulncheck-action@v1.1.0
         with:
           go-version-input: ''
           go-version-file: apps/api/go.mod
           work-dir: apps/api
+          cache: false
           cache-dependency-path: apps/api/go.sum
           repo-checkout: false
 
