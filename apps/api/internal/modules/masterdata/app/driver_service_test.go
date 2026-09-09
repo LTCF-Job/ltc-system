@@ -50,7 +50,7 @@ func newFakeDriverStore() *fakeDriverStore {
 	return &fakeDriverStore{byID: map[uuid.UUID]*Driver{}}
 }
 
-func (f *fakeDriverStore) List(ctx context.Context, region, q, status string, page, pageSize int) ([]Driver, int64, error) {
+func (f *fakeDriverStore) List(ctx context.Context, q, status string, page, pageSize int) ([]Driver, int64, error) {
 	return nil, 0, nil
 }
 
@@ -129,7 +129,6 @@ func TestDriverService_Create(t *testing.T) {
 		_, err := svc.Create(context.Background(), CreateDriverInput{
 			Name:       "  ",
 			NationalID: "A123456789",
-			Region:     "hsinchu",
 		})
 
 		assert.ErrorIs(t, err, ErrDriverNameRequired)
@@ -143,7 +142,6 @@ func TestDriverService_Create(t *testing.T) {
 		_, err := svc.Create(context.Background(), CreateDriverInput{
 			Name:       "測試司機",
 			NationalID: "NOT-VALID",
-			Region:     "hsinchu",
 		})
 
 		assert.ErrorIs(t, err, ErrInvalidDriverNationalID)
@@ -157,7 +155,6 @@ func TestDriverService_Create(t *testing.T) {
 		d, err := svc.Create(context.Background(), CreateDriverInput{
 			Name:       "測試司機",
 			NationalID: "A123456789",
-			Region:     "hsinchu",
 		})
 
 		assert.NoError(t, err)
@@ -196,7 +193,6 @@ func TestDriverService_Create(t *testing.T) {
 				d, err := svc.Create(context.Background(), CreateDriverInput{
 					Name:              "測試司機",
 					NationalID:        "A123456789",
-					Region:            "hsinchu",
 					LicenseClass:      tt.licenseClass,
 					LicenseExpiryDate: &expiry,
 				})
@@ -235,7 +231,7 @@ func TestDriverService_Update(t *testing.T) {
 	t.Run("applies only provided fields", func(t *testing.T) {
 		id := uuid.New()
 		store := newFakeDriverStore()
-		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active"}
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Status: "active"}
 		svc := NewDriverService(store, cfg, nil)
 
 		newName := "新名字"
@@ -243,14 +239,13 @@ func TestDriverService_Update(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Equal(t, "新名字", d.Name)
-		assert.Equal(t, "hsinchu", d.Region) // 未提供的欄位保持不變
 	})
 
 	t.Run("updates license class and expiry date", func(t *testing.T) {
 		id := uuid.New()
 		oldExpiry := time.Date(2027, 5, 21, 0, 0, 0, 0, time.UTC)
 		store := newFakeDriverStore()
-		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active",
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Status: "active",
 			LicenseClass: strPtr("sedan"), LicenseExpiryDate: &oldExpiry}
 		svc := NewDriverService(store, cfg, nil)
 
@@ -268,7 +263,7 @@ func TestDriverService_Update(t *testing.T) {
 	t.Run("接受合法的狀態值", func(t *testing.T) {
 		id := uuid.New()
 		store := newFakeDriverStore()
-		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active"}
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Status: "active"}
 		svc := NewDriverService(store, cfg, nil)
 
 		d, err := svc.Update(context.Background(), id, UpdateDriverInput{Status: strPtr("inactive")})
@@ -280,7 +275,7 @@ func TestDriverService_Update(t *testing.T) {
 	t.Run("拒絕非法狀態值", func(t *testing.T) {
 		id := uuid.New()
 		store := newFakeDriverStore()
-		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active"}
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Status: "active"}
 		svc := NewDriverService(store, cfg, nil)
 
 		_, err := svc.Update(context.Background(), id, UpdateDriverInput{Status: strPtr("resigned")})
@@ -291,7 +286,7 @@ func TestDriverService_Update(t *testing.T) {
 	t.Run("rejects an unknown license class", func(t *testing.T) {
 		id := uuid.New()
 		store := newFakeDriverStore()
-		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active"}
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Status: "active"}
 		svc := NewDriverService(store, cfg, nil)
 
 		_, err := svc.Update(context.Background(), id, UpdateDriverInput{LicenseClass: strPtr("motorcycle")})
@@ -304,7 +299,7 @@ func TestDriverService_Update(t *testing.T) {
 		id := uuid.New()
 		expiry := time.Date(2027, 5, 21, 0, 0, 0, 0, time.UTC)
 		store := newFakeDriverStore()
-		store.byID[id] = &Driver{ID: id, Name: "舊名字", Region: "hsinchu", Status: "active", LicenseExpiryDate: &expiry}
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Status: "active", LicenseExpiryDate: &expiry}
 		svc := NewDriverService(store, cfg, nil)
 
 		d, err := svc.Update(context.Background(), id, UpdateDriverInput{})
@@ -355,11 +350,9 @@ func TestDriverService_AssignVehicle(t *testing.T) {
 
 	driverID := uuid.New()
 	vehicleID := uuid.New()
-	from := time.Now()
 
 	assignment, err := svc.AssignVehicle(context.Background(), driverID, AssignVehicleInput{
-		VehicleID:     vehicleID,
-		EffectiveFrom: from,
+		VehicleID: vehicleID,
 	})
 
 	assert.NoError(t, err)
@@ -371,14 +364,8 @@ func TestDriverService_AssignVehicle(t *testing.T) {
 func TestDriverService_AssignVehicleRejectsInvalidDateRange(t *testing.T) {
 	store := newFakeDriverStore()
 	svc := NewDriverService(store, testConfig(), nil)
-	from := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
-	to := from
 
-	_, err := svc.AssignVehicle(context.Background(), uuid.New(), AssignVehicleInput{
-		VehicleID:     uuid.New(),
-		EffectiveFrom: from,
-		EffectiveTo:   &to,
-	})
+	_, err := svc.AssignVehicle(context.Background(), uuid.New(), AssignVehicleInput{})
 
 	assert.ErrorIs(t, err, ErrInvalidAssignmentRange)
 	assert.Nil(t, store.lastAssign)
@@ -416,7 +403,6 @@ func TestDriverService_CreateAndUpdate_ExtendedFields(t *testing.T) {
 
 	birthDate := time.Date(1998, 8, 29, 0, 0, 0, 0, time.UTC)
 	employmentDate := time.Date(2024, 11, 1, 0, 0, 0, 0, time.UTC)
-	inspectionDate := time.Date(2025, 5, 1, 0, 0, 0, 0, time.UTC)
 	gender := "男"
 	remarks := "優良駕駛"
 
@@ -424,26 +410,22 @@ func TestDriverService_CreateAndUpdate_ExtendedFields(t *testing.T) {
 		d, err := svc.Create(context.Background(), CreateDriverInput{
 			Name:                   "黃駿凱",
 			NationalID:             "A123456789",
-			Region:                 "",
 			Gender:                 &gender,
 			BirthDate:              &birthDate,
 			HasProfessionalLicense: true,
 			EmploymentDate:         &employmentDate,
 			HasTransferCert:        true,
-			InspectionDate:         &inspectionDate,
 			Remarks:                &remarks,
 		})
 
 		require.NoError(t, err)
 		require.NotNil(t, d)
 		assert.Equal(t, "黃駿凱", d.Name)
-		assert.Equal(t, "", d.Region)
 		assert.Equal(t, &gender, d.Gender)
 		assert.Equal(t, &birthDate, d.BirthDate)
 		assert.True(t, d.HasProfessionalLicense)
 		assert.Equal(t, &employmentDate, d.EmploymentDate)
 		assert.True(t, d.HasTransferCert)
-		assert.Equal(t, &inspectionDate, d.InspectionDate)
 		assert.Equal(t, &remarks, d.Remarks)
 	})
 
@@ -455,7 +437,6 @@ func TestDriverService_CreateAndUpdate_ExtendedFields(t *testing.T) {
 			Status:                 "active",
 			BirthDate:              &birthDate,
 			EmploymentDate:         &employmentDate,
-			InspectionDate:         &inspectionDate,
 			HasProfessionalLicense: true,
 			HasTransferCert:        true,
 		}
@@ -471,7 +452,6 @@ func TestDriverService_CreateAndUpdate_ExtendedFields(t *testing.T) {
 			HasProfessionalLicense: &hasProf,
 			ClearEmploymentDate:    true,
 			HasTransferCert:        &hasTrans,
-			ClearInspectionDate:    true,
 			Remarks:                &newRemarks,
 		})
 
@@ -481,7 +461,77 @@ func TestDriverService_CreateAndUpdate_ExtendedFields(t *testing.T) {
 		assert.False(t, updated.HasProfessionalLicense)
 		assert.Nil(t, updated.EmploymentDate)
 		assert.False(t, updated.HasTransferCert)
-		assert.Nil(t, updated.InspectionDate)
 		assert.Equal(t, &newRemarks, updated.Remarks)
+	})
+}
+
+func TestDriverService_UpdateNationalID(t *testing.T) {
+	cfg := testConfig()
+	// 建立一位已登記身分證的司機，之後用同一組金鑰驗證密文、HMAC 與遮罩值。
+	newDriver := func() (*fakeDriverStore, uuid.UUID) {
+		store := newFakeDriverStore()
+		id := uuid.New()
+		cipher, err := crypto.Encrypt("A123456789", cfg.EncryptionKey)
+		require.NoError(t, err)
+		store.byID[id] = &Driver{
+			ID:               id,
+			Name:             "王小明",
+			Status:           "active",
+			NationalIDCipher: cipher,
+			NationalIDHMAC:   crypto.Index("A123456789", cfg.HMACKey),
+			NationalIDMasked: crypto.Mask("A123456789"),
+		}
+		return store, id
+	}
+
+	t.Run("未提供身分證時三個欄位原封不動", func(t *testing.T) {
+		store, id := newDriver()
+		before := *store.byID[id]
+		name := "王大明"
+
+		d, err := NewDriverService(store, cfg, nil).Update(context.Background(), id, UpdateDriverInput{Name: &name})
+
+		require.NoError(t, err)
+		assert.Equal(t, before.NationalIDCipher, d.NationalIDCipher)
+		assert.Equal(t, before.NationalIDHMAC, d.NationalIDHMAC)
+		assert.Equal(t, before.NationalIDMasked, d.NationalIDMasked)
+	})
+
+	t.Run("提供新身分證時同步換掉密文、HMAC 與遮罩值", func(t *testing.T) {
+		store, id := newDriver()
+		before := *store.byID[id]
+		newID := "B234567894"
+
+		d, err := NewDriverService(store, cfg, nil).Update(context.Background(), id, UpdateDriverInput{NationalID: &newID})
+
+		require.NoError(t, err)
+		assert.NotEqual(t, before.NationalIDCipher, d.NationalIDCipher)
+		assert.Equal(t, crypto.Index(newID, cfg.HMACKey), d.NationalIDHMAC)
+		assert.Equal(t, crypto.Mask(newID), d.NationalIDMasked)
+
+		plain, err := crypto.Decrypt(d.NationalIDCipher, cfg.EncryptionKey)
+		require.NoError(t, err)
+		assert.Equal(t, newID, plain, "解密後的明碼必須是新輸入的身分證")
+	})
+
+	t.Run("提供相同身分證時不重新加密", func(t *testing.T) {
+		store, id := newDriver()
+		before := *store.byID[id]
+		sameID := "a123456789" // 大小寫與空白不影響判定
+
+		d, err := NewDriverService(store, cfg, nil).Update(context.Background(), id, UpdateDriverInput{NationalID: &sameID})
+
+		require.NoError(t, err)
+		assert.Equal(t, before.NationalIDCipher, d.NationalIDCipher, "同一組身分證不應產生新密文")
+	})
+
+	t.Run("檢查碼錯誤時拒絕且不寫入", func(t *testing.T) {
+		store, id := newDriver()
+		badID := "A123456780"
+
+		_, err := NewDriverService(store, cfg, nil).Update(context.Background(), id, UpdateDriverInput{NationalID: &badID})
+
+		assert.ErrorIs(t, err, ErrInvalidDriverNationalID)
+		assert.Nil(t, store.lastUpdate, "驗證失敗不得呼叫 store")
 	})
 }

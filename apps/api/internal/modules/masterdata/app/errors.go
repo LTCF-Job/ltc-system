@@ -14,23 +14,15 @@ var (
 	ErrInvalidDriverNationalID = errors.New("invalid driver national id format")
 	// ErrInvalidDriverLicenseClass 代表駕照類別不在允許的代碼清單內。
 	ErrInvalidDriverLicenseClass = errors.New("invalid driver license class")
-	ErrInvalidStatus             = errors.New("invalid status")
-	ErrInvalidAssignmentRange    = errors.New("invalid driver assignment date range")
-	// ErrRegionNameRequired 代表未提供區域名稱。
-	ErrRegionNameRequired = errors.New("region name is required")
-	// ErrDuplicateRegionName 代表區域名稱重複。
-	ErrDuplicateRegionName = errors.New("region name already exists")
-	// ErrRegionNotFound 代表查無區域資料。
-	ErrRegionNotFound = errors.New("region not found")
-	// ErrRegionInUse 代表區域仍被據點、司機、個案或匯出工作引用，不可刪除。
-	ErrRegionInUse = errors.New("region is still referenced")
+	// ErrDuplicateNationalID 代表身分證字號已被其他司機登記。
+	ErrDuplicateNationalID    = errors.New("driver national id already exists")
+	ErrInvalidStatus          = errors.New("invalid status")
+	ErrInvalidAssignmentRange = errors.New("invalid driver assignment date range")
 
 	// ErrSiteNameRequired 代表未提供據點名稱。
 	ErrSiteNameRequired = errors.New("site name is required")
 	// ErrSiteAddressRequired 代表未提供據點地址。
 	ErrSiteAddressRequired = errors.New("site address is required")
-	// ErrSiteRegionRequired 代表未提供所屬區域。
-	ErrSiteRegionRequired = errors.New("site region is required")
 	// ErrDuplicateSiteName 代表該區域已存在相同名稱的據點。
 	ErrDuplicateSiteName = errors.New("site name already exists in region")
 	// ErrSiteNotFound 代表查無據點資料。

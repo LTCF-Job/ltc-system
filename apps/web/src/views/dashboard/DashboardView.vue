@@ -244,11 +244,6 @@
                 <span class="font-mono-bold">{{ row.periodYm }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="region" label="區域" width="100" align="center">
-              <template #default="{ row }">
-                <span>{{ row.region ? regionLabel(row.region) : '全區' }}</span>
-              </template>
-            </el-table-column>
             <el-table-column prop="totalRows" label="總趟數" width="90" align="center">
               <template #default="{ row }">
                 <span class="trip-count-badge">{{ row.totalRows }}</span>
@@ -302,9 +297,7 @@ import {
 import { getDashboardMetrics } from '@/api/dashboard'
 import { getDashboardStats } from '@/api/exports'
 import { formatDateTime } from '@/utils/formatters'
-import { REGION_LABELS } from '@/types/domain'
 import type { DashboardMetricsDTO, ExportJobDTO } from '@/types/api'
-import { regionLabel } from '@/api/regionOptions'
 
 // 註冊 ECharts 核心元件
 use([

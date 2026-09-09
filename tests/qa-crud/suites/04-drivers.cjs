@@ -8,21 +8,16 @@ exports.run = async ({ page, net, record, L }) => {
   await L.goto(page, '/masters/drivers')
 
   await L.openCreate(page, '新增司機')
-  record('所屬區域下拉選項', { options: await L.selectOptions(page, '所屬區域') })
-
-  await L.openCreate(page, '新增司機')
   record('空白送出', await L.submit(page, net))
 
   await L.openCreate(page, '新增司機')
   await L.fill(page, '司機姓名', NAME + 'A')
   await L.fill(page, '身分證字號', 'A202559751')
-  await L.pick(page, '所屬區域', '苗栗縣')
   record('身分證檢查碼錯誤', await L.submit(page, net))
 
   await L.openCreate(page, '新增司機')
   await L.fill(page, '司機姓名', NAME + 'A')
   await L.fill(page, '身分證字號', VALID_IDS[0])
-  await L.pick(page, '所屬區域', '苗栗縣')
   await L.fill(page, '電子信箱', 'qa-driver@example.com')
   await L.pick(page, '駕照類別', '大客車')
   await L.pickDate(page, '駕照有效日期', '2028-12-31')
@@ -31,25 +26,16 @@ exports.run = async ({ page, net, record, L }) => {
   await L.openCreate(page, '新增司機')
   await L.fill(page, '司機姓名', NAME + 'B')
   await L.fill(page, '身分證字號', VALID_IDS[1])
-  await L.pick(page, '所屬區域', '新竹縣')
   record('只填必填欄位', await L.submit(page, net))
 
   await L.openCreate(page, '新增司機')
   await L.fill(page, '司機姓名', NAME + 'C')
   await L.fill(page, '身分證字號', VALID_IDS[0])
-  await L.pick(page, '所屬區域', '苗栗縣')
   record('身分證字號重複', await L.submit(page, net))
-
-  await L.openCreate(page, '新增司機')
-  await L.fill(page, '司機姓名', NAME + 'D')
-  await L.fill(page, '身分證字號', VALID_IDS[2])
-  await L.pick(page, '所屬區域', '臺北市')
-  record('選 DB 不允許的區域（臺北市）', await L.submit(page, net))
 
   await L.openCreate(page, '新增司機')
   await L.fill(page, '司機姓名', NAME + 'E')
   await L.fill(page, '身分證字號', VALID_IDS[2])
-  await L.pick(page, '所屬區域', '苗栗縣')
   await L.fill(page, '電子信箱', 'not-an-email')
   record('電子信箱格式錯誤', await L.submit(page, net))
 
@@ -60,12 +46,30 @@ exports.run = async ({ page, net, record, L }) => {
   await L.fill(page, '駕照有效日期', '')
   record('編輯並清空駕照有效日期', await L.submit(page, net))
 
+  // 身分證字號改為可在編輯畫面變更：留空代表不變更，改成別人的號碼要有可讀的錯誤。
+  await L.goto(page, '/masters/drivers')
+  await L.rowAction(page, NAME + 'A改', '編輯')
+  await L.fill(page, '身分證字號', 'A202559751')
+  record('編輯時身分證檢查碼錯誤', await L.submit(page, net))
+
+  await L.goto(page, '/masters/drivers')
+  await L.rowAction(page, NAME + 'A改', '編輯')
+  await L.fill(page, '身分證字號', VALID_IDS[1])
+  record('編輯改成其他司機已用的身分證', await L.submit(page, net))
+
+  await L.goto(page, '/masters/drivers')
+  await L.rowAction(page, NAME + 'A改', '編輯')
+  await L.fill(page, '身分證字號', VALID_IDS[2])
+  record('編輯變更身分證字號', await L.submit(page, net))
+
   await L.goto(page, '/masters/drivers')
   await L.rowAction(page, NAME + 'B', '指派車輛')
+  // 指派不再有起訖日期：對話框只剩選擇車輛。
   record('指派車輛對話框', await L.dumpForm(page))
-  const opts = await L.selectOptions(page, '指派車輛')
+  const opts = await L.selectOptions(page, '選擇車輛')
   record('可指派車輛選項', { options: opts })
-  await L.closeDialog(page)
+  await L.pick(page, '選擇車輛', opts[0])
+  record('指派車輛送出', await L.submit(page, net))
 
   await L.goto(page, '/masters/drivers')
   await L.rowAction(page, NAME + 'A改', '刪除')

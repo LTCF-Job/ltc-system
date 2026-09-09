@@ -58,7 +58,7 @@ func TestSiteHandler_Create_BindsDTOAndPersists(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	body := `{"name":"竹北站","address":"竹北市文興路一段1號","region":"hsinchu","status":"active"}`
+	body := `{"name":"竹北站","address":"竹北市文興路一段1號","region":"新竹縣","status":"active"}`
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/sites", strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
@@ -67,7 +67,7 @@ func TestSiteHandler_Create_BindsDTOAndPersists(t *testing.T) {
 	require.Equal(t, http.StatusCreated, w.Code)
 	require.NotNil(t, store.created, "Create must actually call the store, not just echo the request")
 	assert.Equal(t, "竹北站", store.created.Name)
-	assert.Equal(t, "hsinchu", store.created.Region)
+	assert.Equal(t, "新竹縣", store.created.Region)
 }
 
 func TestSiteHandler_Update_PersistsChange(t *testing.T) {
@@ -78,7 +78,7 @@ func TestSiteHandler_Update_PersistsChange(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	body := `{"name":"竹北站(更新)","address":"竹北市文興路一段1號","region":"hsinchu","status":"active"}`
+	body := `{"name":"竹北站(更新)","address":"竹北市文興路一段1號","region":"新竹縣","status":"active"}`
 	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/sites/"+id.String(), strings.NewReader(body))
 	c.Params = gin.Params{{Key: "id", Value: id.String()}}
 
@@ -130,7 +130,7 @@ func TestSiteHandler_Create_ResponseShape(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	body := `{"name":"竹北站","address":"文興路","region":"hsinchu","openDays":[1,2],"status":"active"}`
+	body := `{"name":"竹北站","address":"文興路","region":"新竹縣","status":"active"}`
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/sites", strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
@@ -141,11 +141,11 @@ func TestSiteHandler_Create_ResponseShape(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
 
-	for _, field := range []string{"id", "name", "address", "region", "openDays", "status", "createdAt", "updatedAt"} {
+	for _, field := range []string{"id", "name", "address", "region", "status", "createdAt", "updatedAt"} {
 		_, ok := envelope.Data[field]
 		assert.Truef(t, ok, "response must keep field %q", field)
 	}
-	assert.Len(t, envelope.Data, 8, "response must not gain or lose fields")
+	assert.Len(t, envelope.Data, 7, "response must not gain or lose fields")
 }
 
 func TestSiteHandler_Create_WithoutStatus_DefaultsToActive(t *testing.T) {
@@ -155,8 +155,8 @@ func TestSiteHandler_Create_WithoutStatus_DefaultsToActive(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	// 模擬前端送出的請求：未帶 status 與 openDays
-	body := `{"name":"竹北日照中心","address":"竹北市光明六路1號","region":"hsinchu"}`
+	// 模擬前端送出的請求：未帶 status
+	body := `{"name":"竹北日照中心","address":"竹北市光明六路1號","region":"新竹縣"}`
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/sites", strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
@@ -165,7 +165,6 @@ func TestSiteHandler_Create_WithoutStatus_DefaultsToActive(t *testing.T) {
 	require.Equal(t, http.StatusCreated, w.Code)
 	require.NotNil(t, store.created)
 	assert.Equal(t, "active", store.created.Status, "未提供 status 時應自動預設為 active")
-	assert.Equal(t, []int16{1, 2, 3, 4, 5}, store.created.OpenDays, "未提供 openDays 時應自動預設為週一至週五")
 }
 
 func TestSiteHandler_Create_MissingRequiredFields_ReturnsValidationDetails(t *testing.T) {
@@ -176,7 +175,7 @@ func TestSiteHandler_Create_MissingRequiredFields_ReturnsValidationDetails(t *te
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	// 故意缺少必填的 name（address 與 region 已改為選填）
-	body := `{"openDays":[1,2,3]}`
+	body := `{"address":"文興路"}`
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/sites", strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 

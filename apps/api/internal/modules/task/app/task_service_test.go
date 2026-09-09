@@ -34,7 +34,7 @@ type fakeScheduleReader struct {
 	schedules []ActiveSchedule
 }
 
-func (f *fakeScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]ActiveSchedule, error) {
+func (f *fakeScheduleReader) GetActiveSchedulesForMonth(ctx context.Context, year, month int) ([]ActiveSchedule, error) {
 	return f.schedules, nil
 }
 
@@ -44,10 +44,8 @@ func weekdayScheduleFixture(caseID uuid.UUID, year, month int) ActiveSchedule {
 	return ActiveSchedule{
 		CaseID:        caseID,
 		CaseName:      "測試個案",
-		Region:        "竹北",
 		EffectiveFrom: from,
 		Weekdays:      []int16{1, 2, 3, 4, 5, 6, 7},
-		SiteOpenDays:  []int16{1, 2, 3, 4, 5, 6, 7},
 		TripPattern:   2,
 		Legs: []ScheduleLeg{
 			{LegSeq: 1, Direction: "go", DepartTime: "08:00"},
@@ -57,7 +55,7 @@ func weekdayScheduleFixture(caseID uuid.UUID, year, month int) ActiveSchedule {
 
 type fakeHolidayMapReader struct{}
 
-func (f *fakeHolidayMapReader) GetHolidayMap(ctx context.Context, year, month int, region string) (map[string]bool, error) {
+func (f *fakeHolidayMapReader) GetHolidayMap(ctx context.Context, year, month int) (map[string]bool, error) {
 	return map[string]bool{}, nil
 }
 
@@ -100,7 +98,7 @@ func TestTaskService_ListMissingReportsForMonth(t *testing.T) {
 	repo := &mockTaskRepo{}
 	svc := NewTaskService(repo, scheduleReader, &fakeHolidayMapReader{}, notifier)
 
-	items, err := svc.ListMissingReportsForMonth(context.Background(), 2026, 7, "")
+	items, err := svc.ListMissingReportsForMonth(context.Background(), 2026, 7)
 	assert.NoError(t, err)
 	assert.Equal(t, 31, len(items), "七月每天出車一趟，整月都未回報應有 31 筆")
 	assert.Zero(t, notifier.calls, "整月查詢不應觸發催報通知")
@@ -118,7 +116,7 @@ func TestTaskService_ListMissingReportsForMonth_CrossDateCollisionRegression(t *
 	}
 	svc := NewTaskService(repo, scheduleReader, &fakeHolidayMapReader{}, nil)
 
-	items, err := svc.ListMissingReportsForMonth(context.Background(), 2026, 7, "")
+	items, err := svc.ListMissingReportsForMonth(context.Background(), 2026, 7)
 	assert.NoError(t, err)
 	assert.Equal(t, 30, len(items), "7/1 已回報，其餘 30 天仍應視為未回報")
 	for _, item := range items {
@@ -133,7 +131,7 @@ func TestTaskService_CheckMissingReports_SingleDayStillNotifies(t *testing.T) {
 	repo := &mockTaskRepo{}
 	svc := NewTaskService(repo, scheduleReader, &fakeHolidayMapReader{}, notifier)
 
-	items, err := svc.CheckMissingReports(context.Background(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC), "")
+	items, err := svc.CheckMissingReports(context.Background(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.Equal(t, 1, notifier.calls, "單日模式偵測到未回報時仍應觸發通知")
@@ -145,7 +143,7 @@ func TestTaskService_ListMissingReports_SingleDayDoesNotNotify(t *testing.T) {
 	notifier := &fakeNotifier{}
 	svc := NewTaskService(&mockTaskRepo{}, scheduleReader, &fakeHolidayMapReader{}, notifier)
 
-	items, err := svc.ListMissingReports(context.Background(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC), "")
+	items, err := svc.ListMissingReports(context.Background(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
 
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)

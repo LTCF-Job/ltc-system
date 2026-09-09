@@ -24,7 +24,7 @@ type VehicleRef struct {
 // SiteLookup 提供以名稱或區域比對據點的查詢。
 type SiteLookup interface {
 	GetByName(ctx context.Context, name string) (*SiteRef, error)
-	List(ctx context.Context, region string, page, pageSize int) ([]SiteRef, error)
+	List(ctx context.Context, page, pageSize int) ([]SiteRef, error)
 }
 
 // VehicleLookup 提供以顯示名稱比對車輛的查詢。
@@ -54,7 +54,6 @@ type NewCase struct {
 	CareContactName        *string
 	RegisteredAddress      *string
 	HomeAddress            *string
-	Region                 *string
 	ServiceCategory        int
 	ServiceUsageType       int
 	Status                 string
@@ -125,7 +124,6 @@ type StageDuplicateCandidate struct {
 	CareContactName        *string
 	RegisteredAddress      *string
 	HomeAddress            *string
-	Region                 *string
 	ServiceCategory        int
 	ServiceUsageType       int
 	Remarks                *string

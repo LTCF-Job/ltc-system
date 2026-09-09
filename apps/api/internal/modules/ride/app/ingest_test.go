@@ -124,11 +124,11 @@ func (f *fakeRecordStore) ListRideSourcesForSlot(_ context.Context, caseID uuid.
 	return out, nil
 }
 
-func (f *fakeRecordStore) ListCalendarCases(context.Context, time.Time, time.Time, string, string) ([]CalendarCase, error) {
+func (f *fakeRecordStore) ListCalendarCases(context.Context, time.Time, time.Time, string) ([]CalendarCase, error) {
 	return nil, nil
 }
 
-func (f *fakeRecordStore) ListRideRecordsInRange(context.Context, time.Time, time.Time, string, string) ([]RideRecord, error) {
+func (f *fakeRecordStore) ListRideRecordsInRange(context.Context, time.Time, time.Time, string) ([]RideRecord, error) {
 	return nil, nil
 }
 

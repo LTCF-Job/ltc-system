@@ -118,8 +118,8 @@ merge.MergeRideSources（同車取最新、跨車 OR）
 
 ## 3. 未回報偵測與月底提醒（`TaskService`）
 
-- `ListMissingReports(ctx, targetDate, region)`：拿 `domain/calendar.CalculateExpectedRides` 算出「這天應該有的搭乘」，跟實際 `ride_records` 比對，供前端「未回報清單」頁查詢，純查詢不觸發通知。
-- `CheckMissingReports(ctx, targetDate, region)`：同樣比對應搭與實際回報，但只由明確的後台任務入口呼叫，並觸發告警通知。
+- `ListMissingReports(ctx, targetDate)`：拿 `domain/calendar.CalculateExpectedRides` 算出「這天應該有的搭乘」，跟實際 `ride_records` 比對，供前端「未回報清單」頁查詢，純查詢不觸發通知。
+- `CheckMissingReports(ctx, targetDate)`：同樣比對應搭與實際回報，但只由明確的後台任務入口呼叫，並觸發告警通知。
 - `MonthEndReminder(ctx, year, month)`：每月 26 日跑，彙整檢核結果並發信提醒。
 - 這兩支都各自有 `POST /tasks/*` 端點，正式環境由 Cloud Scheduler 定期打；本機要測試就直接手動 curl 這兩支。
 

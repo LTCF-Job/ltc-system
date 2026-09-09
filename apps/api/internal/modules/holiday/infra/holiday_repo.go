@@ -22,19 +22,18 @@ func NewHolidayRepository(db *pgxpool.Pool) *HolidayRepository {
 }
 
 // List 依據日期區間與地區取得國定假日清單。
-func (r *HolidayRepository) List(ctx context.Context, startDate, endDate time.Time, region string) ([]app.Holiday, error) {
+func (r *HolidayRepository) List(ctx context.Context, startDate, endDate time.Time) ([]app.Holiday, error) {
 	if r.db == nil {
 		return []app.Holiday{}, nil
 	}
 
 	query := `
-		SELECT holiday_date, name, region, source, is_day_off, created_at
+		SELECT holiday_date, name, source, is_day_off, created_at
 		FROM holidays
 		WHERE holiday_date >= $1 AND holiday_date <= $2
-		  AND ($3 = '' OR region IS NULL OR region = $3)
 		ORDER BY holiday_date ASC
 	`
-	rows, err := r.db.Query(ctx, query, startDate, endDate, region)
+	rows, err := r.db.Query(ctx, query, startDate, endDate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query holidays: %w", err)
 	}
@@ -43,7 +42,7 @@ func (r *HolidayRepository) List(ctx context.Context, startDate, endDate time.Ti
 	var holidays []app.Holiday
 	for rows.Next() {
 		var h app.Holiday
-		if err := rows.Scan(&h.HolidayDate, &h.Name, &h.Region, &h.Source, &h.IsDayOff, &h.CreatedAt); err != nil {
+		if err := rows.Scan(&h.HolidayDate, &h.Name, &h.Source, &h.IsDayOff, &h.CreatedAt); err != nil {
 			return nil, err
 		}
 		holidays = append(holidays, h)
@@ -58,10 +57,10 @@ func (r *HolidayRepository) GetByDate(ctx context.Context, date time.Time) (*app
 	}
 	var h app.Holiday
 	err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, `
-		SELECT holiday_date, name, region, source, is_day_off, created_at
+		SELECT holiday_date, name, source, is_day_off, created_at
 		FROM holidays
 		WHERE holiday_date = $1
-	`, date).Scan(&h.HolidayDate, &h.Name, &h.Region, &h.Source, &h.IsDayOff, &h.CreatedAt)
+	`, date).Scan(&h.HolidayDate, &h.Name, &h.Source, &h.IsDayOff, &h.CreatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -72,7 +71,7 @@ func (r *HolidayRepository) GetByDate(ctx context.Context, date time.Time) (*app
 }
 
 // GetHolidayMap 取得特定月份之假日集合（格式 YYYY-MM-DD -> true），供日曆計算使用。
-func (r *HolidayRepository) GetHolidayMap(ctx context.Context, year, month int, region string) (map[string]bool, error) {
+func (r *HolidayRepository) GetHolidayMap(ctx context.Context, year, month int) (map[string]bool, error) {
 	result := make(map[string]bool)
 	if r.db == nil {
 		return result, nil
@@ -81,7 +80,7 @@ func (r *HolidayRepository) GetHolidayMap(ctx context.Context, year, month int, 
 	firstDay := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	lastDay := firstDay.AddDate(0, 1, -1)
 
-	holidays, err := r.List(ctx, firstDay, lastDay, region)
+	holidays, err := r.List(ctx, firstDay, lastDay)
 	if err != nil {
 		return nil, err
 	}
@@ -101,13 +100,13 @@ func (r *HolidayRepository) Upsert(ctx context.Context, h *app.Holiday) error {
 	}
 
 	query := `
-		INSERT INTO holidays (holiday_date, name, region, source, is_day_off)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO holidays (holiday_date, name, source, is_day_off)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (holiday_date) DO UPDATE
-		SET name = EXCLUDED.name, region = EXCLUDED.region, source = EXCLUDED.source, is_day_off = EXCLUDED.is_day_off
+		SET name = EXCLUDED.name, source = EXCLUDED.source, is_day_off = EXCLUDED.is_day_off
 		RETURNING created_at
 	`
-	return r.db.QueryRow(ctx, query, h.HolidayDate, h.Name, h.Region, h.Source, h.IsDayOff).Scan(&h.CreatedAt)
+	return r.db.QueryRow(ctx, query, h.HolidayDate, h.Name, h.Source, h.IsDayOff).Scan(&h.CreatedAt)
 }
 
 // BatchUpsert 批次匯入國定假日。
@@ -123,15 +122,15 @@ func (r *HolidayRepository) BatchUpsert(ctx context.Context, holidays []app.Holi
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO holidays (holiday_date, name, region, source, is_day_off)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO holidays (holiday_date, name, source, is_day_off)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (holiday_date) DO UPDATE
-		SET name = EXCLUDED.name, region = EXCLUDED.region, source = EXCLUDED.source, is_day_off = EXCLUDED.is_day_off
+		SET name = EXCLUDED.name, source = EXCLUDED.source, is_day_off = EXCLUDED.is_day_off
 		WHERE holidays.source <> 'manual'
 	`
 
 	for _, h := range holidays {
-		if _, err := tx.Exec(ctx, query, h.HolidayDate, h.Name, h.Region, h.Source, h.IsDayOff); err != nil {
+		if _, err := tx.Exec(ctx, query, h.HolidayDate, h.Name, h.Source, h.IsDayOff); err != nil {
 			return fmt.Errorf("failed to upsert holiday %s: %w", h.HolidayDate.Format("2006-01-02"), err)
 		}
 	}

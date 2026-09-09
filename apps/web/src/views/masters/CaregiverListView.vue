@@ -294,7 +294,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
-import { REGION_LABELS, CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
+import { CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
 import type { CaregiverDTO } from '@/types/api'
 
 const authStore = useAuthStore()

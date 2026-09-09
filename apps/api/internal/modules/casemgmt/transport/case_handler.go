@@ -36,7 +36,6 @@ func (h *CaseHandler) List(c *gin.Context) {
 		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數格式錯誤", nil)
 		return
 	}
-	region := c.Query("region")
 	status := c.Query("status")
 	q := c.Query("q")
 	// 待維護個案預設不出現在任何清單，呼叫端要明確表態才拿得到：unresolvedLink 只取待維護，
@@ -45,7 +44,7 @@ func (h *CaseHandler) List(c *gin.Context) {
 	includePending := httpx.QueryBool(c, "includePending")
 	excludePending := !unresolvedLink && !includePending
 
-	cases, total, err := h.masterService.ListCases(c.Request.Context(), region, status, q, page, pageSize, unresolvedLink, excludePending)
+	cases, total, err := h.masterService.ListCases(c.Request.Context(), status, q, page, pageSize, unresolvedLink, excludePending)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢個案失敗", nil)
 		return
@@ -216,7 +215,6 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		Name              *string      `json:"name"`
 		SiteID            *uuid.UUID   `json:"siteId"`
 		HomeAddress       *string      `json:"homeAddress"`
-		Region            *string      `json:"region"`
 		LTCLevel          *string      `json:"ltcLevel"`
 		ServiceCategory   *int         `json:"serviceCategory"`
 		ServiceUsageType  *int         `json:"serviceUsageType"`
@@ -240,7 +238,6 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		Name:                req.Name,
 		SiteID:              req.SiteID,
 		HomeAddress:         req.HomeAddress,
-		Region:              req.Region,
 		LTCLevel:            req.LTCLevel,
 		ServiceCategory:     req.ServiceCategory,
 		ServiceUsageType:    req.ServiceUsageType,

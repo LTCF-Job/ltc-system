@@ -14,7 +14,6 @@ func TestCalculateExpectedRides(t *testing.T) {
 		CaseID:        caseID,
 		EffectiveFrom: time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC), // 7/10 排班生效
 		Weekdays:      []int16{1, 2, 3, 4, 5},
-		SiteOpenDays:  []int16{1, 2, 3, 4, 5},
 		Holidays: map[string]bool{
 			"2026-07-15": true, // 假設 7/15 停駛
 		},
@@ -55,7 +54,6 @@ func TestCalculateExpectedRides_PriorityOrder(t *testing.T) {
 		CaseID:        caseID,
 		EffectiveFrom: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		Weekdays:      []int16{1, 2, 3, 4, 5},
-		SiteOpenDays:  []int16{1, 2, 3, 4, 5},
 		Legs:          fixedLegs,
 		// 當周排班：週二 4 趟、週三 0 趟
 		WeeklyConfigs: map[int]WeekdayScheduleInput{
@@ -106,7 +104,6 @@ func TestCalculateExpectedRides_RejectsMissingLegDefinition(t *testing.T) {
 		CaseID:        uuid.New(),
 		EffectiveFrom: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		Weekdays:      []int16{2},
-		SiteOpenDays:  []int16{2},
 		Legs:          []LegInput{{LegSeq: 1, Direction: "outbound", DepartTime: "09:00"}},
 		WeeklyConfigs: map[int]WeekdayScheduleInput{2: {TripCount: 2}},
 	}

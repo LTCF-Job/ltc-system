@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/crypto"
 	"ltc-system/apps/api/internal/domain/namenorm"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/config"
 )
 
@@ -32,8 +34,8 @@ func NewDriverService(store DriverStore, cfg *config.Config, auditRepo AuditWrit
 }
 
 // List 查詢司機清單。
-func (s *DriverService) List(ctx context.Context, region, q, status string, page, pageSize int) ([]Driver, int64, error) {
-	return s.store.List(ctx, region, q, status, page, pageSize)
+func (s *DriverService) List(ctx context.Context, q, status string, page, pageSize int) ([]Driver, int64, error) {
+	return s.store.List(ctx, q, status, page, pageSize)
 }
 
 // driverLicenseClasses 是允許的駕照類別代碼，與 drivers.license_class 的 CHECK 約束一致。
@@ -64,7 +66,6 @@ type CreateDriverInput struct {
 	Name                   string
 	NationalID             string
 	Email                  *string
-	Region                 string
 	LicenseClass           *string
 	LicenseExpiryDate      *time.Time
 	Gender                 *string
@@ -72,7 +73,6 @@ type CreateDriverInput struct {
 	HasProfessionalLicense bool
 	EmploymentDate         *time.Time
 	HasTransferCert        bool
-	InspectionDate         *time.Time
 	Remarks                *string
 }
 
@@ -107,7 +107,6 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors
 		NationalIDHMAC:   hmacIdx,
 		NationalIDMasked: crypto.Mask(nationalID),
 		Email:            in.Email,
-		Region:           strings.TrimSpace(in.Region),
 		Status:           "active",
 
 		LicenseClass:           licenseClass,
@@ -117,7 +116,6 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors
 		HasProfessionalLicense: in.HasProfessionalLicense,
 		EmploymentDate:         in.EmploymentDate,
 		HasTransferCert:        in.HasTransferCert,
-		InspectionDate:         in.InspectionDate,
 		Remarks:                in.Remarks,
 	}
 
@@ -131,8 +129,8 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors
 // UpdateDriverInput 代表更新司機基本資料所需之輸入，欄位為 nil 表示不變更。
 type UpdateDriverInput struct {
 	Name                   *string
+	NationalID             *string
 	Email                  *string
-	Region                 *string
 	Status                 *string
 	LicenseClass           *string
 	LicenseExpiryDate      *time.Time
@@ -144,8 +142,6 @@ type UpdateDriverInput struct {
 	EmploymentDate         *time.Time
 	ClearEmploymentDate    bool
 	HasTransferCert        *bool
-	InspectionDate         *time.Time
-	ClearInspectionDate    bool
 	Remarks                *string
 }
 
@@ -168,11 +164,25 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 		existing.Name = name
 		existing.NameNormalized = namenorm.Normalize(*in.Name)
 	}
+	if in.NationalID != nil {
+		// 身分證改動要同步重算密文、HMAC 索引與遮罩值，三者必須一致，
+		// 否則 Reveal 解出來的明碼會跟畫面顯示的遮罩對不上。
+		nationalID := strings.ToUpper(strings.TrimSpace(*in.NationalID))
+		if !crypto.ValidateNationalID(nationalID) {
+			return nil, ErrInvalidDriverNationalID
+		}
+		if !bytes.Equal(crypto.Index(nationalID, s.cfg.HMACKey), existing.NationalIDHMAC) {
+			cipherText, err := crypto.Encrypt(nationalID, s.cfg.EncryptionKey)
+			if err != nil {
+				return nil, fmt.Errorf("encrypt driver national id: %w", err)
+			}
+			existing.NationalIDCipher = cipherText
+			existing.NationalIDHMAC = crypto.Index(nationalID, s.cfg.HMACKey)
+			existing.NationalIDMasked = crypto.Mask(nationalID)
+		}
+	}
 	if in.Email != nil {
 		existing.Email = in.Email
-	}
-	if in.Region != nil {
-		existing.Region = strings.TrimSpace(*in.Region)
 	}
 	if in.Status != nil {
 		if *in.Status != "active" && *in.Status != "inactive" {
@@ -210,11 +220,6 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 	}
 	if in.HasTransferCert != nil {
 		existing.HasTransferCert = *in.HasTransferCert
-	}
-	if in.InspectionDate != nil {
-		existing.InspectionDate = in.InspectionDate
-	} else if in.ClearInspectionDate {
-		existing.InspectionDate = nil
 	}
 	if in.Remarks != nil {
 		existing.Remarks = in.Remarks
@@ -260,26 +265,36 @@ func (s *DriverService) Reveal(ctx context.Context, id, actorID uuid.UUID, actor
 	return crypto.Decrypt(d.NationalIDCipher, s.cfg.EncryptionKey)
 }
 
-// AssignVehicleInput 代表指派司機車輛所需之輸入。
+// AssignVehicleInput 代表指派司機車輛所需之輸入。指派不再由使用者輸入期間：
+// 一律自今日起生效、不設結束日，期間只作為 driver_assignments 的內部表示。
 type AssignVehicleInput struct {
-	VehicleID     uuid.UUID
-	EffectiveFrom time.Time
-	EffectiveTo   *time.Time
+	VehicleID uuid.UUID
 }
 
-// AssignVehicle 建立司機與車輛之指派期間。
+// AssignVehicle 指派司機目前的車輛。一位司機同期只會有一台車，因此改派前先把
+// 生效中的舊指派收斂到今天，否則會撞上 driver_assignments 的不重疊排除約束。
 func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, in AssignVehicleInput, actors ...ActorContext) (*DriverAssignment, error) {
-	if driverID == uuid.Nil || in.VehicleID == uuid.Nil || in.EffectiveFrom.IsZero() ||
-		(in.EffectiveTo != nil && !in.EffectiveTo.After(in.EffectiveFrom)) {
+	if driverID == uuid.Nil || in.VehicleID == uuid.Nil {
 		return nil, ErrInvalidAssignmentRange
 	}
 	assignment := &DriverAssignment{
 		DriverID:      driverID,
 		VehicleID:     in.VehicleID,
-		EffectiveFrom: in.EffectiveFrom,
-		EffectiveTo:   in.EffectiveTo,
+		EffectiveFrom: clock.Today(),
 	}
-	if err := s.store.AssignVehicle(ctx, assignment); err != nil {
+	assignFn := func(txCtx context.Context) error {
+		if err := s.store.CloseActiveAssignments(txCtx, driverID); err != nil {
+			return fmt.Errorf("failed to close active assignments: %w", err)
+		}
+		return s.store.AssignVehicle(txCtx, assignment)
+	}
+	var err error
+	if s.txRunner != nil {
+		err = s.txRunner.WithTx(ctx, assignFn)
+	} else {
+		err = assignFn(ctx)
+	}
+	if err != nil {
 		return nil, err
 	}
 	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "assign_vehicle", "driver_assignments", assignment.ID, nil, assignment.AuditSnapshot())

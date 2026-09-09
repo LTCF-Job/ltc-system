@@ -12,11 +12,6 @@
       <el-form-item label="身分證字號" prop="nationalId">
         <el-input v-model="form.nationalId" placeholder="1 碼英文字母 + 9 碼數字" />
       </el-form-item>
-      <el-form-item label="申報區域" prop="region">
-        <el-select v-model="form.region" placeholder="請選擇區域" filterable style="width: 100%">
-          <el-option v-for="opt in regionOptions" :key="opt.code" :label="opt.name" :value="opt.code" />
-        </el-select>
-      </el-form-item>
       <el-form-item label="所屬據點" prop="siteId">
         <el-select v-model="form.siteId" placeholder="請選擇據點" filterable style="width: 100%">
           <el-option v-for="site in availableSites" :key="site.id" :label="site.name" :value="site.id" />
@@ -55,16 +50,10 @@ import { ElMessage, type FormInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { createCase } from '@/api/cases'
 import { listAllSites } from '@/api/masters'
-import { REGION_LABELS } from '@/types/domain'
 import type { CaseDTO, CreateCaseRequest, SiteDTO } from '@/types/api'
 
-import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
-
-// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
-const regionOptions = ref<RegionOption[]>([])
 const availableSites = ref<SiteDTO[]>([])
 onMounted(async () => {
-  regionOptions.value = await fetchRegionOptions()
   availableSites.value = await listAllSites({ status: 'active' })
 })
 
@@ -86,7 +75,6 @@ const form = reactive<CreateCaseRequest>({
   name: '',
   siteId: '',
   nationalId: '',
-  region: undefined,
   homeAddress: '',
   serviceCategory: undefined,
   serviceUsageType: undefined,
@@ -94,7 +82,7 @@ const form = reactive<CreateCaseRequest>({
   remarks: ''
 })
 
-// 姓名與所屬據點為必填；身分證字號、居住地、區域仍為選填
+// 姓名與所屬據點為必填；身分證字號與居住地仍為選填
 const rules = {
   name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }],
   siteId: [{ required: true, message: '請選擇所屬據點', trigger: 'change' }]
@@ -108,7 +96,6 @@ watch(
     form.siteId = ''
     form.nationalId = ''
     form.homeAddress = ''
-    form.region = undefined
     form.serviceCategory = undefined
     form.serviceUsageType = undefined
     form.remarks = ''
