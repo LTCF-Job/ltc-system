@@ -155,6 +155,115 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	}
 }
 
+// TestCommitCases_DuplicateRowStagedAgainstRealDB 針對真實 Postgres 驗證「疑似重複個案」
+// 這條完整路徑：commit.go 只用 fake stager 測過（單元測試對應假物件），從未有測試打過真實
+// DB 走完 StageDuplicateRow -> case_import_duplicate_rows 的 insert，因此型別編碼、FK
+// 約束等只有在真實環境才會出現的例外，過去完全沒有自動化證據能排除。
+//
+// 執行方式（需要本機 docker-compose.local.yml 啟動的 Postgres）：
+//
+//	docker compose -f docker-compose.local.yml up -d postgres
+//	DATABASE_URL=postgres://postgres:postgrespassword@localhost:5432/ltc_system?sslmode=disable \
+//	  go test -tags=integration ./internal/modules/caseimport/app/... -run TestCommitCases_DuplicateRowStagedAgainstRealDB -v
+func TestCommitCases_DuplicateRowStagedAgainstRealDB(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgrespassword@localhost:5432/ltc_system?sslmode=disable"
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("real Postgres not reachable at %s: %v", dbURL, err)
+	}
+
+	t.Setenv("APP_ENV", "local")
+	t.Setenv("ENCRYPTION_KEY", "MDEwMjAzMDQwNTA2MDcwODAxMDIwMzA0MDUwNjA3MDg=")
+	t.Setenv("HMAC_KEY", "MDkwODAwMDcwNjA1MDQwMzA5MDgwMDA3MDYwNTA0MDM=")
+	cfg, err := config.LoadFromEnv()
+	require.NoError(t, err)
+
+	caseRepo := caseinfra.NewCaseRepository(pool)
+	siteRepo := masterinfra.NewSiteRepository(pool)
+	vehicleRepo := masterinfra.NewVehicleRepository(pool)
+	auditSvc := auditapp.NewService(auditinfra.NewAuditRepository(pool))
+	txRunner := pgxdb.NewTxRunner(pool)
+
+	caseSvc := caseapp.NewCaseService(cfg, caseRepo, auditWriter{auditSvc}, caseinfra.NewExcelRenderer(), caseinfra.NewCaseDuplicateStagingRepository(pool))
+	excel := importinfra.NewExcelAdapter()
+	importSvc := importapp.NewImportService(
+		caseRegistrar{caseSvc},
+		caseDuplicateFinder{caseSvc},
+		caseDuplicateStager{caseSvc},
+		siteAdapter{siteRepo},
+		vehicleAdapter{vehicleRepo},
+		caregiverAdapter{},
+		caseRepo,
+		excel,
+		excel,
+		txRunner,
+	)
+
+	site := masterapp.Site{
+		Name:    "測試單位-" + uuid.NewString()[:8],
+		Address: "測試地址",
+		Status:  "active",
+	}
+	require.NoError(t, siteRepo.Create(ctx, &site))
+
+	actor := importapp.Actor{ActorID: uuid.New(), ActorRole: "admin", IPAddress: "127.0.0.1", UserAgent: "test-agent"}
+
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM case_import_duplicate_rows WHERE duplicate_case_id IN (SELECT id FROM cases WHERE site_id = $1)`, site.ID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM audit_log WHERE entity_type = 'cases' AND entity_id IN (SELECT id::text FROM cases WHERE site_id = $1)`, site.ID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM cases WHERE site_id = $1`, site.ID)
+		_, _ = pool.Exec(cleanupCtx, `DELETE FROM sites WHERE id = $1`, site.ID)
+	})
+
+	// 先建立既有個案，作為這次匯入疑似重複比對到的對象。
+	existing, err := caseSvc.CreateCase(ctx, caseapp.CreateCaseRequest{
+		ID:         uuid.New(),
+		Name:       "受測既有個案",
+		NationalID: "A202559750",
+		SiteID:     &site.ID,
+		Status:     "active",
+	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
+	require.NoError(t, err)
+
+	dupRow := importapp.CaseImportRowResult{
+		RowID:             "sheet1:2",
+		RowIndex:          2,
+		Name:              "受測既有個案",
+		NationalID:        "A202559750",
+		SiteName:          site.Name,
+		IsDuplicate:       true,
+		DuplicateCaseName: existing.Name,
+		DuplicateCaseID:   &existing.ID,
+	}
+	preview := &importapp.CaseImportPreviewResult{
+		FileHash: "sha256:" + uuid.NewString(),
+		Rows:     []importapp.CaseImportRowResult{dupRow},
+	}
+
+	result, err := importSvc.CommitCases(ctx, preview, actor)
+	require.NoError(t, err, "重複個案 commit 不應回傳錯誤")
+	for _, fr := range result.FailedRows {
+		t.Logf("failed row %d (%s): %v", fr.RowIndex, fr.CaseName, fr.Reasons)
+	}
+	require.Empty(t, result.FailedRows, "重複個案不應落入失敗列")
+	require.Equal(t, 1, result.StagedDuplicateCount, "重複個案應計入待裁決筆數")
+	require.Equal(t, 0, result.ImportedCount, "重複個案不應直接建立個案")
+
+	var staged int
+	err = pool.QueryRow(ctx, `SELECT count(*) FROM case_import_duplicate_rows WHERE duplicate_case_id = $1 AND status = 'pending'`, existing.ID).Scan(&staged)
+	require.NoError(t, err)
+	require.Equal(t, 1, staged, "case_import_duplicate_rows 應確實新增一筆待裁決列")
+}
+
 // 以下 adapter 與 cmd/server 的 composition root 等價，讓整合測試能在不匯入
 // package main 的情況下把 caseimport 接到 casemgmt、masterdata 與 audit。
 

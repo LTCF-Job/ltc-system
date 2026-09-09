@@ -52,16 +52,11 @@ func (s *ImportService) ParseCases(ctx context.Context, r io.Reader, fileName st
 	return preview, nil
 }
 
-// headerColumn 是表頭欄位在來源列中的原始名稱與欄位索引。
-type headerColumn struct {
-	name string
-	idx  int
-}
-
-// findHeader 在工作表前 3 列尋找標題列，解析出個案姓名欄與個管/照專姓名欄的位置。
-func findHeader(rows [][]string) (headerRowIdx int, colMap map[string]int, caseNameIdx, careContactNameIdx int) {
+// findHeader 在工作表前 3 列尋找標題列，解析出個案姓名欄的位置；其餘欄位（含「照護人員」）
+// 名稱皆唯一，直接落在 colMap 即可，不需要再靠位置消歧。
+func findHeader(rows [][]string) (headerRowIdx int, colMap map[string]int, caseNameIdx int) {
 	colMap = make(map[string]int)
-	caseNameIdx, careContactNameIdx = -1, -1
+	caseNameIdx = -1
 
 	for r := 0; r < min(3, len(rows)); r++ {
 		rowText := strings.Join(rows[r], ",")
@@ -69,7 +64,6 @@ func findHeader(rows [][]string) (headerRowIdx int, colMap map[string]int, caseN
 			continue
 		}
 
-		var cols []headerColumn
 		for c, colName := range rows[r] {
 			cleanName := strings.TrimSpace(strings.ReplaceAll(colName, "*", ""))
 			if strings.Contains(cleanName, "接送車輛(去)") || strings.Contains(cleanName, "接送車輛（去）") {
@@ -83,39 +77,26 @@ func findHeader(rows [][]string) (headerRowIdx int, colMap map[string]int, caseN
 			cleanName = strings.Split(cleanName, "(")[0]
 			cleanName = strings.Split(cleanName, "（")[0]
 			cleanName = strings.TrimSpace(cleanName)
-			if cleanName != "" {
-				cols = append(cols, headerColumn{name: cleanName, idx: c})
+			if cleanName == "" {
+				continue
 			}
-		}
-
-		careRoleIdx := -1
-		for _, hc := range cols {
-			if hc.name == "個管or照專" || hc.name == "個管／照專" || hc.name == "個管/照專" {
-				careRoleIdx = hc.idx
-			}
-		}
-		for _, hc := range cols {
-			if hc.name != "姓名" {
-				if _, exists := colMap[hc.name]; !exists {
-					colMap[hc.name] = hc.idx
+			if cleanName == "姓名" {
+				if caseNameIdx == -1 {
+					caseNameIdx = c
 				}
 				continue
 			}
-			if careRoleIdx >= 0 && hc.idx > careRoleIdx {
-				if careContactNameIdx == -1 {
-					careContactNameIdx = hc.idx
-				}
-			} else if caseNameIdx == -1 {
-				caseNameIdx = hc.idx
+			if _, exists := colMap[cleanName]; !exists {
+				colMap[cleanName] = c
 			}
 		}
 
 		if caseNameIdx >= 0 {
-			return r, colMap, caseNameIdx, careContactNameIdx
+			return r, colMap, caseNameIdx
 		}
 	}
 
-	return 0, colMap, -1, -1
+	return 0, colMap, -1
 }
 
 func (s *ImportService) processRawTables(ctx context.Context, tables [][][]string, sheetNames []string) (*CaseImportPreviewResult, error) {
@@ -140,7 +121,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			continue
 		}
 
-		headerRowIdx, colMap, caseNameIdx, careContactNameIdx := findHeader(rows)
+		headerRowIdx, colMap, caseNameIdx := findHeader(rows)
 		if caseNameIdx < 0 {
 			inspectedSheets = append(inspectedSheets, sheetName)
 			continue
@@ -217,10 +198,10 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			gender := getVal("性別")
 			birthDate := parseProfileBirthDate(getVal("生日"))
 			siteName := getVal("據點")
-			// 接送車輛(去)/(回) 與序號、歲數同樣只保留版面：欄位仍在範本與匯出中佔位，
-			// 但一律不取值，因此不會比對車輛主檔、也不會寫入交通偏好。
+			// 接送車輛(去)/(回) 只保留版面：欄位仍在範本與匯出中佔位，但一律不取值，
+			// 因此不會比對車輛主檔、也不會寫入交通偏好。
 			careContactRole := getVal("個管or照專")
-			careContactName := getIdxVal(careContactNameIdx)
+			careContactName := getVal("照護人員")
 			registeredAddress := getVal("戶籍")
 			homeAddress := getVal("居住地")
 			remarks := getVal("備註")
@@ -296,6 +277,23 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 				}
 			}
 
+			// 照護人員比對不到主檔不擋列；沿用 commit 階段同一套 resolveCaregiver，讓預覽
+			// 就能提示使用者「正式匯入後會落入待維護」，不用等到正式匯入才發現。
+			if !hasError {
+				caregiverID, _, caregiverWarning, err := s.resolveCaregiver(ctx, careContactName, careContactRole)
+				if err != nil {
+					message := "照護人員查詢失敗，請稍後重試"
+					rowRes.ErrorMessage = appendMessage(rowRes.ErrorMessage, message)
+					errorsList = append(errorsList, CaseImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "照護人員", Message: message})
+					hasError = true
+				} else if caregiverID == nil && caregiverWarning != "" {
+					rowRes.CaregiverUnmatched = true
+					rowRes.WarningMessage = appendMessage(rowRes.WarningMessage, caregiverWarning)
+					warningsList = append(warningsList, CaseImportWarningItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "照護人員", Message: caregiverWarning})
+					hasWarning = true
+				}
+			}
+
 			if hasError {
 				errorRows++
 			} else {
@@ -308,24 +306,25 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			results = append(results, rowRes)
 
 			previewRow := map[string]interface{}{
-				"rowId":             rowID,
-				"rowIndex":          actualRowIndex,
-				"name":              name,
-				"nationalId":        crypto.Mask(nationalID),
-				"householdType":     householdType,
-				"gender":            gender,
-				"birthDate":         birthDate,
-				"siteName":          siteName,
-				"careContactRole":   careContactRole,
-				"careContactName":   careContactName,
-				"registeredAddress": registeredAddress,
-				"homeAddress":       homeAddress,
-				"remarks":           remarks,
-				"isDuplicate":       rowRes.IsDuplicate,
-				"birthDateInvalid":  rowRes.BirthDateInvalid,
-				"nationalIdInvalid": rowRes.NationalIDInvalid,
-				"__hasError":        hasError,
-				"__hasWarning":      hasWarning,
+				"rowId":              rowID,
+				"rowIndex":           actualRowIndex,
+				"name":               name,
+				"nationalId":         crypto.Mask(nationalID),
+				"householdType":      householdType,
+				"gender":             gender,
+				"birthDate":          birthDate,
+				"siteName":           siteName,
+				"careContactRole":    careContactRole,
+				"careContactName":    careContactName,
+				"registeredAddress":  registeredAddress,
+				"homeAddress":        homeAddress,
+				"remarks":            remarks,
+				"isDuplicate":        rowRes.IsDuplicate,
+				"birthDateInvalid":   rowRes.BirthDateInvalid,
+				"nationalIdInvalid":  rowRes.NationalIDInvalid,
+				"caregiverUnmatched": rowRes.CaregiverUnmatched,
+				"__hasError":         hasError,
+				"__hasWarning":       hasWarning,
 			}
 			if rowRes.IsDuplicate {
 				previewRow["duplicateOf"] = map[string]string{

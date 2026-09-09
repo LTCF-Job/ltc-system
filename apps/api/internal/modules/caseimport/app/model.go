@@ -24,34 +24,35 @@ type CaseImportWarningItem struct {
 
 // CaseImportRowResult 代表個案批次匯入單列解析結果。
 type CaseImportRowResult struct {
-	RowID             string            `json:"rowId"`
-	RowIndex          int               `json:"rowIndex"`
-	SheetName         string            `json:"sheetName"`
-	Name              string            `json:"name"`
-	NationalID        string            `json:"nationalId,omitempty"`
-	NationalIDInvalid bool              `json:"nationalIdInvalid"`
-	HouseholdType     string            `json:"householdType,omitempty"`
-	Gender            string            `json:"gender,omitempty"`
-	BirthDate         string            `json:"birthDate,omitempty"`
-	BirthDateRaw      string            `json:"birthDateRaw,omitempty"`
-	BirthDateInvalid  bool              `json:"birthDateInvalid"`
-	CareContactRole   string            `json:"careContactRole,omitempty"`
-	CareContactName   string            `json:"careContactName,omitempty"`
-	RegisteredAddress string            `json:"registeredAddress,omitempty"`
-	HomeAddress       string            `json:"homeAddress,omitempty"`
-	ServiceCategory   int               `json:"serviceCategory"`
-	ServiceUsageType  int               `json:"serviceUsageType"`
-	SiteName          string            `json:"siteName"`
-	SiteID            *uuid.UUID        `json:"siteId,omitempty"`
-	OutboundVehicle   string            `json:"outboundVehicle,omitempty"`
-	InboundVehicle    string            `json:"inboundVehicle,omitempty"`
-	Remarks           string            `json:"remarks,omitempty"`
-	IsDuplicate       bool              `json:"isDuplicate"`
-	DuplicateCaseName string            `json:"duplicateCaseName,omitempty"`
-	DuplicateCaseID   *uuid.UUID        `json:"duplicateCaseId,omitempty"`
-	WarningMessage    string            `json:"warningMessage,omitempty"`
-	ErrorMessage      string            `json:"errorMessage,omitempty"`
-	RawValues         map[string]string `json:"rawValues,omitempty"`
+	RowID              string            `json:"rowId"`
+	RowIndex           int               `json:"rowIndex"`
+	SheetName          string            `json:"sheetName"`
+	Name               string            `json:"name"`
+	NationalID         string            `json:"nationalId,omitempty"`
+	NationalIDInvalid  bool              `json:"nationalIdInvalid"`
+	HouseholdType      string            `json:"householdType,omitempty"`
+	Gender             string            `json:"gender,omitempty"`
+	BirthDate          string            `json:"birthDate,omitempty"`
+	BirthDateRaw       string            `json:"birthDateRaw,omitempty"`
+	BirthDateInvalid   bool              `json:"birthDateInvalid"`
+	CareContactRole    string            `json:"careContactRole,omitempty"`
+	CareContactName    string            `json:"careContactName,omitempty"`
+	CaregiverUnmatched bool              `json:"caregiverUnmatched"`
+	RegisteredAddress  string            `json:"registeredAddress,omitempty"`
+	HomeAddress        string            `json:"homeAddress,omitempty"`
+	ServiceCategory    int               `json:"serviceCategory"`
+	ServiceUsageType   int               `json:"serviceUsageType"`
+	SiteName           string            `json:"siteName"`
+	SiteID             *uuid.UUID        `json:"siteId,omitempty"`
+	OutboundVehicle    string            `json:"outboundVehicle,omitempty"`
+	InboundVehicle     string            `json:"inboundVehicle,omitempty"`
+	Remarks            string            `json:"remarks,omitempty"`
+	IsDuplicate        bool              `json:"isDuplicate"`
+	DuplicateCaseName  string            `json:"duplicateCaseName,omitempty"`
+	DuplicateCaseID    *uuid.UUID        `json:"duplicateCaseId,omitempty"`
+	WarningMessage     string            `json:"warningMessage,omitempty"`
+	ErrorMessage       string            `json:"errorMessage,omitempty"`
+	RawValues          map[string]string `json:"rawValues,omitempty"`
 }
 
 // CaseImportSkippedRow 保留未寫入資料庫的來源列與欄位錯誤。

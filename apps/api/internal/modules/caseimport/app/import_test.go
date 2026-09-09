@@ -36,8 +36,8 @@ func TestGenerateCaseImportTemplateExcel_Structure(t *testing.T) {
 	// 表頭與匯出的「進系統個案個資」逐欄一致，讓匯出檔可以直接回灌。
 	headerRow := rows[0]
 	assert.Equal(t, []string{
-		"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)",
-		"個管or照專", "姓名", "戶籍", "居住地", "備註",
+		"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)",
+		"個管or照專", "照護人員", "戶籍", "居住地", "備註",
 	}, headerRow)
 	assert.NotContains(t, headerRow, "週一趟數(0:不搭/1:單去/2:來回/4:四趟)")
 }
@@ -67,7 +67,7 @@ func TestParseCases_BlankNameRowBecomesError(t *testing.T) {
 	f := excelize.NewFile()
 	defer f.Close()
 	sheet := f.GetSheetName(0)
-	headers := []string{"姓名*", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名(個管/照專)", "戶籍", "居住地", "備註"}
+	headers := []string{"姓名*", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheet, cell, h))
@@ -91,20 +91,20 @@ func TestParseCases_BlankNameRowBecomesError(t *testing.T) {
 	assert.Contains(t, preview.Errors[0].Message, "姓名未填寫")
 }
 
-// TestParseCases_ProfileWorkbook 驗證表頭「姓名」出現兩次時，第一個對應個案姓名，
-// 出現在「個管or照專」欄之後的第二個對應個管/照專姓名，不互相覆蓋。
+// TestParseCases_ProfileWorkbook 驗證個案姓名（姓名欄）與照護人員姓名（照護人員欄）
+// 各自對應到獨立欄位，不會互相覆蓋。
 func TestParseCases_ProfileWorkbook(t *testing.T) {
 	f := excelize.NewFile()
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
 	for i, header := range headers {
 		cell, err := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, err)
 		require.NoError(t, f.SetCellValue(sheetName, cell, header))
 	}
-	row := []interface{}{1, "王小明", "一般", "A202559750", "男", "045/06/15", 70, "竹南日照", "竹南1車", "竹南2車", "個管", "陳小華", "苗栗縣竹南鎮戶籍地址", "苗栗縣竹南鎮居住地址", "需輪椅"}
+	row := []interface{}{"王小明", "一般", "A202559750", "男", "045/06/15", "竹南日照", "竹南1車", "竹南2車", "個管", "陳小華", "苗栗縣竹南鎮戶籍地址", "苗栗縣竹南鎮居住地址", "需輪椅"}
 	for i, value := range row {
 		cell, err := excelize.CoordinatesToCellName(i+1, 2)
 		require.NoError(t, err)
@@ -133,6 +133,37 @@ func TestParseCases_ProfileWorkbook(t *testing.T) {
 	assert.Empty(t, got.InboundVehicle)
 	assert.Equal(t, "需輪椅", got.Remarks)
 	assert.False(t, got.IsDuplicate)
+}
+
+// TestParseCases_CaregiverUnmatchedWarnsInPreview 驗證照護人員姓名比對不到主檔時，
+// 預覽階段就會標記警告，不用等到正式匯入才發現會落入待維護。
+func TestParseCases_CaregiverUnmatchedWarnsInPreview(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	sheetName := "進系統個案個資"
+	f.SetSheetName("Sheet1", sheetName)
+	headers := []string{"姓名", "個管or照專", "照護人員"}
+	for i, header := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		require.NoError(t, f.SetCellValue(sheetName, cell, header))
+	}
+	require.NoError(t, f.SetCellValue(sheetName, "A2", "王小明"))
+	require.NoError(t, f.SetCellValue(sheetName, "B2", "個管"))
+	require.NoError(t, f.SetCellValue(sheetName, "C2", "查無此人"))
+	buf, err := f.WriteToBuffer()
+	require.NoError(t, err)
+
+	svc := NewImportService(nil, nil, nil, nil, nil, fakeCaregiverLookup{}, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	require.NoError(t, err)
+	require.Len(t, preview.Rows, 1)
+
+	got := preview.Rows[0]
+	assert.Equal(t, 0, preview.ErrorRows)
+	assert.Equal(t, 1, preview.WarningRows)
+	assert.True(t, got.CaregiverUnmatched)
+	assert.Contains(t, got.WarningMessage, "照護人員")
+	assert.Contains(t, got.WarningMessage, "查無此人")
 }
 
 // TestParseCases_SiteHeader 驗證「據點」欄位標題可正確解析為 SiteName。
@@ -192,7 +223,7 @@ func TestParseCases_OnlyNameRequired(t *testing.T) {
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
 	for i, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheetName, cell, header))
@@ -247,20 +278,20 @@ func TestParseCases_IgnoresFullyBlankRow(t *testing.T) {
 	assert.Equal(t, "馮玉英", preview.Rows[0].Name)
 }
 
-// 匯出的生日是西元 YYYY/MM/DD，匯出檔要能原樣回灌，這個格式就不能被誤讀成民國年。
+// 匯出的生日是民國年 RRR/MM/DD，匯出檔要能原樣回灌；西元 YYYY/MM/DD 寫法也要能解析成同一個日期。
 func TestParseCases_GregorianBirthDateRoundTrip(t *testing.T) {
 	f := excelize.NewFile()
 	defer f.Close()
 	sheet := f.GetSheetName(0)
-	headers := []string{"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheet, cell, h))
 	}
 	// 第 2 列西元、第 3 列民國：兩種寫法都要解析成同一個日期。
 	values := [][]interface{}{
-		{1, "西元寫法", "", "", "女", "1956/06/15", "", "竹南日照", "", "", "", "", "", "", ""},
-		{2, "民國寫法", "", "", "女", "045/06/15", "", "竹南日照", "", "", "", "", "", "", ""},
+		{"西元寫法", "", "", "女", "1956/06/15", "竹南日照", "", "", "", "", "", "", ""},
+		{"民國寫法", "", "", "女", "045/06/15", "竹南日照", "", "", "", "", "", "", ""},
 	}
 	for r, row := range values {
 		for i, v := range row {
@@ -287,7 +318,7 @@ func TestParseCases_ReportsBirthDateFormatError(t *testing.T) {
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "照護人員", "戶籍", "居住地"}
 	for i, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheetName, cell, header))

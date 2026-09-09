@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/domain/crypto"
-	"ltc-system/apps/api/internal/platform/clock"
 )
 
 // GenerateCaseProfileWorkbook 匯出與來源工作簿一致的個案彙整欄位。
@@ -38,7 +37,7 @@ func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs [
 	}
 
 	rows := make([]CaseProfileRow, 0, len(cases))
-	for index, item := range cases {
+	for _, item := range cases {
 		id := ""
 		if len(item.NationalIDCipher) > 0 {
 			id, err = crypto.Decrypt(item.NationalIDCipher, s.cfg.EncryptionKey)
@@ -46,12 +45,11 @@ func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs [
 				return nil, fmt.Errorf("decrypt case %s: %w", item.ID, err)
 			}
 		}
-		birthday, age := "", ""
+		birthday := ""
 		if item.BirthDate != nil {
-			// 生日輸出西元 YYYY/MM/DD；匯入端的 parseProfileBirthDate 以「年份小於 1911 才視為民國」
-			// 判定，因此這個格式可以原樣回灌，不會被誤讀成民國年。
-			birthday = item.BirthDate.Format("2006/01/02")
-			age = fmt.Sprintf("%d", clock.Now().Year()-item.BirthDate.Year())
+			// 生日輸出民國年 RRR/MM/DD；匯入端的 parseProfileBirthDate 以「年份小於 1911 才視為民國」
+			// 判定，回灌民國年會被正確還原成同一個西元日期。
+			birthday = fmt.Sprintf("%03d/%02d/%02d", item.BirthDate.Year()-1911, item.BirthDate.Month(), item.BirthDate.Day())
 		}
 		value := func(v *string) string {
 			if v == nil {
@@ -60,13 +58,11 @@ func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs [
 			return *v
 		}
 		rows = append(rows, CaseProfileRow{
-			Seq:           fmt.Sprintf("%d", index+1),
 			Name:          item.Name,
 			HouseholdType: value(item.HouseholdType),
 			NationalID:    id,
 			Gender:        value(item.Gender),
 			Birthday:      birthday,
-			Age:           age,
 			SiteName:      item.SiteName,
 			// 接送車輛的去回程欄位保留版面但暫不使用，兩欄一律留白。
 			OutboundVehicle:   "",
