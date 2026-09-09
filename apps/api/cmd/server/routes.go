@@ -157,6 +157,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.DELETE("/drivers/:id", auth.RequirePermission(perm, customPerm, "masters_drivers", "delete"), h.driver.Delete)
 		apiV1.POST("/drivers/:id/reveal", auth.RequirePermission(perm, customPerm, "masters_drivers", "edit"), h.driver.Reveal)
 		apiV1.POST("/drivers/:id/assignments", auth.RequirePermission(perm, customPerm, "masters_drivers", "edit"), h.driver.AssignVehicle)
+		apiV1.DELETE("/drivers/:id/assignments", auth.RequirePermission(perm, customPerm, "masters_drivers", "edit"), h.driver.UnassignVehicle)
 
 		// 5. 司機接送匯報表與欄位對應
 		apiV1.GET("/driver-reports", auth.RequirePermission(perm, customPerm, "driver_reports", "view"), h.driverReport.ListForms)

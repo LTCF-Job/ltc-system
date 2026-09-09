@@ -390,6 +390,27 @@ func TestDriverService_AssignVehicleRejectsInvalidDateRange(t *testing.T) {
 	assert.Nil(t, store.lastAssign)
 }
 
+func TestDriverService_UnassignVehicle(t *testing.T) {
+	t.Run("成功解除車輛指派", func(t *testing.T) {
+		store := newFakeDriverStore()
+		svc := NewDriverService(store, testConfig(), nil)
+
+		driverID := uuid.New()
+		err := svc.UnassignVehicle(context.Background(), driverID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, driverID, store.closedAssignments)
+	})
+
+	t.Run("無效的司機ID拒絕解除", func(t *testing.T) {
+		store := newFakeDriverStore()
+		svc := NewDriverService(store, testConfig(), nil)
+
+		err := svc.UnassignVehicle(context.Background(), uuid.Nil)
+		assert.ErrorIs(t, err, ErrInvalidAssignmentRange)
+	})
+}
+
 func TestDriverService_Delete(t *testing.T) {
 	t.Run("成功刪除並收斂車輛指派", func(t *testing.T) {
 		store := newFakeDriverStore()

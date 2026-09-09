@@ -112,9 +112,28 @@
           <el-table-column prop="email" label="電子信箱" min-width="180" show-overflow-tooltip class-name="email-col">
             <template #default="{ row }"><span class="driver-data">{{ row.email || '-' }}</span></template>
           </el-table-column>
-          <el-table-column label="目前指派車輛" min-width="180" class-name="assigned-vehicle-col">
+          <el-table-column label="目前指派車輛" min-width="220" class-name="assigned-vehicle-col">
             <template #default="{ row }">
-              <div v-if="getAssignedVehicleDisplay(row)" class="assigned-vehicle-info">
+              <el-select
+                v-if="authStore.hasPermission('masters_drivers', 'edit')"
+                :model-value="getAssignedVehicleId(row)"
+                placeholder="選擇指派車輛"
+                clearable
+                filterable
+                size="default"
+                :loading="assigningDriverId === row.id"
+                :disabled="assigningDriverId === row.id || row.status !== 'active'"
+                class="inline-vehicle-select"
+                @change="(val: string) => handleInlineAssignVehicle(row, val)"
+              >
+                <el-option
+                  v-for="v in allVehicles"
+                  :key="v.id"
+                  :label="`${v.displayName} (${v.plateNo})`"
+                  :value="v.id"
+                />
+              </el-select>
+              <div v-else-if="getAssignedVehicleDisplay(row)" class="assigned-vehicle-info">
                 <span class="vehicle-name">{{ getAssignedVehicleDisplay(row)?.name }}</span>
                 <span v-if="getAssignedVehicleDisplay(row)?.plateNo" class="vehicle-plate font-mono">
                   ({{ getAssignedVehicleDisplay(row)?.plateNo }})
@@ -329,6 +348,7 @@ import {
   updateDriver,
   deleteDriver,
   assignDriverVehicle,
+  unassignDriverVehicle,
   listAllVehicles
 } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
@@ -354,6 +374,7 @@ const formRef = ref<FormInstance>()
 
 const assignDialogVisible = ref(false)
 const selectedDriverId = ref<string | null>(null)
+const assigningDriverId = ref<string | null>(null)
 const assignFormRef = ref<FormInstance>()
 const assignForm = reactive({
   vehicleId: ''
@@ -504,6 +525,41 @@ function getAssignedVehicleDisplay(row: any): { name: string; plateNo: string } 
   return null
 }
 
+function getAssignedVehicleId(row: any): string {
+  if (row.assignments && row.assignments.length > 0) {
+    const assignment = row.assignments[row.assignments.length - 1]
+    if (assignment?.vehicleId) {
+      return assignment.vehicleId
+    }
+  }
+  const matchedVeh = allVehicles.value.find((v) => v.drivers?.some((d) => d.id === row.id))
+  return matchedVeh?.id || ''
+}
+
+async function handleInlineAssignVehicle(row: any, newVehicleId: string) {
+  const currentVehicleId = getAssignedVehicleId(row)
+  if (newVehicleId === currentVehicleId) return
+
+  assigningDriverId.value = row.id
+  try {
+    if (newVehicleId) {
+      await assignDriverVehicle(row.id, { vehicleId: newVehicleId })
+      const targetVeh = allVehicles.value.find((v) => v.id === newVehicleId)
+      const vehName = targetVeh ? `${targetVeh.displayName} (${targetVeh.plateNo})` : '車輛'
+      ElMessage.success(`已將司機「${row.name}」指派至 ${vehName}`)
+    } else {
+      await unassignDriverVehicle(row.id)
+      ElMessage.success(`已解除司機「${row.name}」的車輛指派`)
+    }
+    await reloadVehicles()
+    executeFetch()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  } finally {
+    assigningDriverId.value = null
+  }
+}
+
 function openAssignDialog(row: any) {
   selectedDriverId.value = row.id
   const assignment = row.assignments?.[row.assignments.length - 1]
@@ -635,8 +691,11 @@ executeFetch()
 }
 
 :deep(.assigned-vehicle-col .cell) {
-  white-space: nowrap;
-  min-width: 180px;
+  min-width: 220px;
+}
+
+.inline-vehicle-select {
+  width: 100%;
 }
 
 .assignment-empty {

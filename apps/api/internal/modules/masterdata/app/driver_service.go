@@ -332,6 +332,27 @@ func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, i
 	return assignment, nil
 }
 
+// UnassignVehicle 解除司機目前生效中之車輛指派。
+func (s *DriverService) UnassignVehicle(ctx context.Context, driverID uuid.UUID, actors ...ActorContext) error {
+	if driverID == uuid.Nil {
+		return ErrInvalidAssignmentRange
+	}
+	unassignFn := func(txCtx context.Context) error {
+		return s.store.CloseActiveAssignments(txCtx, driverID)
+	}
+	var err error
+	if s.txRunner != nil {
+		err = s.txRunner.WithTx(ctx, unassignFn)
+	} else {
+		err = unassignFn(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "unassign_vehicle", "driver_assignments", driverID, nil, map[string]interface{}{"driverId": driverID})
+	return nil
+}
+
 // Delete 軟刪除司機並收斂其生效中車輛指派。
 func (s *DriverService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRole string, actors ...ActorContext) error {
 	before, err := s.store.GetByID(ctx, id)
