@@ -15,6 +15,7 @@ type Site struct {
 	Name      string
 	Address   string
 	Region    string
+	Remarks   string
 	Status    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -26,6 +27,7 @@ type SiteAuditSnapshot struct {
 	Name    string    `json:"name"`
 	Address string    `json:"address"`
 	Region  string    `json:"region"`
+	Remarks string    `json:"remarks,omitempty"`
 	Status  string    `json:"status"`
 }
 
@@ -36,6 +38,7 @@ func (s Site) AuditSnapshot() SiteAuditSnapshot {
 		Name:    s.Name,
 		Address: s.Address,
 		Region:  s.Region,
+		Remarks: s.Remarks,
 		Status:  s.Status,
 	}
 }
@@ -60,6 +63,7 @@ type Vehicle struct {
 	HasPurchaseContract     bool
 	HasPlateRegistration    bool
 	HasTransferRegistration bool
+	Remarks                 string
 	Status                  string
 	Drivers                 []VehicleDriver
 	CreatedAt               time.Time
@@ -97,6 +101,7 @@ type VehicleAuditSnapshot struct {
 	HasPurchaseContract       bool       `json:"hasPurchaseContract"`
 	HasPlateRegistration      bool       `json:"hasPlateRegistration"`
 	HasTransferRegistration   bool       `json:"hasTransferRegistration"`
+	Remarks                   string     `json:"remarks,omitempty"`
 	Status                    string     `json:"status"`
 }
 
@@ -119,6 +124,7 @@ func (v Vehicle) AuditSnapshot() VehicleAuditSnapshot {
 		HasPurchaseContract:       v.HasPurchaseContract,
 		HasPlateRegistration:      v.HasPlateRegistration,
 		HasTransferRegistration:   v.HasTransferRegistration,
+		Remarks:                   v.Remarks,
 		Status:                    v.Status,
 	}
 }

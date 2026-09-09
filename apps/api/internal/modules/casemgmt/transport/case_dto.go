@@ -73,10 +73,11 @@ func (d requiredDate) toTime() time.Time {
 	return time.Time(d)
 }
 
-// CreateCaseRequest 代表新增個案主檔請求。姓名與所屬據點為必要欄位；其餘欄位皆選填。
+// CreateCaseRequest 代表新增個案主檔請求。姓名、所屬據點與照護人員為必要欄位；其餘欄位皆選填。
 type CreateCaseRequest struct {
 	Name              string     `json:"name" binding:"required"`
 	SiteID            uuid.UUID  `json:"siteId" binding:"required"`
+	CaregiverID       uuid.UUID  `json:"caregiverId" binding:"required"`
 	NationalID        string     `json:"nationalId"`
 	HouseholdType     *string    `json:"householdType"`
 	Gender            *string    `json:"gender"`
@@ -96,9 +97,11 @@ type CreateCaseRequest struct {
 // ToService 轉換為 service 層的建立個案輸入。
 func (r CreateCaseRequest) ToService() app.CreateCaseRequest {
 	siteID := r.SiteID
+	caregiverID := r.CaregiverID
 	return app.CreateCaseRequest{
 		Name:              r.Name,
 		SiteID:            &siteID,
+		CaregiverID:       &caregiverID,
 		NationalID:        r.NationalID,
 		HouseholdType:     r.HouseholdType,
 		Gender:            r.Gender,
@@ -217,6 +220,8 @@ type CaseResponse struct {
 	SiteID                 *uuid.UUID `json:"siteId"`
 	SiteName               string     `json:"siteName"`
 	SiteNameRaw            *string    `json:"siteNameRaw"`
+	CaregiverID            *uuid.UUID `json:"caregiverId"`
+	CaregiverName          string     `json:"caregiverName"`
 	OutboundVehicleID      *uuid.UUID `json:"outboundVehicleId"`
 	OutboundVehicle        string     `json:"outboundVehicle"`
 	OutboundVehicleNameRaw *string    `json:"outboundVehicleNameRaw"`
@@ -251,6 +256,8 @@ func newCaseResponse(c app.Case) CaseResponse {
 		SiteID:                 c.SiteID,
 		SiteName:               c.SiteName,
 		SiteNameRaw:            c.SiteNameRaw,
+		CaregiverID:            c.CaregiverID,
+		CaregiverName:          c.CaregiverName,
 		OutboundVehicleID:      c.OutboundVehicleID,
 		OutboundVehicle:        c.OutboundVehicle,
 		OutboundVehicleNameRaw: c.OutboundVehicleNameRaw,

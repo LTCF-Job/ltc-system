@@ -112,9 +112,19 @@
           <el-table-column prop="email" label="電子信箱" min-width="180" show-overflow-tooltip class-name="email-col">
             <template #default="{ row }"><span class="driver-data">{{ row.email || '-' }}</span></template>
           </el-table-column>
-          <el-table-column label="目前指派車輛" min-width="180" class-name="assigned-vehicle-col">
+          <el-table-column label="目前指派車輛" min-width="220" class-name="assigned-vehicle-col">
             <template #default="{ row }">
-              <div v-if="getAssignedVehicleDisplay(row)" class="assigned-vehicle-info">
+              <InlineOptionPicker
+                v-if="authStore.hasPermission('masters_drivers', 'edit')"
+                :model-value="getAssignedVehicleId(row)"
+                :options="vehicleOptions"
+                clearable
+                placeholder="尚未指派"
+                :loading="assigningDriverId === row.id"
+                :disabled="assigningDriverId === row.id || row.status !== 'active'"
+                @change="(val) => handleInlineAssignVehicle(row, val as string)"
+              />
+              <div v-else-if="getAssignedVehicleDisplay(row)" class="assigned-vehicle-info">
                 <span class="vehicle-name">{{ getAssignedVehicleDisplay(row)?.name }}</span>
                 <span v-if="getAssignedVehicleDisplay(row)?.plateNo" class="vehicle-plate font-mono">
                   ({{ getAssignedVehicleDisplay(row)?.plateNo }})
@@ -160,20 +170,21 @@
           <el-table-column
             v-if="authStore.hasPermission('masters_drivers', 'edit') || authStore.hasPermission('masters_drivers', 'delete')"
             label="操作"
-            width="240"
+            width="140"
             fixed="right"
             align="center"
           >
             <template #default="{ row }">
               <TableRowActions>
-                <template v-if="authStore.hasPermission('masters_drivers', 'edit')">
-                  <el-button link type="primary" size="small" @click="openEditDialog(row)">
-                    編輯
-                  </el-button>
-                  <el-button link type="primary" size="small" @click="openAssignDialog(row)">
-                    指派車輛
-                  </el-button>
-                </template>
+                <el-button
+                  v-if="authStore.hasPermission('masters_drivers', 'edit')"
+                  link
+                  type="primary"
+                  size="small"
+                  @click="openEditDialog(row)"
+                >
+                  編輯
+                </el-button>
                 <el-button
                   v-if="authStore.hasPermission('masters_drivers', 'delete')"
                   link
@@ -289,46 +300,24 @@
         <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="editDialogVisible = false" />
       </template>
     </el-dialog>
-
-    <!-- 車輛期間指派對話框 -->
-    <el-dialog v-model="assignDialogVisible" title="指派駕駛車輛" width="min(480px, calc(100vw - 32px))">
-      <el-form ref="assignFormRef" :model="assignForm" :rules="assignRules" label-width="110px">
-        <el-form-item label="選擇車輛" prop="vehicleId">
-          <el-select v-model="assignForm.vehicleId" placeholder="請選擇車輛" style="width: 100%">
-            <el-option
-              v-for="v in allVehicles"
-              :key="v.id"
-              :label="`${v.displayName} (${v.plateNo})`"
-              :value="v.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <DialogFooter
-          confirm-text="確認指派"
-          :loading="submitting"
-          @confirm="handleAssignSubmit"
-          @cancel="assignDialogVisible = false"
-        />
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import DriverCreateDialog from '@/components/masters/DriverCreateDialog.vue'
+import InlineOptionPicker from '@/components/InlineOptionPicker.vue'
 import {
   listDrivers,
   updateDriver,
   deleteDriver,
   assignDriverVehicle,
+  unassignDriverVehicle,
   listAllVehicles
 } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
@@ -352,16 +341,7 @@ const editingId = ref<string | null>(null)
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
 
-const assignDialogVisible = ref(false)
-const selectedDriverId = ref<string | null>(null)
-const assignFormRef = ref<FormInstance>()
-const assignForm = reactive({
-  vehicleId: ''
-})
-
-const assignRules = {
-  vehicleId: [{ required: true, message: '請選擇車輛', trigger: 'change' }]
-}
+const assigningDriverId = ref<string | null>(null)
 
 const form = reactive<CreateDriverRequest & UpdateDriverRequest>({
   name: '',
@@ -443,7 +423,20 @@ function openCreateDialog() {
   createDialogVisible.value = true
 }
 
-function handleDriverCreated() {
+const vehicleOptions = computed(() =>
+  allVehicles.value.map((v) => ({ label: `${v.displayName} (${v.plateNo})`, value: v.id }))
+)
+
+async function reloadVehicles() {
+  try {
+    allVehicles.value = await listAllVehicles({ status: 'active' })
+  } catch {
+    // 忽略抓取車輛錯誤
+  }
+}
+
+async function handleDriverCreated() {
+  await reloadVehicles()
   executeFetch()
 }
 
@@ -467,30 +460,67 @@ function openEditDialog(row: any) {
 
 // 一位司機同一期間只會有一台車，取目前生效的那筆指派即可
 function getAssignedVehicleDisplay(row: any): { name: string; plateNo: string } | null {
-  if (!row.assignments || row.assignments.length === 0) return null
-  const assignment = row.assignments[row.assignments.length - 1]
-  const veh = allVehicles.value.find((v) => v.id === assignment.vehicleId)
+  if (row.assignments && row.assignments.length > 0) {
+    const assignment = row.assignments[row.assignments.length - 1]
+    const veh = allVehicles.value.find((v) => v.id === assignment.vehicleId)
 
-  const name = veh?.displayName || assignment.vehicleName || ''
-  const plateNo = veh?.plateNo || assignment.vehiclePlateNo || assignment.plateNo || ''
+    const name = veh?.displayName || assignment.vehicleName || ''
+    const plateNo = veh?.plateNo || assignment.vehiclePlateNo || assignment.plateNo || ''
 
-  if (name && plateNo) {
-    return { name, plateNo }
+    if (name && plateNo) {
+      return { name, plateNo }
+    }
+    if (name) {
+      return { name, plateNo: '' }
+    }
+    if (plateNo) {
+      return { name: plateNo, plateNo: '' }
+    }
+    return { name: '已指派車輛', plateNo: '' }
   }
-  if (name) {
-    return { name, plateNo: '' }
+
+  // 若 driver 物件無 assignments 欄位，回查車輛清單中掛載的司機
+  const matchedVeh = allVehicles.value.find((v) => v.drivers?.some((d) => d.id === row.id))
+  if (matchedVeh) {
+    return { name: matchedVeh.displayName, plateNo: matchedVeh.plateNo }
   }
-  if (plateNo) {
-    return { name: plateNo, plateNo: '' }
-  }
-  return { name: '已指派車輛', plateNo: '' }
+
+  return null
 }
 
-function openAssignDialog(row: any) {
-  selectedDriverId.value = row.id
-  const assignment = row.assignments?.[row.assignments.length - 1]
-  assignForm.vehicleId = assignment?.vehicleId || ''
-  assignDialogVisible.value = true
+function getAssignedVehicleId(row: any): string {
+  if (row.assignments && row.assignments.length > 0) {
+    const assignment = row.assignments[row.assignments.length - 1]
+    if (assignment?.vehicleId) {
+      return assignment.vehicleId
+    }
+  }
+  const matchedVeh = allVehicles.value.find((v) => v.drivers?.some((d) => d.id === row.id))
+  return matchedVeh?.id || ''
+}
+
+async function handleInlineAssignVehicle(row: any, newVehicleId: string) {
+  const currentVehicleId = getAssignedVehicleId(row)
+  if (newVehicleId === currentVehicleId) return
+
+  assigningDriverId.value = row.id
+  try {
+    if (newVehicleId) {
+      await assignDriverVehicle(row.id, { vehicleId: newVehicleId })
+      const targetVeh = allVehicles.value.find((v) => v.id === newVehicleId)
+      const vehName = targetVeh ? `${targetVeh.displayName} (${targetVeh.plateNo})` : '車輛'
+      ElMessage.success(`已將司機「${row.name}」指派至 ${vehName}`)
+    } else {
+      await unassignDriverVehicle(row.id)
+      ElMessage.success(`已解除司機「${row.name}」的車輛指派`)
+    }
+    await reloadVehicles()
+    executeFetch()
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  } finally {
+    assigningDriverId.value = null
+  }
 }
 
 async function handleSubmit() {
@@ -523,22 +553,6 @@ async function handleSubmit() {
   })
 }
 
-async function handleAssignSubmit() {
-  if (!assignFormRef.value || !selectedDriverId.value) return
-  await assignFormRef.value.validate(async (valid) => {
-    if (!valid) return
-    submitting.value = true
-    try {
-      await assignDriverVehicle(selectedDriverId.value!, assignForm)
-      ElMessage.success('車輛指派已更新')
-      assignDialogVisible.value = false
-      executeFetch()
-    } finally {
-      submitting.value = false
-    }
-  })
-}
-
 async function handleDeleteDriver(row: DriverDTO) {
   try {
     await ElMessageBox.confirm(
@@ -553,6 +567,7 @@ async function handleDeleteDriver(row: DriverDTO) {
     )
     await deleteDriver(row.id)
     ElMessage.success(`司機「${row.name}」已成功刪除`)
+    await reloadVehicles()
     executeFetch()
   } catch {
     // 使用者取消或 API 錯誤皆不在此重複顯示。
@@ -560,7 +575,7 @@ async function handleDeleteDriver(row: DriverDTO) {
 }
 
 onMounted(async () => {
-  allVehicles.value = await listAllVehicles({ status: 'active' })
+  await reloadVehicles()
 })
 
 executeFetch()
@@ -608,8 +623,7 @@ executeFetch()
 }
 
 :deep(.assigned-vehicle-col .cell) {
-  white-space: nowrap;
-  min-width: 180px;
+  min-width: 220px;
 }
 
 .assignment-empty {

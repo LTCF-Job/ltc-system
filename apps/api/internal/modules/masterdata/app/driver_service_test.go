@@ -213,6 +213,25 @@ func TestDriverService_Create(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("creates driver and assigns vehicle when vehicleID provided", func(t *testing.T) {
+		store := newFakeDriverStore()
+		svc := NewDriverService(store, cfg, nil)
+		vehicleID := uuid.New()
+
+		d, err := svc.Create(context.Background(), CreateDriverInput{
+			Name:       "指派司機",
+			NationalID: "A123456789",
+			VehicleID:  &vehicleID,
+		})
+
+		require.NoError(t, err)
+		assert.NotNil(t, d)
+		assert.Equal(t, "指派司機", d.Name)
+		assert.NotNil(t, store.lastAssign)
+		assert.Equal(t, d.ID, store.lastAssign.DriverID)
+		assert.Equal(t, vehicleID, store.lastAssign.VehicleID)
+	})
 }
 
 func strPtr(v string) *string { return &v }
@@ -369,6 +388,27 @@ func TestDriverService_AssignVehicleRejectsInvalidDateRange(t *testing.T) {
 
 	assert.ErrorIs(t, err, ErrInvalidAssignmentRange)
 	assert.Nil(t, store.lastAssign)
+}
+
+func TestDriverService_UnassignVehicle(t *testing.T) {
+	t.Run("成功解除車輛指派", func(t *testing.T) {
+		store := newFakeDriverStore()
+		svc := NewDriverService(store, testConfig(), nil)
+
+		driverID := uuid.New()
+		err := svc.UnassignVehicle(context.Background(), driverID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, driverID, store.closedAssignments)
+	})
+
+	t.Run("無效的司機ID拒絕解除", func(t *testing.T) {
+		store := newFakeDriverStore()
+		svc := NewDriverService(store, testConfig(), nil)
+
+		err := svc.UnassignVehicle(context.Background(), uuid.Nil)
+		assert.ErrorIs(t, err, ErrInvalidAssignmentRange)
+	})
 }
 
 func TestDriverService_Delete(t *testing.T) {

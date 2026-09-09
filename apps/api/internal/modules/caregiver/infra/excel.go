@@ -81,7 +81,7 @@ func (r ExcelAdapter) RenderCaregiverImportTemplate() ([]byte, error) {
 	sheetName := "照護人員匯入範本"
 	f.SetSheetName("Sheet1", sheetName)
 
-	headers := []string{"類型*", "據點", "姓名*", "聯絡方式", "備註"}
+	headers := []string{"類型*", "單位", "姓名*", "聯絡方式", "備註"}
 
 	headerStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Bold: true, Color: "FFFFFF", Size: 11, Family: "Microsoft JhengHei"},
@@ -100,7 +100,7 @@ func (r ExcelAdapter) RenderCaregiverImportTemplate() ([]byte, error) {
 	// 姓名的「例：」前綴是解析時略過示範列的依據，拿掉會讓未修改的範本被當成真實資料匯入。
 	sampleRows := [][]interface{}{
 		{"個管", "竹北日照中心", "例：陳小華", "0912-345-678", "熟悉輪椅移位協助"},
-		{"照專", "竹南日照據點", "例：王大明", "0987-654-321", ""},
+		{"照專", "竹南日照單位", "例：王大明", "0987-654-321", ""},
 	}
 	for rIdx, rData := range sampleRows {
 		rowNum := rIdx + 2
@@ -114,7 +114,7 @@ func (r ExcelAdapter) RenderCaregiverImportTemplate() ([]byte, error) {
 	// （GetRows 會把任何非空白列都當成候選資料列，寫在表格下方的純文字列會被視為缺漏必填欄位的錯誤列）。
 	_ = f.AddComment(sheetName, excelize.Comment{
 		Cell: "A1",
-		Text: "＊姓名與類型為必填，類型請填寫「個管」或「照專」；據點為自由輸入文字，非必填，不需對應既有據點主檔。",
+		Text: "＊姓名與類型為必填，類型請填寫「個管」或「照專」；單位為自由輸入文字，非必填，不需對應既有據點主檔。",
 	})
 
 	buf, err := f.WriteToBuffer()

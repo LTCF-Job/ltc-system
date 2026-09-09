@@ -201,6 +201,8 @@ export interface CaseDTO {
   siteId?: string;
   siteName?: string;
   siteNameRaw?: string;
+  caregiverId?: string;
+  caregiverName?: string;
   outboundVehicleId?: string;
   outboundVehicle?: string;
   outboundVehicleNameRaw?: string;
@@ -215,6 +217,7 @@ export interface CaseDTO {
 export interface CreateCaseRequest {
   name: string;
   siteId: string;
+  caregiverId: string;
   nationalId?: string;
   homeAddress?: string;
   region?: Region | null;
@@ -275,6 +278,7 @@ export interface SiteDTO {
   /** 使用者自由填寫的區域文字，不再參照地區主檔。 */
   region?: string;
   address?: string;
+  remarks?: string;
   status: "active" | "inactive";
   createdAt: string;
 }
@@ -283,6 +287,7 @@ export interface CreateSiteRequest {
   name: string;
   region?: string;
   address?: string;
+  remarks?: string;
   status?: "active" | "inactive";
 }
 
@@ -308,6 +313,7 @@ export interface VehicleDTO {
   hasPurchaseContract: boolean;
   hasPlateRegistration: boolean;
   hasTransferRegistration: boolean;
+  remarks?: string;
   status: "active" | "inactive";
   createdAt: string;
   drivers?: VehicleDriverDTO[];
@@ -336,6 +342,7 @@ export interface CreateVehicleRequest {
   hasPurchaseContract?: boolean;
   hasPlateRegistration?: boolean;
   hasTransferRegistration?: boolean;
+  remarks?: string | null;
   status?: "active" | "inactive";
 }
 
@@ -382,6 +389,7 @@ export interface CreateDriverRequest {
   remarks?: string;
   licenseClass?: DriverLicenseClass | null;
   licenseExpiryDate?: string | null;
+  vehicleId?: string | null;
 }
 
 export interface UpdateDriverRequest {

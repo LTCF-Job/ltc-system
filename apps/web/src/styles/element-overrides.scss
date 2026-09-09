@@ -829,6 +829,11 @@ select {
   overflow: hidden;
 }
 
+// InlineOptionPicker（行內下拉選單）彈出面板：卡片樣式沿用上面 .el-popper 規則，這裡只收斂 padding
+.inline-picker-popper.el-popover {
+  padding: 8px;
+}
+
 .el-dropdown-menu__item {
   font-size: var(--app-font-sm);
 

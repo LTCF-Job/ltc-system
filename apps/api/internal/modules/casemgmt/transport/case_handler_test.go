@@ -165,6 +165,11 @@ func TestCaseHandler_Get_ResponseIsCamelCase(t *testing.T) {
 	assert.True(t, hasName, "response must expose camelCase \"name\"")
 	assert.False(t, hasPascalName, "response must not expose PascalCase \"Name\"")
 
+	_, hasCaregiverID := envelope.Data["caregiverId"]
+	_, hasPascalCaregiverID := envelope.Data["CaregiverID"]
+	assert.True(t, hasCaregiverID, "response must expose camelCase \"caregiverId\"")
+	assert.False(t, hasPascalCaregiverID, "response must not expose PascalCase \"CaregiverID\"")
+
 	_, hasCipher := envelope.Data["nationalIdCipher"]
 	_, hasHMAC := envelope.Data["nationalIdHmac"]
 	assert.False(t, hasCipher, "response must not expose nationalIdCipher")

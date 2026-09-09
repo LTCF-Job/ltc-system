@@ -65,6 +65,23 @@
         <el-checkbox v-model="form.hasProfessionalLicense">職業駕照</el-checkbox>
         <el-checkbox v-model="form.hasTransferCert">異動登記書</el-checkbox>
       </el-form-item>
+      <el-form-item label="指派車輛" prop="vehicleId">
+        <el-select
+          v-model="form.vehicleId"
+          placeholder="請選擇指派車輛（選填）"
+          clearable
+          filterable
+          :loading="loadingVehicles"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="v in vehicles"
+            :key="v.id"
+            :label="`${v.displayName} (${v.plateNo})`"
+            :value="v.id"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="備註" prop="remarks">
         <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
       </el-form-item>
@@ -79,9 +96,9 @@
 import { reactive, ref, watch } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
-import { createDriver } from '@/api/masters'
+import { createDriver, listAllVehicles } from '@/api/masters'
 import { DRIVER_LICENSE_CLASS_LABELS } from '@/types/domain'
-import type { CreateDriverRequest, DriverDTO } from '@/types/api'
+import type { CreateDriverRequest, DriverDTO, VehicleDTO } from '@/types/api'
 import { nationalIdRules } from '@/utils/driverForm'
 
 // 跟司機管理頁「新增司機」共用同一份欄位與 API，避免兩邊各自維護造成落差；
@@ -98,6 +115,8 @@ const emit = defineEmits<{
 
 const formRef = ref<FormInstance>()
 const saving = ref(false)
+const vehicles = ref<VehicleDTO[]>([])
+const loadingVehicles = ref(false)
 const form = reactive<CreateDriverRequest>({
   name: '',
   nationalId: '',
@@ -109,12 +128,24 @@ const form = reactive<CreateDriverRequest>({
   hasTransferCert: false,
   remarks: '',
   licenseClass: null,
-  licenseExpiryDate: null
+  licenseExpiryDate: null,
+  vehicleId: null
 })
 
 const rules = {
   name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }],
   nationalId: nationalIdRules(true)
+}
+
+async function loadVehicles() {
+  loadingVehicles.value = true
+  try {
+    vehicles.value = await listAllVehicles({ status: 'active' })
+  } catch {
+    // 忽略載入車輛失敗
+  } finally {
+    loadingVehicles.value = false
+  }
 }
 
 watch(
@@ -132,7 +163,9 @@ watch(
     form.remarks = ''
     form.licenseClass = null
     form.licenseExpiryDate = null
+    form.vehicleId = null
     formRef.value?.clearValidate()
+    loadVehicles()
   }
 )
 
@@ -142,7 +175,11 @@ async function handleConfirm() {
     if (!valid) return
     saving.value = true
     try {
-      const created = await createDriver(form)
+      const payload: CreateDriverRequest = {
+        ...form,
+        vehicleId: form.vehicleId || undefined
+      }
+      const created = await createDriver(payload)
       ElMessage.success(`司機「${created.name}」建立成功`)
       emit('update:modelValue', false)
       emit('created', created)

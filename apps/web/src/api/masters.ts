@@ -137,6 +137,11 @@ export async function assignDriverVehicle(driverId: string, data: {
 	unwrapData<unknown>(res)
 }
 
+export async function unassignDriverVehicle(driverId: string): Promise<void> {
+	const res = await apiClient.delete(`/drivers/${driverId}/assignments`)
+	unwrapData<unknown>(res)
+}
+
 // 整批設定車輛司機；被指派到本車的司機，其他車上尚未結束的指派會一併收掉
 export async function setVehicleDrivers(vehicleId: string, data: {
   driverIds: string[]

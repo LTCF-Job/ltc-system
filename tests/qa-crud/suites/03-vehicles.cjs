@@ -18,7 +18,7 @@ exports.run = async ({ page, net, record, L }) => {
   await L.pickDate(page, '強制責任險', '2027-01-31')
   await L.pickDate(page, '乘客責任險', '2027-02-28')
   await L.pickDate(page, '第三人責任險', '2027-03-31')
-  await L.pickDate(page, '前次檢驗日期', '2026-06-15')
+  await L.pickDate(page, '驗車日期', '2026-06-15')
   await L.radio(page, '符合輪椅載運規定', '否')
   await L.check(page, '證件資料', '行照')
   await L.check(page, '證件資料', '領牌登記書')

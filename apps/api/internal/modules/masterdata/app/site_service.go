@@ -33,6 +33,7 @@ type CreateSiteInput struct {
 	Address string
 	Region  string
 	Status  string
+	Remarks string
 }
 
 // Create 新增據點主檔。
@@ -57,6 +58,7 @@ func (s *SiteService) Create(ctx context.Context, in CreateSiteInput, actors ...
 		Address: address,
 		Region:  region,
 		Status:  status,
+		Remarks: strings.TrimSpace(in.Remarks),
 	}
 	if err := s.store.Create(ctx, &site); err != nil {
 		return nil, err
@@ -71,6 +73,7 @@ type UpdateSiteInput struct {
 	Address string
 	Region  string
 	Status  string
+	Remarks string
 }
 
 // Update 更新據點主檔。
@@ -107,6 +110,7 @@ func (s *SiteService) Update(ctx context.Context, id uuid.UUID, in UpdateSiteInp
 		Address: address,
 		Region:  region,
 		Status:  status,
+		Remarks: strings.TrimSpace(in.Remarks),
 	}
 	if err := s.store.Update(ctx, &site); err != nil {
 		return nil, err

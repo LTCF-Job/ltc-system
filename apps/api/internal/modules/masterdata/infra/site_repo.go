@@ -20,6 +20,7 @@ type siteRow struct {
 	Address   string
 	Region    string
 	Status    string
+	Remarks   *string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -31,12 +32,13 @@ func (r siteRow) toApp() app.Site {
 		Address:   r.Address,
 		Region:    r.Region,
 		Status:    r.Status,
+		Remarks:   derefString(r.Remarks),
 		CreatedAt: r.CreatedAt,
 		UpdatedAt: r.UpdatedAt,
 	}
 }
 
-const siteColumns = `id, name, COALESCE(address, ''), COALESCE(region, ''), status, created_at, updated_at`
+const siteColumns = `id, name, COALESCE(address, ''), COALESCE(region, ''), status, remarks, created_at, updated_at`
 
 // SiteRepository 提供 sites 資料表之存取操作。
 type SiteRepository struct {
@@ -69,7 +71,7 @@ func (r *SiteRepository) List(ctx context.Context, region, q, status string, pag
 	var sites []app.Site
 	for rows.Next() {
 		var s siteRow
-		if err := rows.Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.Status, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.Status, &s.Remarks, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, 0, err
 		}
 		sites = append(sites, s.toApp())
@@ -105,7 +107,7 @@ func (r *SiteRepository) GetByName(ctx context.Context, name string) (*app.Site,
 func (r *SiteRepository) getOne(ctx context.Context, query string, arg interface{}) (*app.Site, error) {
 	var s siteRow
 	err := r.db.QueryRow(ctx, query, arg).
-		Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+		Scan(&s.ID, &s.Name, &s.Address, &s.Region, &s.Status, &s.Remarks, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, app.ErrSiteNotFound
@@ -119,14 +121,14 @@ func (r *SiteRepository) getOne(ctx context.Context, query string, arg interface
 // Create 新增據點。
 func (r *SiteRepository) Create(ctx context.Context, s *app.Site) error {
 	query := `
-		INSERT INTO sites (id, name, address, region, status)
-		VALUES ($1, $2, $3, NULLIF($4, ''), $5)
+		INSERT INTO sites (id, name, address, region, status, remarks)
+		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6)
 		RETURNING created_at, updated_at
 	`
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
 	}
-	err := r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.Status).
+	err := r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.Status, nullableText(s.Remarks)).
 		Scan(&s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -142,11 +144,11 @@ func (r *SiteRepository) Create(ctx context.Context, s *app.Site) error {
 func (r *SiteRepository) Update(ctx context.Context, s *app.Site) error {
 	query := `
 		UPDATE sites
-		SET name = $2, address = $3, region = NULLIF($4, ''), status = $5, updated_at = now()
+		SET name = $2, address = $3, region = NULLIF($4, ''), status = $5, remarks = $6, updated_at = now()
 		WHERE id = $1
 		RETURNING updated_at
 	`
-	err := r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.Status).
+	err := r.db.QueryRow(ctx, query, s.ID, s.Name, s.Address, s.Region, s.Status, nullableText(s.Remarks)).
 		Scan(&s.UpdatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError

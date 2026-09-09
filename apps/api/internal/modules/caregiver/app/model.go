@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Caregiver 代表一位照護人員。SiteName 是自由輸入的據點文字註記，非必填，不關聯
+// Caregiver 代表一位照護人員。SiteName 是自由輸入的單位文字註記，非必填，不關聯
 // 據點主檔。
 type Caregiver struct {
 	ID        uuid.UUID

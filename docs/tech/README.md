@@ -10,6 +10,7 @@
 
 | 規範文件 | 內容與核心守則 |
 |---|---|
+| [product-spec-business-logic.md](product-spec-business-logic.md) | **產品規格、實體模型與業務邏輯手冊**：完整對照實體關係（Cardinality、主外鍵映射）、全系統模組功能規格、業務規則與防呆核檢機制。 |
 | [system-logic-specification.md](system-logic-specification.md) | **全系統 7 大核心業務與工程規範**：主檔 CRUD 與狀態管理、匯出前置檢核與非阻擋原則、匯入比照檢核、待維護全站隔離與生命週期、使用者友善錯誤代碼、前後端同步規格、前端 E2E 測試規範。 |
 | [backend-business-rules.md](backend-business-rules.md) | **後端核心業務演算與驗證規則**：混車合併演算法、司機車輛歸屬、應搭日曆計算、四趟展開、姓名比對評分、身分證驗證與加密、申報表排序規則、申報表留白欄位。 |
 | [api-design-specification.md](api-design-specification.md) | **API 設計與契約規範**：Canonical Resource ID、DTO 隔離、統一 Response Envelope、404 vs 200 狀態碼語意、前後端整合驗證標準。 |

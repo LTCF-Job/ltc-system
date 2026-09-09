@@ -16,7 +16,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
 | GET | `/cases` | viewer, staff, admin | 個案清單（回傳遮罩身分證）。**待維護個案預設不回傳**：`unresolvedLink=true` 只取待維護，`includePending=true` 取全部 |
-| POST | `/cases` | staff, admin | 新增個案；`siteId`（所屬據點）為必填 |
+| POST | `/cases` | staff, admin | 新增個案；`siteId`（所屬據點）與 `caregiverId`（照護人員）為必填 |
 | GET | `/cases/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
 | GET | `/cases/:id` | viewer, staff, admin | |
 | PATCH | `/cases/:id` | staff, admin | |
@@ -38,8 +38,8 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/sites` | viewer, staff, admin | 支援 `q`、`region`、`status`（`active`／`inactive`）篩選；`region` 為使用者自由填寫的文字，以模糊比對 |
-| POST | `/sites` | staff, admin | 僅 `name` 為必填，`region`（自由文字）與 `address` 為選填 |
+| GET | `/sites` | viewer, staff, admin | 支援 `q`、`region`、`status`（`active`／`inactive`）篩選；`region` 為使用者自由填寫的文字，以模糊比對；包含 `remarks` 備註欄位 |
+| POST | `/sites` | staff, admin | 僅 `name` 為必填，`region`（自由文字）、`address` 與 `remarks` 為選填 |
 | PATCH | `/sites/:id` | staff, admin | 整筆覆寫，必填與選填欄位同 POST |
 | DELETE | `/sites/:id` | admin | 刪除據點 |
 
@@ -47,8 +47,8 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/vehicles` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）篩選（`siteId`／`region` 篩選與唯讀 `region` 欄位已隨車輛與據點主檔解耦移除）；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位）、車輛自己的自由文字 `siteName`（不關聯據點主檔），以及四項證件註記 `hasVehicleLicense`（行照）、`hasPurchaseContract`（汽車買賣合約書）、`hasPlateRegistration`（領牌登記書）、`hasTransferRegistration`（異動登記書） |
-| POST | `/vehicles` | staff, admin | `plateNo` 與 `displayName`（車別）為必填，`siteName`（自由文字，不驗證關聯）與其餘車籍欄位皆為選填（支援 `null` 與空值）；四項證件註記未提供時一律為 `false`；`status` 非 `active`／`inactive` 一律預設 `active`；車號或車別重複時回 409 並帶 `details` |
+| GET | `/vehicles` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）篩選（`siteId`／`region` 篩選與唯讀 `region` 欄位已隨車輛與據點主檔解耦移除）；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位）、車輛自己的自由文字 `siteName`（不關聯據點主檔）、`remarks`（備註），以及四項證件註記 `hasVehicleLicense`（行照）、`hasPurchaseContract`（汽車買賣合約書）、`hasPlateRegistration`（領牌登記書）、`hasTransferRegistration`（異動登記書） |
+| POST | `/vehicles` | staff, admin | `plateNo` 與 `displayName`（車別）為必填，`siteName`（自由文字，不驗證關聯）、`remarks` 與其餘車籍欄位皆為選填（支援 `null` 與空值）；四項證件註記未提供時一律為 `false`；`status` 非 `active`／`inactive` 一律預設 `active`；車號或車別重複時回 409 並帶 `details` |
 | PATCH | `/vehicles/:id` | staff, admin | 整筆覆寫，必填欄位同 POST；車號或車別重複時回 409 並帶 `details` |
 | DELETE | `/vehicles/:id` | admin | 軟刪除（僅標記 `deleted_at`，不影響 `status` 啟用/停用狀態）；仍有生效中司機指派或排班趟次綁定時回 409（`CodeResourceInUse`） |
 | PUT | `/vehicles/:id/drivers` | staff, admin | 整批設定本車司機：`{ driverIds: string[], effectiveFrom?: date }`；`driverIds` 為空代表清空 |
@@ -58,7 +58,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
 | GET | `/drivers` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）篩選；回傳欄位含 `gender`、`birthDate`、`hasProfessionalLicense`、`employmentDate`、`hasTransferCert`、`remarks`、`licenseClass`、`licenseExpiryDate` |
-| POST | `/drivers` | staff, admin | `name` 與 `nationalId` 為必填，擴充欄位（`gender`, `birthDate`, `hasProfessionalLicense`, `employmentDate`, `hasTransferCert`, `remarks`, `licenseClass`, `licenseExpiryDate`）皆為選填，新增一律為 `active` |
+| POST | `/drivers` | staff, admin | `name` 與 `nationalId` 為必填，擴充欄位（`gender`, `birthDate`, `hasProfessionalLicense`, `employmentDate`, `hasTransferCert`, `remarks`, `licenseClass`, `licenseExpiryDate`）與 `vehicleId`（指派車輛 ID）皆為選填，提供 `vehicleId` 時於同一交易內建立指派紀錄，新增一律為 `active` |
 | PATCH | `/drivers/:id` | staff, admin | 欄位未提供代表不變更；日期欄位明確給 `null` 才會清空；`status` 非 `active`／`inactive` 時保留原值不變更。可帶 `nationalId` 變更身分證：會重新驗證檢查碼並同步重算密文、HMAC 索引與遮罩值，檢查碼錯誤回 400、與其他司機重複回 409，皆帶 `details` |
 | DELETE | `/drivers/:id` | admin | 軟刪除（僅標記 `deleted_at`，不影響 `status` 啟用/停用狀態），同交易內收斂生效中的司機指派區間 |
 | POST | `/drivers/:id/reveal` | staff, admin | 明文顯示司機個資 |
@@ -201,11 +201,11 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）篩選。**待維護資料（姓名或類型未填寫）預設不回傳**：`pending=true` 只取待維護，`includePending=true` 取全部 |
 | POST | `/caregivers` | staff, admin | 新增照護人員，姓名與類型（`case_manager`＝個管／`specialist`＝照專）皆為必填；`status` 非 `active`／`inactive` 一律預設 `active` |
 | GET | `/caregivers/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
-| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx）；姓名或類型缺漏（或類型不是個管／照專，向後相容專護）改以空白建立並列入待維護，據點（`siteName`）為自由文字、不比對據點主檔，缺漏直接留白、不列入待維護，聯絡方式與備註缺漏不再產生警告 |
+| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx，表頭欄位為：類型*、單位、姓名*、聯絡方式、備註；向前相容舊表頭「據點」）；姓名或類型缺漏（或類型不是個管／照專，向後相容專護）改以空白建立並列入待維護，單位（`siteName`）為自由文字、不比對據點主檔，缺漏直接留白、不列入待維護，聯絡方式與備註缺漏不再產生警告 |
 | PATCH | `/caregivers/:id` | staff, admin | |
 | DELETE | `/caregivers/:id` | admin | 刪除照護人員；待維護清單的「忽略此筆」也走這支 |
 
-照護人員不再關聯據點主檔，`site_id`／`site_name_raw` 已改為自由文字 `site_name`，原本用來把待關聯照護人員連結到既有據點的 `PUT /caregivers/:id/site` 端點與前端「新增單位快速建立」對話框已一併移除。
+照護人員所屬「單位」（欄位名稱仍為 `site_name`，UI 與範本已由「據點」改為「單位」）為自由文字，不關聯據點主檔。個案主檔則新增關聯 `caregiver_id`（外鍵關聯照護人員主檔），新增個案時必須選擇照護人員。
 
 ## 角色身分管理 `roleH`
 

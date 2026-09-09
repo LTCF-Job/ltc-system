@@ -71,6 +71,7 @@ func (h *DriverHandler) Create(c *gin.Context) {
 		EmploymentDate:         req.EmploymentDate.toTimePtr(),
 		HasTransferCert:        hasTrans,
 		Remarks:                req.Remarks,
+		VehicleID:              req.VehicleID,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
 		ActorRole: auth.GetActorRole(c),
@@ -256,4 +257,29 @@ func (h *DriverHandler) AssignVehicle(c *gin.Context) {
 	}
 
 	httpx.RespondSuccess(c, http.StatusCreated, newDriverAssignmentResponse(*assignment), nil)
+}
+
+// UnassignVehicle 解除司機車輛指派。
+func (h *DriverHandler) UnassignVehicle(c *gin.Context) {
+	driverID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		respondInvalidID(c, "無效的司機 ID")
+		return
+	}
+
+	if err := h.svc.UnassignVehicle(c.Request.Context(), driverID, app.ActorContext{
+		ActorID:   auth.GetActorID(c),
+		ActorRole: auth.GetActorRole(c),
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}); err != nil {
+		if errors.Is(err, app.ErrDriverNotFound) {
+			respondNotFound(c, "查無司機資料")
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }

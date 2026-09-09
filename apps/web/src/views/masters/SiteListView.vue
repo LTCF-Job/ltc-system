@@ -70,6 +70,11 @@
               <span>{{ row.address || '-' }}</span>
             </template>
           </el-table-column>
+          <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.remarks || '-' }}</span>
+            </template>
+          </el-table-column>
 
           <el-table-column prop="status" label="狀態" width="130" align="center">
             <template #default="{ row }">
@@ -152,6 +157,9 @@
         <el-form-item label="據點地址" prop="address">
           <el-input v-model="form.address" placeholder="請輸入完整地址（選填）" clearable />
         </el-form-item>
+        <el-form-item label="備註" prop="remarks">
+          <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
+        </el-form-item>
         <el-form-item label="狀態" prop="status">
           <el-radio-group v-model="form.status" class="status-radio-group">
             <el-radio-button value="active">
@@ -203,6 +211,7 @@ const form = reactive<CreateSiteRequest>({
   name: '',
   region: '',
   address: '',
+  remarks: '',
   status: 'active'
 })
 
@@ -214,6 +223,7 @@ async function handleToggleStatus(row: SiteDTO, newActive: boolean) {
       name: row.name,
       region: row.region,
       address: row.address,
+      remarks: row.remarks || '',
       status: newStatus
     })
     row.status = newStatus
@@ -262,6 +272,7 @@ function openCreateDialog() {
   form.name = ''
   form.region = ''
   form.address = ''
+  form.remarks = ''
   form.status = 'active'
   dialogVisible.value = true
 }
@@ -271,6 +282,7 @@ function openEditDialog(row: any) {
   form.name = row.name
   form.region = row.region || ''
   form.address = row.address || ''
+  form.remarks = row.remarks || ''
   form.status = row.status || 'active'
   dialogVisible.value = true
 }

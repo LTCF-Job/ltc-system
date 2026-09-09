@@ -93,7 +93,7 @@ apiClient.interceptors.response.use(
       compulsoryInsuranceExpiry: '強制責任險',
       passengerInsuranceExpiry: '乘客責任險',
       thirdPartyInsuranceExpiry: '第三人責任險',
-      lastInspectionDate: '前次檢驗日期',
+      lastInspectionDate: '驗車日期',
       wheelchairAccessible: '符合輪椅載運規定',
       status: '狀態',
       name: '姓名',

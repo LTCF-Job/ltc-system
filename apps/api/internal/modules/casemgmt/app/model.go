@@ -34,6 +34,8 @@ type Case struct {
 	SiteID                 *uuid.UUID
 	SiteName               string
 	SiteNameRaw            *string
+	CaregiverID            *uuid.UUID
+	CaregiverName          string
 	OutboundVehicleID      *uuid.UUID
 	OutboundVehicle        string
 	OutboundVehicleNameRaw *string

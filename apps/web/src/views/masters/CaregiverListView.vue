@@ -4,7 +4,7 @@
       <el-tab-pane label="照護人員清單" name="list">
         <DataTablePage
           title="照護人員管理"
-          :max-width="1070"
+          :max-width="1280"
           v-model:page="page"
           v-model:pageSize="pageSize"
           :total="total"
@@ -36,15 +36,6 @@
           </template>
 
           <template #actions>
-            <!-- 下載範本實際呼叫 GET /caregivers/template，後端僅要求 masters_caregivers:view -->
-            <el-button v-if="authStore.hasPermission('masters_caregivers', 'view')" plain @click="handleDownloadTemplate">
-              下載匯入範本
-            </el-button>
-
-            <el-button v-if="authStore.hasPermission('masters_caregivers', 'edit')" plain @click="openImportDialog">
-              批次匯入照護人員
-            </el-button>
-
             <el-button v-if="authStore.hasPermission('masters_caregivers', 'edit')" type="primary" @click="openCreateDialog">
               <el-icon><Plus /></el-icon>
               新增照護人員
@@ -60,9 +51,20 @@
                   </span>
                 </template>
               </el-table-column>
-              <el-table-column prop="siteName" label="據點" min-width="220" class-name="site-col">
+              <el-table-column prop="siteName" label="單位" min-width="220" class-name="site-col">
                 <template #default="{ row }">
-                  <span v-if="row.siteName">{{ row.siteName }}</span>
+                  <InlineOptionPicker
+                    v-if="authStore.hasPermission('masters_caregivers', 'edit')"
+                    :model-value="row.siteName || ''"
+                    :options="siteOptionItems"
+                    allow-create
+                    clearable
+                    placeholder="未指定"
+                    :loading="updatingCaregiverId === row.id"
+                    :disabled="updatingCaregiverId === row.id || row.status !== 'active'"
+                    @change="(val) => handleInlineUpdateSiteName(row as CaregiverDTO, val as string)"
+                  />
+                  <span v-else-if="row.siteName">{{ row.siteName }}</span>
                   <span v-else class="empty-value">-</span>
                 </template>
               </el-table-column>
@@ -186,7 +188,7 @@
     <!-- 批次匯入對話框 -->
     <ImportPreviewDialog
       ref="importDialogRef"
-      title="批次匯入照護人員 (類型/據點/姓名/聯絡方式/備註.xlsx)"
+      title="批次匯入照護人員 (類型/單位/姓名/聯絡方式/備註.xlsx)"
       :on-dry-run="handleDryRun"
       :on-commit="handleCommitImport"
       :on-download-template="handleDownloadTemplate"
@@ -194,7 +196,7 @@
     >
       <template #columns="{ checkedDuplicateRows, toggleDuplicateRow, getRowId }">
         <el-table-column prop="type" label="類型" width="80" />
-        <el-table-column prop="siteName" label="據點" width="140" />
+        <el-table-column prop="siteName" label="單位" width="140" />
         <el-table-column prop="name" label="姓名" width="110" />
         <el-table-column prop="contact" label="聯絡方式" width="140" />
         <el-table-column prop="notes" label="備註" min-width="160" show-overflow-tooltip />
@@ -232,8 +234,23 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="據點" prop="siteName">
-          <el-input v-model="form.siteName" placeholder="請輸入所屬據點（選填）" />
+        <el-form-item label="單位" prop="siteName">
+          <el-select
+            v-model="form.siteName"
+            placeholder="請選擇或輸入所屬單位（選填）"
+            clearable
+            filterable
+            allow-create
+            default-first-option
+            style="width: 100%"
+          >
+            <el-option
+              v-for="site in siteOptions"
+              :key="site"
+              :label="site"
+              :value="site"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="姓名" prop="name">
           <el-input v-model="form.name" placeholder="請輸入姓名" />
@@ -274,13 +291,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
+import InlineOptionPicker from '@/components/InlineOptionPicker.vue'
 import {
   listCaregivers,
   createCaregiver,
@@ -291,15 +309,18 @@ import {
   commitImportCaregivers,
   listAllCaregivers
 } from '@/api/caregivers'
+import { listAllSites } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
 import { CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
-import type { CaregiverDTO } from '@/types/api'
+import type { CaregiverDTO, SiteDTO } from '@/types/api'
 
 const authStore = useAuthStore()
 const activeTab = ref<'list' | 'pending'>('list')
 const caregivers = ref<CaregiverDTO[]>([])
+const allSites = ref<SiteDTO[]>([])
+const updatingCaregiverId = ref<string | null>(null)
 const importDialogRef = ref<InstanceType<typeof ImportPreviewDialog>>()
 
 const {
@@ -447,6 +468,44 @@ async function handleToggleStatus(row: CaregiverDTO, newActive: boolean) {
   }
 }
 
+async function loadSites() {
+  try {
+    allSites.value = await listAllSites({ status: 'active' })
+  } catch {
+    allSites.value = []
+  }
+}
+
+const siteOptions = computed(() => {
+  const set = new Set<string>()
+  for (const s of allSites.value) {
+    if (s.name) set.add(s.name)
+  }
+  for (const c of caregivers.value) {
+    if (c.siteName) set.add(c.siteName)
+  }
+  return Array.from(set)
+})
+
+const siteOptionItems = computed(() => siteOptions.value.map((site) => ({ label: site, value: site })))
+
+async function handleInlineUpdateSiteName(row: CaregiverDTO, newSiteName: string) {
+  const currentSiteName = row.siteName || ''
+  const trimmed = newSiteName ? newSiteName.trim() : ''
+  if (trimmed === currentSiteName) return
+
+  updatingCaregiverId.value = row.id
+  try {
+    await updateCaregiver(row.id, { siteName: trimmed })
+    row.siteName = trimmed
+    ElMessage.success(`已將「${row.name}」單位更新為 ${trimmed ? `「${trimmed}」` : '（未填）'}`)
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  } finally {
+    updatingCaregiverId.value = null
+  }
+}
+
 async function handleSave() {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
@@ -545,6 +604,7 @@ async function handleTabChange(name: string | number) {
   }
 }
 
+loadSites()
 executeFetch()
 </script>
 
@@ -599,10 +659,9 @@ executeFetch()
   min-width: 120px;
 }
 
-/* 主表格「據點／聯絡方式／備註」欄同樣沒有 class-name 鎖 min-width 下限，
+/* 主表格「單位／聯絡方式／備註」欄同樣沒有 class-name 鎖 min-width 下限，
    會被 table-layout="auto" 壓窄或被其他欄擠壓（見待維護子表格同一段說明）。 */
 :deep(.site-col .cell) {
-  white-space: nowrap;
   min-width: 220px;
 }
 

@@ -74,10 +74,11 @@ type CreateDriverInput struct {
 	EmploymentDate         *time.Time
 	HasTransferCert        bool
 	Remarks                *string
+	VehicleID              *uuid.UUID
 }
 
-// Create 新增司機：驗證身分證檢查碼，寫入加密密文與 HMAC 索引。actors 是可選的
-// 稽核來源資訊，保留 application 測試與離線呼叫的相容性。
+// Create 新增司機：驗證身分證檢查碼，寫入加密密文與 HMAC 索引。若有指定指派車輛，
+// 於同一交易中建立指派紀錄。actors 是可選的稽核來源資訊。
 func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors ...ActorContext) (*Driver, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" {
@@ -119,10 +120,40 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors
 		Remarks:                in.Remarks,
 	}
 
-	if err := s.store.Create(ctx, &d); err != nil {
+	var assignment *DriverAssignment
+	if in.VehicleID != nil && *in.VehicleID != uuid.Nil {
+		assignment = &DriverAssignment{
+			DriverID:      d.ID,
+			VehicleID:     *in.VehicleID,
+			EffectiveFrom: clock.Today(),
+		}
+	}
+
+	createFn := func(txCtx context.Context) error {
+		if err := s.store.Create(txCtx, &d); err != nil {
+			return err
+		}
+		if assignment != nil {
+			if err := s.store.AssignVehicle(txCtx, assignment); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if s.txRunner != nil {
+		err = s.txRunner.WithTx(ctx, createFn)
+	} else {
+		err = createFn(ctx)
+	}
+	if err != nil {
 		return nil, err
 	}
+
 	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "create", "drivers", d.ID, nil, d.AuditSnapshot())
+	if assignment != nil {
+		writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "assign_vehicle", "driver_assignments", assignment.ID, nil, assignment.AuditSnapshot())
+	}
 	return &d, nil
 }
 
@@ -299,6 +330,27 @@ func (s *DriverService) AssignVehicle(ctx context.Context, driverID uuid.UUID, i
 	}
 	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "assign_vehicle", "driver_assignments", assignment.ID, nil, assignment.AuditSnapshot())
 	return assignment, nil
+}
+
+// UnassignVehicle 解除司機目前生效中之車輛指派。
+func (s *DriverService) UnassignVehicle(ctx context.Context, driverID uuid.UUID, actors ...ActorContext) error {
+	if driverID == uuid.Nil {
+		return ErrInvalidAssignmentRange
+	}
+	unassignFn := func(txCtx context.Context) error {
+		return s.store.CloseActiveAssignments(txCtx, driverID)
+	}
+	var err error
+	if s.txRunner != nil {
+		err = s.txRunner.WithTx(ctx, unassignFn)
+	} else {
+		err = unassignFn(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	writeAuditBestEffort(ctx, s.auditRepo, actorOrEmpty(actors), "unassign_vehicle", "driver_assignments", driverID, nil, map[string]interface{}{"driverId": driverID})
+	return nil
 }
 
 // Delete 軟刪除司機並收斂其生效中車輛指派。

@@ -6,21 +6,9 @@
 --
 -- 背景：地區管理功能下架後，區域不再是受控值域；各資料表自行保存文字即可。
 
--- 1. 先把 sites.region 由 regions.code 回填成顯示名稱，否則畫面會顯示 hsinchu 這類代碼。
---    regions 若已不存在（重複套用或既有環境已手動清理）就跳過。
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'regions')
-       AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'regions' AND column_name = 'code')
-    THEN
-        UPDATE sites s SET region = r.name
-        FROM regions r
-        WHERE s.region = r.code AND r.name IS NOT NULL AND r.name <> '';
-    END IF;
-END $$;
-
--- 2. 移除五張業務表殘留的 region 外鍵。約束名以 000043 建立的命名為準，
---    但仍以查 pg_constraint 的方式移除，避免舊環境改過名而對不上。
+-- 1. 移除五張業務表殘留的 region 外鍵。必須先移除外鍵約束，
+--    否則後續將 sites.region 由 code 回填成中文名稱（regions.name）時，會因中文名稱不存在於 regions(code)
+--    而觸發 sites_region_fkey 外鍵約束違反錯誤（SQLSTATE 23503）。
 DO $$
 DECLARE r record;
 BEGIN
@@ -33,6 +21,19 @@ BEGIN
     LOOP
         EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.tbl, r.conname);
     END LOOP;
+END $$;
+
+-- 2. 把 sites.region 由 regions.code 回填成顯示名稱，否則畫面會顯示 hsinchu 這類代碼。
+--    regions 若已不存在（重複套用或既有環境已手動清理）就跳過。
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'regions')
+       AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'regions' AND column_name = 'code')
+    THEN
+        UPDATE sites s SET region = r.name
+        FROM regions r
+        WHERE s.region = r.code AND r.name IS NOT NULL AND r.name <> '';
+    END IF;
 END $$;
 
 -- 3. 移除不再使用的 region 欄位。sites.region 保留。

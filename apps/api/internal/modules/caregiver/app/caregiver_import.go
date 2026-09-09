@@ -11,7 +11,7 @@ import (
 	"ltc-system/apps/api/internal/domain/namenorm"
 )
 
-// ParseCaregivers 僅支援解析 .xlsx 檔案，對齊「類型／據點／姓名／聯絡方式／備註」欄位格式。
+// ParseCaregivers 僅支援解析 .xlsx 檔案，對齊「類型／單位／姓名／聯絡方式／備註」欄位格式。
 func (s *CaregiverService) ParseCaregivers(ctx context.Context, r io.Reader, fileName string) (*CaregiverImportPreviewResult, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -35,7 +35,7 @@ func (s *CaregiverService) ParseCaregivers(ctx context.Context, r io.Reader, fil
 
 // caregiverColumns 是表頭關鍵字對應的欄位名稱，依序嘗試比對第一列儲存格內容。
 var caregiverColumns = map[string][]string{
-	"site":    {"據點"},
+	"site":    {"單位", "據點"},
 	"name":    {"姓名"},
 	"type":    {"類型"},
 	"contact": {"聯絡方式"},
@@ -130,7 +130,7 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 			totalRows++
 			actualRowIndex := rIdx + 1
 			rowID := fmt.Sprintf("%s:%d", sheetName, actualRowIndex)
-			rawValues := map[string]string{"據點": siteName, "姓名": name, "類型": typeLabel, "聯絡方式": contact, "備註": notes}
+			rawValues := map[string]string{"單位": siteName, "姓名": name, "類型": typeLabel, "聯絡方式": contact, "備註": notes}
 
 			// 姓名與類型缺漏不再擋列：以空白建立並列入待維護，讓使用者在待維護頁籤補齊，
 			// 避免整列連同其他已填欄位一起被丟棄。類型比對不到固定選項時同樣存成空字串。

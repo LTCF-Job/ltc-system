@@ -93,7 +93,7 @@
             <template #default="{ row }">{{ formatRocDate(row.thirdPartyInsuranceExpiry) }}</template>
           </el-table-column>
 
-          <el-table-column label="前次檢驗日期 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col vehicle-inspection-col">
+          <el-table-column label="驗車日期 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col vehicle-inspection-col">
             <template #default="{ row }">{{ formatRocDate(row.lastInspectionDate) }}</template>
           </el-table-column>
 
@@ -128,9 +128,19 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="目前司機" min-width="160" class-name="vehicle-current-driver-col">
+          <el-table-column label="駕駛司機" min-width="200" class-name="vehicle-current-driver-col">
             <template #default="{ row }">
-              <div v-if="row.drivers && row.drivers.length" class="vehicle-driver-tags">
+              <InlineOptionPicker
+                v-if="authStore.hasPermission('masters_vehicles', 'edit')"
+                :model-value="(row.drivers || []).map((d: any) => d.id)"
+                :options="driverOptions"
+                multiple
+                placeholder="尚未指派"
+                :loading="savingVehicleId === row.id"
+                :disabled="savingVehicleId === row.id || row.status !== 'active'"
+                @change="(val) => handleInlineSetDrivers(row as any, val as string[])"
+              />
+              <div v-else-if="row.drivers && row.drivers.length" class="vehicle-driver-tags">
                 <el-tag
                   v-for="d in row.drivers"
                   :key="d.id"
@@ -142,6 +152,12 @@
                 </el-tag>
               </div>
               <span v-else class="vehicle-empty-text">尚未指派</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="vehicle-data">{{ row.remarks || '-' }}</span>
             </template>
           </el-table-column>
 
@@ -181,20 +197,21 @@
           <el-table-column
             v-if="authStore.hasPermission('masters_vehicles', 'edit') || authStore.hasPermission('masters_vehicles', 'delete')"
             label="操作"
-            width="200"
+            width="140"
             fixed="right"
             align="center"
           >
             <template #default="{ row }">
               <TableRowActions>
-                <template v-if="authStore.hasPermission('masters_vehicles', 'edit')">
-                  <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
-                    編輯
-                  </el-button>
-                  <el-button link type="primary" size="small" @click="openDriverDialog(row as any)">
-                    司機
-                  </el-button>
-                </template>
+                <el-button
+                  v-if="authStore.hasPermission('masters_vehicles', 'edit')"
+                  link
+                  type="primary"
+                  size="small"
+                  @click="openEditDialog(row as any)"
+                >
+                  編輯
+                </el-button>
                 <el-button
                   v-if="authStore.hasPermission('masters_vehicles', 'delete')"
                   link
@@ -224,57 +241,18 @@
         <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
       </template>
     </el-dialog>
-
-    <!-- 車輛司機維護對話框 -->
-    <el-dialog
-      v-model="driverDialogVisible"
-      :title="`維護司機 - ${driverDialogVehicle?.displayName || ''}`"
-      width="min(480px, calc(100vw - 32px))"
-    >
-      <el-form label-width="110px">
-        <el-form-item label="本車司機">
-          <el-select
-            v-model="driverDialogForm.driverIds"
-            multiple
-            filterable
-            placeholder="可選擇多位司機"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="d in allDrivers"
-              :key="d.id"
-              :label="d.name"
-              :value="d.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="生效日期">
-          <el-date-picker
-            v-model="driverDialogForm.effectiveFrom"
-            type="date"
-            value-format="YYYY-MM-DD"
-            style="width: 100%"
-          />
-        </el-form-item>
-      </el-form>
-      <div class="driver-dialog-hint">
-        一位司機同一期間只會有一台車：被加入本車的司機，其他車上尚未結束的指派會從生效日起收掉。
-      </div>
-      <template #footer>
-        <DialogFooter :loading="savingDrivers" @confirm="handleSaveDrivers" @cancel="driverDialogVisible = false" />
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import VehicleFormFields from '@/components/VehicleFormFields.vue'
+import InlineOptionPicker from '@/components/InlineOptionPicker.vue'
 import {
   listVehicles,
   createVehicle,
@@ -294,13 +272,7 @@ const vehicles = ref<VehicleDTO[]>([])
 const allDrivers = ref<DriverDTO[]>([])
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
-const driverDialogVisible = ref(false)
-const driverDialogVehicle = ref<VehicleDTO | null>(null)
-const savingDrivers = ref(false)
-const driverDialogForm = reactive<{ driverIds: string[]; effectiveFrom: string }>({
-  driverIds: [],
-  effectiveFrom: todayLocal()
-})
+const savingVehicleId = ref<string | null>(null)
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
 
@@ -341,6 +313,8 @@ function rowIndex(index: number) {
   return (page.value - 1) * pageSize.value + index + 1
 }
 
+const driverOptions = computed(() => allDrivers.value.map((d) => ({ label: d.name, value: d.id })))
+
 async function loadDrivers() {
   try {
     allDrivers.value = await listAllDrivers({ status: 'active' })
@@ -353,28 +327,27 @@ onMounted(() => {
   loadDrivers()
 })
 
-function openDriverDialog(row: VehicleDTO) {
-  driverDialogVehicle.value = row
-  driverDialogForm.driverIds = (row.drivers || []).map((d) => d.id)
-  driverDialogForm.effectiveFrom = todayLocal()
-  driverDialogVisible.value = true
-}
+async function handleInlineSetDrivers(row: VehicleDTO, newDriverIds: string[]) {
+  const currentDriverIds = (row.drivers || []).map((d) => d.id)
+  if (
+    newDriverIds.length === currentDriverIds.length &&
+    newDriverIds.every((id) => currentDriverIds.includes(id))
+  ) {
+    return
+  }
 
-async function handleSaveDrivers() {
-  if (!driverDialogVehicle.value) return
-  savingDrivers.value = true
+  savingVehicleId.value = row.id
   try {
-    await setVehicleDrivers(driverDialogVehicle.value.id, {
-      driverIds: driverDialogForm.driverIds,
-      effectiveFrom: driverDialogForm.effectiveFrom
+    await setVehicleDrivers(row.id, {
+      driverIds: newDriverIds,
+      effectiveFrom: todayLocal()
     })
-    ElMessage.success(`車輛「${driverDialogVehicle.value.displayName}」司機已更新`)
-    driverDialogVisible.value = false
+    ElMessage.success(`車輛「${row.displayName}」駕駛司機已更新`)
     await Promise.all([executeFetch(), loadDrivers()])
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
   } finally {
-    savingDrivers.value = false
+    savingVehicleId.value = null
   }
 }
 
@@ -419,6 +392,7 @@ function openEditDialog(row: VehicleDTO) {
     hasPurchaseContract: !!row.hasPurchaseContract,
     hasPlateRegistration: !!row.hasPlateRegistration,
     hasTransferRegistration: !!row.hasTransferRegistration,
+    remarks: row.remarks || '',
     status: row.status
   })
   formRef.value?.clearValidate()
@@ -567,14 +541,7 @@ executeFetch()
 }
 
 :deep(.vehicle-current-driver-col .cell) {
-  min-width: 160px;
+  min-width: 200px;
 }
 
-.driver-dialog-hint {
-  margin-top: -4px;
-  padding-left: 120px;
-  color: var(--app-text-secondary);
-  font-size: var(--app-font-xs);
-  line-height: 1.6;
-}
 </style>

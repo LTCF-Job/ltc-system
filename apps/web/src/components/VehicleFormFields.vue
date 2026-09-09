@@ -53,6 +53,9 @@
     <el-checkbox v-model="form.hasPlateRegistration">領牌登記書</el-checkbox>
     <el-checkbox v-model="form.hasTransferRegistration">異動登記書</el-checkbox>
   </el-form-item>
+  <el-form-item label="備註" prop="remarks">
+    <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
+  </el-form-item>
   <el-form-item v-if="showStatus" label="狀態" prop="status">
     <el-radio-group v-model="form.status" class="status-radio-group">
       <el-radio-button value="active">

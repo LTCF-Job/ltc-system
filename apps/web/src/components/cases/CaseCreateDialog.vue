@@ -17,6 +17,16 @@
           <el-option v-for="site in availableSites" :key="site.id" :label="site.name" :value="site.id" />
         </el-select>
       </el-form-item>
+      <el-form-item label="照護人員" prop="caregiverId">
+        <el-select v-model="form.caregiverId" placeholder="請選擇照護人員" filterable style="width: 100%">
+          <el-option
+            v-for="caregiver in availableCaregivers"
+            :key="caregiver.id"
+            :label="caregiver.name + (caregiver.type ? `（${CAREGIVER_TYPE_LABELS[caregiver.type as CaregiverType] || caregiver.type}）` : '')"
+            :value="caregiver.id"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="住家地址" prop="homeAddress">
         <el-input v-model="form.homeAddress" placeholder="請輸入住家地址" />
       </el-form-item>
@@ -50,11 +60,19 @@ import { ElMessage, type FormInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { createCase } from '@/api/cases'
 import { listAllSites } from '@/api/masters'
-import type { CaseDTO, CreateCaseRequest, SiteDTO } from '@/types/api'
+import { listAllCaregivers } from '@/api/caregivers'
+import { CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
+import type { CaseDTO, CreateCaseRequest, SiteDTO, CaregiverDTO } from '@/types/api'
 
 const availableSites = ref<SiteDTO[]>([])
+const availableCaregivers = ref<CaregiverDTO[]>([])
 onMounted(async () => {
-  availableSites.value = await listAllSites({ status: 'active' })
+  const [sites, caregivers] = await Promise.all([
+    listAllSites({ status: 'active' }),
+    listAllCaregivers({ status: 'active' })
+  ])
+  availableSites.value = sites
+  availableCaregivers.value = caregivers
 })
 
 // 跟個案清單頁「新增個案基本資料」共用同一份欄位與 API，避免兩邊各自維護造成落差；
@@ -74,6 +92,7 @@ const saving = ref(false)
 const form = reactive<CreateCaseRequest>({
   name: '',
   siteId: '',
+  caregiverId: '',
   nationalId: '',
   homeAddress: '',
   serviceCategory: undefined,
@@ -82,10 +101,11 @@ const form = reactive<CreateCaseRequest>({
   remarks: ''
 })
 
-// 姓名與所屬據點為必填；身分證字號與居住地仍為選填
+// 姓名、所屬據點與照護人員為必填；身分證字號與居住地仍為選填
 const rules = {
   name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }],
-  siteId: [{ required: true, message: '請選擇所屬據點', trigger: 'change' }]
+  siteId: [{ required: true, message: '請選擇所屬據點', trigger: 'change' }],
+  caregiverId: [{ required: true, message: '請選擇照護人員', trigger: 'change' }]
 }
 
 watch(
@@ -94,6 +114,7 @@ watch(
     if (!visible) return
     form.name = props.prefillName || ''
     form.siteId = ''
+    form.caregiverId = ''
     form.nationalId = ''
     form.homeAddress = ''
     form.serviceCategory = undefined

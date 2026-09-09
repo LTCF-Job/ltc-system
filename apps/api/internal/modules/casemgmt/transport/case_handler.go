@@ -214,6 +214,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 	var req struct {
 		Name              *string      `json:"name"`
 		SiteID            *uuid.UUID   `json:"siteId"`
+		CaregiverID       *uuid.UUID   `json:"caregiverId"`
 		HomeAddress       *string      `json:"homeAddress"`
 		LTCLevel          *string      `json:"ltcLevel"`
 		ServiceCategory   *int         `json:"serviceCategory"`
@@ -237,6 +238,7 @@ func (h *CaseHandler) Update(c *gin.Context) {
 	in := app.UpdateCaseInput{
 		Name:                req.Name,
 		SiteID:              req.SiteID,
+		CaregiverID:         req.CaregiverID,
 		HomeAddress:         req.HomeAddress,
 		LTCLevel:            req.LTCLevel,
 		ServiceCategory:     req.ServiceCategory,
