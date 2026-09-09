@@ -28,24 +28,6 @@ func (f *fakeCaseRegistrar) RecordSkipped(ctx context.Context, row CaseImportSki
 	f.skipped = append(f.skipped, row)
 }
 
-// fakeTransportPreferenceWriter is a deterministic TransportPreferenceWriter test double.
-type fakeTransportPreferenceWriter struct {
-	calls []struct {
-		caseID                              uuid.UUID
-		outboundVehicleID, inboundVehicleID *uuid.UUID
-		outboundNameRaw, inboundNameRaw     string
-	}
-}
-
-func (f *fakeTransportPreferenceWriter) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
-	f.calls = append(f.calls, struct {
-		caseID                              uuid.UUID
-		outboundVehicleID, inboundVehicleID *uuid.UUID
-		outboundNameRaw, inboundNameRaw     string
-	}{caseID, outboundVehicleID, inboundVehicleID, outboundVehicleNameRaw, inboundVehicleNameRaw})
-	return nil
-}
-
 // fakeSiteLookup resolves a fixed set of names to sites; anything else is "not found".
 type fakeSiteLookup struct{ byName map[string]uuid.UUID }
 
@@ -59,17 +41,6 @@ func (f fakeSiteLookup) GetByName(ctx context.Context, name string) (*SiteRef, e
 
 func (f fakeSiteLookup) List(ctx context.Context, page, pageSize int) ([]SiteRef, error) {
 	return nil, nil
-}
-
-// fakeVehicleLookup resolves a fixed set of display names; anything else is "not found".
-type fakeVehicleLookup struct{ byName map[string]uuid.UUID }
-
-func (f fakeVehicleLookup) GetByDisplayName(ctx context.Context, displayName string) (*VehicleRef, error) {
-	id, ok := f.byName[displayName]
-	if !ok {
-		return nil, ErrLookupNotFound
-	}
-	return &VehicleRef{ID: id}, nil
 }
 
 // fakeTxRunner runs fn directly without an actual transaction, matching the
@@ -102,7 +73,7 @@ func (f *fakeDuplicateCandidateStager) StageDuplicateRow(ctx context.Context, fi
 func TestCommitCases_DuplicateRowsAlwaysStaged(t *testing.T) {
 	registrar := &fakeCaseRegistrar{}
 	stager := &fakeDuplicateCandidateStager{}
-	svc := &ImportService{cases: registrar, duplicateStager: stager, prefRepo: &fakeTransportPreferenceWriter{}, txRunner: fakeTxRunner{}}
+	svc := &ImportService{cases: registrar, duplicateStager: stager, txRunner: fakeTxRunner{}}
 
 	dupID := uuid.New()
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
@@ -129,7 +100,7 @@ func TestCommitCases_AlreadyStagedDuplicateCountsAsAlreadyImported(t *testing.T)
 	registrar := &fakeCaseRegistrar{}
 	dupID := uuid.New()
 	stager := &fakeDuplicateCandidateStager{alreadyKeys: map[string]bool{":legacy:1": true}}
-	svc := &ImportService{cases: registrar, duplicateStager: stager, prefRepo: &fakeTransportPreferenceWriter{}, txRunner: fakeTxRunner{}}
+	svc := &ImportService{cases: registrar, duplicateStager: stager, txRunner: fakeTxRunner{}}
 
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
 		{RowIndex: 1, Name: "重複重試列", IsDuplicate: true, DuplicateCaseID: &dupID},
@@ -483,7 +454,7 @@ func TestCommitCases_RepeatedFileDoesNotStageOwnCreatedCase(t *testing.T) {
 
 func TestCommitCases_BirthDateAndNationalIDInvalid_StillCreatesCase(t *testing.T) {
 	registrar := &fakeCaseRegistrar{}
-	svc := &ImportService{cases: registrar, prefRepo: &fakeTransportPreferenceWriter{}, txRunner: fakeTxRunner{}}
+	svc := &ImportService{cases: registrar, txRunner: fakeTxRunner{}}
 
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
 		{RowIndex: 1, Name: "格式待補正個案", BirthDateInvalid: true, BirthDateRaw: "民國78年怪日期", NationalIDInvalid: true, NationalID: "NOT-VALID"},

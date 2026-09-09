@@ -20,7 +20,7 @@ import (
 func TestDownloadTemplate_TableDriven(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	excel := importinfra.NewExcelAdapter()
-	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, nil, nil, excel, excel, nil))
+	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, excel, excel, nil))
 
 	tests := []struct {
 		name                string
@@ -101,7 +101,7 @@ func TestDownloadTemplate_TableDriven(t *testing.T) {
 func TestDownloadTemplate_BodyIsReadableWorkbookWithSourceHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	excel := importinfra.NewExcelAdapter()
-	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, nil, nil, excel, excel, nil))
+	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, excel, excel, nil))
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -126,7 +126,7 @@ func TestDownloadTemplate_BodyIsReadableWorkbookWithSourceHeaders(t *testing.T) 
 // 超限請求必須在進入 service 解析之前就被擋下並回 413。
 func TestImportExcel_RejectsOversizedUpload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil))
+	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, nil, nil, nil))
 
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)

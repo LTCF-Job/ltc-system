@@ -57,7 +57,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 
 	caseRepo := caseinfra.NewCaseRepository(pool)
 	siteRepo := masterinfra.NewSiteRepository(pool)
-	vehicleRepo := masterinfra.NewVehicleRepository(pool)
 	auditSvc := auditapp.NewService(auditinfra.NewAuditRepository(pool))
 	txRunner := pgxdb.NewTxRunner(pool)
 
@@ -68,9 +67,7 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		caseDuplicateFinder{caseSvc},
 		caseDuplicateStager{caseSvc},
 		siteAdapter{siteRepo},
-		vehicleAdapter{vehicleRepo},
 		caregiverAdapter{},
-		caseRepo,
 		excel,
 		excel,
 		txRunner,
@@ -188,7 +185,6 @@ func TestCommitCases_DuplicateRowStagedAgainstRealDB(t *testing.T) {
 
 	caseRepo := caseinfra.NewCaseRepository(pool)
 	siteRepo := masterinfra.NewSiteRepository(pool)
-	vehicleRepo := masterinfra.NewVehicleRepository(pool)
 	auditSvc := auditapp.NewService(auditinfra.NewAuditRepository(pool))
 	txRunner := pgxdb.NewTxRunner(pool)
 
@@ -199,9 +195,7 @@ func TestCommitCases_DuplicateRowStagedAgainstRealDB(t *testing.T) {
 		caseDuplicateFinder{caseSvc},
 		caseDuplicateStager{caseSvc},
 		siteAdapter{siteRepo},
-		vehicleAdapter{vehicleRepo},
 		caregiverAdapter{},
-		caseRepo,
 		excel,
 		excel,
 		txRunner,
@@ -304,25 +298,6 @@ func (a siteAdapter) List(ctx context.Context, page, pageSize int) ([]importapp.
 		out = append(out, importapp.SiteRef{ID: s.ID, Name: s.Name})
 	}
 	return out, nil
-}
-
-type vehicleAdapter struct {
-	repo *masterinfra.VehicleRepository
-}
-
-func (a vehicleAdapter) GetByDisplayName(ctx context.Context, displayName string) (*importapp.VehicleRef, error) {
-	v, err := a.repo.GetByDisplayName(ctx, displayName)
-	if err != nil {
-		// 與 composition root 一致：查無車輛屬於保留原始名稱待人工關聯，不是整列失敗。
-		if errors.Is(err, masterapp.ErrVehicleNotFound) {
-			return nil, importapp.ErrLookupNotFound
-		}
-		return nil, err
-	}
-	if v == nil {
-		return nil, nil
-	}
-	return &importapp.VehicleRef{ID: v.ID}, nil
 }
 
 // caregiverAdapter 在本測試中一律回傳查無資料：照護人員關聯不是這個測試的主題，

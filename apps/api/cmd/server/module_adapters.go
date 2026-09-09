@@ -218,25 +218,6 @@ func (a importSiteLookup) List(ctx context.Context, page, pageSize int) ([]impor
 	return out, nil
 }
 
-// importVehicleLookup 讓 caseimport 以顯示名稱比對車輛。
-type importVehicleLookup struct {
-	repo *masterinfra.VehicleRepository
-}
-
-func (a importVehicleLookup) GetByDisplayName(ctx context.Context, displayName string) (*importapp.VehicleRef, error) {
-	v, err := a.repo.GetByDisplayName(ctx, displayName)
-	if err != nil {
-		if errors.Is(err, masterapp.ErrVehicleNotFound) {
-			return nil, importapp.ErrLookupNotFound
-		}
-		return nil, err
-	}
-	if v == nil {
-		return nil, nil
-	}
-	return &importapp.VehicleRef{ID: v.ID}, nil
-}
-
 // importCaregiverLookup 讓 caseimport 以姓名比對照護人員；同名多筆時的消歧留在 caseimport。
 type importCaregiverLookup struct {
 	repo *caregiverinfra.CaregiverRepository

@@ -6,9 +6,7 @@ type ImportService struct {
 	duplicates      CaseDuplicateFinder
 	duplicateStager DuplicateCandidateStager
 	siteRepo        SiteLookup
-	vehicleRepo     VehicleLookup
 	caregiverRepo   CaregiverLookup
-	prefRepo        TransportPreferenceWriter
 	spreadsheet     SpreadsheetReader
 	template        TemplateRenderer
 	txRunner        TxRunner
@@ -21,9 +19,7 @@ func NewImportService(
 	duplicates CaseDuplicateFinder,
 	duplicateStager DuplicateCandidateStager,
 	siteRepo SiteLookup,
-	vehicleRepo VehicleLookup,
 	caregiverRepo CaregiverLookup,
-	prefRepo TransportPreferenceWriter,
 	spreadsheet SpreadsheetReader,
 	template TemplateRenderer,
 	txRunner TxRunner,
@@ -33,9 +29,7 @@ func NewImportService(
 		duplicates:      duplicates,
 		duplicateStager: duplicateStager,
 		siteRepo:        siteRepo,
-		vehicleRepo:     vehicleRepo,
 		caregiverRepo:   caregiverRepo,
-		prefRepo:        prefRepo,
 		spreadsheet:     spreadsheet,
 		template:        template,
 		txRunner:        txRunner,

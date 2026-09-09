@@ -16,11 +16,6 @@ type SiteRef struct {
 	Name string
 }
 
-// VehicleRef 是匯入比對車輛時需要的最小資訊。
-type VehicleRef struct {
-	ID uuid.UUID
-}
-
 // CaregiverRef 是匯入比對照護人員時需要的最小資訊；Type 供同名多筆時消歧。
 type CaregiverRef struct {
 	ID   uuid.UUID
@@ -34,21 +29,9 @@ type SiteLookup interface {
 	List(ctx context.Context, page, pageSize int) ([]SiteRef, error)
 }
 
-// VehicleLookup 提供以顯示名稱比對車輛的查詢。
-// 接送車輛欄位目前保留版面但不匯入，因此 commit 路徑暫時不會呼叫這個查詢。
-type VehicleLookup interface {
-	GetByDisplayName(ctx context.Context, displayName string) (*VehicleRef, error)
-}
-
 // CaregiverLookup 以姓名取回同名的照護人員清單；同名多筆時的消歧規則屬於匯入政策，留在 app 層。
 type CaregiverLookup interface {
 	FindByName(ctx context.Context, name string) ([]CaregiverRef, error)
-}
-
-// TransportPreferenceWriter 以 PUT 完整替換個案的去回程車輛偏好。據點已改由個案本身
-// 持有，隨 NewCase 一併寫入。接送車輛欄位目前保留版面但不匯入，commit 路徑暫時不會呼叫。
-type TransportPreferenceWriter interface {
-	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 }
 
 // NewCase 是建立個案所需的輸入，僅 Name 為必要欄位。AllowInvalidNationalID 讓身分證字號
