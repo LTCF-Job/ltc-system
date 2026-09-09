@@ -48,7 +48,7 @@ const govClaimSourceQuery = `
 	  AND NOT ps.is_pending
 	  AND r.effective_status = 'boarded'
 	  AND (r.has_conflict = false OR r.conflict_resolved_at IS NOT NULL)
-	  AND (COALESCE(cardinality($4::uuid[]), 0) = 0 OR c.id = ANY($4::uuid[]))
+	  AND (COALESCE(cardinality($3::uuid[]), 0) = 0 OR c.id = ANY($3::uuid[]))
 	ORDER BY c.name, r.leg_seq, r.service_date
 `
 
