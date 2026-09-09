@@ -35,14 +35,17 @@
           <el-option label="停案" value="closed" />
         </el-select>
 
-        <el-input
+        <el-select
           v-model="filters.region"
           placeholder="區域"
           clearable
+          filterable
           style="width: 160px"
-          @keyup.enter="handleSearch"
+          @change="handleSearch"
           @clear="handleSearch"
-        />
+        >
+          <el-option v-for="option in caseRegionOptions" :key="option" :label="option" :value="option" />
+        </el-select>
 
         <el-button type="primary" @click="handleSearch">查詢</el-button>
         <el-button @click="handleReset">重設</el-button>
@@ -330,10 +333,26 @@
 
     <!-- 新增據點/車輛快速建立彈窗 -->
     <el-dialog v-model="quickCreateVisible" :title="quickCreateKind === 'site' ? '新增據點' : '新增車輛'" width="min(480px, calc(100vw - 32px))">
-      <el-form v-if="quickCreateKind === 'site'" label-width="90px">
-        <el-form-item label="據點名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
-        <el-form-item label="區域">
-          <el-input v-model="quickCreateSiteForm.region" placeholder="請輸入區域" />
+      <el-form
+        v-if="quickCreateKind === 'site'"
+        ref="quickCreateSiteFormRef"
+        :model="quickCreateSiteForm"
+        :rules="quickCreateSiteRules"
+        label-width="90px"
+      >
+        <el-form-item label="據點名稱" prop="name"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
+        <el-form-item label="區域" prop="region">
+          <el-select
+            v-model="quickCreateSiteForm.region"
+            placeholder="請選擇或輸入區域"
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            style="width: 100%"
+          >
+            <el-option v-for="option in caseRegionOptions" :key="option" :label="option" :value="option" />
+          </el-select>
         </el-form-item>
         <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
       </el-form>
@@ -469,6 +488,14 @@ function formatRocBirthDate(birthDate?: string): string {
 const authStore = useAuthStore()
 const activeTab = ref<'list' | 'unresolved'>('list')
 const cases = ref<CaseDTO[]>([])
+const caseRegionOptions = ref<string[]>([])
+
+// 篩選比對的是個案關聯據點（含停用），不能只抓 availableSites 的啟用據點
+async function refreshCaseRegionOptions() {
+  const allSites = await listAllSites()
+  const distinctRegions = new Set(allSites.map((site) => site.region).filter((region): region is string => !!region))
+  caseRegionOptions.value = Array.from(distinctRegions).sort((a, b) => a.localeCompare(b, 'zh-Hant'))
+}
 const importDialogRef = ref<InstanceType<typeof ImportPreviewDialog>>()
 
 const {
@@ -897,6 +924,13 @@ const quickCreateSaving = ref(false)
 const quickCreateTargetCase = ref<CaseDTO | null>(null)
 const quickCreateSlot = ref<UnresolvedSlot>('site')
 const quickCreateSiteForm = reactive({ name: '', region: '', address: '' })
+const quickCreateSiteFormRef = ref<FormInstance>()
+// 與據點主檔（SiteListView）同一組必填條件：這條捷徑同樣不能建出沒有區域的據點，
+// 否則該據點的個案會從區域篩選中整批消失。
+const quickCreateSiteRules = {
+  name: [{ required: true, message: '請輸入據點名稱', trigger: 'blur' }],
+  region: [{ required: true, message: '請輸入區域', trigger: 'change' }]
+}
 const quickCreateVehicleForm = reactive<CreateVehicleRequest>(emptyVehicleForm())
 const quickCreateVehicleFormRef = ref<FormInstance>()
 
@@ -911,6 +945,7 @@ function openQuickCreate(kind: 'site' | 'vehicle', row: CaseDTO, slot: Unresolve
   Object.assign(quickCreateVehicleForm, emptyVehicleForm(), {
     displayName: kind === 'vehicle' ? row[SLOT_RAW_FIELD[slot as 'outboundVehicle' | 'inboundVehicle']] || '' : ''
   })
+  quickCreateSiteFormRef.value?.clearValidate()
   quickCreateVehicleFormRef.value?.clearValidate()
   quickCreateVisible.value = true
 }
@@ -920,8 +955,11 @@ async function handleQuickCreateAndLink() {
   quickCreateSaving.value = true
   try {
     if (quickCreateKind.value === 'site') {
+      if (!(await quickCreateSiteFormRef.value?.validate().catch(() => false))) return
       const site = await createSite(quickCreateSiteForm)
       availableSites.value.push(site)
+      // 新據點可能帶進尚未出現過的區域，篩選選項要一併補上
+      refreshCaseRegionOptions()
       await handleLinkSlot(quickCreateTargetCase.value, 'site', site.id)
     } else {
       if (!(await quickCreateVehicleFormRef.value?.validate().catch(() => false))) return
@@ -948,6 +986,7 @@ async function handleTabChange(name: string | number) {
 
 // 初始載入
 executeFetch()
+refreshCaseRegionOptions()
 </script>
 
 <style scoped>
