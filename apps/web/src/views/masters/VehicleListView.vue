@@ -142,7 +142,7 @@
                 size="default"
                 :loading="savingVehicleId === row.id"
                 :disabled="savingVehicleId === row.id || row.status !== 'active'"
-                class="inline-driver-select"
+                class="inline-driver-select inline-cell-select"
                 @change="(val: string[]) => handleInlineSetDrivers(row as any, val)"
               >
                 <el-option
@@ -209,20 +209,21 @@
           <el-table-column
             v-if="authStore.hasPermission('masters_vehicles', 'edit') || authStore.hasPermission('masters_vehicles', 'delete')"
             label="操作"
-            width="200"
+            width="140"
             fixed="right"
             align="center"
           >
             <template #default="{ row }">
               <TableRowActions>
-                <template v-if="authStore.hasPermission('masters_vehicles', 'edit')">
-                  <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
-                    編輯
-                  </el-button>
-                  <el-button link type="primary" size="small" @click="openDriverDialog(row as any)">
-                    司機
-                  </el-button>
-                </template>
+                <el-button
+                  v-if="authStore.hasPermission('masters_vehicles', 'edit')"
+                  link
+                  type="primary"
+                  size="small"
+                  @click="openEditDialog(row as any)"
+                >
+                  編輯
+                </el-button>
                 <el-button
                   v-if="authStore.hasPermission('masters_vehicles', 'delete')"
                   link
@@ -250,46 +251,6 @@
       </el-form>
       <template #footer>
         <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="dialogVisible = false" />
-      </template>
-    </el-dialog>
-
-    <!-- 車輛司機維護對話框 -->
-    <el-dialog
-      v-model="driverDialogVisible"
-      :title="`維護司機 - ${driverDialogVehicle?.displayName || ''}`"
-      width="min(480px, calc(100vw - 32px))"
-    >
-      <el-form label-width="110px">
-        <el-form-item label="駕駛司機">
-          <el-select
-            v-model="driverDialogForm.driverIds"
-            multiple
-            filterable
-            placeholder="可選擇多位司機"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="d in allDrivers"
-              :key="d.id"
-              :label="d.name"
-              :value="d.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="生效日期">
-          <el-date-picker
-            v-model="driverDialogForm.effectiveFrom"
-            type="date"
-            value-format="YYYY-MM-DD"
-            style="width: 100%"
-          />
-        </el-form-item>
-      </el-form>
-      <div class="driver-dialog-hint">
-        一位司機同一期間只會有一台車：被加入本車的司機，其他車上尚未結束的指派會從生效日起收掉。
-      </div>
-      <template #footer>
-        <DialogFooter :loading="savingDrivers" @confirm="handleSaveDrivers" @cancel="driverDialogVisible = false" />
       </template>
     </el-dialog>
   </div>
@@ -322,14 +283,7 @@ const vehicles = ref<VehicleDTO[]>([])
 const allDrivers = ref<DriverDTO[]>([])
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
-const driverDialogVisible = ref(false)
-const driverDialogVehicle = ref<VehicleDTO | null>(null)
-const savingDrivers = ref(false)
 const savingVehicleId = ref<string | null>(null)
-const driverDialogForm = reactive<{ driverIds: string[]; effectiveFrom: string }>({
-  driverIds: [],
-  effectiveFrom: todayLocal()
-})
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
 
@@ -382,13 +336,6 @@ onMounted(() => {
   loadDrivers()
 })
 
-function openDriverDialog(row: VehicleDTO) {
-  driverDialogVehicle.value = row
-  driverDialogForm.driverIds = (row.drivers || []).map((d) => d.id)
-  driverDialogForm.effectiveFrom = todayLocal()
-  driverDialogVisible.value = true
-}
-
 async function handleInlineSetDrivers(row: VehicleDTO, newDriverIds: string[]) {
   const currentDriverIds = (row.drivers || []).map((d) => d.id)
   if (
@@ -410,24 +357,6 @@ async function handleInlineSetDrivers(row: VehicleDTO, newDriverIds: string[]) {
     // 全域攔截器負責顯示 API 錯誤。
   } finally {
     savingVehicleId.value = null
-  }
-}
-
-async function handleSaveDrivers() {
-  if (!driverDialogVehicle.value) return
-  savingDrivers.value = true
-  try {
-    await setVehicleDrivers(driverDialogVehicle.value.id, {
-      driverIds: driverDialogForm.driverIds,
-      effectiveFrom: driverDialogForm.effectiveFrom
-    })
-    ElMessage.success(`車輛「${driverDialogVehicle.value.displayName}」司機已更新`)
-    driverDialogVisible.value = false
-    await Promise.all([executeFetch(), loadDrivers()])
-  } catch {
-    // 全域攔截器負責顯示 API 錯誤。
-  } finally {
-    savingDrivers.value = false
   }
 }
 
@@ -626,13 +555,5 @@ executeFetch()
 
 .inline-driver-select {
   width: 100%;
-}
-
-.driver-dialog-hint {
-  margin-top: -4px;
-  padding-left: 120px;
-  color: var(--app-text-secondary);
-  font-size: var(--app-font-xs);
-  line-height: 1.6;
 }
 </style>

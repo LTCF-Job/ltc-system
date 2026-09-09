@@ -123,7 +123,7 @@
                 size="default"
                 :loading="assigningDriverId === row.id"
                 :disabled="assigningDriverId === row.id || row.status !== 'active'"
-                class="inline-vehicle-select"
+                class="inline-vehicle-select inline-cell-select"
                 @change="(val: string) => handleInlineAssignVehicle(row, val)"
               >
                 <el-option
@@ -179,20 +179,21 @@
           <el-table-column
             v-if="authStore.hasPermission('masters_drivers', 'edit') || authStore.hasPermission('masters_drivers', 'delete')"
             label="操作"
-            width="240"
+            width="140"
             fixed="right"
             align="center"
           >
             <template #default="{ row }">
               <TableRowActions>
-                <template v-if="authStore.hasPermission('masters_drivers', 'edit')">
-                  <el-button link type="primary" size="small" @click="openEditDialog(row)">
-                    編輯
-                  </el-button>
-                  <el-button link type="primary" size="small" @click="openAssignDialog(row)">
-                    指派車輛
-                  </el-button>
-                </template>
+                <el-button
+                  v-if="authStore.hasPermission('masters_drivers', 'edit')"
+                  link
+                  type="primary"
+                  size="small"
+                  @click="openEditDialog(row)"
+                >
+                  編輯
+                </el-button>
                 <el-button
                   v-if="authStore.hasPermission('masters_drivers', 'delete')"
                   link
@@ -308,30 +309,6 @@
         <DialogFooter :loading="submitting" @confirm="handleSubmit" @cancel="editDialogVisible = false" />
       </template>
     </el-dialog>
-
-    <!-- 車輛期間指派對話框 -->
-    <el-dialog v-model="assignDialogVisible" title="指派駕駛車輛" width="min(480px, calc(100vw - 32px))">
-      <el-form ref="assignFormRef" :model="assignForm" :rules="assignRules" label-width="110px">
-        <el-form-item label="選擇車輛" prop="vehicleId">
-          <el-select v-model="assignForm.vehicleId" placeholder="請選擇車輛" style="width: 100%">
-            <el-option
-              v-for="v in allVehicles"
-              :key="v.id"
-              :label="`${v.displayName} (${v.plateNo})`"
-              :value="v.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <DialogFooter
-          confirm-text="確認指派"
-          :loading="submitting"
-          @confirm="handleAssignSubmit"
-          @cancel="assignDialogVisible = false"
-        />
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -372,17 +349,7 @@ const editingId = ref<string | null>(null)
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
 
-const assignDialogVisible = ref(false)
-const selectedDriverId = ref<string | null>(null)
 const assigningDriverId = ref<string | null>(null)
-const assignFormRef = ref<FormInstance>()
-const assignForm = reactive({
-  vehicleId: ''
-})
-
-const assignRules = {
-  vehicleId: [{ required: true, message: '請選擇車輛', trigger: 'change' }]
-}
 
 const form = reactive<CreateDriverRequest & UpdateDriverRequest>({
   name: '',
@@ -560,20 +527,6 @@ async function handleInlineAssignVehicle(row: any, newVehicleId: string) {
   }
 }
 
-function openAssignDialog(row: any) {
-  selectedDriverId.value = row.id
-  const assignment = row.assignments?.[row.assignments.length - 1]
-  let vehId = assignment?.vehicleId || ''
-  if (!vehId) {
-    const matchedVeh = allVehicles.value.find((v) => v.drivers?.some((d) => d.id === row.id))
-    if (matchedVeh) {
-      vehId = matchedVeh.id
-    }
-  }
-  assignForm.vehicleId = vehId
-  assignDialogVisible.value = true
-}
-
 async function handleSubmit() {
   if (!formRef.value || !editingId.value) return
   await formRef.value.validate(async (valid) => {
@@ -597,23 +550,6 @@ async function handleSubmit() {
       })
       ElMessage.success('司機資料已更新')
       editDialogVisible.value = false
-      executeFetch()
-    } finally {
-      submitting.value = false
-    }
-  })
-}
-
-async function handleAssignSubmit() {
-  if (!assignFormRef.value || !selectedDriverId.value) return
-  await assignFormRef.value.validate(async (valid) => {
-    if (!valid) return
-    submitting.value = true
-    try {
-      await assignDriverVehicle(selectedDriverId.value!, assignForm)
-      ElMessage.success('車輛指派已更新')
-      assignDialogVisible.value = false
-      await reloadVehicles()
       executeFetch()
     } finally {
       submitting.value = false

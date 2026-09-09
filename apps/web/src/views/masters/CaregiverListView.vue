@@ -64,7 +64,7 @@
                     size="default"
                     :loading="updatingCaregiverId === row.id"
                     :disabled="updatingCaregiverId === row.id || row.status !== 'active'"
-                    class="inline-site-select"
+                    class="inline-site-select inline-cell-select"
                     @change="(val: string) => handleInlineUpdateSiteName(row as CaregiverDTO, val)"
                   >
                     <el-option
