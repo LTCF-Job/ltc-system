@@ -33,7 +33,7 @@ type caseListFlags struct {
 	excludePending bool
 }
 
-func (f *fakeCaseStore) List(ctx context.Context, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
+func (f *fakeCaseStore) List(ctx context.Context, status, q, region string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
 	f.listFlags = caseListFlags{unresolvedLink: unresolvedLink, excludePending: excludePending}
 	return f.cases, int64(len(f.cases)), nil
 }

@@ -35,6 +35,15 @@
           <el-option label="停案" value="closed" />
         </el-select>
 
+        <el-input
+          v-model="filters.region"
+          placeholder="區域"
+          clearable
+          style="width: 160px"
+          @keyup.enter="handleSearch"
+          @clear="handleSearch"
+        />
+
         <el-button type="primary" @click="handleSearch">查詢</el-button>
         <el-button @click="handleReset">重設</el-button>
       </template>
@@ -324,7 +333,7 @@
       <el-form v-if="quickCreateKind === 'site'" label-width="90px">
         <el-form-item label="據點名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
         <el-form-item label="區域">
-          <el-input v-model="quickCreateSiteForm.region" placeholder="請輸入區域（選填）" />
+          <el-input v-model="quickCreateSiteForm.region" placeholder="請輸入區域" />
         </el-form-item>
         <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
       </el-form>
@@ -476,14 +485,16 @@ const {
 } = useListQuery({
   defaultFilters: {
     q: '',
-    status: ''
+    status: '',
+    region: ''
   },
   onFetch: async () => {
     const res = await listCases({
       page: page.value,
       pageSize: pageSize.value,
       q: filters.q,
-      status: filters.status
+      status: filters.status,
+      region: filters.region
       // 待維護個案由後端預設排除，主清單不需要另外表態
     })
     cases.value = res.data

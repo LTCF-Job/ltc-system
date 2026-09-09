@@ -15,7 +15,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/cases` | viewer, staff, admin | 個案清單（回傳遮罩身分證）。**待維護個案預設不回傳**：`unresolvedLink=true` 只取待維護，`includePending=true` 取全部 |
+| GET | `/cases` | viewer, staff, admin | 個案清單（回傳遮罩身分證）。**待維護個案預設不回傳**：`unresolvedLink=true` 只取待維護，`includePending=true` 取全部；`region` 依已關聯據點的區域篩選（對 `sites.region` 模糊比對） |
 | POST | `/cases` | staff, admin | 新增個案；`siteId`（所屬據點）與 `caregiverId`（照護人員）為必填 |
 | GET | `/cases/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本；欄位版面與 `/cases/export` 共用同一組 A~K 11 欄（見系統邏輯規格書準則三.二） |
 | GET | `/cases/:id` | viewer, staff, admin | |

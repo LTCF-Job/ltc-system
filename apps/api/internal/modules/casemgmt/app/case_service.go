@@ -202,8 +202,8 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 // ListCases 查詢個案清單（回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳
 // 據點／去回程車輛任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案；
 // excludePending 為 true 時排除這類待維護個案。
-func (s *CaseService) ListCases(ctx context.Context, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
-	return s.caseRepo.List(ctx, status, q, page, pageSize, unresolvedLink, excludePending)
+func (s *CaseService) ListCases(ctx context.Context, status, q, region string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
+	return s.caseRepo.List(ctx, status, q, region, page, pageSize, unresolvedLink, excludePending)
 }
 
 // GetCaseByID 取得單筆個案主檔明細。

@@ -49,7 +49,7 @@ func newFakeCaseStore() *fakeCaseStore {
 	}
 }
 
-func (f *fakeCaseStore) List(ctx context.Context, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
+func (f *fakeCaseStore) List(ctx context.Context, status, q, region string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
 	return nil, 0, nil
 }
 

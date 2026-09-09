@@ -38,13 +38,14 @@ func (h *CaseHandler) List(c *gin.Context) {
 	}
 	status := c.Query("status")
 	q := c.Query("q")
+	region := c.Query("region")
 	// 待維護個案預設不出現在任何清單，呼叫端要明確表態才拿得到：unresolvedLink 只取待維護，
 	// includePending 取全部。預設排除，避免新增呼叫端忘記帶參數就把待維護資料洩漏出去。
 	unresolvedLink := httpx.QueryBool(c, "unresolvedLink")
 	includePending := httpx.QueryBool(c, "includePending")
 	excludePending := !unresolvedLink && !includePending
 
-	cases, total, err := h.masterService.ListCases(c.Request.Context(), status, q, page, pageSize, unresolvedLink, excludePending)
+	cases, total, err := h.masterService.ListCases(c.Request.Context(), status, q, region, page, pageSize, unresolvedLink, excludePending)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢個案失敗", nil)
 		return

@@ -141,7 +141,7 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	require.Equal(t, 2, result.FailedRows[0].RowIndex)
 
 	// 驗證 Row B 沒有殘留孤兒個案。
-	orphans, orphanCount, err := caseRepo.List(ctx, "", rowB.Name, 1, 10, false, false)
+	orphans, orphanCount, err := caseRepo.List(ctx, "", rowB.Name, "", 1, 10, false, false)
 	require.NoError(t, err)
 	require.Zero(t, orphanCount, "Row B 的個案主檔必須未寫入")
 	require.Empty(t, orphans, "Row B 的個案主檔必須未寫入")
