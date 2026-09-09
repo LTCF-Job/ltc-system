@@ -16,7 +16,7 @@ type activeDriverListerStub struct {
 	err     error
 }
 
-func (s activeDriverListerStub) List(context.Context, string, string, int, int) ([]DriverRef, int64, error) {
+func (s activeDriverListerStub) List(context.Context, string, int, int) ([]DriverRef, int64, error) {
 	return s.paged, int64(len(s.drivers)), s.err
 }
 
@@ -28,7 +28,7 @@ type failingHolidayReader struct {
 	err error
 }
 
-func (r failingHolidayReader) GetHolidayMap(context.Context, int, int, string) (map[string]bool, error) {
+func (r failingHolidayReader) GetHolidayMap(context.Context, int, int) (map[string]bool, error) {
 	return nil, r.err
 }
 
@@ -54,7 +54,7 @@ func TestGetMonthAttendance_EmptyDriverListReturnsEmpty(t *testing.T) {
 func TestGetMonthAttendance_IncludesAllActiveDrivers(t *testing.T) {
 	drivers := make([]DriverRef, 101)
 	for i := range drivers {
-		drivers[i] = DriverRef{ID: uuid.New(), Name: "司機", Region: "hsinchu"}
+		drivers[i] = DriverRef{ID: uuid.New(), Name: "司機"}
 	}
 
 	firstPage := drivers[:100]
@@ -75,7 +75,7 @@ func TestGetMonthAttendance_HolidayQueryErrorFails(t *testing.T) {
 	wantErr := errors.New("holiday database unavailable")
 	svc := NewAttendanceService(
 		stubAttendanceStore{},
-		activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "司機", Region: "hsinchu"}}},
+		activeDriverListerStub{drivers: []DriverRef{{ID: uuid.New(), Name: "司機"}}},
 		discardAuditWriter{},
 		failingHolidayReader{err: wantErr},
 	)

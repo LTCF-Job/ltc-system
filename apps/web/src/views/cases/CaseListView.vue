@@ -21,22 +21,6 @@
           @keyup.enter="handleSearch"
         />
 
-        <el-select
-          v-model="filters.region"
-          placeholder="全部區域"
-          clearable
-          filterable
-          style="width: 140px"
-          @change="handleSearch"
-        >
-          <el-option label="全部區域" value="" />
-          <el-option
-            v-for="opt in regionOptions"
-            :key="opt.code"
-            :label="opt.name"
-            :value="opt.code"
-          />
-        </el-select>
 
         <el-select
           v-model="filters.status"
@@ -87,36 +71,6 @@
           <el-table-column prop="nationalId" label="身分證字號" min-width="150" align="center">
             <template #default="{ row }">
               <span class="font-mono text-id">{{ row.nationalId || '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="region" label="區域" width="115" align="center">
-            <template #default="{ row }">
-              <el-dropdown
-                v-if="authStore.hasPermission('masters_cases', 'edit')"
-                trigger="click"
-                @command="(val: Region) => handleQuickUpdateRegion(row as any, val)"
-              >
-                <span class="cursor-pointer">
-                  <span class="inline-value inline-value-clickable">
-                    {{ regionLabel(row.region) }}
-                    <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                  </span>
-                </span>
-                <template #dropdown>
-                  <el-dropdown-menu style="max-height: 240px; overflow-y: auto;">
-                    <el-dropdown-item
-                      v-for="opt in regionOptions"
-                      :key="opt.code"
-                      :command="opt.code"
-                    >
-                      <span>{{ opt.name }}</span>
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-              <span v-else class="inline-value">
-                {{ regionLabel(row.region) }}
-              </span>
             </template>
           </el-table-column>
           <el-table-column prop="status" label="狀態" width="115" align="center">
@@ -337,9 +291,7 @@
       <el-form v-if="quickCreateKind === 'site'" label-width="90px">
         <el-form-item label="據點名稱"><el-input v-model="quickCreateSiteForm.name" /></el-form-item>
         <el-form-item label="區域">
-          <el-select v-model="quickCreateSiteForm.region" style="width: 100%">
-            <el-option v-for="opt in regionOptions" :key="opt.code" :value="opt.code" :label="opt.name" />
-          </el-select>
+          <el-input v-model="quickCreateSiteForm.region" placeholder="請輸入區域（選填）" />
         </el-form-item>
         <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
       </el-form>
@@ -446,11 +398,9 @@ import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
 import { emptyVehicleForm, vehicleFormRules } from '@/utils/vehicleForm'
 import {
-  REGION_LABELS,
   CASE_STATUS_LABELS,
   TRIP_PATTERN_LABELS,
   SERVICE_USAGE_TYPE_LABELS,
-  type Region,
   type CaseStatus,
   type TripPattern,
   type ServiceUsageType
@@ -463,14 +413,6 @@ import type {
   UpdateCaseTransportPreferenceRequest,
   VehicleDTO
 } from '@/types/api'
-
-import { fetchRegionOptions, regionLabel, type RegionOption } from '@/api/regionOptions'
-
-// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
-const regionOptions = ref<RegionOption[]>([])
-onMounted(async () => {
-  regionOptions.value = await fetchRegionOptions()
-})
 
 // 匯入預覽的生日僅供人工核對，改用民國年顯示；後端仍以西元 ISO 日期解析與儲存
 function formatRocBirthDate(birthDate?: string): string {
@@ -500,7 +442,6 @@ const {
 } = useListQuery({
   defaultFilters: {
     q: '',
-    region: '',
     status: ''
   },
   onFetch: async () => {
@@ -508,7 +449,6 @@ const {
       page: page.value,
       pageSize: pageSize.value,
       q: filters.q,
-      region: filters.region,
       status: filters.status
       // 待維護個案由後端預設排除，主清單不需要另外表態
     })
@@ -518,17 +458,6 @@ const {
 })
 
 // 快速行內修改區域
-async function handleQuickUpdateRegion(row: CaseDTO, newRegion: Region) {
-  if (row.region === newRegion) return
-  try {
-    await updateCase(row.id, { region: newRegion })
-    row.region = newRegion
-    ElMessage.success(`已將個案「${row.name}」申報區域修改為 ${regionLabel(newRegion)}`)
-  } catch {
-    // 全域攔截器負責顯示 API 錯誤。
-  }
-}
-
 // 快速行內修改狀態
 async function handleQuickUpdateStatus(row: CaseDTO, newStatus: CaseStatus) {
   if (row.status === newStatus) return
@@ -909,7 +838,7 @@ const quickCreateKind = ref<'site' | 'vehicle'>('site')
 const quickCreateSaving = ref(false)
 const quickCreateTargetCase = ref<CaseDTO | null>(null)
 const quickCreateSlot = ref<UnresolvedSlot>('site')
-const quickCreateSiteForm = reactive({ name: '', region: '' as Region, address: '', openDays: [1, 2, 3, 4, 5] })
+const quickCreateSiteForm = reactive({ name: '', region: '', address: '' })
 const quickCreateVehicleForm = reactive<CreateVehicleRequest>(emptyVehicleForm())
 const quickCreateVehicleFormRef = ref<FormInstance>()
 

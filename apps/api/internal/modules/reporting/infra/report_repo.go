@@ -133,8 +133,7 @@ func (r *ReportRepository) QueryHsinchuScheduleDataAsOf(ctx context.Context, asO
 		LEFT JOIN sites s ON s.id = c.site_id
 		LEFT JOIN vehicles v ON v.id = l.vehicle_id AND v.deleted_at IS NULL
 		JOIN case_pending_status ps ON ps.case_id = c.id
-		WHERE c.region = 'hsinchu'
-		  AND c.status = 'active'
+		WHERE c.status = 'active'
 		  AND NOT ps.is_pending
 		  AND cs.effective_range @> $1::date
 	`

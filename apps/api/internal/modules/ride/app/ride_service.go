@@ -1030,7 +1030,7 @@ type IssueRide struct {
 }
 
 // ListIssues 依 issueType 分派查詢「異常集中處理」清單，month 格式為 YYYY-MM。
-func (s *RideService) ListIssues(ctx context.Context, issueType string, year, month int, region, keyword string, page, pageSize int) ([]IssueRide, int64, error) {
+func (s *RideService) ListIssues(ctx context.Context, issueType string, year, month int, keyword string, page, pageSize int) ([]IssueRide, int64, error) {
 	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	end := start.AddDate(0, 1, 0).Add(-time.Second)
 
@@ -1038,7 +1038,7 @@ func (s *RideService) ListIssues(ctx context.Context, issueType string, year, mo
 	case "conflict":
 		return s.listConflictIssues(ctx, start, end, keyword, page, pageSize)
 	case "unreported":
-		return s.listUnreportedIssues(ctx, year, month, region, page, pageSize)
+		return s.listUnreportedIssues(ctx, year, month, page, pageSize)
 	case "import_error":
 		return s.listImportErrorIssues(ctx, start, end, keyword, page, pageSize)
 	default:
@@ -1066,11 +1066,11 @@ func (s *RideService) listConflictIssues(ctx context.Context, start, end time.Ti
 	return items, total, nil
 }
 
-func (s *RideService) listUnreportedIssues(ctx context.Context, year, month int, region string, page, pageSize int) ([]IssueRide, int64, error) {
+func (s *RideService) listUnreportedIssues(ctx context.Context, year, month int, page, pageSize int) ([]IssueRide, int64, error) {
 	if s.missingProvider == nil {
 		return []IssueRide{}, 0, nil
 	}
-	rows, err := s.missingProvider.ListMissingForMonth(ctx, year, month, region)
+	rows, err := s.missingProvider.ListMissingForMonth(ctx, year, month)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list missing reports: %w", err)
 	}

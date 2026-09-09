@@ -20,8 +20,10 @@ exports.run = async ({ page, net, record, L }) => {
   await L.pickDate(page, '第三人責任險', '2027-03-31')
   await L.pickDate(page, '前次檢驗日期', '2026-06-15')
   await L.radio(page, '符合輪椅載運規定', '否')
+  await L.check(page, '證件資料', '行照')
+  await L.check(page, '證件資料', '領牌登記書')
   await L.radio(page, '狀態', '停用')
-  record('全欄位新增', await L.submit(page, net))
+  record('全欄位新增（含證件資料）', await L.submit(page, net))
 
   await L.openCreate(page, '新增車輛')
   await L.fill(page, '車號', P(2))

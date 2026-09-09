@@ -25,13 +25,13 @@ covers:
 
 | 端點形狀 | 範例 | 查無資料時 |
 | --- | --- | --- |
-| 單一資源，該資源本應存在 | `GET/PUT/PATCH/DELETE /cases/:id`、`/regions/:id`、`/rides/:id` | `404`／`CodeNotFound` |
-| 集合／清單／搜尋結果 | `GET /cases`、`GET /cases?region=north` | `200` + 空陣列 |
+| 單一資源，該資源本應存在 | `GET/PUT/PATCH/DELETE /cases/:id`、`/sites/:id`、`/rides/:id` | `404`／`CodeNotFound` |
+| 集合／清單／搜尋結果 | `GET /cases`、`GET /cases?q=王` | `200` + 空陣列 |
 | 子資源或欄位可以不存在 | `GET /cases/:id/schedule` | `200` + `data: null` |
 
 ```text
 GET /cases/:id            指定某一筆，找不到 → 404
-GET /cases?region=north   查詢集合，找不到 → 200 + []
+GET /cases?q=王          查詢集合，找不到 → 200 + []
 GET /cases/:id/schedule   個案的衍生狀態，可以不存在 → 200 + data: null
 ```
 
@@ -64,7 +64,7 @@ GET /cases/:id/schedule   個案的衍生狀態，可以不存在 → 200 + data
 - 前端呼叫端可以直接把回應資料的 `null` 或空陣列當成正常空狀態渲染，不需要
   為這類查詢額外寫錯誤攔截邏輯，也不需要在 `apiClient` 層級提供略過全域提示
   的旗標。
-- 現有的單一資源 lookup／mutation（`cases/:id`、`regions/:id`、`sites/:id`、
+- 現有的單一資源 lookup／mutation（`cases/:id`、`sites/:id`、
   `drivers/:id`、`rides/:id` 等 GET／PUT／PATCH／DELETE）查無資料時繼續回
   `404`，不受本決策影響；清單類端點（如 `GET /cases`）本來就已經是 0 筆回
   `200+[]`，同樣不受影響。

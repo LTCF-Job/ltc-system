@@ -29,7 +29,7 @@ func (h *DriverHandler) List(c *gin.Context) {
 		return
 	}
 
-	drivers, total, err := h.svc.List(c.Request.Context(), c.Query("region"), c.Query("q"), c.Query("status"), page, pageSize)
+	drivers, total, err := h.svc.List(c.Request.Context(), c.Query("q"), c.Query("status"), page, pageSize)
 	if err != nil {
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "查詢司機失敗", nil)
 		return
@@ -63,7 +63,6 @@ func (h *DriverHandler) Create(c *gin.Context) {
 		Name:                   req.Name,
 		NationalID:             req.NationalID,
 		Email:                  req.Email,
-		Region:                 req.Region,
 		LicenseClass:           req.LicenseClass,
 		LicenseExpiryDate:      req.LicenseExpiryDate.toTimePtr(),
 		Gender:                 req.Gender,
@@ -71,7 +70,6 @@ func (h *DriverHandler) Create(c *gin.Context) {
 		HasProfessionalLicense: hasProf,
 		EmploymentDate:         req.EmploymentDate.toTimePtr(),
 		HasTransferCert:        hasTrans,
-		InspectionDate:         req.InspectionDate.toTimePtr(),
 		Remarks:                req.Remarks,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
@@ -115,8 +113,8 @@ func (h *DriverHandler) Update(c *gin.Context) {
 
 	d, err := h.svc.Update(c.Request.Context(), id, app.UpdateDriverInput{
 		Name:                   req.Name,
+		NationalID:             req.NationalID,
 		Email:                  req.Email,
-		Region:                 req.Region,
 		Status:                 req.Status,
 		LicenseClass:           req.LicenseClass,
 		LicenseExpiryDate:      req.LicenseExpiryDate.Value,
@@ -128,8 +126,6 @@ func (h *DriverHandler) Update(c *gin.Context) {
 		EmploymentDate:         req.EmploymentDate.Value,
 		ClearEmploymentDate:    req.EmploymentDate.Present && req.EmploymentDate.Value == nil,
 		HasTransferCert:        req.HasTransferCert,
-		InspectionDate:         req.InspectionDate.Value,
-		ClearInspectionDate:    req.InspectionDate.Present && req.InspectionDate.Value == nil,
 		Remarks:                req.Remarks,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
@@ -152,6 +148,14 @@ func (h *DriverHandler) Update(c *gin.Context) {
 		}
 		if errors.Is(err, app.ErrInvalidDriverLicenseClass) {
 			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "駕照類別不正確", nil)
+			return
+		}
+		if errors.Is(err, app.ErrInvalidDriverNationalID) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "身分證檢查碼錯誤", nil)
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateNationalID) {
+			httpx.RespondError(c, http.StatusConflict, httpx.CodeValidationFailed, "此身分證字號已被其他司機使用", nil)
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
@@ -235,9 +239,7 @@ func (h *DriverHandler) AssignVehicle(c *gin.Context) {
 	}
 
 	assignment, err := h.svc.AssignVehicle(c.Request.Context(), driverID, app.AssignVehicleInput{
-		VehicleID:     req.VehicleID,
-		EffectiveFrom: req.EffectiveFrom.toTime(),
-		EffectiveTo:   req.EffectiveTo.toTimePtr(),
+		VehicleID: req.VehicleID,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
 		ActorRole: auth.GetActorRole(c),
@@ -246,7 +248,7 @@ func (h *DriverHandler) AssignVehicle(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidAssignmentRange) {
-			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "司機指派日期區間無效", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "司機指派資料無效", nil)
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)

@@ -111,6 +111,23 @@
             </template>
           </el-table-column>
 
+          <el-table-column label="證件資料" min-width="200" class-name="vehicle-documents-col">
+            <template #default="{ row }">
+              <div v-if="vehicleDocumentLabels(row as any).length" class="vehicle-document-tags">
+                <el-tag
+                  v-for="label in vehicleDocumentLabels(row as any)"
+                  :key="label"
+                  size="small"
+                  type="success"
+                  effect="plain"
+                >
+                  {{ label }}
+                </el-tag>
+              </div>
+              <span v-else class="vehicle-empty-text">未填</span>
+            </template>
+          </el-table-column>
+
           <el-table-column label="目前司機" min-width="160" class-name="vehicle-current-driver-col">
             <template #default="{ row }">
               <div v-if="row.drivers && row.drivers.length" class="vehicle-driver-tags">
@@ -374,6 +391,16 @@ function openCreateDialog() {
   dialogVisible.value = true
 }
 
+// 四項證件合併為一欄標籤呈現，避免為每個布林值各開一個窄欄。
+function vehicleDocumentLabels(row: VehicleDTO): string[] {
+  const labels: string[] = []
+  if (row.hasVehicleLicense) labels.push('行照')
+  if (row.hasPurchaseContract) labels.push('汽車買賣合約書')
+  if (row.hasPlateRegistration) labels.push('領牌登記書')
+  if (row.hasTransferRegistration) labels.push('異動登記書')
+  return labels
+}
+
 function openEditDialog(row: VehicleDTO) {
   editingId.value = row.id
   Object.assign(form, emptyVehicleForm(), {
@@ -388,6 +415,10 @@ function openEditDialog(row: VehicleDTO) {
     thirdPartyInsuranceExpiry: row.thirdPartyInsuranceExpiry || '',
     lastInspectionDate: row.lastInspectionDate || '',
     wheelchairAccessible: row.wheelchairAccessible ?? true,
+    hasVehicleLicense: !!row.hasVehicleLicense,
+    hasPurchaseContract: !!row.hasPurchaseContract,
+    hasPlateRegistration: !!row.hasPlateRegistration,
+    hasTransferRegistration: !!row.hasTransferRegistration,
     status: row.status
   })
   formRef.value?.clearValidate()
@@ -433,6 +464,10 @@ async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
       thirdPartyInsuranceExpiry: row.thirdPartyInsuranceExpiry || '',
       lastInspectionDate: row.lastInspectionDate || '',
       wheelchairAccessible: row.wheelchairAccessible ?? true,
+      hasVehicleLicense: !!row.hasVehicleLicense,
+      hasPurchaseContract: !!row.hasPurchaseContract,
+      hasPlateRegistration: !!row.hasPlateRegistration,
+      hasTransferRegistration: !!row.hasTransferRegistration,
       status: newStatus
     })
     row.status = newStatus
@@ -466,7 +501,8 @@ executeFetch()
 </script>
 
 <style scoped>
-.vehicle-driver-tags {
+.vehicle-driver-tags,
+.vehicle-document-tags {
   display: flex;
   align-items: center;
   gap: 6px;

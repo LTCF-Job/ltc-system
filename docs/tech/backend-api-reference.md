@@ -11,16 +11,6 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 架構背景見 [backend-framework.md](backend-framework.md)，每支端點背後的業務流程見 [backend-flows.md](backend-flows.md)。
 
-## 區域主檔 `regionH`
-
-| Method | Path | 角色 |
-|---|---|---|
-| GET | `/regions` | viewer, staff, admin |
-| GET | `/regions/:id` | viewer, staff, admin |
-| POST | `/regions` | staff, admin |
-| PATCH | `/regions/:id` | staff, admin |
-| DELETE | `/regions/:id` | admin |
-
 ## 個案主檔與排班 `caseH`
 
 | Method | Path | 角色 | 說明 |
@@ -48,8 +38,8 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/sites` | viewer, staff, admin | 支援 `q`、`region`、`status`（`active`／`inactive`）篩選 |
-| POST | `/sites` | staff, admin | 僅 `name` 為必填，`region` 與 `address` 為選填 |
+| GET | `/sites` | viewer, staff, admin | 支援 `q`、`region`、`status`（`active`／`inactive`）篩選；`region` 為使用者自由填寫的文字，以模糊比對 |
+| POST | `/sites` | staff, admin | 僅 `name` 為必填，`region`（自由文字）與 `address` 為選填 |
 | PATCH | `/sites/:id` | staff, admin | 整筆覆寫，必填與選填欄位同 POST |
 | DELETE | `/sites/:id` | admin | 刪除據點 |
 
@@ -57,8 +47,8 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/vehicles` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）篩選（`siteId`／`region` 篩選與唯讀 `region` 欄位已隨車輛與據點主檔解耦移除）；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位），以及車輛自己的自由文字 `siteName`（不關聯據點主檔） |
-| POST | `/vehicles` | staff, admin | `plateNo` 與 `displayName`（車別）為必填，`siteName`（自由文字，不驗證關聯）與其餘車籍欄位皆為選填（支援 `null` 與空值）；`status` 非 `active`／`inactive` 一律預設 `active`；車號或車別重複時回 409 並帶 `details` |
+| GET | `/vehicles` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）篩選（`siteId`／`region` 篩選與唯讀 `region` 欄位已隨車輛與據點主檔解耦移除）；每筆帶 `drivers`（該車今日生效的司機，一台車可有多位）、車輛自己的自由文字 `siteName`（不關聯據點主檔），以及四項證件註記 `hasVehicleLicense`（行照）、`hasPurchaseContract`（汽車買賣合約書）、`hasPlateRegistration`（領牌登記書）、`hasTransferRegistration`（異動登記書） |
+| POST | `/vehicles` | staff, admin | `plateNo` 與 `displayName`（車別）為必填，`siteName`（自由文字，不驗證關聯）與其餘車籍欄位皆為選填（支援 `null` 與空值）；四項證件註記未提供時一律為 `false`；`status` 非 `active`／`inactive` 一律預設 `active`；車號或車別重複時回 409 並帶 `details` |
 | PATCH | `/vehicles/:id` | staff, admin | 整筆覆寫，必填欄位同 POST；車號或車別重複時回 409 並帶 `details` |
 | DELETE | `/vehicles/:id` | admin | 軟刪除（僅標記 `deleted_at`，不影響 `status` 啟用/停用狀態）；仍有生效中司機指派或排班趟次綁定時回 409（`CodeResourceInUse`） |
 | PUT | `/vehicles/:id/drivers` | staff, admin | 整批設定本車司機：`{ driverIds: string[], effectiveFrom?: date }`；`driverIds` 為空代表清空 |
@@ -67,12 +57,12 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/drivers` | viewer, staff, admin | 支援 `region`、`q`、`status`（`active`／`inactive`）篩選；回傳欄位含 `gender`、`birthDate`、`hasProfessionalLicense`、`employmentDate`、`hasTransferCert`、`inspectionDate`、`remarks`、`licenseClass`、`licenseExpiryDate` |
-| POST | `/drivers` | staff, admin | `name` 與 `nationalId` 為必填，`region` 及擴充欄位（`gender`, `birthDate`, `hasProfessionalLicense`, `employmentDate`, `hasTransferCert`, `inspectionDate`, `remarks`, `licenseClass`, `licenseExpiryDate`）皆為選填，新增一律為 `active` |
-| PATCH | `/drivers/:id` | staff, admin | 欄位未提供代表不變更；日期欄位明確給 `null` 才會清空；`status` 非 `active`／`inactive` 時保留原值不變更 |
+| GET | `/drivers` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）篩選；回傳欄位含 `gender`、`birthDate`、`hasProfessionalLicense`、`employmentDate`、`hasTransferCert`、`remarks`、`licenseClass`、`licenseExpiryDate` |
+| POST | `/drivers` | staff, admin | `name` 與 `nationalId` 為必填，擴充欄位（`gender`, `birthDate`, `hasProfessionalLicense`, `employmentDate`, `hasTransferCert`, `remarks`, `licenseClass`, `licenseExpiryDate`）皆為選填，新增一律為 `active` |
+| PATCH | `/drivers/:id` | staff, admin | 欄位未提供代表不變更；日期欄位明確給 `null` 才會清空；`status` 非 `active`／`inactive` 時保留原值不變更。可帶 `nationalId` 變更身分證：會重新驗證檢查碼並同步重算密文、HMAC 索引與遮罩值，檢查碼錯誤回 400、與其他司機重複回 409，皆帶 `details` |
 | DELETE | `/drivers/:id` | admin | 軟刪除（僅標記 `deleted_at`，不影響 `status` 啟用/停用狀態），同交易內收斂生效中的司機指派區間 |
 | POST | `/drivers/:id/reveal` | staff, admin | 明文顯示司機個資 |
-| POST | `/drivers/:id/assignments` | staff, admin | 指派車輛給司機；一位司機同期只會有一台車，指派新車即取代原本的指派 |
+| POST | `/drivers/:id/assignments` | staff, admin | 指派車輛給司機；body 只有 `vehicleId`，一律自今日起生效且不設結束日。一位司機同期只會有一台車，指派新車會先收斂原本的指派 |
 
 ## 司機接送匯報與欄位對應 `driverReportH`
 
@@ -120,8 +110,8 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
-| GET | `/exports/precheck` | staff, admin | 依 `periodYm`、`region` 與可選 `caseIds` 執行匯出前置檢核 |
-| POST | `/exports/precheck` | staff, admin | 同上；body 可帶 `periodYm`、`region`、`caseIds` |
+| GET | `/exports/precheck` | staff, admin | 依 `periodYm` 與可選 `caseIds` 執行匯出前置檢核 |
+| POST | `/exports/precheck` | staff, admin | 同上；body 可帶 `periodYm`、`caseIds` |
 | GET | `/exports` | viewer, staff, admin | 匯出工作歷史清單（不含檔案明細與下載連結） |
 | POST | `/exports` | staff, admin | 建立政府申報匯出工作並同步產檔；body 需帶 `periodYm`(民國 5 碼)、`mode`(`direct`\|`zip`)、`caseIds`(至少一筆) |
 | GET | `/exports/:id` | viewer, staff, admin | 單筆匯出工作詳情，含逐案檔案清單 `files` |

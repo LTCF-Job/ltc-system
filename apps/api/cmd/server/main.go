@@ -95,7 +95,6 @@ func main() {
 	auditSvc := auditapp.NewService(auditinfra.NewAuditRepository(pool))
 
 	// masterdata 模組自有的 repository，legacy service 透過本檔的 adapter 取用
-	mdRegionRepo := masterinfra.NewRegionRepository(pool)
 	mdSiteRepo := masterinfra.NewSiteRepository(pool)
 	mdVehicleRepo := masterinfra.NewVehicleRepository(pool)
 	mdDriverRepo := masterinfra.NewDriverRepository(pool)
@@ -127,7 +126,6 @@ func main() {
 	// 初始化 Services
 	mdAudit := masterdataAuditWriter{svc: auditSvc}
 	txRunner := pgxdb.NewTxRunner(pool)
-	regionSvc := masterapp.NewRegionService(mdRegionRepo, mdAudit)
 	siteSvc := masterapp.NewSiteService(mdSiteRepo, mdAudit)
 	vehicleSvc := masterapp.NewVehicleService(mdVehicleRepo, mdDriverRepo, mdAudit, txRunner)
 	driverSvc := masterapp.NewDriverService(mdDriverRepo, cfg, mdAudit, txRunner)
@@ -224,7 +222,6 @@ func main() {
 
 	// 初始化 Handlers
 	h := handlers{
-		region:       mastertransport.NewRegionHandler(regionSvc),
 		kase:         casetransport.NewCaseHandler(caseSvc),
 		caseImport:   importtransport.NewImportHandler(importSvc),
 		site:         mastertransport.NewSiteHandler(siteSvc),

@@ -29,6 +29,10 @@ type vehicleRow struct {
 	ThirdPartyInsuranceExpiry *time.Time
 	LastInspectionDate        *time.Time
 	WheelchairAccessible      *bool
+	HasVehicleLicense         bool
+	HasPurchaseContract       bool
+	HasPlateRegistration      bool
+	HasTransferRegistration   bool
 	Status                    string
 	CreatedAt                 time.Time
 	UpdatedAt                 time.Time
@@ -55,6 +59,10 @@ func (r vehicleRow) toApp() app.Vehicle {
 		ThirdPartyInsuranceExpiry: r.ThirdPartyInsuranceExpiry,
 		LastInspectionDate:        r.LastInspectionDate,
 		WheelchairAccessible:      r.WheelchairAccessible,
+		HasVehicleLicense:         r.HasVehicleLicense,
+		HasPurchaseContract:       r.HasPurchaseContract,
+		HasPlateRegistration:      r.HasPlateRegistration,
+		HasTransferRegistration:   r.HasTransferRegistration,
 		Status:                    r.Status,
 		CreatedAt:                 r.CreatedAt,
 		UpdatedAt:                 r.UpdatedAt,
@@ -66,7 +74,10 @@ const vehicleSelect = `
 	       v.brand, v.model, v.manufacture_ym,
 	       v.compulsory_insurance_expiry, v.passenger_insurance_expiry,
 	       v.third_party_insurance_expiry, v.last_inspection_date,
-	       v.wheelchair_accessible, v.status, v.created_at, v.updated_at
+	       v.wheelchair_accessible,
+	       v.has_vehicle_license, v.has_purchase_contract,
+	       v.has_plate_registration, v.has_transfer_registration,
+	       v.status, v.created_at, v.updated_at
 	FROM vehicles v
 `
 
@@ -76,7 +87,10 @@ func scanVehicle(dest *vehicleRow) []interface{} {
 		&dest.Brand, &dest.Model, &dest.ManufactureYM,
 		&dest.CompulsoryInsuranceExpiry, &dest.PassengerInsuranceExpiry,
 		&dest.ThirdPartyInsuranceExpiry, &dest.LastInspectionDate,
-		&dest.WheelchairAccessible, &dest.Status, &dest.CreatedAt, &dest.UpdatedAt,
+		&dest.WheelchairAccessible,
+		&dest.HasVehicleLicense, &dest.HasPurchaseContract,
+		&dest.HasPlateRegistration, &dest.HasTransferRegistration,
+		&dest.Status, &dest.CreatedAt, &dest.UpdatedAt,
 	}
 }
 
@@ -189,7 +203,9 @@ func vehicleWriteArgs(v *app.Vehicle) []interface{} {
 		v.ID, v.PlateNo, v.DisplayName, nullableText(v.SiteName),
 		nullableText(v.Brand), nullableText(v.Model), nullableText(v.ManufactureYM),
 		v.CompulsoryInsuranceExpiry, v.PassengerInsuranceExpiry, v.ThirdPartyInsuranceExpiry,
-		v.LastInspectionDate, v.WheelchairAccessible, v.Status,
+		v.LastInspectionDate, v.WheelchairAccessible,
+		v.HasVehicleLicense, v.HasPurchaseContract, v.HasPlateRegistration, v.HasTransferRegistration,
+		v.Status,
 	}
 }
 
@@ -210,9 +226,11 @@ func (r *VehicleRepository) Create(ctx context.Context, v *app.Vehicle) error {
 		INSERT INTO vehicles (
 			id, plate_no, display_name, site_name, brand, model, manufacture_ym,
 			compulsory_insurance_expiry, passenger_insurance_expiry, third_party_insurance_expiry,
-			last_inspection_date, wheelchair_accessible, status
+			last_inspection_date, wheelchair_accessible,
+			has_vehicle_license, has_purchase_contract, has_plate_registration, has_transfer_registration,
+			status
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		RETURNING created_at, updated_at
 	`
 	db := pgxdb.FromContext(ctx, r.db)
@@ -229,7 +247,10 @@ func (r *VehicleRepository) Update(ctx context.Context, v *app.Vehicle) error {
 		SET plate_no = $2, display_name = $3, site_name = $4, brand = $5,
 		    model = $6, manufacture_ym = $7, compulsory_insurance_expiry = $8,
 		    passenger_insurance_expiry = $9, third_party_insurance_expiry = $10,
-		    last_inspection_date = $11, wheelchair_accessible = $12, status = $13,
+		    last_inspection_date = $11, wheelchair_accessible = $12,
+		    has_vehicle_license = $13, has_purchase_contract = $14,
+		    has_plate_registration = $15, has_transfer_registration = $16,
+		    status = $17,
 		    updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING created_at, updated_at

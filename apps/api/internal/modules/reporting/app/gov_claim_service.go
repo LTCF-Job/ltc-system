@@ -26,7 +26,6 @@ var periodYMPattern = regexp.MustCompile(`^\d{5}$`)
 // CreateGovClaimInput 代表建立政府申報匯出工作的輸入條件。
 type CreateGovClaimInput struct {
 	PeriodYM      string
-	Region        string
 	CaseIDs       []uuid.UUID
 	Mode          GovClaimMode
 	CreatedBy     uuid.UUID
@@ -80,7 +79,7 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 		return GovClaimJob{}, err
 	}
 
-	scope := NewClaimScope(start, end, input.Region, input.CaseIDs)
+	scope := NewClaimScope(start, end, input.CaseIDs)
 	report, err := s.precheck.RunPrecheck(ctx, scope)
 	if err != nil {
 		return GovClaimJob{}, fmt.Errorf("run precheck: %w", err)
@@ -97,7 +96,6 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 	jobID, err := s.store.CreateJob(ctx, ExportJobCreate{
 		JobType:       govClaimJobType,
 		PeriodYM:      periodYM,
-		Region:        input.Region,
 		Format:        format,
 		CaseIDs:       input.CaseIDs,
 		Precheck:      report,
@@ -110,7 +108,6 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 	s.recordExportAuditBestEffort(ctx, GovClaimJob{
 		ID:       jobID,
 		PeriodYM: periodYM,
-		Region:   input.Region,
 		Mode:     input.Mode,
 		Status:   ExportStatusRunning,
 	}, input, "export_requested")
@@ -124,7 +121,6 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 		s.recordExportAuditBestEffort(ctx, GovClaimJob{
 			ID:           jobID,
 			PeriodYM:     periodYM,
-			Region:       input.Region,
 			Mode:         input.Mode,
 			Status:       ExportStatusFailed,
 			ErrorMessage: exportFailureMessage(err),
@@ -139,7 +135,6 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 		s.recordExportAuditBestEffort(ctx, GovClaimJob{
 			ID:           jobID,
 			PeriodYM:     periodYM,
-			Region:       input.Region,
 			Mode:         input.Mode,
 			Status:       ExportStatusFailed,
 			ErrorMessage: exportFailureMessage(err),
@@ -152,7 +147,6 @@ func (s *GovClaimService) CreateGovClaimJob(ctx context.Context, input CreateGov
 	s.recordExportAuditBestEffort(ctx, GovClaimJob{
 		ID:         jobID,
 		PeriodYM:   periodYM,
-		Region:     input.Region,
 		Mode:       input.Mode,
 		Status:     ExportStatusSucceeded,
 		TotalCases: len(files),
@@ -188,7 +182,6 @@ func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob
 	for _, f := range job.Files {
 		cases = append(cases, ExportJobAuditCaseFile{
 			CaseName: f.CaseName,
-			Region:   f.Region,
 			FileName: f.FileName,
 			RowCount: f.RowCount,
 		})
@@ -203,7 +196,6 @@ func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob
 		AfterData: ExportJobAuditSnapshot{
 			Status:     job.Status,
 			PeriodYM:   job.PeriodYM,
-			Region:     job.Region,
 			Mode:       string(job.Mode),
 			TotalCases: job.TotalCases,
 			TotalRows:  job.TotalRows,
@@ -273,15 +265,12 @@ func (s *GovClaimService) RenderZip(ctx context.Context, jobID uuid.UUID) (strin
 	if err != nil {
 		return "", nil, fmt.Errorf("build zip: %w", err)
 	}
-	return ZipFileName(job.Region, job.PeriodYM), archive, nil
+	return ZipFileName(job.PeriodYM), archive, nil
 }
 
 // ZipFileName 組出壓縮檔檔名；未指定地區時以 all 標示。
-func ZipFileName(region, periodYM string) string {
-	if region == "" {
-		region = "all"
-	}
-	return fmt.Sprintf("gov-claim-%s-%s.zip", region, periodYM)
+func ZipFileName(periodYM string) string {
+	return fmt.Sprintf("gov-claim-%s.zip", periodYM)
 }
 
 // buildJobContent 查詢趟次並組出逐案工作簿、申報列快照與跳過清單。
@@ -320,7 +309,6 @@ func (s *GovClaimService) buildJobContent(
 		files = append(files, GovClaimCaseFile{
 			CaseID:   group.caseID,
 			CaseName: group.caseName,
-			Region:   group.region,
 			FileName: uniqueFileName(usedFileNames, group.caseName, periodYM),
 			RowCount: len(rows),
 			Checksum: hex.EncodeToString(sum[:]),
@@ -666,7 +654,6 @@ func rowKeyOf(row govform.ClaimRow) rowKey {
 type caseGroup struct {
 	caseID           uuid.UUID
 	caseName         string
-	region           string
 	nationalIDCipher []byte
 	nationalIDMasked string
 	items            []GovClaimSource
@@ -683,7 +670,6 @@ func groupByCase(sources []GovClaimSource) []caseGroup {
 			groups = append(groups, caseGroup{
 				caseID:           item.CaseID,
 				caseName:         item.CaseName,
-				region:           item.Region,
 				nationalIDCipher: item.CaseNationalIDCipher,
 				nationalIDMasked: item.CaseNationalIDMasked,
 			})

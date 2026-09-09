@@ -9,6 +9,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// ActorContext 代表發動異動的操作者與來源資訊，供稽核留痕使用。
+type ActorContext struct {
+	ActorID   uuid.UUID
+	ActorRole string
+	IPAddress string
+	UserAgent string
+}
+
 // writeAuditBestEffort 將已完成的主檔異動送入稽核；稽核服務故障不得讓已完成的
 // 非外部 mutation 被回報成失敗，但也不可以靜默吞掉錯誤。
 func writeAuditBestEffort(ctx context.Context, writer AuditWriter, actor ActorContext, action, entityType string, entityID uuid.UUID, before, after interface{}) {

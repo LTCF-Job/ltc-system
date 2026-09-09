@@ -15,20 +15,20 @@ type CaseNameRef struct {
 
 // Case 代表 cases 資料表實體。
 type Case struct {
-	ID                     uuid.UUID
-	Name                   string
-	NameNormalized         string
-	NationalIDCipher       []byte
-	NationalIDHMAC         []byte
-	NationalIDMasked       string
-	NationalIDInvalid      bool
-	HouseholdType          *string
-	Gender                 *string
-	BirthDate              *time.Time
-	BirthDateRaw           *string
-	CareContactRole        *string
-	CareContactName        *string
-	RegisteredAddress      *string
+	ID                uuid.UUID
+	Name              string
+	NameNormalized    string
+	NationalIDCipher  []byte
+	NationalIDHMAC    []byte
+	NationalIDMasked  string
+	NationalIDInvalid bool
+	HouseholdType     *string
+	Gender            *string
+	BirthDate         *time.Time
+	BirthDateRaw      *string
+	CareContactRole   *string
+	CareContactName   *string
+	RegisteredAddress *string
 	// SiteID 為 nil 且 SiteNameRaw 有值時，表示匯入時的據點名稱未比對到主檔，
 	// 待人工於「待維護」畫面補齊。這是個案直接關聯的據點，排班與交通偏好不再各自持有。
 	SiteID                 *uuid.UUID
@@ -41,7 +41,6 @@ type Case struct {
 	InboundVehicle         string
 	InboundVehicleNameRaw  *string
 	HomeAddress            *string
-	Region                 *string
 	LTCLevel               *string
 	ServiceCategory        *int
 	ServiceUsageType       *int
@@ -74,7 +73,6 @@ type DuplicateCandidate struct {
 	CareContactName        *string
 	RegisteredAddress      *string
 	HomeAddress            *string
-	Region                 *string
 	ServiceCategory        *int
 	ServiceUsageType       *int
 	SiteID                 *uuid.UUID
@@ -130,14 +128,12 @@ type ScheduleLeg struct {
 	CreatedAt   time.Time
 }
 
-// ActiveCaseScheduleInfo 代表個案於指定月份之有效排班與關聯基本資訊。SiteOpenDays
-// 現由個案的據點帶出（見 GetActiveSchedulesForMonth 的 JOIN 路徑）。
+// ActiveCaseScheduleInfo 代表個案於指定月份之有效排班與關聯基本資訊。據點不再設定
+// 開放星期，排班只由個案自己的 Weekdays 決定。
 type ActiveCaseScheduleInfo struct {
 	CaseID        uuid.UUID
 	CaseName      string
-	Region        string
 	ClaimEndDate  *time.Time
-	SiteOpenDays  []int16
 	EffectiveFrom time.Time
 	EffectiveTo   *time.Time
 	Weekdays      []int16

@@ -22,7 +22,7 @@ Each module owns one business capability. Put new work in the module that alread
 
 | module | Owns |
 | --- | --- |
-| `masterdata` | Sites, vehicles, drivers, regions, driver–vehicle assignment |
+| `masterdata` | Sites, vehicles, drivers, driver–vehicle assignment |
 | `caregiver` | Caregiver master data and its batch Excel/CSV import |
 | `casemgmt` | Case master data, schedules, transport preference, case profile workbook |
 | `caseimport` | Batch Excel/CSV parsing, preview, and commit of cases |
@@ -100,7 +100,7 @@ A struct carrying a `binding:` tag that also appears in a `rows.Scan()` call sit
 
 - The layer that makes the decision declares the sentinel: `app` for business outcomes, the domain package for invariant violations.
 - Cross-boundary wrapping uses `%w`; the sentinel identity survives to the handler.
-- Handlers compare with `errors.Is`. `region_handler.go` is the working example.
+- Handlers compare with `errors.Is`. `site_handler.go` is the working example.
 - Exactly one place maps a sentinel to an HTTP status and error code: `<mod>/transport/errors.go`.
 - Error codes come from the `httpx` constants.
 - Response bodies carry a stable message; the underlying `err` goes to the log.

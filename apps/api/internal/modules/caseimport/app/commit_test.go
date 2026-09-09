@@ -57,7 +57,7 @@ func (f fakeSiteLookup) GetByName(ctx context.Context, name string) (*SiteRef, e
 	return &SiteRef{ID: id, Name: name}, nil
 }
 
-func (f fakeSiteLookup) List(ctx context.Context, region string, page, pageSize int) ([]SiteRef, error) {
+func (f fakeSiteLookup) List(ctx context.Context, page, pageSize int) ([]SiteRef, error) {
 	return nil, nil
 }
 
@@ -273,7 +273,7 @@ func (f errorSiteLookup) GetByName(context.Context, string) (*SiteRef, error) {
 	return nil, f.err
 }
 
-func (errorSiteLookup) List(context.Context, string, int, int) ([]SiteRef, error) {
+func (errorSiteLookup) List(context.Context, int, int) ([]SiteRef, error) {
 	return nil, nil
 }
 

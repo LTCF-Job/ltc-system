@@ -32,9 +32,6 @@
     >
       <el-table-column type="selection" width="45" :reserve-selection="true" />
       <el-table-column prop="name" label="姓名" width="110" />
-      <el-table-column prop="region" label="區域" width="100" align="center">
-        <template #default="{ row }">{{ regionLabel(row.region) }}</template>
-      </el-table-column>
       <el-table-column prop="status" label="狀態" width="90" align="center">
         <template #default="{ row }">{{ CASE_STATUS_LABELS[row.status as CaseStatus] || row.status }}</template>
       </el-table-column>
@@ -58,10 +55,9 @@ import { ref, computed, nextTick } from 'vue'
 import type { TableInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { listAllCases } from '@/api/cases'
-import { REGION_LABELS, CASE_STATUS_LABELS } from '@/types/domain'
-import type { Region, CaseStatus } from '@/types/domain'
+import { CASE_STATUS_LABELS } from '@/types/domain'
+import type { CaseStatus } from '@/types/domain'
 import type { CaseDTO } from '@/types/api'
-import { regionLabel } from '@/api/regionOptions'
 
 const props = withDefaults(
   defineProps<{
@@ -69,14 +65,12 @@ const props = withDefaults(
     title?: string
     confirmText?: string
     confirmLoading?: boolean
-    region?: string
     initialSelectedIds?: string[]
   }>(),
   {
     title: '選擇個案',
     confirmText: '確認',
     confirmLoading: false,
-    region: '',
     initialSelectedIds: () => []
   }
 )
@@ -106,7 +100,7 @@ async function loadCandidates() {
   tableRef.value?.clearSelection()
   loading.value = true
   try {
-    candidates.value = await listAllCases({ region: props.region || undefined })
+    candidates.value = await listAllCases()
     await nextTick()
     restoreInitialSelection()
   } catch {

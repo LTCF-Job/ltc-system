@@ -28,11 +28,6 @@
           style="width: 100%"
         />
       </el-form-item>
-      <el-form-item label="所屬區域" prop="region">
-        <el-select v-model="form.region" placeholder="請選擇區域（選填）" clearable filterable style="width: 100%">
-          <el-option v-for="opt in regionOptions" :key="opt.code" :label="opt.name" :value="opt.code" />
-        </el-select>
-      </el-form-item>
       <el-form-item label="電子信箱" prop="email">
         <el-input v-model="form.email" placeholder="通知寄送用信箱（選填）" clearable />
       </el-form-item>
@@ -70,16 +65,6 @@
         <el-checkbox v-model="form.hasProfessionalLicense">職業駕照</el-checkbox>
         <el-checkbox v-model="form.hasTransferCert">異動登記書</el-checkbox>
       </el-form-item>
-      <el-form-item label="驗車日" prop="inspectionDate">
-        <el-date-picker
-          v-model="form.inspectionDate"
-          type="date"
-          value-format="YYYY-MM-DD"
-          placeholder="請選擇驗車日（選填）"
-          clearable
-          style="width: 100%"
-        />
-      </el-form-item>
       <el-form-item label="備註" prop="remarks">
         <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
       </el-form-item>
@@ -97,15 +82,7 @@ import DialogFooter from '@/components/DialogFooter.vue'
 import { createDriver } from '@/api/masters'
 import { DRIVER_LICENSE_CLASS_LABELS } from '@/types/domain'
 import type { CreateDriverRequest, DriverDTO } from '@/types/api'
-import { isValidNationalID } from '@/utils/nationalId'
-
-import { fetchRegionOptions, type RegionOption } from '@/api/regionOptions'
-
-// 區域選項一律來自地區主檔，避免前端寫死清單與主檔、DB 值域三方不一致。
-const regionOptions = ref<RegionOption[]>([])
-onMounted(async () => {
-  regionOptions.value = await fetchRegionOptions()
-})
+import { nationalIdRules } from '@/utils/driverForm'
 
 // 跟司機管理頁「新增司機」共用同一份欄位與 API，避免兩邊各自維護造成落差；
 // 編輯流程不在本元件範圍，維持在司機管理頁自行處理。
@@ -124,14 +101,12 @@ const saving = ref(false)
 const form = reactive<CreateDriverRequest>({
   name: '',
   nationalId: '',
-  region: '',
   email: '',
   gender: '',
   birthDate: null,
   hasProfessionalLicense: false,
   employmentDate: null,
   hasTransferCert: false,
-  inspectionDate: null,
   remarks: '',
   licenseClass: null,
   licenseExpiryDate: null
@@ -139,19 +114,7 @@ const form = reactive<CreateDriverRequest>({
 
 const rules = {
   name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }],
-  nationalId: [
-    { required: true, message: '請輸入身分證字號', trigger: 'blur' },
-    {
-      validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
-        if (value && !isValidNationalID(value)) {
-          callback(new Error('身分證字號格式錯誤，請確認後再試'))
-          return
-        }
-        callback()
-      },
-      trigger: 'blur'
-    }
-  ]
+  nationalId: nationalIdRules(true)
 }
 
 watch(
@@ -160,14 +123,12 @@ watch(
     if (!visible) return
     form.name = props.prefillName || ''
     form.nationalId = ''
-    form.region = ''
     form.email = ''
     form.gender = ''
     form.birthDate = null
     form.hasProfessionalLicense = false
     form.employmentDate = null
     form.hasTransferCert = false
-    form.inspectionDate = null
     form.remarks = ''
     form.licenseClass = null
     form.licenseExpiryDate = null

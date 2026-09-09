@@ -58,11 +58,11 @@ func (r *RideRepository) ListRideSourcesForSlot(
 func (r *RideRepository) ListCalendarCases(
 	ctx context.Context,
 	start, end time.Time,
-	region, keyword string,
+	keyword string,
 ) ([]app.CalendarCase, error) {
 	query := `
-		SELECT c.id, c.name, COALESCE(c.region, ''), c.claim_end_date,
-		       cs.id, cs.trip_pattern, cs.weekdays, COALESCE(s.open_days, ARRAY[]::smallint[]),
+		SELECT c.id, c.name, c.claim_end_date,
+		       cs.id, cs.trip_pattern, cs.weekdays,
 		       lower(cs.effective_range), upper(cs.effective_range)
 		FROM cases c
 		JOIN case_schedules cs ON cs.case_id = c.id AND cs.effective_range && daterange($1::date, $2::date, '[)')
@@ -70,12 +70,11 @@ func (r *RideRepository) ListCalendarCases(
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.status = 'active'
 		  AND NOT ps.is_pending
-		  AND ($3 = '' OR c.region = $3)
 		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
 
 		UNION ALL
 
-		SELECT c.id, c.name, COALESCE(c.region, ''), c.claim_end_date,
+		SELECT c.id, c.name, c.claim_end_date,
 		       '00000000-0000-0000-0000-000000000000'::uuid, 0::smallint,
 		       ARRAY[]::smallint[], ARRAY[]::smallint[],
 		       $1::date, NULL::date
@@ -83,7 +82,6 @@ func (r *RideRepository) ListCalendarCases(
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.status = 'active'
 		  AND NOT ps.is_pending
-		  AND ($3 = '' OR c.region = $3)
 		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
 		  AND NOT EXISTS (
 		    SELECT 1 FROM case_schedules cs2
@@ -97,7 +95,7 @@ func (r *RideRepository) ListCalendarCases(
 		ORDER BY name ASC
 	`
 	db := pgxdb.FromContext(ctx, r.db)
-	rows, err := db.Query(ctx, query, start, end, region, keyword)
+	rows, err := db.Query(ctx, query, start, end, keyword)
 	if err != nil {
 		return nil, err
 	}
@@ -110,8 +108,8 @@ func (r *RideRepository) ListCalendarCases(
 		var scheduleID uuid.UUID
 		var effectiveTo *time.Time
 		if err := rows.Scan(
-			&c.ID, &c.Name, &c.Region, &c.ClaimEndDate,
-			&scheduleID, &c.TripPattern, &c.Weekdays, &c.SiteOpenDays,
+			&c.ID, &c.Name, &c.ClaimEndDate,
+			&scheduleID, &c.TripPattern, &c.Weekdays,
 			&c.EffectiveFrom, &effectiveTo,
 		); err != nil {
 			return nil, err
@@ -170,7 +168,7 @@ func (r *RideRepository) ListCalendarCases(
 func (r *RideRepository) ListRideRecordsInRange(
 	ctx context.Context,
 	start, end time.Time,
-	region, keyword string,
+	keyword string,
 ) ([]app.RideRecord, error) {
 	query := `
 		SELECT rr.id, rr.case_id, c.name, rr.service_date, rr.leg_seq,
@@ -184,12 +182,11 @@ func (r *RideRepository) ListRideRecordsInRange(
 		LEFT JOIN vehicles v ON rr.vehicle_id = v.id AND v.deleted_at IS NULL
 		LEFT JOIN drivers d ON rr.driver_id = d.id
 		WHERE rr.service_date >= $1 AND rr.service_date < $2
-		  AND ($3 = '' OR c.region = $3)
 		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
 		ORDER BY rr.service_date ASC, rr.leg_seq ASC
 	`
 	db := pgxdb.FromContext(ctx, r.db)
-	rows, err := db.Query(ctx, query, start, end, region, keyword)
+	rows, err := db.Query(ctx, query, start, end, keyword)
 	if err != nil {
 		return nil, err
 	}

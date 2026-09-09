@@ -11,7 +11,7 @@ import (
 
 type emptyDriverLister struct{}
 
-func (emptyDriverLister) List(context.Context, string, string, int, int) ([]DriverRef, int64, error) {
+func (emptyDriverLister) List(context.Context, string, int, int) ([]DriverRef, int64, error) {
 	return nil, 0, nil
 }
 
@@ -21,7 +21,7 @@ func (emptyDriverLister) ListAllActive(context.Context) ([]DriverRef, error) {
 
 type emptyVehicleLister struct{}
 
-func (emptyVehicleLister) List(context.Context, string, string, int, int) ([]VehicleRef, int64, error) {
+func (emptyVehicleLister) List(context.Context, string, int, int) ([]VehicleRef, int64, error) {
 	return nil, 0, nil
 }
 
@@ -130,7 +130,7 @@ func (s *recordingAttendanceStore) DeleteConflict(_ context.Context, id uuid.UUI
 
 type stubHolidayReader struct{}
 
-func (stubHolidayReader) GetHolidayMap(context.Context, int, int, string) (map[string]bool, error) {
+func (stubHolidayReader) GetHolidayMap(context.Context, int, int) (map[string]bool, error) {
 	return map[string]bool{}, nil
 }
 
@@ -138,7 +138,7 @@ type fixedHolidayReader struct {
 	dates map[string]bool
 }
 
-func (f fixedHolidayReader) GetHolidayMap(context.Context, int, int, string) (map[string]bool, error) {
+func (f fixedHolidayReader) GetHolidayMap(context.Context, int, int) (map[string]bool, error) {
 	return f.dates, nil
 }
 

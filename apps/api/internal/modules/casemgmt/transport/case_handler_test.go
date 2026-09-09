@@ -33,7 +33,7 @@ type caseListFlags struct {
 	excludePending bool
 }
 
-func (f *fakeCaseStore) List(ctx context.Context, region, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
+func (f *fakeCaseStore) List(ctx context.Context, status, q string, page, pageSize int, unresolvedLink, excludePending bool) ([]app.Case, int64, error) {
 	f.listFlags = caseListFlags{unresolvedLink: unresolvedLink, excludePending: excludePending}
 	return f.cases, int64(len(f.cases)), nil
 }
@@ -75,7 +75,7 @@ func (f *fakeCaseStore) GetActiveScheduleForCaseOnDate(ctx context.Context, case
 	return f.sched, nil
 }
 
-func (f *fakeCaseStore) GetActiveSchedulesForMonth(ctx context.Context, year, month int, region string) ([]app.ActiveCaseScheduleInfo, error) {
+func (f *fakeCaseStore) GetActiveSchedulesForMonth(ctx context.Context, year, month int) ([]app.ActiveCaseScheduleInfo, error) {
 	return nil, nil
 }
 
@@ -228,7 +228,7 @@ func TestCaseHandler_GetSchedule_NoActiveSchedule_ReturnsNullNotNotFound(t *test
 func TestCaseHandler_SaveSchedule_UsesPathCaseID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	pathCaseID := uuid.New()
-	store := &fakeCaseStore{cases: []app.Case{{ID: pathCaseID, Region: strPtr("north")}}}
+	store := &fakeCaseStore{cases: []app.Case{{ID: pathCaseID}}}
 	svc := app.NewCaseService(&config.Config{}, store, nil, nil, nil)
 	h := NewCaseHandler(svc)
 
