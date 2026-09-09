@@ -49,7 +49,7 @@ func (r *ExportJobRepository) CreateJob(ctx context.Context, job app.ExportJobCr
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO export_jobs (job_type, period_ym, format, filter_case_ids, status, precheck, created_by, created_by_name)
-		VALUES ($1, $2, NULLIF($3, ''), $4, $5::uuid[], 'running', $6::jsonb, $7, $8)
+		VALUES ($1, $2, $3, $4::uuid[], 'running', $5::jsonb, $6, $7)
 		RETURNING id
 	`, job.JobType, job.PeriodYM, job.Format, pgxdb.UUIDStrings(job.CaseIDs), precheckJSON, job.CreatedBy, job.CreatedByName).Scan(&id)
 	if err != nil {
@@ -114,7 +114,7 @@ func (r *ExportJobRepository) CompleteJob(ctx context.Context, jobID uuid.UUID, 
 		}
 		batch.Queue(`
 			INSERT INTO export_job_files (job_id, case_id, seq, case_name, file_name, row_count, file_checksum, storage_path, file_content, file_size)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		`, jobID, file.CaseID, seq+1, file.CaseName, file.FileName, file.RowCount, file.Checksum,
 			storagePath, fileContent, len(file.Bytes))
 	}
