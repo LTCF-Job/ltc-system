@@ -171,20 +171,13 @@ jobs:
           cache-dependency-path: apps/api/go.sum
 
       - name: Go vulnerability check
-        # 釘 v1.1.0：浮動的 v1 仍指向以 node20 執行內部 action 的舊版。
-        # go-version-input 預設 'stable'，會與 go-version-file 同時傳進 setup-go 而蓋掉 go.mod 版本，
-        # 設為空字串才會真的照 go.mod 的 Go 版本掃描。
-        # cache 設為 false：本 job 前一步的 Set up Go 已用同一個 cache-dependency-path 還原過
-        # module cache，這裡的內部 setup-go 若再還原一次同 key 的快取，tar 解壓會撞到既有檔案
-        # 而以 "Cannot open: File exists" 失敗。
-        uses: golang/govulncheck-action@v1.1.0
-        with:
-          go-version-input: ''
-          go-version-file: apps/api/go.mod
-          work-dir: apps/api
-          cache: false
-          cache-dependency-path: apps/api/go.sum
-          repo-checkout: false
+        # 不用 golang/govulncheck-action：它內部固定 go install .../govulncheck@latest，
+        # 最新版 golang.org/x/vuln 已要求 go >= 1.26，跟 go.mod 釘住的 1.25.14 不相容而直接失敗。
+        # 改成自行安裝 v1.7.0（相容 go >= 1.25.0）並直接執行，同時避開該 action 內部再跑一次
+        # setup-go 還原同一份 module cache 而撞出 tar "File exists" 的問題。
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          govulncheck ./...
 
       - name: Vet
         run: go vet ./...
