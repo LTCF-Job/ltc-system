@@ -58,8 +58,11 @@ export async function dryRunImportDriverReport(
 ): Promise<DriverReportPreviewDTO> {
   const formData = new FormData()
   formData.append('file', file)
+  // 大量資料的匯入需要後端逐列解析與比對，耗時可能超過全域 30 秒逾時，
+  // 這裡個別關閉逾時限制，避免使用者看到誤導性的「伺服器回應逾時」提示。
   const res = await apiClient.post(buildImportUrl(formId, true, yearMonth), formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 0
   })
   return unwrapData<DriverReportPreviewDTO>(res)
 }
@@ -73,8 +76,10 @@ export async function commitImportDriverReport(
   const formData = new FormData()
   formData.append('file', file)
   formData.append('columnDecisions', JSON.stringify(columnDecisions))
+  // 正式寫入同樣要跑完整解析與寫入流程，理由同 dryRunImportDriverReport。
   const res = await apiClient.post(buildImportUrl(formId, false, yearMonth), formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 0
   })
   return unwrapData<DriverReportCommitResultDTO>(res)
 }
