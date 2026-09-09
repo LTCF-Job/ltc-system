@@ -237,7 +237,7 @@
         <el-form-item label="單位" prop="siteName">
           <el-select
             v-model="form.siteName"
-            placeholder="請選擇或輸入所屬單位"
+            placeholder="請選擇或輸入所屬單位（選填）"
             clearable
             filterable
             allow-create

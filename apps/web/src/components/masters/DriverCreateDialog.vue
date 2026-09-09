@@ -68,7 +68,7 @@
       <el-form-item label="指派車輛" prop="vehicleId">
         <el-select
           v-model="form.vehicleId"
-          placeholder="請選擇指派車輛"
+          placeholder="請選擇指派車輛（選填）"
           clearable
           filterable
           :loading="loadingVehicles"
