@@ -35,7 +35,7 @@ type SiteLookup interface {
 }
 
 // VehicleLookup 提供以顯示名稱比對車輛的查詢。
-// 接送車輛欄位目前保留版面但不匯入，因此 commit 路徑暫時不會呼叫這個查詢。
+// 接送車輛欄位已自匯入範本與匯出移除，commit 路徑不再呼叫這個查詢。
 type VehicleLookup interface {
 	GetByDisplayName(ctx context.Context, displayName string) (*VehicleRef, error)
 }
@@ -46,7 +46,7 @@ type CaregiverLookup interface {
 }
 
 // TransportPreferenceWriter 以 PUT 完整替換個案的去回程車輛偏好。據點已改由個案本身
-// 持有，隨 NewCase 一併寫入。接送車輛欄位目前保留版面但不匯入，commit 路徑暫時不會呼叫。
+// 持有，隨 NewCase 一併寫入。接送車輛欄位已自匯入範本與匯出移除，commit 路徑不再呼叫。
 type TransportPreferenceWriter interface {
 	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 }

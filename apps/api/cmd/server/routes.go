@@ -307,8 +307,14 @@ func routeNotFoundHandler(status int) gin.HandlerFunc {
 func extendedImportDeadlineMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rc := http.NewResponseController(c.Writer)
-		_ = rc.SetReadDeadline(time.Time{})
-		_ = rc.SetWriteDeadline(time.Time{})
+		// 解除失敗時仍照常往下走，但一定要留下 log：否則逾時保護會無聲失效，
+		// 症狀又退回「伺服器沒有回應」，屆時完全看不出是這一層沒生效。
+		if err := rc.SetReadDeadline(time.Time{}); err != nil {
+			slog.Warn("解除匯入端點讀取逾時失敗，仍沿用全域 ReadTimeout", "path", c.FullPath(), "error", err)
+		}
+		if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+			slog.Warn("解除匯入端點寫入逾時失敗，仍沿用全域 WriteTimeout", "path", c.FullPath(), "error", err)
+		}
 		c.Next()
 	}
 }
