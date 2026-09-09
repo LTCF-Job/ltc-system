@@ -51,7 +51,7 @@
                   </span>
                 </template>
               </el-table-column>
-              <el-table-column prop="siteName" label="據點" min-width="220" class-name="site-col">
+              <el-table-column prop="siteName" label="單位" min-width="220" class-name="site-col">
                 <template #default="{ row }">
                   <span v-if="row.siteName">{{ row.siteName }}</span>
                   <span v-else class="empty-value">-</span>
@@ -177,7 +177,7 @@
     <!-- 批次匯入對話框 -->
     <ImportPreviewDialog
       ref="importDialogRef"
-      title="批次匯入照護人員 (類型/據點/姓名/聯絡方式/備註.xlsx)"
+      title="批次匯入照護人員 (類型/單位/姓名/聯絡方式/備註.xlsx)"
       :on-dry-run="handleDryRun"
       :on-commit="handleCommitImport"
       :on-download-template="handleDownloadTemplate"
@@ -185,7 +185,7 @@
     >
       <template #columns="{ checkedDuplicateRows, toggleDuplicateRow, getRowId }">
         <el-table-column prop="type" label="類型" width="80" />
-        <el-table-column prop="siteName" label="據點" width="140" />
+        <el-table-column prop="siteName" label="單位" width="140" />
         <el-table-column prop="name" label="姓名" width="110" />
         <el-table-column prop="contact" label="聯絡方式" width="140" />
         <el-table-column prop="notes" label="備註" min-width="160" show-overflow-tooltip />
@@ -223,8 +223,8 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="據點" prop="siteName">
-          <el-input v-model="form.siteName" placeholder="請輸入所屬據點（選填）" />
+        <el-form-item label="單位" prop="siteName">
+          <el-input v-model="form.siteName" placeholder="請輸入所屬單位（選填）" />
         </el-form-item>
         <el-form-item label="姓名" prop="name">
           <el-input v-model="form.name" placeholder="請輸入姓名" />
@@ -590,7 +590,7 @@ executeFetch()
   min-width: 120px;
 }
 
-/* 主表格「據點／聯絡方式／備註」欄同樣沒有 class-name 鎖 min-width 下限，
+/* 主表格「單位／聯絡方式／備註」欄同樣沒有 class-name 鎖 min-width 下限，
    會被 table-layout="auto" 壓窄或被其他欄擠壓（見待維護子表格同一段說明）。 */
 :deep(.site-col .cell) {
   white-space: nowrap;

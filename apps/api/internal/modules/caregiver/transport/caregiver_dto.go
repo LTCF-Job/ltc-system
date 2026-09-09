@@ -7,7 +7,7 @@ import (
 	"ltc-system/apps/api/internal/modules/caregiver/app"
 )
 
-// CaregiverResponse 代表回傳給前端的照護人員資料。SiteName 是自由輸入的據點文字，
+// CaregiverResponse 代表回傳給前端的照護人員資料。SiteName 是自由輸入的單位文字，
 // 非必填，不關聯據點主檔。
 type CaregiverResponse struct {
 	ID        uuid.UUID `json:"id"`

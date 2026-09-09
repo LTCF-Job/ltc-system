@@ -201,6 +201,8 @@ export interface CaseDTO {
   siteId?: string;
   siteName?: string;
   siteNameRaw?: string;
+  caregiverId?: string;
+  caregiverName?: string;
   outboundVehicleId?: string;
   outboundVehicle?: string;
   outboundVehicleNameRaw?: string;
@@ -215,6 +217,7 @@ export interface CaseDTO {
 export interface CreateCaseRequest {
   name: string;
   siteId: string;
+  caregiverId: string;
   nationalId?: string;
   homeAddress?: string;
   region?: Region | null;

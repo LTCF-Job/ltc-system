@@ -93,6 +93,7 @@ type CreateCaseRequest struct {
 	Remarks                *string
 	SiteID                 *uuid.UUID
 	SiteNameRaw            *string
+	CaregiverID            *uuid.UUID
 }
 
 // buildCaseEntity 組裝個案實體並套用身分證字號加密與生日 raw 保留規則，供
@@ -162,6 +163,7 @@ func (s *CaseService) buildCaseEntity(req CreateCaseRequest) (Case, error) {
 		Remarks:           req.Remarks,
 		SiteID:            req.SiteID,
 		SiteNameRaw:       req.SiteNameRaw,
+		CaregiverID:       req.CaregiverID,
 	}, nil
 }
 
@@ -230,6 +232,7 @@ type UpdateCaseInput struct {
 	RegisteredAddress   *string
 	Remarks             *string
 	SiteID              *uuid.UUID
+	CaregiverID         *uuid.UUID
 }
 
 // caseAuditSnapshot 是個案異動的固定稽核白名單；不得直接序列化 Case，避免把
@@ -245,6 +248,7 @@ type caseAuditSnapshot struct {
 	ClaimEndDate      *time.Time `json:"claimEndDate,omitempty"`
 	Status            string     `json:"status"`
 	SiteID            *uuid.UUID `json:"siteId,omitempty"`
+	CaregiverID       *uuid.UUID `json:"caregiverId,omitempty"`
 	OutboundVehicleID *uuid.UUID `json:"outboundVehicleId,omitempty"`
 	InboundVehicleID  *uuid.UUID `json:"inboundVehicleId,omitempty"`
 	NationalIDInvalid bool       `json:"nationalIdInvalid,omitempty"`
@@ -265,6 +269,7 @@ func newCaseAuditSnapshot(c *Case) caseAuditSnapshot {
 		ClaimEndDate:      c.ClaimEndDate,
 		Status:            c.Status,
 		SiteID:            c.SiteID,
+		CaregiverID:       c.CaregiverID,
 		OutboundVehicleID: c.OutboundVehicleID,
 		InboundVehicleID:  c.InboundVehicleID,
 		NationalIDInvalid: c.NationalIDInvalid,
@@ -344,6 +349,9 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 	if in.SiteID != nil {
 		entity.SiteID = in.SiteID
 		entity.SiteNameRaw = nil
+	}
+	if in.CaregiverID != nil {
+		entity.CaregiverID = in.CaregiverID
 	}
 
 	if err := s.caseRepo.Update(ctx, entity); err != nil {

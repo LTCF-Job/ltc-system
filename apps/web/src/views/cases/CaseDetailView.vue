@@ -71,6 +71,18 @@
                 </el-select>
               </el-form-item>
             </el-col>
+            <el-col :xs="24" :lg="12">
+              <el-form-item label="照護人員" prop="caregiverId">
+                <el-select v-model="editForm.caregiverId" filterable clearable placeholder="請選擇照護人員" style="width: 100%">
+                  <el-option
+                    v-for="caregiver in availableCaregivers"
+                    :key="caregiver.id"
+                    :value="caregiver.id"
+                    :label="caregiver.name + (caregiver.type ? `（${CAREGIVER_TYPE_LABELS[caregiver.type as CaregiverType] || caregiver.type}）` : '')"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
           </el-row>
 
           <el-row :gutter="16">
@@ -120,8 +132,8 @@
 
           <el-row :gutter="16">
             <el-col :xs="24" :sm="12" :lg="6">
-              <el-form-item label="家戶類型" prop="householdType">
-                <el-input v-model="editForm.householdType" placeholder="如：獨居、與子女同住" />
+              <el-form-item label="戶別" prop="householdType">
+                <el-input v-model="editForm.householdType" placeholder="如：一般戶、中低收入戶、低收入戶" />
               </el-form-item>
             </el-col>
             <el-col :xs="24" :sm="12" :lg="6">
@@ -237,9 +249,11 @@ import ScheduleEditor from './ScheduleEditor.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { getCase, updateCase, deleteCase, getCaseSchedule, updateCaseTransportPreference } from '@/api/cases'
 import { listAllSites, listAllVehicles } from '@/api/masters'
+import { listAllCaregivers } from '@/api/caregivers'
+import { CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
-import type { CaseDTO, UpdateCaseRequest, UpdateCaseTransportPreferenceRequest, SiteDTO, VehicleDTO } from '@/types/api'
+import type { CaseDTO, UpdateCaseRequest, UpdateCaseTransportPreferenceRequest, SiteDTO, VehicleDTO, CaregiverDTO } from '@/types/api'
 
 
 const route = useRoute()
@@ -254,10 +268,12 @@ const activeTab = ref(route.query.tab === 'schedule' ? 'schedule' : 'basic')
 const caseData = ref<CaseDTO | null>(null)
 const availableSites = ref<SiteDTO[]>([])
 const availableVehicles = ref<VehicleDTO[]>([])
+const availableCaregivers = ref<CaregiverDTO[]>([])
 
 const editForm = reactive<UpdateCaseRequest>({
   name: '',
   siteId: undefined,
+  caregiverId: undefined,
   homeAddress: '',
   serviceCategory: undefined,
   serviceUsageType: undefined,
@@ -299,6 +315,7 @@ async function fetchDetail() {
     caseData.value = res
     editForm.name = res.name || ''
     editForm.siteId = res.siteId || undefined
+    editForm.caregiverId = res.caregiverId || undefined
     editForm.homeAddress = res.homeAddress || ''
     editForm.serviceCategory = res.serviceCategory
     editForm.serviceUsageType = res.serviceUsageType
@@ -321,12 +338,14 @@ async function fetchDetail() {
 }
 
 async function loadSitesAndVehicles() {
-  const [sitesRes, vehiclesRes] = await Promise.all([
+  const [sitesRes, vehiclesRes, caregiversRes] = await Promise.all([
     listAllSites({ status: 'active' }),
-    listAllVehicles({ status: 'active' })
+    listAllVehicles({ status: 'active' }),
+    listAllCaregivers({ status: 'active' })
   ])
   availableSites.value = sitesRes
   availableVehicles.value = vehiclesRes
+  availableCaregivers.value = caregiversRes
 }
 
 async function handleUpdateCase() {

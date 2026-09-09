@@ -265,6 +265,29 @@ func TestCreateCase_OnlyNameSucceeds(t *testing.T) {
 	assert.Equal(t, "active", entity.Status)
 }
 
+func TestCreateCase_WithCaregiverID(t *testing.T) {
+	store := newFakeCaseStore()
+	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+	cgID := uuid.New()
+
+	entity, err := svc.CreateCase(context.Background(), CreateCaseRequest{
+		Name:        "指定照護人員",
+		CaregiverID: &cgID,
+	}, uuid.New(), "admin", "127.0.0.1", "test-agent")
+
+	require.NoError(t, err)
+	require.NotNil(t, entity)
+	assert.Equal(t, "指定照護人員", entity.Name)
+	assert.Equal(t, &cgID, entity.CaregiverID)
+
+	newCgID := uuid.New()
+	updated, err := svc.UpdateCase(context.Background(), entity.ID, UpdateCaseInput{
+		CaregiverID: &newCgID,
+	}, uuid.New(), "admin", "127.0.0.1", "test-agent")
+	require.NoError(t, err)
+	assert.Equal(t, &newCgID, updated.CaregiverID)
+}
+
 func TestCaseAuditSnapshotsUseWhitelistWithoutSensitiveFields(t *testing.T) {
 	caseEntity := &Case{
 		ID:                uuid.New(),

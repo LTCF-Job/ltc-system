@@ -16,7 +16,7 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | Method | Path | 角色 | 說明 |
 |---|---|---|---|
 | GET | `/cases` | viewer, staff, admin | 個案清單（回傳遮罩身分證）。**待維護個案預設不回傳**：`unresolvedLink=true` 只取待維護，`includePending=true` 取全部 |
-| POST | `/cases` | staff, admin | 新增個案；`siteId`（所屬據點）為必填 |
+| POST | `/cases` | staff, admin | 新增個案；`siteId`（所屬據點）與 `caregiverId`（照護人員）為必填 |
 | GET | `/cases/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
 | GET | `/cases/:id` | viewer, staff, admin | |
 | PATCH | `/cases/:id` | staff, admin | |
@@ -201,11 +201,11 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | GET | `/caregivers` | viewer, staff, admin | 支援 `q`、`status`（`active`／`inactive`）篩選。**待維護資料（姓名或類型未填寫）預設不回傳**：`pending=true` 只取待維護，`includePending=true` 取全部 |
 | POST | `/caregivers` | staff, admin | 新增照護人員，姓名與類型（`case_manager`＝個管／`specialist`＝照專）皆為必填；`status` 非 `active`／`inactive` 一律預設 `active` |
 | GET | `/caregivers/template` | viewer, staff, admin | 下載批次匯入用 Excel 範本 |
-| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx）；姓名或類型缺漏（或類型不是個管／照專，向後相容專護）改以空白建立並列入待維護，據點（`siteName`）為自由文字、不比對據點主檔，缺漏直接留白、不列入待維護，聯絡方式與備註缺漏不再產生警告 |
+| POST | `/caregivers/import` | staff, admin | 批次匯入照護人員 Excel（僅支援 .xlsx，表頭欄位為：類型*、單位、姓名*、聯絡方式、備註；向前相容舊表頭「據點」）；姓名或類型缺漏（或類型不是個管／照專，向後相容專護）改以空白建立並列入待維護，單位（`siteName`）為自由文字、不比對據點主檔，缺漏直接留白、不列入待維護，聯絡方式與備註缺漏不再產生警告 |
 | PATCH | `/caregivers/:id` | staff, admin | |
 | DELETE | `/caregivers/:id` | admin | 刪除照護人員；待維護清單的「忽略此筆」也走這支 |
 
-照護人員不再關聯據點主檔，`site_id`／`site_name_raw` 已改為自由文字 `site_name`，原本用來把待關聯照護人員連結到既有據點的 `PUT /caregivers/:id/site` 端點與前端「新增單位快速建立」對話框已一併移除。
+照護人員所屬「單位」（欄位名稱仍為 `site_name`，UI 與範本已由「據點」改為「單位」）為自由文字，不關聯據點主檔。個案主檔則新增關聯 `caregiver_id`（外鍵關聯照護人員主檔），新增個案時必須選擇照護人員。
 
 ## 角色身分管理 `roleH`
 

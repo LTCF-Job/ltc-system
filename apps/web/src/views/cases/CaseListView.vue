@@ -73,6 +73,42 @@
               <span class="font-mono text-id">{{ row.nationalId || '-' }}</span>
             </template>
           </el-table-column>
+          <el-table-column prop="birthDate" label="生日" min-width="110" align="center">
+            <template #default="{ row }">
+              <span>{{ row.birthDate ? formatDate(row.birthDate) : (row.birthDateRaw || '-') }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="gender" label="性別" width="70" align="center">
+            <template #default="{ row }">
+              <span>{{ row.gender || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="householdType" label="戶別" min-width="110" align="center">
+            <template #default="{ row }">
+              <span>{{ row.householdType || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="siteName" label="據點" min-width="140" align="center">
+            <template #default="{ row }">
+              <span>{{ row.siteName || row.siteNameRaw || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="caregiverName" label="照護人員" min-width="120" align="center">
+            <template #default="{ row }">
+              <span>{{ row.caregiverName || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="serviceUsageType" label="服務使用類型" min-width="190" align="center">
+            <template #default="{ row }">
+              <span>{{ SERVICE_USAGE_TYPE_LABELS[row.serviceUsageType as ServiceUsageType] || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="homeAddress" label="住家地址" min-width="190" show-overflow-tooltip />
+          <el-table-column prop="remarks" label="備註" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.remarks || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="status" label="狀態" width="115" align="center">
             <template #default="{ row }">
               <el-dropdown
@@ -99,26 +135,6 @@
                 <span class="status-dot" :class="`status-dot-${row.status}`"></span>
                 {{ CASE_STATUS_LABELS[row.status as CaseStatus] || row.status }}
               </span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="serviceUsageType" label="服務使用類型" min-width="190" align="center">
-            <template #default="{ row }">
-              <span>{{ SERVICE_USAGE_TYPE_LABELS[row.serviceUsageType as ServiceUsageType] || '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="排班概要" min-width="320">
-            <template #default="{ row }">
-              <span v-if="row.activeSchedule">
-                {{ TRIP_PATTERN_LABELS[row.activeSchedule.tripPattern as TripPattern] }}
-                ({{ row.activeSchedule.weekdays?.map((w: number) => `週${'一二三四五六日'[w-1]}`).join('、') }})
-              </span>
-              <span v-else class="empty-value">尚未設定排班</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="homeAddress" label="住家地址" min-width="190" show-overflow-tooltip />
-          <el-table-column prop="remarks" label="備註" min-width="160" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span>{{ row.remarks || '-' }}</span>
             </template>
           </el-table-column>
 
@@ -396,13 +412,12 @@ import { listAllSites, listAllVehicles, listSites, listVehicles, createSite, cre
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
+import { formatDate } from '@/utils/formatters'
 import { emptyVehicleForm, vehicleFormRules } from '@/utils/vehicleForm'
 import {
   CASE_STATUS_LABELS,
-  TRIP_PATTERN_LABELS,
   SERVICE_USAGE_TYPE_LABELS,
   type CaseStatus,
-  type TripPattern,
   type ServiceUsageType
 } from '@/types/domain'
 import type {

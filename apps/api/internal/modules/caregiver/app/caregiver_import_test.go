@@ -61,14 +61,14 @@ func xlsxReader(t *testing.T, header []string, rows ...[]string) *bytes.Reader {
 	return bytes.NewReader(buf.Bytes())
 }
 
-var caregiverHeader = []string{"據點", "姓名", "類型", "聯絡方式", "備註"}
+var caregiverHeader = []string{"單位", "姓名", "類型", "聯絡方式", "備註"}
 
 func TestParseCaregivers_KeepsRowMissingNameAsPending(t *testing.T) {
 	svc := NewCaregiverService(newFakeCaregiverStore(), testExcelReader{}, nil)
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
-		[]string{"竹南日照據點", "", "個管", "0912-000-000", ""},
-		[]string{"竹南日照據點", "王大明", "個管", "0987-000-000", "行動自如"},
+		[]string{"竹南日照單位", "", "個管", "0912-000-000", ""},
+		[]string{"竹南日照單位", "王大明", "個管", "0987-000-000", "行動自如"},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestParseCaregivers_IgnoresFullyBlankRow(t *testing.T) {
 
 	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, caregiverHeader,
 		[]string{"", "", "", "", ""},
-		[]string{"竹南日照據點", "王大明", "個管", "0987-000-000", "行動自如"},
+		[]string{"竹南日照單位", "王大明", "個管", "0987-000-000", "行動自如"},
 	), "upload.xlsx")
 
 	require.NoError(t, err)
@@ -140,6 +140,19 @@ func TestParseCaregivers_KeepsSiteNameAsFreeText(t *testing.T) {
 	assert.Equal(t, "任意輸入的據點名稱", row.SiteName)
 	assert.Equal(t, CaregiverTypeSpecialist, row.Type)
 	assert.Empty(t, row.WarningMessage)
+}
+
+func TestParseCaregivers_SupportsLegacySiteHeader(t *testing.T) {
+	svc := NewCaregiverService(newFakeCaregiverStore(), testExcelReader{}, nil)
+	legacyHeader := []string{"據點", "姓名", "類型", "聯絡方式", "備註"}
+
+	preview, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, legacyHeader,
+		[]string{"舊版據點名稱", "陳小華", "個管", "0912-345-678", ""},
+	), "upload.xlsx")
+
+	require.NoError(t, err)
+	require.Len(t, preview.Rows, 1)
+	assert.Equal(t, "舊版據點名稱", preview.Rows[0].SiteName)
 }
 
 func TestParseCaregivers_DoesNotWarnOnMissingContactOrNotes(t *testing.T) {
