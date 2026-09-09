@@ -130,28 +130,16 @@
 
           <el-table-column label="駕駛司機" min-width="200" class-name="vehicle-current-driver-col">
             <template #default="{ row }">
-              <el-select
+              <InlineOptionPicker
                 v-if="authStore.hasPermission('masters_vehicles', 'edit')"
                 :model-value="(row.drivers || []).map((d: any) => d.id)"
+                :options="driverOptions"
                 multiple
-                collapse-tags
-                collapse-tags-tooltip
-                clearable
-                filterable
-                placeholder="選擇司機"
-                size="default"
+                placeholder="尚未指派"
                 :loading="savingVehicleId === row.id"
                 :disabled="savingVehicleId === row.id || row.status !== 'active'"
-                class="inline-driver-select inline-cell-select"
-                @change="(val: string[]) => handleInlineSetDrivers(row as any, val)"
-              >
-                <el-option
-                  v-for="d in allDrivers"
-                  :key="d.id"
-                  :label="d.name"
-                  :value="d.id"
-                />
-              </el-select>
+                @change="(val) => handleInlineSetDrivers(row as any, val as string[])"
+              />
               <div v-else-if="row.drivers && row.drivers.length" class="vehicle-driver-tags">
                 <el-tag
                   v-for="d in row.drivers"
@@ -257,13 +245,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import VehicleFormFields from '@/components/VehicleFormFields.vue'
+import InlineOptionPicker from '@/components/InlineOptionPicker.vue'
 import {
   listVehicles,
   createVehicle,
@@ -323,6 +312,8 @@ const {
 function rowIndex(index: number) {
   return (page.value - 1) * pageSize.value + index + 1
 }
+
+const driverOptions = computed(() => allDrivers.value.map((d) => ({ label: d.name, value: d.id })))
 
 async function loadDrivers() {
   try {
@@ -553,7 +544,4 @@ executeFetch()
   min-width: 200px;
 }
 
-.inline-driver-select {
-  width: 100%;
-}
 </style>

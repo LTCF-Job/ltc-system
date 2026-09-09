@@ -114,25 +114,16 @@
           </el-table-column>
           <el-table-column label="目前指派車輛" min-width="220" class-name="assigned-vehicle-col">
             <template #default="{ row }">
-              <el-select
+              <InlineOptionPicker
                 v-if="authStore.hasPermission('masters_drivers', 'edit')"
                 :model-value="getAssignedVehicleId(row)"
-                placeholder="選擇指派車輛"
+                :options="vehicleOptions"
                 clearable
-                filterable
-                size="default"
+                placeholder="尚未指派"
                 :loading="assigningDriverId === row.id"
                 :disabled="assigningDriverId === row.id || row.status !== 'active'"
-                class="inline-vehicle-select inline-cell-select"
-                @change="(val: string) => handleInlineAssignVehicle(row, val)"
-              >
-                <el-option
-                  v-for="v in allVehicles"
-                  :key="v.id"
-                  :label="`${v.displayName} (${v.plateNo})`"
-                  :value="v.id"
-                />
-              </el-select>
+                @change="(val) => handleInlineAssignVehicle(row, val as string)"
+              />
               <div v-else-if="getAssignedVehicleDisplay(row)" class="assigned-vehicle-info">
                 <span class="vehicle-name">{{ getAssignedVehicleDisplay(row)?.name }}</span>
                 <span v-if="getAssignedVehicleDisplay(row)?.plateNo" class="vehicle-plate font-mono">
@@ -313,13 +304,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import DriverCreateDialog from '@/components/masters/DriverCreateDialog.vue'
+import InlineOptionPicker from '@/components/InlineOptionPicker.vue'
 import {
   listDrivers,
   updateDriver,
@@ -430,6 +422,10 @@ async function handleQuickToggleActive(row: DriverDTO, newActive: boolean) {
 function openCreateDialog() {
   createDialogVisible.value = true
 }
+
+const vehicleOptions = computed(() =>
+  allVehicles.value.map((v) => ({ label: `${v.displayName} (${v.plateNo})`, value: v.id }))
+)
 
 async function reloadVehicles() {
   try {
@@ -628,10 +624,6 @@ executeFetch()
 
 :deep(.assigned-vehicle-col .cell) {
   min-width: 220px;
-}
-
-.inline-vehicle-select {
-  width: 100%;
 }
 
 .assignment-empty {

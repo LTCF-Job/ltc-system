@@ -53,27 +53,17 @@
               </el-table-column>
               <el-table-column prop="siteName" label="單位" min-width="220" class-name="site-col">
                 <template #default="{ row }">
-                  <el-select
+                  <InlineOptionPicker
                     v-if="authStore.hasPermission('masters_caregivers', 'edit')"
                     :model-value="row.siteName || ''"
-                    placeholder="選擇單位"
-                    clearable
-                    filterable
+                    :options="siteOptionItems"
                     allow-create
-                    default-first-option
-                    size="default"
+                    clearable
+                    placeholder="未指定"
                     :loading="updatingCaregiverId === row.id"
                     :disabled="updatingCaregiverId === row.id || row.status !== 'active'"
-                    class="inline-site-select inline-cell-select"
-                    @change="(val: string) => handleInlineUpdateSiteName(row as CaregiverDTO, val)"
-                  >
-                    <el-option
-                      v-for="site in siteOptions"
-                      :key="site"
-                      :label="site"
-                      :value="site"
-                    />
-                  </el-select>
+                    @change="(val) => handleInlineUpdateSiteName(row as CaregiverDTO, val as string)"
+                  />
                   <span v-else-if="row.siteName">{{ row.siteName }}</span>
                   <span v-else class="empty-value">-</span>
                 </template>
@@ -308,6 +298,7 @@ import DataTablePage from '@/components/DataTablePage.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
+import InlineOptionPicker from '@/components/InlineOptionPicker.vue'
 import {
   listCaregivers,
   createCaregiver,
@@ -496,6 +487,8 @@ const siteOptions = computed(() => {
   return Array.from(set)
 })
 
+const siteOptionItems = computed(() => siteOptions.value.map((site) => ({ label: site, value: site })))
+
 async function handleInlineUpdateSiteName(row: CaregiverDTO, newSiteName: string) {
   const currentSiteName = row.siteName || ''
   const trimmed = newSiteName ? newSiteName.trim() : ''
@@ -670,10 +663,6 @@ executeFetch()
    會被 table-layout="auto" 壓窄或被其他欄擠壓（見待維護子表格同一段說明）。 */
 :deep(.site-col .cell) {
   min-width: 220px;
-}
-
-.inline-site-select {
-  width: 100%;
 }
 
 :deep(.contact-col .cell) {

@@ -411,27 +411,6 @@ select {
   }
 }
 
-// 表格內行內編輯用的下拉選單（如車輛駕駛司機、司機指派車輛、照護人員單位）：
-// 平常不佔視覺重量，只在 hover／展開時才浮現底色與邊框，避免看起來像硬塞進表格的表單控件
-.inline-cell-select {
-  .el-select__wrapper {
-    background: transparent;
-    box-shadow: none;
-    padding-left: 6px;
-    padding-right: 6px;
-  }
-
-  .el-select__wrapper:not(.is-disabled):hover {
-    background: var(--app-border-light);
-  }
-
-  // el-select 的展開狀態 class 是 is-focused，不是 el-input 共用的 is-focus
-  .el-select__wrapper.is-focused {
-    background: var(--app-surface);
-    box-shadow: 0 0 0 1px var(--app-primary) inset, 0 0 0 3px rgba(12, 112, 237, 0.12);
-  }
-}
-
 .login-container {
   min-height: 100vh;
   display: flex;
@@ -848,6 +827,11 @@ select {
   border-color: var(--app-border-color) !important;
   box-shadow: var(--app-shadow-md) !important;
   overflow: hidden;
+}
+
+// InlineOptionPicker（行內下拉選單）彈出面板：卡片樣式沿用上面 .el-popper 規則，這裡只收斂 padding
+.inline-picker-popper.el-popover {
+  padding: 8px;
 }
 
 .el-dropdown-menu__item {
