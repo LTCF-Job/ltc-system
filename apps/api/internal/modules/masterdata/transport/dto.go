@@ -20,6 +20,7 @@ type SiteResponse struct {
 	Name      string    `json:"name"`
 	Address   string    `json:"address"`
 	Region    string    `json:"region"`
+	Remarks   string    `json:"remarks"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -31,6 +32,7 @@ func newSiteResponse(s app.Site) SiteResponse {
 		Name:      s.Name,
 		Address:   s.Address,
 		Region:    s.Region,
+		Remarks:   s.Remarks,
 		Status:    s.Status,
 		CreatedAt: s.CreatedAt,
 		UpdatedAt: s.UpdatedAt,
@@ -53,6 +55,7 @@ type CreateSiteRequest struct {
 	Name    string `json:"name" binding:"required"`
 	Address string `json:"address"`
 	Region  string `json:"region"`
+	Remarks string `json:"remarks"`
 	Status  string `json:"status"`
 }
 
@@ -61,6 +64,7 @@ type UpdateSiteRequest struct {
 	Name    string `json:"name" binding:"required"`
 	Address string `json:"address"`
 	Region  string `json:"region"`
+	Remarks string `json:"remarks"`
 	Status  string `json:"status"`
 }
 
@@ -82,6 +86,7 @@ type VehicleResponse struct {
 	HasPurchaseContract       bool                 `json:"hasPurchaseContract"`
 	HasPlateRegistration      bool                 `json:"hasPlateRegistration"`
 	HasTransferRegistration   bool                 `json:"hasTransferRegistration"`
+	Remarks                   string               `json:"remarks"`
 	Status                    string               `json:"status"`
 	Drivers                   []VehicleDriverBrief `json:"drivers"`
 	CreatedAt                 time.Time            `json:"createdAt"`
@@ -116,6 +121,7 @@ func newVehicleResponse(v app.Vehicle) VehicleResponse {
 		HasPurchaseContract:       v.HasPurchaseContract,
 		HasPlateRegistration:      v.HasPlateRegistration,
 		HasTransferRegistration:   v.HasTransferRegistration,
+		Remarks:                   v.Remarks,
 		Status:                    v.Status,
 		Drivers:                   drivers,
 		CreatedAt:                 v.CreatedAt,
@@ -163,6 +169,7 @@ type VehicleWriteFields struct {
 	HasPurchaseContract     *bool  `json:"hasPurchaseContract"`
 	HasPlateRegistration    *bool  `json:"hasPlateRegistration"`
 	HasTransferRegistration *bool  `json:"hasTransferRegistration"`
+	Remarks                 string `json:"remarks"`
 	Status                  string `json:"status"`
 }
 
@@ -188,6 +195,7 @@ func (f VehicleWriteFields) toInput() app.VehicleInput {
 		HasPurchaseContract:       boolOrFalse(f.HasPurchaseContract),
 		HasPlateRegistration:      boolOrFalse(f.HasPlateRegistration),
 		HasTransferRegistration:   boolOrFalse(f.HasTransferRegistration),
+		Remarks:                   f.Remarks,
 		Status:                    f.Status,
 	}
 }
@@ -274,17 +282,18 @@ func newDriverAssignmentResponse(a app.DriverAssignment) DriverAssignmentRespons
 
 // CreateDriverRequest 代表新增司機請求。
 type CreateDriverRequest struct {
-	Name                   string    `json:"name" binding:"required"`
-	NationalID             string    `json:"nationalId" binding:"required"`
-	Email                  *string   `json:"email"`
-	LicenseClass           *string   `json:"licenseClass"`
-	LicenseExpiryDate      *wireDate `json:"licenseExpiryDate"`
-	Gender                 *string   `json:"gender"`
-	BirthDate              *wireDate `json:"birthDate"`
-	HasProfessionalLicense *bool     `json:"hasProfessionalLicense"`
-	EmploymentDate         *wireDate `json:"employmentDate"`
-	HasTransferCert        *bool     `json:"hasTransferCert"`
-	Remarks                *string   `json:"remarks"`
+	Name                   string     `json:"name" binding:"required"`
+	NationalID             string     `json:"nationalId" binding:"required"`
+	Email                  *string    `json:"email"`
+	LicenseClass           *string    `json:"licenseClass"`
+	LicenseExpiryDate      *wireDate  `json:"licenseExpiryDate"`
+	Gender                 *string    `json:"gender"`
+	BirthDate              *wireDate  `json:"birthDate"`
+	HasProfessionalLicense *bool      `json:"hasProfessionalLicense"`
+	EmploymentDate         *wireDate  `json:"employmentDate"`
+	HasTransferCert        *bool      `json:"hasTransferCert"`
+	Remarks                *string    `json:"remarks"`
+	VehicleID              *uuid.UUID `json:"vehicleId"`
 }
 
 // UpdateDriverRequest 代表更新司機請求，欄位為 nil 表示不變更。

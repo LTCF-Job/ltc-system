@@ -56,6 +56,7 @@ func (h *SiteHandler) Create(c *gin.Context) {
 		Address: req.Address,
 		Region:  req.Region,
 		Status:  req.Status,
+		Remarks: req.Remarks,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
 		ActorRole: auth.GetActorRole(c),
@@ -112,6 +113,7 @@ func (h *SiteHandler) Update(c *gin.Context) {
 		Address: req.Address,
 		Region:  req.Region,
 		Status:  req.Status,
+		Remarks: req.Remarks,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
 		ActorRole: auth.GetActorRole(c),

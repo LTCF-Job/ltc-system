@@ -93,7 +93,7 @@
             <template #default="{ row }">{{ formatRocDate(row.thirdPartyInsuranceExpiry) }}</template>
           </el-table-column>
 
-          <el-table-column label="前次檢驗日期 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col vehicle-inspection-col">
+          <el-table-column label="驗車日期 (年/月/日)" min-width="160" align="center" class-name="vehicle-nowrap-col vehicle-inspection-col">
             <template #default="{ row }">{{ formatRocDate(row.lastInspectionDate) }}</template>
           </el-table-column>
 
@@ -142,6 +142,12 @@
                 </el-tag>
               </div>
               <span v-else class="vehicle-empty-text">尚未指派</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="vehicle-data">{{ row.remarks || '-' }}</span>
             </template>
           </el-table-column>
 
@@ -419,6 +425,7 @@ function openEditDialog(row: VehicleDTO) {
     hasPurchaseContract: !!row.hasPurchaseContract,
     hasPlateRegistration: !!row.hasPlateRegistration,
     hasTransferRegistration: !!row.hasTransferRegistration,
+    remarks: row.remarks || '',
     status: row.status
   })
   formRef.value?.clearValidate()

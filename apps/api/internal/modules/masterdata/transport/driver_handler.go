@@ -71,6 +71,7 @@ func (h *DriverHandler) Create(c *gin.Context) {
 		EmploymentDate:         req.EmploymentDate.toTimePtr(),
 		HasTransferCert:        hasTrans,
 		Remarks:                req.Remarks,
+		VehicleID:              req.VehicleID,
 	}, app.ActorContext{
 		ActorID:   auth.GetActorID(c),
 		ActorRole: auth.GetActorRole(c),

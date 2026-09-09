@@ -213,6 +213,25 @@ func TestDriverService_Create(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("creates driver and assigns vehicle when vehicleID provided", func(t *testing.T) {
+		store := newFakeDriverStore()
+		svc := NewDriverService(store, cfg, nil)
+		vehicleID := uuid.New()
+
+		d, err := svc.Create(context.Background(), CreateDriverInput{
+			Name:       "指派司機",
+			NationalID: "A123456789",
+			VehicleID:  &vehicleID,
+		})
+
+		require.NoError(t, err)
+		assert.NotNil(t, d)
+		assert.Equal(t, "指派司機", d.Name)
+		assert.NotNil(t, store.lastAssign)
+		assert.Equal(t, d.ID, store.lastAssign.DriverID)
+		assert.Equal(t, vehicleID, store.lastAssign.VehicleID)
+	})
 }
 
 func strPtr(v string) *string { return &v }

@@ -85,6 +85,7 @@ type VehicleInput struct {
 	HasPurchaseContract       bool
 	HasPlateRegistration      bool
 	HasTransferRegistration   bool
+	Remarks                   string
 	Status                    string
 }
 
@@ -104,6 +105,7 @@ func (in VehicleInput) apply(v *Vehicle) error {
 	v.HasPurchaseContract = in.HasPurchaseContract
 	v.HasPlateRegistration = in.HasPlateRegistration
 	v.HasTransferRegistration = in.HasTransferRegistration
+	v.Remarks = strings.TrimSpace(in.Remarks)
 	// 未提供狀態時預設 active；非法值不可靜默改寫。
 	status := strings.TrimSpace(in.Status)
 	if status == "" {

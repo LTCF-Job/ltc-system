@@ -443,7 +443,16 @@ function openCreateDialog() {
   createDialogVisible.value = true
 }
 
-function handleDriverCreated() {
+async function reloadVehicles() {
+  try {
+    allVehicles.value = await listAllVehicles({ status: 'active' })
+  } catch {
+    // 忽略抓取車輛錯誤
+  }
+}
+
+async function handleDriverCreated() {
+  await reloadVehicles()
   executeFetch()
 }
 
@@ -467,29 +476,45 @@ function openEditDialog(row: any) {
 
 // 一位司機同一期間只會有一台車，取目前生效的那筆指派即可
 function getAssignedVehicleDisplay(row: any): { name: string; plateNo: string } | null {
-  if (!row.assignments || row.assignments.length === 0) return null
-  const assignment = row.assignments[row.assignments.length - 1]
-  const veh = allVehicles.value.find((v) => v.id === assignment.vehicleId)
+  if (row.assignments && row.assignments.length > 0) {
+    const assignment = row.assignments[row.assignments.length - 1]
+    const veh = allVehicles.value.find((v) => v.id === assignment.vehicleId)
 
-  const name = veh?.displayName || assignment.vehicleName || ''
-  const plateNo = veh?.plateNo || assignment.vehiclePlateNo || assignment.plateNo || ''
+    const name = veh?.displayName || assignment.vehicleName || ''
+    const plateNo = veh?.plateNo || assignment.vehiclePlateNo || assignment.plateNo || ''
 
-  if (name && plateNo) {
-    return { name, plateNo }
+    if (name && plateNo) {
+      return { name, plateNo }
+    }
+    if (name) {
+      return { name, plateNo: '' }
+    }
+    if (plateNo) {
+      return { name: plateNo, plateNo: '' }
+    }
+    return { name: '已指派車輛', plateNo: '' }
   }
-  if (name) {
-    return { name, plateNo: '' }
+
+  // 若 driver 物件無 assignments 欄位，回查車輛清單中掛載的司機
+  const matchedVeh = allVehicles.value.find((v) => v.drivers?.some((d) => d.id === row.id))
+  if (matchedVeh) {
+    return { name: matchedVeh.displayName, plateNo: matchedVeh.plateNo }
   }
-  if (plateNo) {
-    return { name: plateNo, plateNo: '' }
-  }
-  return { name: '已指派車輛', plateNo: '' }
+
+  return null
 }
 
 function openAssignDialog(row: any) {
   selectedDriverId.value = row.id
   const assignment = row.assignments?.[row.assignments.length - 1]
-  assignForm.vehicleId = assignment?.vehicleId || ''
+  let vehId = assignment?.vehicleId || ''
+  if (!vehId) {
+    const matchedVeh = allVehicles.value.find((v) => v.drivers?.some((d) => d.id === row.id))
+    if (matchedVeh) {
+      vehId = matchedVeh.id
+    }
+  }
+  assignForm.vehicleId = vehId
   assignDialogVisible.value = true
 }
 
@@ -532,6 +557,7 @@ async function handleAssignSubmit() {
       await assignDriverVehicle(selectedDriverId.value!, assignForm)
       ElMessage.success('車輛指派已更新')
       assignDialogVisible.value = false
+      await reloadVehicles()
       executeFetch()
     } finally {
       submitting.value = false
@@ -553,6 +579,7 @@ async function handleDeleteDriver(row: DriverDTO) {
     )
     await deleteDriver(row.id)
     ElMessage.success(`司機「${row.name}」已成功刪除`)
+    await reloadVehicles()
     executeFetch()
   } catch {
     // 使用者取消或 API 錯誤皆不在此重複顯示。
@@ -560,7 +587,7 @@ async function handleDeleteDriver(row: DriverDTO) {
 }
 
 onMounted(async () => {
-  allVehicles.value = await listAllVehicles({ status: 'active' })
+  await reloadVehicles()
 })
 
 executeFetch()

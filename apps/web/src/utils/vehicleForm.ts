@@ -5,7 +5,7 @@ export const VEHICLE_DATE_FIELDS = [
   { prop: 'compulsoryInsuranceExpiry', label: '強制責任險' },
   { prop: 'passengerInsuranceExpiry', label: '乘客責任險' },
   { prop: 'thirdPartyInsuranceExpiry', label: '第三人責任險' },
-  { prop: 'lastInspectionDate', label: '前次檢驗日期' }
+  { prop: 'lastInspectionDate', label: '驗車日期' }
 ] as const
 
 export type VehicleDateField = (typeof VEHICLE_DATE_FIELDS)[number]['prop']
@@ -28,6 +28,7 @@ export function emptyVehicleForm(): CreateVehicleRequest {
     hasPurchaseContract: false,
     hasPlateRegistration: false,
     hasTransferRegistration: false,
+    remarks: '',
     status: 'active'
   }
 }
@@ -54,6 +55,7 @@ export function sanitizeVehiclePayload<T extends CreateVehicleRequest>(form: T):
     compulsoryInsuranceExpiry: form.compulsoryInsuranceExpiry?.trim() || null,
     passengerInsuranceExpiry: form.passengerInsuranceExpiry?.trim() || null,
     thirdPartyInsuranceExpiry: form.thirdPartyInsuranceExpiry?.trim() || null,
-    lastInspectionDate: form.lastInspectionDate?.trim() || null
+    lastInspectionDate: form.lastInspectionDate?.trim() || null,
+    remarks: form.remarks?.trim() || null
   }
 }

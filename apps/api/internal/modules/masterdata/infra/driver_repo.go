@@ -222,7 +222,8 @@ func (r *DriverRepository) Create(ctx context.Context, d *app.Driver) error {
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
 	}
-	err := r.db.QueryRow(ctx, query,
+	db := pgxdb.FromContext(ctx, r.db)
+	err := db.QueryRow(ctx, query,
 		d.ID, d.Name, d.NameNormalized, d.NationalIDCipher, d.NationalIDHMAC, d.NationalIDMasked,
 		d.Email, d.Status, d.LicenseClass, d.LicenseExpiryDate,
 		d.Gender, d.BirthDate, d.HasProfessionalLicense, d.EmploymentDate, d.HasTransferCert, d.Remarks,
@@ -243,7 +244,8 @@ func (r *DriverRepository) Update(ctx context.Context, d *app.Driver) error {
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING updated_at
 	`
-	err := r.db.QueryRow(ctx, query, d.ID, d.Name, d.NameNormalized, d.Email, d.Status,
+	db := pgxdb.FromContext(ctx, r.db)
+	err := db.QueryRow(ctx, query, d.ID, d.Name, d.NameNormalized, d.Email, d.Status,
 		d.NationalIDCipher, d.NationalIDHMAC, d.NationalIDMasked,
 		d.LicenseClass, d.LicenseExpiryDate,
 		d.Gender, d.BirthDate, d.HasProfessionalLicense, d.EmploymentDate, d.HasTransferCert, d.Remarks).
@@ -280,7 +282,8 @@ func (r *DriverRepository) AssignVehicle(ctx context.Context, a *app.DriverAssig
 		end := a.EffectiveTo.AddDate(0, 0, 1)
 		exclusiveTo = &end
 	}
-	return r.db.QueryRow(ctx, query, a.ID, a.DriverID, a.VehicleID, a.EffectiveFrom, exclusiveTo).
+	db := pgxdb.FromContext(ctx, r.db)
+	return db.QueryRow(ctx, query, a.ID, a.DriverID, a.VehicleID, a.EffectiveFrom, exclusiveTo).
 		Scan(&a.CreatedAt)
 }
 
@@ -428,7 +431,7 @@ func (r *DriverRepository) ReplaceVehicleDrivers(ctx context.Context, vehicleID 
 
 // SoftDelete 軟刪除司機，回傳 false 代表該筆已被刪除過。
 func (r *DriverRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
-	tag, err := r.db.Exec(ctx, `UPDATE drivers SET deleted_at = now(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
+	tag, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `UPDATE drivers SET deleted_at = now(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL`, id, actorID)
 	if err != nil {
 		return false, err
 	}

@@ -141,11 +141,11 @@ func TestSiteHandler_Create_ResponseShape(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
 
-	for _, field := range []string{"id", "name", "address", "region", "status", "createdAt", "updatedAt"} {
+	for _, field := range []string{"id", "name", "address", "region", "remarks", "status", "createdAt", "updatedAt"} {
 		_, ok := envelope.Data[field]
 		assert.Truef(t, ok, "response must keep field %q", field)
 	}
-	assert.Len(t, envelope.Data, 7, "response must not gain or lose fields")
+	assert.Len(t, envelope.Data, 8, "response must not gain or lose fields")
 }
 
 func TestSiteHandler_Create_WithoutStatus_DefaultsToActive(t *testing.T) {

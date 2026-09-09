@@ -34,6 +34,7 @@ type vehicleRow struct {
 	HasPlateRegistration      bool
 	HasTransferRegistration   bool
 	Status                    string
+	Remarks                   *string
 	CreatedAt                 time.Time
 	UpdatedAt                 time.Time
 }
@@ -64,6 +65,7 @@ func (r vehicleRow) toApp() app.Vehicle {
 		HasPlateRegistration:      r.HasPlateRegistration,
 		HasTransferRegistration:   r.HasTransferRegistration,
 		Status:                    r.Status,
+		Remarks:                   derefString(r.Remarks),
 		CreatedAt:                 r.CreatedAt,
 		UpdatedAt:                 r.UpdatedAt,
 	}
@@ -77,7 +79,7 @@ const vehicleSelect = `
 	       v.wheelchair_accessible,
 	       v.has_vehicle_license, v.has_purchase_contract,
 	       v.has_plate_registration, v.has_transfer_registration,
-	       v.status, v.created_at, v.updated_at
+	       v.status, v.remarks, v.created_at, v.updated_at
 	FROM vehicles v
 `
 
@@ -90,7 +92,7 @@ func scanVehicle(dest *vehicleRow) []interface{} {
 		&dest.WheelchairAccessible,
 		&dest.HasVehicleLicense, &dest.HasPurchaseContract,
 		&dest.HasPlateRegistration, &dest.HasTransferRegistration,
-		&dest.Status, &dest.CreatedAt, &dest.UpdatedAt,
+		&dest.Status, &dest.Remarks, &dest.CreatedAt, &dest.UpdatedAt,
 	}
 }
 
@@ -205,12 +207,24 @@ func vehicleWriteArgs(v *app.Vehicle) []interface{} {
 		v.CompulsoryInsuranceExpiry, v.PassengerInsuranceExpiry, v.ThirdPartyInsuranceExpiry,
 		v.LastInspectionDate, v.WheelchairAccessible,
 		v.HasVehicleLicense, v.HasPurchaseContract, v.HasPlateRegistration, v.HasTransferRegistration,
-		v.Status,
+		v.Status, nullableText(v.Remarks),
 	}
 }
 
 // nullableText 讓未填寫的選填欄位寫入 NULL 而不是空字串，避免同一語意出現兩種表示。
 func nullableText(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// nullableTextPtr 讓未填寫或空白字串的選填指標欄位寫入 NULL。
+func nullableTextPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
 	if s == "" {
 		return nil
 	}
@@ -228,9 +242,9 @@ func (r *VehicleRepository) Create(ctx context.Context, v *app.Vehicle) error {
 			compulsory_insurance_expiry, passenger_insurance_expiry, third_party_insurance_expiry,
 			last_inspection_date, wheelchair_accessible,
 			has_vehicle_license, has_purchase_contract, has_plate_registration, has_transfer_registration,
-			status
+			status, remarks
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		RETURNING created_at, updated_at
 	`
 	db := pgxdb.FromContext(ctx, r.db)
@@ -250,7 +264,7 @@ func (r *VehicleRepository) Update(ctx context.Context, v *app.Vehicle) error {
 		    last_inspection_date = $11, wheelchair_accessible = $12,
 		    has_vehicle_license = $13, has_purchase_contract = $14,
 		    has_plate_registration = $15, has_transfer_registration = $16,
-		    status = $17,
+		    status = $17, remarks = $18,
 		    updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING created_at, updated_at
