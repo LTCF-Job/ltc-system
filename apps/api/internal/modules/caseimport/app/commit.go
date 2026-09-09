@@ -71,7 +71,7 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			}
 		}
 
-		// 據點／去回程車輛各自獨立比對：比對到則寫入 ID，比對不到但有填名稱則保留
+		// 據點與照護人員各自獨立比對：比對到則寫入 ID，比對不到但有填名稱則保留
 		// 原始名稱待人工關聯，兩種情況都不影響個案主檔本身的建立。
 		siteID, siteNameRaw, siteWarning, err := s.resolveSite(ctx, row.SiteName)
 		if err != nil {
@@ -79,19 +79,13 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			recordFailed(caseImportFailureRow(row, "據點查詢失敗，請稍後重試"))
 			continue
 		}
-		outboundID, outboundNameRaw, outboundWarning, err := s.resolveVehicle(ctx, row.OutboundVehicle, "接送車輛(去)")
+		caregiverID, caregiverRole, caregiverWarning, err := s.resolveCaregiver(ctx, row.CareContactName, row.CareContactRole)
 		if err != nil {
-			slog.Error("case import outbound vehicle lookup failed", "row_index", row.RowIndex, "error", err)
-			recordFailed(caseImportFailureRow(row, "去程車輛查詢失敗，請稍後重試"))
+			slog.Error("case import caregiver lookup failed", "row_index", row.RowIndex, "error", err)
+			recordFailed(caseImportFailureRow(row, "照護人員查詢失敗，請稍後重試"))
 			continue
 		}
-		inboundID, inboundNameRaw, inboundWarning, err := s.resolveVehicle(ctx, row.InboundVehicle, "接送車輛(回)")
-		if err != nil {
-			slog.Error("case import inbound vehicle lookup failed", "row_index", row.RowIndex, "error", err)
-			recordFailed(caseImportFailureRow(row, "回程車輛查詢失敗，請稍後重試"))
-			continue
-		}
-		for _, w := range []string{siteWarning, outboundWarning, inboundWarning} {
+		for _, w := range []string{siteWarning, caregiverWarning} {
 			if w != "" {
 				result.Warnings = append(result.Warnings, CaseImportWarningItem{RowIndex: row.RowIndex, CaseName: row.Name, Message: w})
 			}
@@ -103,28 +97,25 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 				continue
 			}
 			_, alreadyStaged, err := s.duplicateStager.StageDuplicateRow(ctx, preview.FileHash, importRowKey(row.RowID, row.RowIndex), StageDuplicateCandidate{
-				RowIndex:               row.RowIndex,
-				SheetName:              row.SheetName,
-				Name:                   row.Name,
-				NationalID:             row.NationalID,
-				HouseholdType:          stringPointer(row.HouseholdType),
-				Gender:                 stringPointer(row.Gender),
-				BirthDate:              parseBirthDate(row.BirthDate),
-				BirthDateRaw:           stringPointer(row.BirthDateRaw),
-				CareContactRole:        stringPointer(row.CareContactRole),
-				CareContactName:        stringPointer(row.CareContactName),
-				RegisteredAddress:      stringPointer(row.RegisteredAddress),
-				HomeAddress:            stringPointer(row.HomeAddress),
-				ServiceCategory:        row.ServiceCategory,
-				ServiceUsageType:       row.ServiceUsageType,
-				Remarks:                stringPointer(row.Remarks),
-				SiteID:                 siteID,
-				SiteNameRaw:            siteNameRaw,
-				OutboundVehicleID:      outboundID,
-				OutboundVehicleNameRaw: outboundNameRaw,
-				InboundVehicleID:       inboundID,
-				InboundVehicleNameRaw:  inboundNameRaw,
-				DuplicateCaseID:        *row.DuplicateCaseID,
+				RowIndex:          row.RowIndex,
+				SheetName:         row.SheetName,
+				Name:              row.Name,
+				NationalID:        row.NationalID,
+				HouseholdType:     stringPointer(row.HouseholdType),
+				Gender:            stringPointer(row.Gender),
+				BirthDate:         parseBirthDate(row.BirthDate),
+				BirthDateRaw:      stringPointer(row.BirthDateRaw),
+				CareContactRole:   stringPointer(caregiverRole),
+				CareContactName:   stringPointer(row.CareContactName),
+				RegisteredAddress: stringPointer(row.RegisteredAddress),
+				HomeAddress:       stringPointer(row.HomeAddress),
+				ServiceCategory:   row.ServiceCategory,
+				ServiceUsageType:  row.ServiceUsageType,
+				Remarks:           stringPointer(row.Remarks),
+				SiteID:            siteID,
+				SiteNameRaw:       siteNameRaw,
+				CaregiverID:       caregiverID,
+				DuplicateCaseID:   *row.DuplicateCaseID,
 			})
 			if err != nil {
 				slog.Error("case import duplicate staging failed", "row_index", row.RowIndex, "error", err)
@@ -151,7 +142,7 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			Gender:                 stringPointer(row.Gender),
 			BirthDate:              parseBirthDate(row.BirthDate),
 			BirthDateRaw:           stringPointer(row.BirthDateRaw),
-			CareContactRole:        stringPointer(row.CareContactRole),
+			CareContactRole:        stringPointer(caregiverRole),
 			CareContactName:        stringPointer(row.CareContactName),
 			RegisteredAddress:      stringPointer(row.RegisteredAddress),
 			HomeAddress:            stringPointer(row.HomeAddress),
@@ -161,6 +152,7 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			Remarks:                stringPointer(row.Remarks),
 			SiteID:                 siteID,
 			SiteNameRaw:            siteNameRaw,
+			CaregiverID:            caregiverID,
 		}
 
 		txErr := s.txRunner.WithTx(ctx, func(txCtx context.Context) error {
@@ -176,18 +168,9 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			if s.cases == nil {
 				return errors.New("case registrar not configured")
 			}
-			caseID, err := s.cases.CreateCase(txCtx, caseReq, actor)
-			if err != nil {
+			// 接送車輛欄位目前保留版面但不匯入，因此不寫入 case_transport_preferences。
+			if _, err := s.cases.CreateCase(txCtx, caseReq, actor); err != nil {
 				return fmt.Errorf("個案建立失敗：%w", err)
-			}
-
-			if outboundID != nil || inboundID != nil || outboundNameRaw != "" || inboundNameRaw != "" {
-				if s.prefRepo == nil {
-					return errors.New("transport preference writer not configured")
-				}
-				if err := s.prefRepo.UpsertTransportPreference(txCtx, caseID, outboundID, inboundID, outboundNameRaw, inboundNameRaw); err != nil {
-					return fmt.Errorf("儲存接送車輛偏好失敗：%w", err)
-				}
 			}
 
 			return nil
@@ -250,22 +233,71 @@ func (s *ImportService) resolveSite(ctx context.Context, name string) (id *uuid.
 	return &site.ID, "", "", nil
 }
 
-// resolveVehicle 依顯示名稱比對既有車輛；查無資料時回傳空 ID 與原始名稱，並附上待人工關聯的提示。
-func (s *ImportService) resolveVehicle(ctx context.Context, name, fieldLabel string) (id *uuid.UUID, nameRaw string, warning string, err error) {
-	if name == "" || s.vehicleRepo == nil {
+// caregiverTypeOf 把工作表的「個管or照專」文字轉為主檔類型；無法對應時回傳空字串。
+// 「專護」是照專的舊稱，沿用 caregiver 匯入既有的相容處理。
+func caregiverTypeOf(role string) string {
+	switch strings.TrimSpace(role) {
+	case "個管":
+		return "case_manager"
+	case "照專", "專護":
+		return "specialist"
+	default:
+		return ""
+	}
+}
+
+// caregiverRoleOf 把主檔類型轉回工作表的中文角色；未設定類型時留白。
+func caregiverRoleOf(caregiverType string) string {
+	switch caregiverType {
+	case "case_manager":
+		return "個管"
+	case "specialist":
+		return "照專"
+	default:
+		return ""
+	}
+}
+
+// resolveCaregiver 以姓名比對照護人員主檔：同名唯一即採用，角色一律以主檔為準；
+// 只有同名多筆時才用工作表的「個管or照專」消歧，消歧後仍不唯一就視為比對不到。
+// 比對不到時回傳空 ID 與原始角色文字，個案照常建立並由 caregiver_pending 落入待維護。
+func (s *ImportService) resolveCaregiver(ctx context.Context, name, role string) (id *uuid.UUID, resolvedRole string, warning string, err error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
 		return nil, "", "", nil
 	}
-	vehicle, err := s.vehicleRepo.GetByDisplayName(ctx, name)
+	if s.caregiverRepo == nil {
+		return nil, role, "", nil
+	}
+	matches, err := s.caregiverRepo.FindByName(ctx, name)
 	if err != nil {
 		if errors.Is(err, ErrLookupNotFound) {
-			return nil, name, fmt.Sprintf("%s『%s』未於車輛管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name), nil
+			matches = nil
+		} else {
+			return nil, "", "", err
 		}
-		return nil, "", "", err
 	}
-	if vehicle == nil {
-		return nil, name, fmt.Sprintf("%s『%s』未於車輛管理中找到，已建立個案並保留原始名稱待人工關聯", fieldLabel, name), nil
+	switch len(matches) {
+	case 0:
+		return nil, role, fmt.Sprintf("照護人員「%s」未於照護人員管理中找到，已建立個案並列入待維護", name), nil
+	case 1:
+		return &matches[0].ID, caregiverRoleOf(matches[0].Type), "", nil
 	}
-	return &vehicle.ID, "", "", nil
+
+	wanted := caregiverTypeOf(role)
+	if wanted == "" {
+		return nil, role, fmt.Sprintf("照護人員「%s」有多筆同名資料，需以「個管or照專」指定，已建立個案並列入待維護", name), nil
+	}
+	var narrowed []CaregiverRef
+	for _, m := range matches {
+		if m.Type == wanted {
+			narrowed = append(narrowed, m)
+		}
+	}
+	if len(narrowed) != 1 {
+		return nil, role, fmt.Sprintf("照護人員「%s」以「%s」仍無法唯一對應，已建立個案並列入待維護", name, strings.TrimSpace(role)), nil
+	}
+	return &narrowed[0].ID, caregiverRoleOf(narrowed[0].Type), "", nil
 }
 
 func skippedRow(row CaseImportRowResult) CaseImportSkippedRow {

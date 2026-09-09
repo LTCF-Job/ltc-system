@@ -33,14 +33,12 @@ func TestGenerateCaseImportTemplateExcel_Structure(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(rows), 3, "範本應包含 1 列標題與至少 2 列範例資料")
 
+	// 表頭與匯出的「進系統個案個資」逐欄一致，讓匯出檔可以直接回灌。
 	headerRow := rows[0]
-	assert.Equal(t, "姓名*", headerRow[0])
-	assert.Contains(t, headerRow, "身分證字號")
-	assert.Contains(t, headerRow, "據點")
-	assert.Contains(t, headerRow, "接送車輛(去)")
-	assert.Contains(t, headerRow, "接送車輛(回)")
-	assert.Contains(t, headerRow, "姓名(個管/照專)")
-	assert.Contains(t, headerRow, "備註")
+	assert.Equal(t, []string{
+		"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)",
+		"個管or照專", "姓名", "戶籍", "居住地", "備註",
+	}, headerRow)
 	assert.NotContains(t, headerRow, "週一趟數(0:不搭/1:單去/2:來回/4:四趟)")
 }
 
@@ -49,15 +47,19 @@ func TestParseCases_TemplateExcel(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, excelBytes)
 
-	svc := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(excelBytes), "template.xlsx")
 	require.NoError(t, err)
 	require.NotNil(t, preview)
 
-	// 範本自帶的示範列以「例：」前綴標記，原封不動上傳不得產生任何可匯入的個案。
-	assert.Equal(t, 0, preview.TotalRows)
-	assert.Equal(t, 0, preview.ValidRows)
+	// 示範列不再帶「例：」前綴，因此原封不動上傳會把這兩筆虛構個案當成真資料解析出來
+	// （已與使用者確認採此行為）；使用者必須先刪除示範列再上傳。
+	assert.Equal(t, 2, preview.TotalRows)
+	assert.Equal(t, 2, preview.ValidRows)
 	assert.Equal(t, 0, preview.ErrorRows)
+	require.Len(t, preview.Rows, 2)
+	assert.Equal(t, "王小明", preview.Rows[0].Name)
+	assert.Equal(t, "張香香", preview.Rows[1].Name)
 }
 
 // 姓名空白但同列其他欄位有值，代表使用者漏填，必須列成錯誤列而不是靜默丟棄。
@@ -77,7 +79,7 @@ func TestParseCases_BlankNameRowBecomesError(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	svc := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "blank-name.xlsx")
 	require.NoError(t, err)
 	require.NotNil(t, preview)
@@ -112,7 +114,7 @@ func TestParseCases_ProfileWorkbook(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	svc := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "彙整-個案資料(竹南.頭份).xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
@@ -126,8 +128,9 @@ func TestParseCases_ProfileWorkbook(t *testing.T) {
 	assert.Equal(t, "陳小華", got.CareContactName)
 	assert.Equal(t, "苗栗縣竹南鎮戶籍地址", got.RegisteredAddress)
 	assert.Equal(t, "苗栗縣竹南鎮居住地址", got.HomeAddress)
-	assert.Equal(t, "竹南1車", got.OutboundVehicle)
-	assert.Equal(t, "竹南2車", got.InboundVehicle)
+	// 接送車輛兩欄保留版面但不匯入：來源檔即使填了車輛，解析結果一律留空。
+	assert.Empty(t, got.OutboundVehicle)
+	assert.Empty(t, got.InboundVehicle)
 	assert.Equal(t, "需輪椅", got.Remarks)
 	assert.False(t, got.IsDuplicate)
 }
@@ -151,7 +154,7 @@ func TestParseCases_SiteHeader(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
 	assert.Equal(t, "竹南日照據點", preview.Rows[0].SiteName)
@@ -177,7 +180,7 @@ func TestParseCases_LegacySiteHeaderNoLongerRecognized(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
 	assert.Empty(t, preview.Rows[0].SiteName, "舊「單位」標頭不再被讀取")
@@ -202,7 +205,7 @@ func TestParseCases_OnlyNameRequired(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
 	assert.Equal(t, 0, preview.ErrorRows)
@@ -235,13 +238,47 @@ func TestParseCases_IgnoresFullyBlankRow(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	assert.Equal(t, 1, preview.TotalRows, "全空白列不應計入總筆數")
 	assert.Equal(t, 1, preview.ValidRows)
 	assert.Equal(t, 0, preview.ErrorRows, "全空白列應直接忽略，不應歸入錯誤列")
 	require.Len(t, preview.Rows, 1)
 	assert.Equal(t, "馮玉英", preview.Rows[0].Name)
+}
+
+// 匯出的生日是西元 YYYY/MM/DD，匯出檔要能原樣回灌，這個格式就不能被誤讀成民國年。
+func TestParseCases_GregorianBirthDateRoundTrip(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	sheet := f.GetSheetName(0)
+	headers := []string{"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "姓名", "戶籍", "居住地", "備註"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		require.NoError(t, f.SetCellValue(sheet, cell, h))
+	}
+	// 第 2 列西元、第 3 列民國：兩種寫法都要解析成同一個日期。
+	values := [][]interface{}{
+		{1, "西元寫法", "", "", "女", "1956/06/15", "", "竹南日照", "", "", "", "", "", "", ""},
+		{2, "民國寫法", "", "", "女", "045/06/15", "", "竹南日照", "", "", "", "", "", "", ""},
+	}
+	for r, row := range values {
+		for i, v := range row {
+			cell, _ := excelize.CoordinatesToCellName(i+1, r+2)
+			require.NoError(t, f.SetCellValue(sheet, cell, v))
+		}
+	}
+	buf, err := f.WriteToBuffer()
+	require.NoError(t, err)
+
+	svc := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "export.xlsx")
+	require.NoError(t, err)
+	require.Len(t, preview.Rows, 2)
+	assert.Equal(t, "1956-06-15", preview.Rows[0].BirthDate)
+	assert.Equal(t, "1956-06-15", preview.Rows[1].BirthDate)
+	assert.False(t, preview.Rows[0].BirthDateInvalid)
+	assert.False(t, preview.Rows[1].BirthDateInvalid)
 }
 
 // TestParseCases_ReportsBirthDateFormatError 驗證生日格式錯誤不擋列，改標記為待補正 warning。
@@ -263,7 +300,7 @@ func TestParseCases_ReportsBirthDateFormatError(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
 	assert.Equal(t, 0, preview.ErrorRows)
@@ -293,7 +330,7 @@ func TestParseCases_InvalidNationalID_SetsWarningNotError(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
+	preview, err := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil).ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
 	assert.Equal(t, 0, preview.ErrorRows)
@@ -325,7 +362,7 @@ func TestParseCases_FlagsDuplicateByNationalID(t *testing.T) {
 		"A202559750": {CaseID: dupCaseID, CaseName: "王小明"},
 	}}
 
-	svc := NewImportService(nil, finder, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	svc := NewImportService(nil, finder, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
@@ -356,7 +393,7 @@ func TestParseCases_FlagsDuplicateByNameWhenNationalIDBlank(t *testing.T) {
 		"王小明": {CaseID: dupCaseID, CaseName: "王小明"},
 	}}
 
-	svc := NewImportService(nil, finder, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	svc := NewImportService(nil, finder, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
@@ -374,7 +411,7 @@ func TestParseCases_DuplicateLookupFailureMarksRowAsError(t *testing.T) {
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
 
-	svc := NewImportService(nil, failingDuplicateFinder{}, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	svc := NewImportService(nil, failingDuplicateFinder{}, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)
@@ -386,7 +423,7 @@ func TestParseCases_DuplicateLookupFailureMarksRowAsError(t *testing.T) {
 }
 
 func TestParseCases_EmptyAndCorruptedFiles(t *testing.T) {
-	svc := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 
 	// 測試不支援的副檔名應回傳錯誤
 	_, err := svc.ParseCases(context.Background(), strings.NewReader(""), "empty.csv")
@@ -417,7 +454,7 @@ func TestParseCases_TemplateMismatchIsAnError(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, f.Write(&buf))
 
-	svc := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 	_, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "wrong.xlsx")
 
 	require.ErrorIs(t, err, ErrTemplateMismatch)
@@ -433,7 +470,7 @@ func TestParseCasesFromExcel_RealFile(t *testing.T) {
 	}
 	defer f.Close()
 
-	svc := NewImportService(nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	svc := NewImportService(nil, nil, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 	preview, err := svc.ParseCasesFromExcel(context.Background(), f)
 	require.NoError(t, err)
 	require.NotNil(t, preview)
@@ -482,7 +519,7 @@ func TestParseCases_InvalidNationalIDFallsBackToNameDuplicateCheck(t *testing.T)
 		"王小明": {CaseID: dupCaseID, CaseName: "王小明"},
 	}}
 
-	svc := NewImportService(nil, finder, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
+	svc := NewImportService(nil, finder, nil, nil, nil, nil, nil, importinfra.NewExcelAdapter(), importinfra.NewExcelAdapter(), nil)
 	preview, err := svc.ParseCases(context.Background(), bytes.NewReader(buf.Bytes()), "profile.xlsx")
 	require.NoError(t, err)
 	require.Len(t, preview.Rows, 1)

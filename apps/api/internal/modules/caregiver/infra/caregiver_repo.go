@@ -77,6 +77,30 @@ func (r *CaregiverRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.C
 	return &c, nil
 }
 
+// FindByName 取得所有同名的照護人員（姓名前後空白不計）。回傳整份清單而非單筆，
+// 是因為同名多筆時要由呼叫端依類型消歧；狀態不納入條件，比照據點以名稱比對的既有行為。
+func (r *CaregiverRepository) FindByName(ctx context.Context, name string) ([]app.Caregiver, error) {
+	query := `SELECT ` + caregiverColumns + ` FROM caregivers c WHERE btrim(c.name) = btrim($1) ORDER BY c.created_at`
+	rows, err := r.db.Query(ctx, query, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query caregivers by name: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]app.Caregiver, 0)
+	for rows.Next() {
+		var row caregiverRow
+		if err := rows.Scan(&row.ID, &row.SiteName, &row.Name, &row.Type, &row.Contact, &row.Notes, &row.Status, &row.CreatedAt, &row.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan caregiver: %w", err)
+		}
+		list = append(list, row.toApp())
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 // Create 新增照護人員。
 func (r *CaregiverRepository) Create(ctx context.Context, c *app.Caregiver) error {
 	if c.ID == uuid.Nil {

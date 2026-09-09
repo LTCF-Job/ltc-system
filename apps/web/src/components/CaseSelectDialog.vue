@@ -35,7 +35,7 @@
       <el-table-column prop="status" label="狀態" width="90" align="center">
         <template #default="{ row }">{{ CASE_STATUS_LABELS[row.status as CaseStatus] || row.status }}</template>
       </el-table-column>
-      <el-table-column prop="homeAddress" label="住家地址" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="homeAddress" label="居住地址" min-width="180" show-overflow-tooltip />
     </el-table>
 
     <template #footer>

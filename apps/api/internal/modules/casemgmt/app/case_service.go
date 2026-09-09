@@ -519,6 +519,7 @@ type StageDuplicateCandidateInput struct {
 	ServiceUsageType       *int
 	SiteID                 *uuid.UUID
 	SiteNameRaw            string
+	CaregiverID            *uuid.UUID
 	OutboundVehicleID      *uuid.UUID
 	OutboundVehicleNameRaw string
 	InboundVehicleID       *uuid.UUID
@@ -586,6 +587,7 @@ func (s *CaseService) StageDuplicateCandidate(ctx context.Context, in StageDupli
 		ServiceUsageType:       in.ServiceUsageType,
 		SiteID:                 in.SiteID,
 		SiteNameRaw:            emptyToNil(in.SiteNameRaw),
+		CaregiverID:            in.CaregiverID,
 		OutboundVehicleID:      in.OutboundVehicleID,
 		OutboundVehicleNameRaw: emptyToNil(in.OutboundVehicleNameRaw),
 		InboundVehicleID:       in.InboundVehicleID,
@@ -783,6 +785,7 @@ func (s *CaseService) resolveDuplicateAsNewCase(ctx context.Context, cand *Dupli
 		Remarks:           cand.Remarks,
 		SiteID:            cand.SiteID,
 		SiteNameRaw:       cand.SiteNameRaw,
+		CaregiverID:       cand.CaregiverID,
 	}
 	if err := s.caseRepo.Create(ctx, &entity); err != nil {
 		return nil, fmt.Errorf("failed to create case from duplicate candidate: %w", err)

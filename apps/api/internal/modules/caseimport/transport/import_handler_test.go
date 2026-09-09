@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/xuri/excelize/v2"
 	importapp "ltc-system/apps/api/internal/modules/caseimport/app"
 	importinfra "ltc-system/apps/api/internal/modules/caseimport/infra"
 	"ltc-system/apps/api/internal/platform/httpx"
@@ -19,7 +20,7 @@ import (
 func TestDownloadTemplate_TableDriven(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	excel := importinfra.NewExcelAdapter()
-	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, nil, excel, excel, nil))
+	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, nil, nil, excel, excel, nil))
 
 	tests := []struct {
 		name                string
@@ -95,11 +96,37 @@ func TestDownloadTemplate_TableDriven(t *testing.T) {
 	}
 }
 
+// 端點實際送出的位元組必須是可開啟、欄位正確的工作簿：magic number 只證明是 ZIP，
+// 因此這裡把 recorder body 當成真的檔案回讀，逐欄比對表頭。
+func TestDownloadTemplate_BodyIsReadableWorkbookWithSourceHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	excel := importinfra.NewExcelAdapter()
+	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, nil, nil, excel, excel, nil))
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request, _ = http.NewRequest(http.MethodGet, "/api/v1/cases/template", nil)
+	h.DownloadTemplate(c)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	f, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
+	require.NoError(t, err)
+	defer f.Close()
+
+	rows, err := f.GetRows("個案匯入範本")
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	assert.Equal(t, []string{
+		"序號", "姓名", "戶別", "身分證字號", "性別", "生日", "歲數", "據點", "接送車輛(去)", "接送車輛(回)",
+		"個管or照專", "姓名", "戶籍", "居住地", "備註",
+	}, rows[0])
+}
+
 // TestImportExcel_RejectsOversizedUpload 驗證上傳大小上限接在 handler 入口：
 // 超限請求必須在進入 service 解析之前就被擋下並回 413。
 func TestImportExcel_RejectsOversizedUpload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, nil, nil, nil, nil))
+	h := NewImportHandler(importapp.NewImportService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil))
 
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)

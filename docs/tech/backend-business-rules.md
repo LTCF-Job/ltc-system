@@ -86,6 +86,14 @@ covers:
 
 `Passed = (errorCount == 0)`——只有 `error` 等級的項目會擋匯出，`warning`／`info` 只是提示不會擋。**未裁決混車衝突是唯一會擋下匯出的檢核項目**：缺資料只會讓該欄位在申報檔留白，混車卻會讓報出去的資料本身是錯的。
 
+## 個案彙整表匯出（`CaseService.GenerateCaseProfileWorkbook`）
+
+- 欄位版面與匯入範本共用同一組 A~O 15 欄，詳見 `docs/tech/system-logic-specification.md` 準則三.二。
+- 「個管or照專」與其右方的姓名取自 `cases.caregiver_id` 關聯到的 `caregivers`（`type` 轉中文、`name` 直出），**不再取用 `care_contact_role`／`care_contact_name` 這兩個匯入留下的文字欄位**；那兩欄現在只在照護人員比對不到主檔時當作待維護的線索。
+- 接送車輛(去)/(回) 兩欄保留版面但恆為空白，匯入端也不取值。
+- 生日輸出西元 `YYYY/MM/DD`，歲數由生日與當年推算；身分證字號為解密後明文。匯入端的 `parseProfileBirthDate` 以「年份小於 1911 才視為民國」判定，因此匯出檔可原樣回灌。
+- `ListAll` 走 `case_pending_status`，待維護個案不會出現在匯出檔中。
+
 ## 政府申報表排序規則（`domain/govform.SortClaimRows`）
 
 匯出的 Excel 資料列排序，依序比較（前面相等才看下一條）：

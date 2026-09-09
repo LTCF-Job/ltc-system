@@ -143,39 +143,144 @@ func TestCommitCases_AlreadyStagedDuplicateCountsAsAlreadyImported(t *testing.T)
 	assert.Empty(t, stager.staged)
 }
 
-func TestCommitCases_CreatesCaseWhenSiteAndVehicleNamesDoNotMatch(t *testing.T) {
+func TestCommitCases_CreatesCaseWhenSiteAndCaregiverNamesDoNotMatch(t *testing.T) {
 	registrar := &fakeCaseRegistrar{}
-	prefWriter := &fakeTransportPreferenceWriter{}
 	svc := &ImportService{
-		cases:       registrar,
-		siteRepo:    fakeSiteLookup{byName: map[string]uuid.UUID{}},
-		vehicleRepo: fakeVehicleLookup{byName: map[string]uuid.UUID{}},
-		prefRepo:    prefWriter,
-		txRunner:    fakeTxRunner{},
+		cases:         registrar,
+		siteRepo:      fakeSiteLookup{byName: map[string]uuid.UUID{}},
+		caregiverRepo: fakeCaregiverLookup{},
+		txRunner:      fakeTxRunner{},
 	}
 
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
-		{RowIndex: 1, Name: "個案甲", SiteName: "查無此單位", OutboundVehicle: "查無此車", InboundVehicle: "查無此車回"},
+		{RowIndex: 1, Name: "個案甲", SiteName: "查無此單位", CareContactRole: "個管", CareContactName: "查無此人"},
 	}}
 
 	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
 
 	require.NoError(t, err)
-	assert.Equal(t, 1, result.ImportedCount, "據點/車輛比對不到仍應建立個案")
+	assert.Equal(t, 1, result.ImportedCount, "據點／照護人員比對不到仍應建立個案")
 	assert.Empty(t, result.SkippedRows)
-	require.Len(t, result.Warnings, 3, "據點與去回程車輛各自獨立比對不到，各附一則警示")
+	require.Len(t, result.Warnings, 2, "據點與照護人員各自獨立比對不到，各附一則警示")
 
 	require.Len(t, registrar.created, 1)
 	created := registrar.created[0]
 	assert.Nil(t, created.SiteID)
 	assert.Equal(t, "查無此單位", created.SiteNameRaw)
+	// 比對不到時保留工作表原始角色文字，caregiver_pending 才有線索可供待維護頁顯示。
+	assert.Nil(t, created.CaregiverID)
+	require.NotNil(t, created.CareContactRole)
+	assert.Equal(t, "個管", *created.CareContactRole)
+}
 
-	require.Len(t, prefWriter.calls, 1)
-	call := prefWriter.calls[0]
-	assert.Nil(t, call.outboundVehicleID)
-	assert.Nil(t, call.inboundVehicleID)
-	assert.Equal(t, "查無此車", call.outboundNameRaw)
-	assert.Equal(t, "查無此車回", call.inboundNameRaw)
+// 同名唯一命中：角色一律以主檔為準，即使工作表填的是另一個角色也不採用。
+func TestCommitCases_CaregiverMatchedByNameOverridesSheetRole(t *testing.T) {
+	registrar := &fakeCaseRegistrar{}
+	caregiverID := uuid.New()
+	svc := &ImportService{
+		cases:    registrar,
+		siteRepo: fakeSiteLookup{byName: map[string]uuid.UUID{}},
+		caregiverRepo: fakeCaregiverLookup{byName: map[string][]CaregiverRef{
+			"陳小華": {{ID: caregiverID, Name: "陳小華", Type: "specialist"}},
+		}},
+		txRunner: fakeTxRunner{},
+	}
+
+	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
+		{RowIndex: 1, Name: "個案甲", SiteName: "查無此單位", CareContactRole: "個管", CareContactName: "陳小華"},
+	}}
+
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ImportedCount)
+	require.Len(t, registrar.created, 1)
+	created := registrar.created[0]
+	require.NotNil(t, created.CaregiverID)
+	assert.Equal(t, caregiverID, *created.CaregiverID)
+	require.NotNil(t, created.CareContactRole)
+	assert.Equal(t, "照專", *created.CareContactRole)
+}
+
+// 同名多筆時才用工作表的「個管or照專」消歧；消歧成功即採用該筆。
+func TestCommitCases_CaregiverDuplicateNamesResolvedByRole(t *testing.T) {
+	registrar := &fakeCaseRegistrar{}
+	managerID, specialistID := uuid.New(), uuid.New()
+	svc := &ImportService{
+		cases:    registrar,
+		siteRepo: fakeSiteLookup{byName: map[string]uuid.UUID{}},
+		caregiverRepo: fakeCaregiverLookup{byName: map[string][]CaregiverRef{
+			"陳小華": {
+				{ID: managerID, Name: "陳小華", Type: "case_manager"},
+				{ID: specialistID, Name: "陳小華", Type: "specialist"},
+			},
+		}},
+		txRunner: fakeTxRunner{},
+	}
+
+	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
+		{RowIndex: 1, Name: "個案甲", SiteName: "查無此單位", CareContactRole: "照專", CareContactName: "陳小華"},
+	}}
+
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ImportedCount)
+	require.Len(t, registrar.created, 1)
+	require.NotNil(t, registrar.created[0].CaregiverID)
+	assert.Equal(t, specialistID, *registrar.created[0].CaregiverID)
+}
+
+// 同名多筆但角色欄空白：無法唯一對應，落入待維護而不是隨便挑一筆。
+func TestCommitCases_CaregiverDuplicateNamesWithoutRoleStaysPending(t *testing.T) {
+	registrar := &fakeCaseRegistrar{}
+	svc := &ImportService{
+		cases:    registrar,
+		siteRepo: fakeSiteLookup{byName: map[string]uuid.UUID{}},
+		caregiverRepo: fakeCaregiverLookup{byName: map[string][]CaregiverRef{
+			"陳小華": {
+				{ID: uuid.New(), Name: "陳小華", Type: "case_manager"},
+				{ID: uuid.New(), Name: "陳小華", Type: "specialist"},
+			},
+		}},
+		txRunner: fakeTxRunner{},
+	}
+
+	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
+		{RowIndex: 1, Name: "個案甲", SiteName: "查無此單位", CareContactName: "陳小華"},
+	}}
+
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ImportedCount)
+	require.Len(t, registrar.created, 1)
+	assert.Nil(t, registrar.created[0].CaregiverID)
+	require.Len(t, result.Warnings, 2)
+}
+
+// 照護人員姓名空白：不是錯誤也不是待維護，不得產生警示。
+func TestCommitCases_BlankCaregiverNameProducesNoWarning(t *testing.T) {
+	registrar := &fakeCaseRegistrar{}
+	siteID := uuid.New()
+	svc := &ImportService{
+		cases:         registrar,
+		siteRepo:      fakeSiteLookup{byName: map[string]uuid.UUID{"竹南日照單位": siteID}},
+		caregiverRepo: fakeCaregiverLookup{},
+		txRunner:      fakeTxRunner{},
+	}
+
+	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
+		{RowIndex: 1, Name: "個案甲", SiteName: "竹南日照單位"},
+	}}
+
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.ImportedCount)
+	assert.Empty(t, result.Warnings)
+	require.Len(t, registrar.created, 1)
+	assert.Nil(t, registrar.created[0].CaregiverID)
 }
 
 // 據點欄位完全空白（使用者根本沒填，不是「填了但比對不到」）時，SiteID 與 SiteNameRaw
@@ -231,40 +336,42 @@ func TestCommitCases_BlankSiteNameOnDuplicateRowAlsoGetsPlaceholder(t *testing.T
 	assert.NotEmpty(t, stager.staged[0].SiteNameRaw, "暫存列的 SiteID 與 SiteNameRaw 不可同時為空")
 }
 
-func TestCommitCases_ResolvesSiteAndVehicleWhenNamesMatch(t *testing.T) {
+func TestCommitCases_ResolvesSiteAndCaregiverWhenNamesMatch(t *testing.T) {
 	registrar := &fakeCaseRegistrar{}
-	prefWriter := &fakeTransportPreferenceWriter{}
 	siteID := uuid.New()
-	outboundID := uuid.New()
+	caregiverID := uuid.New()
 	svc := &ImportService{
-		cases:       registrar,
-		siteRepo:    fakeSiteLookup{byName: map[string]uuid.UUID{"竹南日照單位": siteID}},
-		vehicleRepo: fakeVehicleLookup{byName: map[string]uuid.UUID{"竹南1車": outboundID}},
-		prefRepo:    prefWriter,
-		txRunner:    fakeTxRunner{},
+		cases:    registrar,
+		siteRepo: fakeSiteLookup{byName: map[string]uuid.UUID{"竹南日照單位": siteID}},
+		caregiverRepo: fakeCaregiverLookup{byName: map[string][]CaregiverRef{
+			"陳小華": {{ID: caregiverID, Name: "陳小華", Type: "case_manager"}},
+		}},
+		txRunner: fakeTxRunner{},
 	}
 
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
-		{RowIndex: 1, Name: "個案乙", SiteName: "竹南日照單位", OutboundVehicle: "竹南1車", InboundVehicle: "查無此車回"},
+		{RowIndex: 1, Name: "個案乙", SiteName: "竹南日照單位", CareContactRole: "個管", CareContactName: "陳小華", InboundVehicle: "查無此車回"},
 	}}
 
 	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.ImportedCount)
-	require.Len(t, result.Warnings, 1, "僅回程車比對不到，只附一則警示")
+	assert.Empty(t, result.Warnings, "據點與照護人員都比對到，接送車輛不參與比對")
 
 	require.Len(t, registrar.created, 1)
 	created := registrar.created[0]
 	require.NotNil(t, created.SiteID)
 	assert.Equal(t, siteID, *created.SiteID)
+	require.NotNil(t, created.CaregiverID)
+	assert.Equal(t, caregiverID, *created.CaregiverID)
+}
 
-	require.Len(t, prefWriter.calls, 1)
-	call := prefWriter.calls[0]
-	require.NotNil(t, call.outboundVehicleID)
-	assert.Equal(t, outboundID, *call.outboundVehicleID)
-	assert.Nil(t, call.inboundVehicleID)
-	assert.Equal(t, "查無此車回", call.inboundNameRaw)
+// fakeCaregiverLookup 以姓名回傳同名清單；未登錄的姓名回傳空清單代表查無此人。
+type fakeCaregiverLookup struct{ byName map[string][]CaregiverRef }
+
+func (f fakeCaregiverLookup) FindByName(ctx context.Context, name string) ([]CaregiverRef, error) {
+	return f.byName[name], nil
 }
 
 type errorSiteLookup struct{ err error }

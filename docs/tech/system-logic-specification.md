@@ -116,7 +116,32 @@ covers:
    - 系統依序比對每列資料：檢查格式（日期、身分證）、外鍵關聯（司機是否存在、據點是否存在）、必填欄位。
    - 匯入預覽表格中，將含有缺漏或格式異常的儲存格以醒目色彩（如橘色警告標籤、紅色底線）標記，並滑鼠懸停（Tooltip）或展開顯示明確原因。
 
-### 3.2 就地修正與容錯處置
+### 3.2 個案匯入匯出的共用欄位版面
+個案的匯入範本（`GET /cases/template`，工作表「個案匯入範本」）與彙整表匯出（`GET /cases/export`，工作表「進系統個案個資」）共用同一組 A~O 共 15 欄，順序與現場使用的來源工作表逐欄一致，因此匯出檔可以直接回灌匯入。
+
+| 欄 | 表頭 | 匯出來源 | 匯入行為 |
+|---|---|---|---|
+| A | 序號 | 列流水號 | 忽略 |
+| B | 姓名 | `cases.name` | 必填，空值該列不匯入 |
+| C | 戶別 | `household_type` | 寫入 |
+| D | 身分證字號 | 解密後明文 | 格式錯誤不擋列，標記待補正 |
+| E | 生日 | 西元 `YYYY/MM/DD` | 民國／西元皆可（年份小於 1911 才視為民國），格式錯誤不擋列 |
+| F | 歲數 | 由生日計算 | 忽略（衍生值，不回寫） |
+| G | 據點 | `sites.name` | 比對主檔，比不到入待維護 |
+| H | 接送車輛(去) | 恆空 | 不取值 |
+| I | 接送車輛(回) | 恆空 | 不取值 |
+| J | 個管or照專 | `caregivers.type` | 僅在 K 欄同名多筆時作為消歧依據 |
+| K | 姓名 | `caregivers.name` | 比對照護人員主檔的主要依據 |
+| L | 戶籍 | `registered_address` | 寫入 |
+| M | 居住地 | `home_address` | 寫入 |
+| N | 備註 | `remarks` | 寫入 |
+
+- **接送車輛兩欄保留版面但不使用**：匯出恆為空白，匯入不取值、不比對車輛主檔、不寫入 `case_transport_preferences`。既有個案的交通偏好仍可於個案編輯頁手動維護。
+- **照護人員以姓名為主鍵比對**：匯入時先以 K 欄姓名查 `caregivers`，同名唯一即採用，角色一律以主檔的 `type` 為準（即使 J 欄填了不同角色）；只有同名多筆時才用 J 欄消歧，消歧後仍不唯一或查無此人，則保留原始文字並依準則四落入待維護（`cases.caregiver_pending`）。
+- **B 欄與 K 欄同名**：兩個「姓名」欄靠 J 欄「個管or照專」的欄位位置區分，J 欄左側為個案姓名、右側為照護人員姓名。範本的必填說明掛在 B1 的儲存格註解，不得放進資料列（逐列解析會讀成幽靈個案）。
+- **範本的兩列示範資料是不帶前綴的虛構資料**：解析時會被當成一般資料列，**使用者必須先刪除示範列再上傳**，否則會匯入這兩筆假個案。（照護人員範本仍沿用「例：」前綴略過示範列，兩者行為不同。）
+
+### 3.3 就地修正與容錯處置
 - **就地修改**：預覽介面應支援就地修正單筆資料欄位（或重新上傳覆蓋單一列），使用者修正後即時重新計算通過狀態。
 - **非阻擋原則延伸**：
   - 遇到部分列資料有瑕疵時，系統不得直接中斷並拋棄整份檔案。
@@ -155,9 +180,10 @@ covers:
 2. **關聯未建立或匹配失敗**：
    - 如司機接送匯報中填寫之司機姓名比對不到司機主檔（`driver_id IS NULL`）。
    - **個案自己的據點**比對不到據點主檔（`cases.site_pending`，`site_id IS NULL AND site_name_raw IS NOT NULL`）：手動新增個案時 `siteId` 為必填（`POST /cases` `binding:"required"`），不會產生此狀態；只有 Excel 匯入時據點名稱比對不到既有據點主檔，才會落入 `site_name_raw` 並觸發待維護，與既有的去／回程車輛比對不到主檔、司機接送匯報姓名比對不到司機主檔屬同一套模式。
-   - 個案指定之去/回程車輛找不到對應主檔（`case_transport_preferences.link_pending`；此條件現在**只涵蓋去/回程車輛**，據點比對已搬到上一條的 `cases.site_pending`，不再重複判定）。
+   - **個案的照護人員**比對不到照護人員主檔（`cases.caregiver_pending`，`caregiver_id IS NULL AND care_contact_name` 非空白）：手動新增個案時 `caregiverId` 為必填（`POST /cases` `binding:"required"`），不會產生此狀態；只有 Excel 匯入時「個管or照專」旁的姓名比對不到主檔（查無此人，或同名多筆且無法以角色消歧）才會落入待維護，與據點是同一套模式。從未填過照護人員姓名的個案不算待維護。
+   - 個案指定之去/回程車輛找不到對應主檔（`case_transport_preferences.link_pending`；此條件現在**只涵蓋去/回程車輛**，據點比對已搬到上一條的 `cases.site_pending`，不再重複判定）。個案匯入已不再寫入去/回程車輛，此狀態只會來自既有資料與手動設定的交通偏好。
    - 照服員姓名或類型未填寫（`caregivers.is_pending`）。車輛與照護人員自己的據點欄位（`site_name`）是自由輸入文字、不關聯據點主檔，因此不會因據點問題進入待維護。
-3. **合併視圖**：`case_pending_status` view 將 `cases.profile_pending`、`cases.site_pending`、`case_transport_preferences.link_pending` 三者以 `OR` 合併為單一 `is_pending`，供所有讀取個案的查詢統一 JOIN 使用（見準則四.二）。
+3. **合併視圖**：`case_pending_status` view 將 `cases.profile_pending`、`cases.site_pending`、`cases.caregiver_pending`、`case_transport_preferences.link_pending` 四者以 `OR` 合併為單一 `is_pending`，供所有讀取個案的查詢統一 JOIN 使用（見準則四.二）。
 
 ### 4.2 核心鐵律：全站嚴格隔離（Strict Full-Site Isolation）
 - **隔離範圍**：

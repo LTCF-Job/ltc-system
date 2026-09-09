@@ -57,7 +57,9 @@ type TransactionRunner interface {
 }
 
 // CaseProfileRow 是個案彙整表的一列，欄位順序即表格欄位順序。
+// OutboundVehicle / InboundVehicle 目前恆為空字串：來源工作表保留這兩欄的版面，但資料暫不流動。
 type CaseProfileRow struct {
+	Seq               string
 	Name              string
 	HouseholdType     string
 	NationalID        string
@@ -71,6 +73,7 @@ type CaseProfileRow struct {
 	CareContactName   string
 	RegisteredAddress string
 	HomeAddress       string
+	Remarks           string
 }
 
 // ProfileRenderer 產生個案彙整表的 Excel 位元組。

@@ -27,8 +27,11 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="住家地址" prop="homeAddress">
-        <el-input v-model="form.homeAddress" placeholder="請輸入住家地址" />
+      <el-form-item label="戶籍地址" prop="registeredAddress">
+        <el-input v-model="form.registeredAddress" placeholder="選填" />
+      </el-form-item>
+      <el-form-item label="居住地址" prop="homeAddress">
+        <el-input v-model="form.homeAddress" placeholder="請輸入居住地址" />
       </el-form-item>
       <el-form-item label="服務類別" prop="serviceCategory">
         <el-radio-group v-model="form.serviceCategory">
@@ -94,6 +97,7 @@ const form = reactive<CreateCaseRequest>({
   siteId: '',
   caregiverId: '',
   nationalId: '',
+  registeredAddress: '',
   homeAddress: '',
   serviceCategory: undefined,
   serviceUsageType: undefined,
@@ -101,7 +105,7 @@ const form = reactive<CreateCaseRequest>({
   remarks: ''
 })
 
-// 姓名、所屬據點與照護人員為必填；身分證字號與居住地仍為選填
+// 姓名、所屬據點與照護人員為必填；身分證字號與戶籍／居住地址仍為選填
 const rules = {
   name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }],
   siteId: [{ required: true, message: '請選擇所屬據點', trigger: 'change' }],
@@ -116,6 +120,7 @@ watch(
     form.siteId = ''
     form.caregiverId = ''
     form.nationalId = ''
+    form.registeredAddress = ''
     form.homeAddress = ''
     form.serviceCategory = undefined
     form.serviceUsageType = undefined

@@ -137,6 +137,7 @@ func main() {
 		caseDuplicateStager{svc: caseSvc},
 		importSiteLookup{repo: mdSiteRepo},
 		importVehicleLookup{repo: mdVehicleRepo},
+		importCaregiverLookup{repo: caregiverRepo},
 		caseRepo,
 		excelAdapter,
 		excelAdapter,

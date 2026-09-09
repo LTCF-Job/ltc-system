@@ -64,12 +64,13 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 	caseSvc := caseapp.NewCaseService(cfg, caseRepo, auditWriter{auditSvc}, caseinfra.NewExcelRenderer(), caseinfra.NewCaseDuplicateStagingRepository(pool))
 	excel := importinfra.NewExcelAdapter()
 	importSvc := importapp.NewImportService(
-		caseRegistrar{caseSvc},
+		failingCaseRegistrar{delegate: caseRegistrar{caseSvc}, failName: "受測個案B"},
 		caseDuplicateFinder{caseSvc},
 		caseDuplicateStager{caseSvc},
 		siteAdapter{siteRepo},
 		vehicleAdapter{vehicleRepo},
-		failingPreferenceWriter{delegate: caseRepo, failName: "FORCE_ROLLBACK"},
+		caregiverAdapter{},
+		caseRepo,
 		excel,
 		excel,
 		txRunner,
@@ -102,14 +103,13 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		SiteName:    site.Name,
 	}
 
-	// Row B：故意讓交通偏好 writer 在個案主檔寫入後失敗，用來驗證同一列的
+	// Row B：故意讓 registrar 在個案主檔寫入成功之後失敗，用來驗證同一列的
 	// 個案主檔會隨交易回滾，且批次不會因單列失敗而中止其餘列的處理。
 	rowB := importapp.CaseImportRowResult{
-		RowIndex:        2,
-		Name:            "受測個案B",
-		HomeAddress:     "苗栗縣測試路2號",
-		SiteName:        site.Name,
-		OutboundVehicle: "FORCE_ROLLBACK",
+		RowIndex:    2,
+		Name:        "受測個案B",
+		HomeAddress: "苗栗縣測試路2號",
+		SiteName:    site.Name,
 	}
 
 	// Row C：緊接失敗列之後的正常列，用來驗證批次不會因單列失敗而提早中止。
@@ -216,16 +216,34 @@ func (a vehicleAdapter) GetByDisplayName(ctx context.Context, displayName string
 	return &importapp.VehicleRef{ID: v.ID}, nil
 }
 
-type failingPreferenceWriter struct {
-	delegate importapp.TransportPreferenceWriter
+// caregiverAdapter 在本測試中一律回傳查無資料：照護人員關聯不是這個測試的主題，
+// 但仍需佔位讓 composition 與 cmd/server 一致。
+type caregiverAdapter struct{}
+
+func (caregiverAdapter) FindByName(ctx context.Context, name string) ([]importapp.CaregiverRef, error) {
+	return nil, nil
+}
+
+// failingCaseRegistrar 在個案主檔寫入成功「之後」才回報失敗，模擬列交易中途出錯：
+// 唯有交易確實回滾，該列才不會留下孤兒個案。
+type failingCaseRegistrar struct {
+	delegate importapp.CaseRegistrar
 	failName string
 }
 
-func (w failingPreferenceWriter) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
-	if outboundVehicleNameRaw == w.failName {
-		return errors.New("forced preference write failure")
+func (w failingCaseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, actor importapp.Actor) (uuid.UUID, error) {
+	id, err := w.delegate.CreateCase(ctx, in, actor)
+	if err != nil {
+		return uuid.Nil, err
 	}
-	return w.delegate.UpsertTransportPreference(ctx, caseID, outboundVehicleID, inboundVehicleID, outboundVehicleNameRaw, inboundVehicleNameRaw)
+	if in.Name == w.failName {
+		return uuid.Nil, errors.New("forced post-create failure")
+	}
+	return id, nil
+}
+
+func (w failingCaseRegistrar) RecordSkipped(ctx context.Context, row importapp.CaseImportSkippedRow, actor importapp.Actor) {
+	w.delegate.RecordSkipped(ctx, row, actor)
 }
 
 type caseRegistrar struct{ svc *caseapp.CaseService }
@@ -240,6 +258,7 @@ func (a caseRegistrar) CreateCase(ctx context.Context, in importapp.NewCase, act
 		ServiceCategory:  intPointerOrNilForTest(in.ServiceCategory),
 		ServiceUsageType: intPointerOrNilForTest(in.ServiceUsageType), Status: in.Status,
 		SiteID: in.SiteID, SiteNameRaw: nullableStringPtrForTest(in.SiteNameRaw),
+		CaregiverID: in.CaregiverID,
 	}, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
 	if err != nil {
 		return uuid.Nil, err
@@ -291,8 +310,7 @@ func (a caseDuplicateStager) StageDuplicateRow(ctx context.Context, fileHash, ro
 		ServiceUsageType: intPointerOrNilForTest(in.ServiceUsageType),
 		Remarks:          in.Remarks,
 		SiteID:           in.SiteID, SiteNameRaw: in.SiteNameRaw,
-		OutboundVehicleID: in.OutboundVehicleID, OutboundVehicleNameRaw: in.OutboundVehicleNameRaw,
-		InboundVehicleID: in.InboundVehicleID, InboundVehicleNameRaw: in.InboundVehicleNameRaw,
+		CaregiverID:     in.CaregiverID,
 		DuplicateCaseID: in.DuplicateCaseID,
 	})
 }
