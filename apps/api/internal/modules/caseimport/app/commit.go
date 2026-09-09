@@ -173,7 +173,6 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 			if s.cases == nil {
 				return errors.New("case registrar not configured")
 			}
-			// 接送車輛欄位目前保留版面但不匯入，因此不寫入 case_transport_preferences。
 			if _, err := s.cases.CreateCase(txCtx, caseReq, actor); err != nil {
 				return fmt.Errorf("個案建立失敗：%w", err)
 			}

@@ -36,7 +36,7 @@ func TestGenerateCaseImportTemplateExcel_Structure(t *testing.T) {
 	// 表頭與匯出的「進系統個案個資」逐欄一致，讓匯出檔可以直接回灌。
 	headerRow := rows[0]
 	assert.Equal(t, []string{
-		"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)",
+		"姓名", "戶別", "身分證字號", "性別", "生日", "據點",
 		"個管or照專", "照護人員", "戶籍", "居住地", "備註",
 	}, headerRow)
 	assert.NotContains(t, headerRow, "週一趟數(0:不搭/1:單去/2:來回/4:四趟)")
@@ -67,14 +67,14 @@ func TestParseCases_BlankNameRowBecomesError(t *testing.T) {
 	f := excelize.NewFile()
 	defer f.Close()
 	sheet := f.GetSheetName(0)
-	headers := []string{"姓名*", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
+	headers := []string{"姓名*", "戶別", "身分證字號", "性別", "生日", "據點", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheet, cell, h))
 	}
 	require.NoError(t, f.SetCellValue(sheet, "A2", "王大明"))
 	require.NoError(t, f.SetCellValue(sheet, "B3", "一般戶"))
-	require.NoError(t, f.SetCellValue(sheet, "M3", "姓名漏填"))
+	require.NoError(t, f.SetCellValue(sheet, "K3", "姓名漏填"))
 
 	buf, err := f.WriteToBuffer()
 	require.NoError(t, err)
@@ -98,13 +98,13 @@ func TestParseCases_ProfileWorkbook(t *testing.T) {
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
 	for i, header := range headers {
 		cell, err := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, err)
 		require.NoError(t, f.SetCellValue(sheetName, cell, header))
 	}
-	row := []interface{}{"王小明", "一般", "A202559750", "男", "045/06/15", "竹南日照", "竹南1車", "竹南2車", "個管", "陳小華", "苗栗縣竹南鎮戶籍地址", "苗栗縣竹南鎮居住地址", "需輪椅"}
+	row := []interface{}{"王小明", "一般", "A202559750", "男", "045/06/15", "竹南日照", "個管", "陳小華", "苗栗縣竹南鎮戶籍地址", "苗栗縣竹南鎮居住地址", "需輪椅"}
 	for i, value := range row {
 		cell, err := excelize.CoordinatesToCellName(i+1, 2)
 		require.NoError(t, err)
@@ -128,9 +128,6 @@ func TestParseCases_ProfileWorkbook(t *testing.T) {
 	assert.Equal(t, "陳小華", got.CareContactName)
 	assert.Equal(t, "苗栗縣竹南鎮戶籍地址", got.RegisteredAddress)
 	assert.Equal(t, "苗栗縣竹南鎮居住地址", got.HomeAddress)
-	// 接送車輛兩欄保留版面但不匯入：來源檔即使填了車輛，解析結果一律留空。
-	assert.Empty(t, got.OutboundVehicle)
-	assert.Empty(t, got.InboundVehicle)
 	assert.Equal(t, "需輪椅", got.Remarks)
 	assert.False(t, got.IsDuplicate)
 }
@@ -223,12 +220,12 @@ func TestParseCases_OnlyNameRequired(t *testing.T) {
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
 	for i, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheetName, cell, header))
 	}
-	values := []interface{}{"馮玉英", "", "", "", "", "", "", "", "", "", "", "", ""}
+	values := []interface{}{"馮玉英", "", "", "", "", "", "", "", "", "", ""}
 	for i, value := range values {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
 		require.NoError(t, f.SetCellValue(sheetName, cell, value))
@@ -283,15 +280,15 @@ func TestParseCases_GregorianBirthDateRoundTrip(t *testing.T) {
 	f := excelize.NewFile()
 	defer f.Close()
 	sheet := f.GetSheetName(0)
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "個管or照專", "照護人員", "戶籍", "居住地", "備註"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheet, cell, h))
 	}
 	// 第 2 列西元、第 3 列民國：兩種寫法都要解析成同一個日期。
 	values := [][]interface{}{
-		{"西元寫法", "", "", "女", "1956/06/15", "竹南日照", "", "", "", "", "", "", ""},
-		{"民國寫法", "", "", "女", "045/06/15", "竹南日照", "", "", "", "", "", "", ""},
+		{"西元寫法", "", "", "女", "1956/06/15", "竹南日照", "", "", "", "", ""},
+		{"民國寫法", "", "", "女", "045/06/15", "竹南日照", "", "", "", "", ""},
 	}
 	for r, row := range values {
 		for i, v := range row {
@@ -318,12 +315,12 @@ func TestParseCases_ReportsBirthDateFormatError(t *testing.T) {
 	defer f.Close()
 	sheetName := "進系統個案個資"
 	f.SetSheetName("Sheet1", sheetName)
-	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "接送車輛(去)", "接送車輛(回)", "個管or照專", "照護人員", "戶籍", "居住地"}
+	headers := []string{"姓名", "戶別", "身分證字號", "性別", "生日", "據點", "個管or照專", "照護人員", "戶籍", "居住地"}
 	for i, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		require.NoError(t, f.SetCellValue(sheetName, cell, header))
 	}
-	values := []interface{}{"馮玉英", "", "A202559750", "女", "錯誤生日", "竹南日照", "竹南1車", "竹南2車", "個管", "陳小華", "戶籍地址", "居住地址"}
+	values := []interface{}{"馮玉英", "", "A202559750", "女", "錯誤生日", "竹南日照", "個管", "陳小華", "戶籍地址", "居住地址"}
 	for i, value := range values {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
 		require.NoError(t, f.SetCellValue(sheetName, cell, value))

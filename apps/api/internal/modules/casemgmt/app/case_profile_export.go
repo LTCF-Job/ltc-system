@@ -58,15 +58,12 @@ func (s *CaseService) GenerateCaseProfileWorkbook(ctx context.Context, caseIDs [
 			return *v
 		}
 		rows = append(rows, CaseProfileRow{
-			Name:          item.Name,
-			HouseholdType: value(item.HouseholdType),
-			NationalID:    id,
-			Gender:        value(item.Gender),
-			Birthday:      birthday,
-			SiteName:      item.SiteName,
-			// 接送車輛的去回程欄位保留版面但暫不使用，兩欄一律留白。
-			OutboundVehicle:   "",
-			InboundVehicle:    "",
+			Name:              item.Name,
+			HouseholdType:     value(item.HouseholdType),
+			NationalID:        id,
+			Gender:            value(item.Gender),
+			Birthday:          birthday,
+			SiteName:          item.SiteName,
 			CareContactRole:   caregiverRoleLabel(item.CaregiverType),
 			CareContactName:   item.CaregiverName,
 			RegisteredAddress: value(item.RegisteredAddress),
