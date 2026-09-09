@@ -178,7 +178,7 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.DELETE("/driver-reports/submissions/:id", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.IgnoreSubmission)
 		apiV1.DELETE("/driver-reports/:id", auth.RequirePermission(perm, customPerm, "driver_reports", "delete"), h.driverReport.DeleteForm)
 		apiV1.GET("/driver-reports/:id/template", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.DownloadTemplate)
-		apiV1.POST("/driver-reports/:id/import", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.ImportExcel)
+		apiV1.POST("/driver-reports/:id/import", extendedImportDeadlineMiddleware(), auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.ImportExcel)
 
 		// 6. 搭乘月曆、搭乘紀錄更正、異常搭乘與未回報清單
 		apiV1.GET("/rides/calendar", auth.RequirePermission(perm, customPerm, "rides_calendar", "view"), h.ride.GetCalendar)
@@ -294,6 +294,22 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 func routeNotFoundHandler(status int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		httpx.RespondError(c, status, httpx.CodeRouteNotFound, "", nil)
+	}
+}
+
+// extendedImportDeadlineMiddleware 解除這個請求的 http.Server Read/WriteTimeout。
+//
+// main.go 的全域 WriteTimeout（60s）從讀完請求表頭那刻就開始算，涵蓋整個 handler 執行
+// 時間；大量資料的匯報表匯入逐列解析與寫入可能超過這個時間，屆時伺服器會直接斷線，
+// 使用者端收到的是「沒有回應」而非正常的錯誤內容。前端已對這個端點關閉自己的逾時限制
+// （見 apps/web/src/api/driverReports.ts），但那只擋得住前端自己的 axios timeout，
+// 擋不住伺服器這一側主動斷線，兩邊都要放寬才不會讓使用者看到誤導性的「伺服器回應逾時」。
+func extendedImportDeadlineMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rc := http.NewResponseController(c.Writer)
+		_ = rc.SetReadDeadline(time.Time{})
+		_ = rc.SetWriteDeadline(time.Time{})
+		c.Next()
 	}
 }
 
