@@ -44,9 +44,9 @@
 
           <template #table>
             <el-table :data="caregivers" border stripe table-layout="auto" style="width: 100%">
-              <el-table-column label="類型" width="90" align="center">
+              <el-table-column label="類型" min-width="90" align="center" class-name="type-col">
                 <template #default="{ row }">
-                  <span :class="{ 'empty-value': !row.type }">
+                  <span class="type-value" :class="{ 'empty-value': !row.type }">
                     {{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type || '（未填）' }}
                   </span>
                 </template>
@@ -80,7 +80,7 @@
                 </template>
               </el-table-column>
 
-              <el-table-column prop="status" label="狀態" width="130" align="center">
+              <el-table-column prop="status" label="狀態" min-width="120" align="center" class-name="status-col">
                 <template #default="{ row }">
                   <el-tooltip
                     v-if="authStore.hasPermission('masters_caregivers', 'edit')"
@@ -142,9 +142,9 @@
                 <span :class="{ 'empty-value': !row.name }">{{ row.name || '（未填寫）' }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="類型" width="90" align="center">
+            <el-table-column label="類型" min-width="90" align="center" class-name="pending-type-col">
               <template #default="{ row }">
-                <span :class="{ 'empty-value': !row.type }">
+                <span class="type-value" :class="{ 'empty-value': !row.type }">
                   {{ CAREGIVER_TYPE_LABELS[row.type as CaregiverType] || row.type || '（未填）' }}
                 </span>
               </template>
@@ -640,6 +640,10 @@ executeFetch()
 .pending-panel :deep(.pending-notes-col .cell) { min-width: 180px; }
 .pending-panel :deep(.pending-missing-col .cell) { min-width: 160px; }
 .pending-panel :deep(.name-col .cell) { min-width: 120px; }
+.pending-panel :deep(.pending-type-col .cell) {
+  white-space: nowrap;
+  min-width: 90px;
+}
 
 .missing-fields {
   color: var(--app-status-danger-fg);
@@ -647,8 +651,21 @@ executeFetch()
 }
 
 /* 同樣道理：span 沒鎖 nowrap，table-layout: auto 也救不了，聯絡方式還是會被壓成多行。 */
-.contact-value {
+.contact-value,
+.type-value {
   white-space: nowrap;
+}
+
+/* 類型與姓名欄沒有自訂 template 或在 table-layout="auto" 下需鎖死欄寬，
+   使用 class-name 打進 el-table 內部 cell 鎖 nowrap 與 min-width 下限。 */
+:deep(.type-col .cell) {
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+:deep(.status-col .cell) {
+  white-space: nowrap;
+  min-width: 120px;
 }
 
 /* 姓名欄沒有自訂 template，只能用 class-name 打進 el-table 內部 cell 鎖 nowrap；
