@@ -21,6 +21,7 @@ type Case struct {
 	NationalIDCipher  []byte
 	NationalIDHMAC    []byte
 	NationalIDMasked  string
+	NationalID        string
 	NationalIDInvalid bool
 	HouseholdType     *string
 	Gender            *string
@@ -69,6 +70,7 @@ type DuplicateCandidate struct {
 	NationalIDCipher       []byte
 	NationalIDHMAC         []byte
 	NationalIDMasked       string
+	NationalID             string
 	HouseholdType          *string
 	Gender                 *string
 	BirthDate              *time.Time

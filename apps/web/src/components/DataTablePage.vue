@@ -20,9 +20,9 @@
     <!-- 資料表格區塊 -->
     <el-card class="table-card" shadow="never">
       <div
+        ref="tableContainerRef"
         v-loading="!!loading"
         class="table-container"
-        :class="{ 'table-container--capped': !!maxWidth }"
         :aria-busy="loading ? 'true' : 'false'"
       >
         <slot name="table" />
@@ -48,7 +48,9 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
+import { useDynamicTableLayout } from '@/composables/useDynamicTableLayout'
 
 defineProps<{
   title?: string
@@ -58,7 +60,7 @@ defineProps<{
   page?: number
   pageSize?: number
   pageSizes?: number[]
-  // 欄位少、內容短的主檔列表可傳入頁面實際欄寬總和（含操作欄，建議加 30px 緩衝），避免整頁被硬撐滿
+  // 相容保留 maxWidth prop，動態計算會自動根據可用空間切換橫向展開或橫向捲軸
   maxWidth?: number
 }>()
 
@@ -68,6 +70,9 @@ defineEmits<{
   (e: 'page-change', val: number): void
   (e: 'size-change', val: number): void
 }>()
+
+const tableContainerRef = ref<HTMLElement | null>(null)
+useDynamicTableLayout(tableContainerRef)
 </script>
 
 <style scoped>
@@ -129,18 +134,20 @@ defineEmits<{
   overflow-y: hidden;
 }
 
-/* 只有帶 max-width（欄寬已依內容算好）的表格才鎖 min-width:max-content 讓表格內縮版滾動；
-   沒有 max-width 的表格要讓欄位隨版面伸展，鎖住反而會在版面還有空間時擠出多餘的橫向卷軸 */
-.table-container--capped {
+/* 自適應緊湊與滾動容器樣式：允許表格依照內容自然總寬度呈現，不硬拉滿網頁寬度 */
+.table-container {
   :deep(.el-table) {
-    min-width: max-content;
+    max-width: 100%;
+  }
+
+  &.table-scrollable :deep(.el-table) {
     max-width: none;
   }
 }
 
 .pagination-container {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 12px;
   border-top: 1px solid var(--app-border-light, #f0f2f4);

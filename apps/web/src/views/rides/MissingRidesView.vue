@@ -4,7 +4,6 @@
       <!-- 分頁一：未回報清單 -->
       <el-tab-pane label="未回報清單" name="missing">
         <DataTablePage
-          :max-width="950"
           :loading="loadingMissing"
           :total="missingTotal"
           :page="page"
@@ -57,22 +56,22 @@
 
           <template #table>
             <el-table :data="missingList" stripe border style="width: 100%;">
-              <el-table-column prop="serviceDate" label="服務日期" width="120" sortable />
-              <el-table-column prop="caseName" label="個案姓名" width="100" />
-              <el-table-column label="方向 / 趟次" width="120">
+              <el-table-column prop="serviceDate" label="服務日期" min-width="120" sortable class-name="missing-nowrap-col missing-date-col" />
+              <el-table-column prop="caseName" label="個案姓名" min-width="100" class-name="missing-nowrap-col missing-name-col" />
+              <el-table-column label="方向 / 趟次" min-width="120" class-name="missing-nowrap-col missing-dir-col">
                 <template #default="{ row }">
                   <span>{{ (DIRECTION_LABELS as any)[row.direction] || row.direction }}</span>
                   <span style="margin-left: 6px; font-size: 13px;">第 {{ row.legSeq }} 趟</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="departTime" label="排定出發時間" width="120" />
-              <el-table-column prop="vehicleName" label="負責車輛" width="110">
+              <el-table-column prop="departTime" label="排定出發時間" min-width="120" class-name="missing-nowrap-col missing-time-col" />
+              <el-table-column prop="vehicleName" label="負責車輛" min-width="110" class-name="missing-nowrap-col missing-vehicle-col">
                 <template #default="{ row }">
                   <span>{{ row.vehicleName || '未指定' }}</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="driverName" label="司機" width="100" />
-              <el-table-column label="逾期天數" width="110" align="center">
+              <el-table-column prop="driverName" label="司機" min-width="100" class-name="missing-nowrap-col missing-driver-col" />
+              <el-table-column label="逾期天數" min-width="110" align="center" class-name="missing-nowrap-col missing-overdue-col">
                 <template #default="{ row }">
                   <span
                     class="overdue-days"
@@ -86,9 +85,10 @@
               <el-table-column
                 v-if="authStore.hasPermission('rides_issues', 'edit')"
                 label="操作"
-                width="120"
+                min-width="120"
                 align="center"
                 fixed="right"
+                class-name="missing-nowrap-col missing-actions-col"
               >
                 <template #default="{ row }">
                   <TableRowActions>
@@ -111,7 +111,6 @@
       <!-- 分頁二：催報通知歷史 -->
       <el-tab-pane label="催報通知歷史" name="history">
         <DataTablePage
-          :max-width="1400"
           :loading="loadingLogs"
           :total="logsTotal"
           :page="logPage"
@@ -158,13 +157,13 @@
           </template>
 
           <template #table>
-            <el-table :data="logList" stripe border table-layout="auto" style="width: 100%;">
-              <el-table-column prop="sentAt" label="發送時間" width="170" sortable align="center">
+            <el-table :data="logList" stripe border style="width: 100%;">
+              <el-table-column prop="sentAt" label="發送時間" min-width="170" sortable align="center" class-name="log-nowrap-col log-sent-col">
                 <template #default="{ row }">
                   <span>{{ formatDateTime(row.sentAt) }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="主題" min-width="140" class-name="topic-col">
+              <el-table-column label="主題" min-width="140" class-name="log-nowrap-col topic-col">
                 <template #default="{ row }">
                   <span class="topic-label">{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
                 </template>
@@ -179,8 +178,8 @@
                   <el-tag v-else type="danger" size="small">無設定收件人</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="triggeredByName" label="觸發來源" min-width="140" class-name="trigger-source-col" />
-              <el-table-column label="狀態" width="100" align="center">
+              <el-table-column prop="triggeredByName" label="觸發來源" min-width="140" class-name="log-nowrap-col trigger-source-col" />
+              <el-table-column label="狀態" min-width="100" align="center" class-name="log-nowrap-col log-status-col">
                 <template #default="{ row }">
                   <el-tag :type="row.status === 'sent' || row.success ? 'success' : 'danger'" size="small">
                     {{ row.status === 'sent' || row.success ? '發送成功' : '失敗' }}
@@ -193,7 +192,7 @@
                   <span v-else class="text-secondary">{{ row.contentSummary || row.body || '-' }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="90" align="center" fixed="right">
+              <el-table-column label="操作" min-width="100" align="center" fixed="right" class-name="log-nowrap-col log-actions-col">
                 <template #default="{ row }">
                   <TableRowActions>
                     <el-button
@@ -710,6 +709,58 @@ onMounted(() => {
 
 .topic-label {
   white-space: nowrap;
+}
+
+:deep(.missing-nowrap-col .cell) {
+  white-space: nowrap;
+}
+
+:deep(.missing-date-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.missing-name-col .cell) {
+  min-width: 100px;
+}
+
+:deep(.missing-dir-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.missing-time-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.missing-vehicle-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.missing-driver-col .cell) {
+  min-width: 100px;
+}
+
+:deep(.missing-overdue-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.missing-actions-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.log-nowrap-col .cell) {
+  white-space: nowrap;
+}
+
+:deep(.log-sent-col .cell) {
+  min-width: 170px;
+}
+
+:deep(.log-status-col .cell) {
+  min-width: 100px;
+}
+
+:deep(.log-actions-col .cell) {
+  min-width: 100px;
 }
 
 :deep(.trigger-source-col .cell) {

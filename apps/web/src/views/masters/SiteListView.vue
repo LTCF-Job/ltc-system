@@ -2,7 +2,6 @@
   <div class="site-list-view">
     <DataTablePage
       title="據點管理"
-      :max-width="1020"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -61,9 +60,9 @@
 
       <!-- 表格 -->
       <template #table>
-        <el-table :data="sites" border stripe table-layout="auto" style="width: 100%">
-          <el-table-column prop="name" label="據點名稱" min-width="140" class-name="site-name-col" />
-          <el-table-column prop="region" label="區域" width="120" align="center">
+        <el-table :data="sites" border stripe style="width: 100%">
+          <el-table-column prop="name" label="據點名稱" min-width="140" class-name="site-nowrap-col site-name-col" />
+          <el-table-column prop="region" label="區域" min-width="120" align="center" class-name="site-nowrap-col site-region-col">
             <template #default="{ row }">
               <span>{{ row.region || '-' }}</span>
             </template>
@@ -73,13 +72,13 @@
               <span>{{ row.address || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip>
+          <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip class-name="site-remarks-col">
             <template #default="{ row }">
               <span>{{ row.remarks || '-' }}</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="status" label="狀態" width="130" align="center">
+          <el-table-column prop="status" label="狀態" min-width="130" align="center" class-name="site-nowrap-col site-status-col">
             <template #default="{ row }">
               <el-tooltip
                 v-if="authStore.hasPermission('masters_sites', 'edit')"
@@ -111,9 +110,10 @@
           <el-table-column
             v-if="authStore.hasPermission('masters_sites', 'edit') || authStore.hasPermission('masters_sites', 'delete')"
             label="操作"
-            width="140"
+            min-width="140"
             fixed="right"
             align="center"
+            class-name="site-nowrap-col site-actions-col"
           >
             <template #default="{ row }">
               <TableRowActions>
@@ -169,9 +169,6 @@
         </el-form-item>
         <el-form-item label="據點地址" prop="address">
           <el-input v-model="form.address" placeholder="請輸入完整地址" clearable />
-        </el-form-item>
-        <el-form-item label="備註" prop="remarks">
-          <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
         </el-form-item>
         <el-form-item label="備註" prop="remarks">
           <el-input v-model="form.remarks" type="textarea" :rows="2" placeholder="選填備註" clearable />
@@ -372,16 +369,31 @@ refreshRegionOptions()
 .region-label.region-miaoli::before { border-color: var(--app-status-warning-fg); }
 .region-label.region-hsinchu::before { border-color: var(--app-primary); }
 
-:deep(.open-days-column .cell) {
+:deep(.site-nowrap-col .cell) {
   white-space: nowrap;
 }
 
 :deep(.site-name-col .cell) {
-  white-space: nowrap;
   min-width: 140px;
+}
+
+:deep(.site-region-col .cell) {
+  min-width: 120px;
 }
 
 :deep(.site-address-col .cell) {
   min-width: 180px;
+}
+
+:deep(.site-remarks-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.site-status-col .cell) {
+  min-width: 130px;
+}
+
+:deep(.site-actions-col .cell) {
+  min-width: 140px;
 }
 </style>

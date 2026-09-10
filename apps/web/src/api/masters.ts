@@ -125,11 +125,6 @@ export async function deleteDriver(id: string): Promise<void> {
 	unwrapData<unknown>(res)
 }
 
-export async function revealDriverId(id: string): Promise<{ nationalId: string }> {
-  const res = await apiClient.post(`/drivers/${id}/reveal`)
-  return unwrapData<{ nationalId: string }>(res)
-}
-
 export async function assignDriverVehicle(driverId: string, data: {
   vehicleId: string
 }): Promise<void> {

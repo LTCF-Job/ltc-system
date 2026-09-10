@@ -28,10 +28,10 @@
       <el-tab-pane label="混車衝突待裁決" name="conflict">
         <DataTablePage :loading="loading">
         <template #table>
-        <el-table :data="issueList" border stripe table-layout="auto">
-          <el-table-column prop="serviceDate" label="服務日期" width="110" class-name="service-date-col" />
+        <el-table :data="issueList" border stripe style="width: 100%">
+          <el-table-column prop="serviceDate" label="服務日期" min-width="110" class-name="service-date-col" />
           <el-table-column prop="caseName" label="個案姓名" min-width="90" class-name="case-name-col" />
-          <el-table-column label="趟次" width="80" align="center" class-name="leg-seq-col">
+          <el-table-column label="趟次" min-width="80" align="center" class-name="leg-seq-col">
             <template #default="{ row }">
               第 {{ row.legSeq }} 趟
             </template>
@@ -48,7 +48,7 @@
           <el-table-column
             v-if="authStore.hasPermission('rides_issues', 'edit')"
             label="操作"
-            width="100"
+            min-width="100"
             fixed="right"
             align="center"
             class-name="action-col"
@@ -71,10 +71,10 @@
       <el-tab-pane label="應搭未回報清單" name="unreported">
         <DataTablePage :loading="loading">
         <template #table>
-        <el-table :data="issueList" border stripe table-layout="auto">
-          <el-table-column prop="serviceDate" label="服務日期" width="110" class-name="service-date-col" />
+        <el-table :data="issueList" border stripe style="width: 100%">
+          <el-table-column prop="serviceDate" label="服務日期" min-width="110" class-name="service-date-col" />
           <el-table-column prop="caseName" label="個案姓名" min-width="90" class-name="case-name-col" />
-          <el-table-column label="趟次" width="80" align="center" class-name="leg-seq-col">
+          <el-table-column label="趟次" min-width="80" align="center" class-name="leg-seq-col">
             <template #default="{ row }">
               第 {{ row.legSeq }} 趟
             </template>
@@ -82,7 +82,7 @@
           <el-table-column prop="description" label="說明" min-width="260" class-name="description-col" />
           <!-- 「前往回報」「查看排班」為 4 字操作文案，比一般 2 字按鈕（編輯／刪除）長，
                標準 2 顆按鈕寬度 140px 會被裁切，故加寬到 190px -->
-          <el-table-column label="操作" width="190" fixed="right" align="center" class-name="action-col-190">
+          <el-table-column label="操作" min-width="190" fixed="right" align="center" class-name="action-col-190">
             <template #default="{ row }">
               <TableRowActions>
                 <el-button link type="info" size="small" @click="$router.push('/rides/missing')">
@@ -104,11 +104,11 @@
       <el-tab-pane label="表單匯入異常" name="import_error">
         <DataTablePage :loading="loading">
         <template #table>
-        <el-table :data="issueList" border stripe table-layout="auto">
-          <el-table-column prop="serviceDate" label="服務日期" width="110" class-name="service-date-col" />
+        <el-table :data="issueList" border stripe style="width: 100%">
+          <el-table-column prop="serviceDate" label="服務日期" min-width="110" class-name="service-date-col" />
           <el-table-column prop="caseName" label="回報文字/欄位" min-width="140" class-name="report-field-col" />
           <el-table-column prop="description" label="錯誤訊息與原始 Payload" min-width="300" class-name="error-desc-col" />
-          <el-table-column label="操作" width="100" fixed="right" align="center" class-name="action-col">
+          <el-table-column label="操作" min-width="100" fixed="right" align="center" class-name="action-col">
             <template #default="{ row }">
               <TableRowActions>
                 <el-button link type="info" size="small" @click="openErrorDetail(row as any)">
@@ -336,8 +336,8 @@ onMounted(async () => {
 /* 操作欄同樣受這個問題影響：fixed width 在這個 pattern 下一樣不是真正下限，
    按鈕欄可能被壓得比規範表要求的寬度還窄（見上方 component-contract.md
    「操作欄一律 fixed="right"」那條的按鈕數對照寬度）。 */
-:deep(.action-col .cell) { min-width: 100px; }
-:deep(.action-col-190 .cell) { min-width: 190px; }
+:deep(.action-col .cell) { min-width: 100px; white-space: nowrap; }
+:deep(.action-col-190 .cell) { min-width: 190px; white-space: nowrap; }
 :deep(.service-date-col .cell) { min-width: 110px; white-space: nowrap; }
 :deep(.leg-seq-col .cell) { min-width: 80px; white-space: nowrap; }
 :deep(.conflict-desc-col .cell) { min-width: 260px; }

@@ -205,7 +205,7 @@ type DriverResponse struct {
 	ID                     uuid.UUID  `json:"id"`
 	Name                   string     `json:"name"`
 	NameNormalized         string     `json:"nameNormalized"`
-	NationalIDMasked       string     `json:"nationalIdMasked"`
+	NationalID             string     `json:"nationalId"`
 	Gender                 *string    `json:"gender,omitempty"`
 	BirthDate              *time.Time `json:"birthDate,omitempty"`
 	HasProfessionalLicense bool       `json:"hasProfessionalLicense"`
@@ -226,7 +226,7 @@ func newDriverResponse(d app.Driver) DriverResponse {
 		ID:                     d.ID,
 		Name:                   d.Name,
 		NameNormalized:         d.NameNormalized,
-		NationalIDMasked:       d.NationalIDMasked,
+		NationalID:             d.NationalID,
 		Gender:                 d.Gender,
 		BirthDate:              d.BirthDate,
 		HasProfessionalLicense: d.HasProfessionalLicense,

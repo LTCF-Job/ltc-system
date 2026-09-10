@@ -99,7 +99,8 @@ form_submissions.driver_id)`，避免這次沒解析出司機（`NULL`）覆蓋�
 - 移除 `ClaimDriverReportImport`、`DriverReportImportIdempotencyStore` 與
   `CommitResult.FileHash`／`AlreadyImported`；`driver_report_imports` 表由 migration `000036` 移除。
   冪等完全交給 `reconcileRideSource`。`LockDriverReportImport`（advisory lock）與前端
-  `commitMonthOnce` 的本地去重都保留，兩者防的是併發與重複送出，不是內容重複。
+  的本地去重（見下方「單次全檔匯入」修訂，該去重現已改成以表單為單位）都保留，兩者防的是
+  併發與重複送出，不是內容重複。
 - **已裁決「保留原資料」後重傳同一份檔案，會重新產生一筆未解決衝突，這是刻意行為。**
   `uq_ride_source_row_conflict_open` 只涵蓋 `resolved_at IS NULL`，已裁決的列不擋新的 INSERT。
   使用者要求每次上傳都重新判斷，不希望任何比對不上的資料被系統自行吞掉；代價是重傳同一份
@@ -110,9 +111,8 @@ form_submissions.driver_id)`，避免這次沒解析出司機（`NULL`）覆蓋�
 - **`BackfillColumn` 必須排在逐列 `IngestSubmission` 之後**，因為 `SaveFormSubmission` 是
   `(form_id, service_date)` 原地更新：先補寫會讀到這幾天更新前的舊答案寫進去，再被本次的新值
   比出一筆並不存在的衝突。放在之後，本月各天走 Reaffirmed 跳過，只有先前月份真的被補寫。
-- **回填要排除這份檔案涵蓋的所有服務日期，不只本次宣告的月份**。`ListSubmissionAnswersForColumn`
-  沒有日期條件，回填範圍是整份表單的全部歷史；而跨月檔案是逐月各送一次 commit，先 commit 的
-  那個月回填時其他月份的 payload 還是上一次上傳的舊值，補進去就會在下一輪被比出一批假衝突。
+- **回填要排除這份檔案涵蓋的所有服務日期**。`ListSubmissionAnswersForColumn` 沒有日期條件，
+  回填範圍是整份表單的全部歷史；補寫會讀到這份檔案剛寫進去的新答案，不排除就會比出一批假衝突。
   `BackfillColumn` 因此新增 `skipDates`，由 `collectFileServiceDates` 從預覽列取出整份檔案的
   日期傳入；待維護頁的手動綁定沒有這種日期，傳 `nil`。
 - 前端移除「這幾個月份已有資料，請勾選確認」的攔截，選完檔案直接上傳；改以
@@ -139,8 +139,63 @@ form_submissions.driver_id)`，避免這次沒解析出司機（`NULL`）覆蓋�
   獨立事件，留痕正確，量大時再另評估保留策略。檔案雜湊仍算在稽核快照裡（`AuditSnapshot` 的
   `fileHash` 參數），純粹供事後追溯某筆搭乘來源出自哪一次上傳，不再參與任何重複判斷。
 - 匯入現在可能寫入本次宣告月份以外的資料：剛完成對應的欄位會補寫**不在這份檔案裡**的先前月份，
-  `backfilledRows` 是唯一能看出這件事的數字。檔案自己涵蓋的月份一律由各自的 commit 寫入。
+  `backfilledRows` 是唯一能看出這件事的數字。檔案自己涵蓋的月份由單次 commit 一起寫入（見下方
+  「單次全檔匯入」修訂）。
 - `expandLegSeqs` 依當下排班展開：排班改過後重傳同一份檔案，舊 legSeq 的來源留著、新 legSeq
   走 Inserted，會出現「重傳卻有新增」，屬預期。
 - migration `000036` 直接 `DROP TABLE driver_report_imports`，down migration 只還原結構、
   不還原資料；正式環境執行前需備份資料庫（比照 `000034` 的既有要求）。
+
+## 後續修訂：單次全檔匯入取代逐月拆送，並以逐列 savepoint 取代整份回滾
+
+### Context
+
+跨月匯報表（一份 `.xlsx` 涵蓋多個月份）原本由前端 `computeMonths()` 先算出檔案涵蓋的月份，
+再對每個月份各帶一次 `yearMonth` 呼叫 `CommitDriverReport`。`ParseDriverReport` 對每一輪
+commit 都會把「這輪以外月份的列」標成 `ErrorMessage`（`不屬於本次宣告匯入的 YYYY-MM`），這些
+本是設計本身的排除，卻被前端一律當成錯誤累積進說明清單——5 個月的檔案會產生「5 × 其他 4 個月
+的列數」則假錯誤，使用者無從分辨真假。
+
+同一時間，`CommitDriverReport` 逐列呼叫 `IngestSubmission`／`SyncFromImport` 只要有一列失敗
+就整份交易回滾：跨月檔案改成單次 commit 後，這個代價會被放大——一台已停用的個案、一筆格式異常
+的列，就足以擋掉整份檔案裡其他全部正確的資料，與 `docs/tech/system-logic-specification.md`
+準則三的「非阻擋原則」（部分列有瑕疵不得中斷整份檔案）直接衝突。
+
+### Decision
+
+- **前端不再逐月拆送。**`ParseDriverReport` 解析時把所有列的 `service_date` 去重收進
+  `PreviewResult.CoveredMonths`（`CommitResult` 也回同一份），前端 dry-run 與 commit 都直接
+  讀這個欄位顯示涵蓋月份，不再自己從 `previewRows` 算。`processRow` 改成單次呼叫
+  `commitImportDriverReport(formId, file, payload)`，不帶 `yearMonth`；`computeMonths`／
+  `commitMonthOnce`／`activeMonthImports`／`monthImportLocks` 全數移除，改成以 `formId` 為
+  鍵的單一 in-flight guard（`activeImports`／`formImportLocks`）。`yearMonth` 這個 query
+  參數與 `parse.go` 的跨月排除分支本身不動——後端仍支援帶月份的整月覆蓋語意，只是前端不再使用。
+- **逐列寫入改用 savepoint 隔離失敗。**`pgxdb.TxRunner` 新增 `WithSavepoint`：在既有事務內
+  呼叫 `pgx.Tx.Begin` 開的是 SAVEPOINT 而非新交易，失敗時只回滾這個 savepoint。
+  `CommitDriverReport` 對每一列的 `IngestSubmission` + `SyncFromImport` 呼叫
+  `SavepointRunner.WithSavepoint`：失敗記入 `SkippedRows`（原因為原始錯誤訊息）並跳到下一列，
+  不再中止整份交易。`persistColumnDecisions`、`LockDriverReportImport`、`BackfillColumn`
+  仍在交易層級，失敗照樣整份回滾——那些不是單列資料問題。
+  `DriverReportService.txRunner` 以 `.(SavepointRunner)` 型別斷言取得能力，未實作時退回
+  「一列失敗即整份回滾」的舊行為，供沒有這項能力的測試替身使用；正式環境注入的
+  `*pgxdb.TxRunner` 一律具備此能力。
+
+### Alternatives
+
+- **繼續逐月拆送，只是把跨月排除訊息標成 warning 而不是 error。** 治標：訊息數量沒變，使用者
+  仍要在幾百則提示裡分辨哪些是真正需要處理的，也沒解決「一份檔案要發 N 次請求」的效能問題。
+- **單次 commit，但保留整份回滾。** 符合「不逐月拆送」，但沒解決非阻擋原則要求的「部分列有
+  瑕疵不得拖累整份」；且單次 commit 後失敗半徑從一個月放大到整份檔案（可能十幾個月），風險
+  比逐月拆送時更高，必須同時解決。
+- **應用層手動記錄「要跳過的列」再重試整份，不用資料庫 savepoint。** 需要自己實作補償邏輯與
+  部分寫入的追蹤，複雜度高於直接借助 `pgx.Tx.Begin` 既有的 savepoint 語意。
+
+### Consequences
+
+- 說明清單不再出現「不屬於本次宣告匯入」的假錯誤；`SkippedRows` 現在同時可能來自解析層級
+  （跨月、格式錯誤）與資料庫層級（個案停用、外鍵衝突等）失敗，前端統一顯示，不用分開處理。
+- 「僅重試失敗月份」功能移除：失敗改成逐列跳過並記錄在 `SkippedRows`，不會再有「這個月成功、
+  那個月失敗」的部分完成狀態需要重試；主表的「重試」按鈕保留，但意義變成整份請求層級的失敗
+  （網路錯誤、鎖定失敗、欄位對應資料格式錯誤）才需要重試。
+- 單一交易一次寫入整份檔案，交易與鎖持有時間比逐月長；以單一表單、月級資料量可接受。若日後
+  單檔規模大幅成長出現逾時，應在後端切批並共用同一把表單鎖，而不是退回前端逐月上傳。

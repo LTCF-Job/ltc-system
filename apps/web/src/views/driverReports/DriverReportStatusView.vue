@@ -3,7 +3,6 @@
     <DataTablePage
       title="接送匯報總覽"
       :description="`共 ${forms.length} 台車，顯示各車已有對應資料的月份`"
-      :max-width="700"
       :loading="loading"
     >
       <template #filter>
@@ -24,7 +23,6 @@
         border
         stripe
         row-key="id"
-        table-layout="auto"
         style="width: 100%"
         :expand-row-keys="expandedIds"
         @expand-change="onExpandChange"
@@ -72,7 +70,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="最後匯入時間" width="170" align="center">
+        <el-table-column label="最後匯入時間" min-width="170" align="center" class-name="report-nowrap-col import-time-col">
           <template #default="{ row }">
             {{ formatDateTime(row.lastImportedAt, '尚未匯入') }}
           </template>
@@ -99,11 +97,11 @@
         <el-tab-pane label="逐日回報明細" name="submissions">
           <div v-loading="monthDetailLoading" class="month-detail-scroll-body">
             <el-empty v-if="!monthDetailLoading && !monthSubmissions.length" description="這個月沒有逐日回報資料" />
-            <el-table v-else :data="monthSubmissions" border stripe table-layout="auto" style="width: 100%">
-              <el-table-column label="服務日期" prop="serviceDate" width="120" />
-              <el-table-column label="駕駛人（原始）" prop="driverNameRaw" width="140" />
-              <el-table-column label="備註" prop="remark" min-width="140" />
-              <el-table-column label="原始欄位內容" min-width="280">
+            <el-table v-else v-table-auto-width :data="monthSubmissions" border stripe style="width: 100%">
+              <el-table-column label="服務日期" prop="serviceDate" min-width="120" align="center" class-name="report-nowrap-col report-date-col" />
+              <el-table-column label="駕駛人（原始）" prop="driverNameRaw" min-width="140" class-name="report-nowrap-col report-raw-driver-col" />
+              <el-table-column label="備註" prop="remark" min-width="140" show-overflow-tooltip class-name="report-remark-col" />
+              <el-table-column label="原始欄位內容" min-width="280" class-name="report-answers-col">
                 <template #default="{ row }">
                   <div class="answers-list">
                     <span v-for="(value, header) in row.answers" :key="header" class="answer-item">
@@ -119,20 +117,20 @@
         <el-tab-pane label="逐個案搭乘紀錄" name="rideEntries">
           <div v-loading="monthDetailLoading" class="month-detail-scroll-body">
             <el-empty v-if="!monthDetailLoading && !monthRideEntries.length" description="這個月沒有個案搭乘紀錄" />
-            <el-table v-else :data="monthRideEntries" border stripe table-layout="auto" style="width: 100%">
-              <el-table-column label="個案" prop="caseName" min-width="120" />
-              <el-table-column label="趟次" width="130">
+            <el-table v-else v-table-auto-width :data="monthRideEntries" border stripe style="width: 100%">
+              <el-table-column label="個案" prop="caseName" min-width="120" class-name="report-nowrap-col report-case-col" />
+              <el-table-column label="趟次" min-width="130" align="center" class-name="report-nowrap-col report-leg-col">
                 <template #default="{ row }">
                   {{ legLabel(row.legSeq) }}
                 </template>
               </el-table-column>
-              <el-table-column label="服務日期" prop="serviceDate" width="120" />
-              <el-table-column label="回報結果" width="100">
+              <el-table-column label="服務日期" prop="serviceDate" min-width="120" align="center" class-name="report-nowrap-col report-date-col" />
+              <el-table-column label="回報結果" min-width="100" align="center" class-name="report-nowrap-col report-result-col">
                 <template #default="{ row }">
                   {{ row.reported === 'boarded' ? '有搭乘' : '未搭乘' }}
                 </template>
               </el-table-column>
-              <el-table-column label="駕駛人" prop="driverName" min-width="120" />
+              <el-table-column label="駕駛人" prop="driverName" min-width="120" class-name="report-nowrap-col report-driver-col" />
             </el-table>
           </div>
         </el-tab-pane>
@@ -247,6 +245,10 @@ onMounted(fetchForms)
   font-size: 13px;
 }
 
+:deep(.report-nowrap-col .cell) {
+  white-space: nowrap;
+}
+
 :deep(.vehicle-col .cell) {
   white-space: nowrap;
   min-width: 140px;
@@ -254,6 +256,42 @@ onMounted(fetchForms)
 
 :deep(.months-col .cell) {
   min-width: 260px;
+}
+
+:deep(.import-time-col .cell) {
+  min-width: 170px;
+}
+
+:deep(.report-date-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.report-raw-driver-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.report-remark-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.report-answers-col .cell) {
+  min-width: 280px;
+}
+
+:deep(.report-case-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.report-leg-col .cell) {
+  min-width: 130px;
+}
+
+:deep(.report-result-col .cell) {
+  min-width: 100px;
+}
+
+:deep(.report-driver-col .cell) {
+  min-width: 120px;
 }
 
 .month-tags {

@@ -181,7 +181,6 @@ export interface CaseDTO {
   name: string;
   nameNormalized?: string;
   nationalId?: string;
-  nationalIdMasked?: string;
   nationalIdInvalid?: boolean;
   homeAddress?: string;
   region?: Region | null;
@@ -361,7 +360,7 @@ export interface DriverDTO {
   id: string;
   name: string;
   nameNormalized?: string;
-  nationalIdMasked: string;
+  nationalId: string;
   email?: string;
   gender?: string;
   birthDate?: string | null;
@@ -524,6 +523,7 @@ export interface DriverReportPreviewDTO {
   errorRows: number;
   warningRows: number;
   unmappedColumns: number;
+  coveredMonths: string[];
   columns: DriverReportPreviewColumn[];
   previewRows: DriverReportPreviewRow[];
   errors: Array<{
@@ -558,6 +558,7 @@ export interface DriverReportCommitResultDTO {
   pendingConflictRows: number;
   backfilledRows: number;
   mappedColumns: number;
+  coveredMonths: string[];
   skippedRows: Array<{
     rowIndex: number;
     reportDate: string;
@@ -911,13 +912,12 @@ export interface CaseImportCommitResult {
 }
 
 // 待裁決的疑似重複個案暫存列；裁決前不對應任何 cases 資料列，故無 caseId。
-// 身分證字號只提供遮罩值，明文需另外呼叫 reveal API 並留下稽核紀錄後才會回傳。
 export interface CaseDuplicateCandidateDTO {
   id: string;
   rowIndex: number;
   sheetName?: string;
   name: string;
-  nationalIdMasked?: string;
+  nationalId?: string;
   nationalIdInvalid?: boolean;
   householdType?: string;
   gender?: string;

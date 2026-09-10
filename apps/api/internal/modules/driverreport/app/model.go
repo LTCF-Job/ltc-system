@@ -110,6 +110,7 @@ type PreviewResult struct {
 	ErrorRows       int                 `json:"errorRows"`
 	WarningRows     int                 `json:"warningRows"`
 	UnmappedColumns int                 `json:"unmappedColumns"`
+	CoveredMonths   []string            `json:"coveredMonths"`
 	Columns         []ColumnPreview     `json:"columns"`
 	PreviewRows     []RowPreview        `json:"previewRows"`
 	Errors          []ImportErrorItem   `json:"errors"`
@@ -177,6 +178,7 @@ type CommitResult struct {
 	PendingConflictRows int                 `json:"pendingConflictRows"`
 	BackfilledRows      int                 `json:"backfilledRows"`
 	MappedColumns       int                 `json:"mappedColumns"`
+	CoveredMonths       []string            `json:"coveredMonths"`
 	SkippedRows         []SkippedRow        `json:"skippedRows"`
 	Warnings            []ImportWarningItem `json:"warnings,omitempty"`
 }
@@ -194,6 +196,7 @@ type DriverReportImportAuditSnapshot struct {
 	PendingConflictRows int       `json:"pendingConflictRows"`
 	BackfilledRows      int       `json:"backfilledRows"`
 	MappedColumns       int       `json:"mappedColumns"`
+	CoveredMonths       []string  `json:"coveredMonths,omitempty"`
 	SkippedRows         int       `json:"skippedRows"`
 	WarningRows         int       `json:"warningRows"`
 }
@@ -206,6 +209,7 @@ func (r CommitResult) AuditSnapshot(formID uuid.UUID, yearMonth, fileHash string
 		ImportedRows: r.ImportedRows, RideRecordRows: r.RideRecordRows,
 		ReaffirmedRows: r.ReaffirmedRows, PendingConflictRows: r.PendingConflictRows,
 		BackfilledRows: r.BackfilledRows, MappedColumns: r.MappedColumns,
-		SkippedRows: len(r.SkippedRows), WarningRows: len(r.Warnings),
+		CoveredMonths: r.CoveredMonths,
+		SkippedRows:   len(r.SkippedRows), WarningRows: len(r.Warnings),
 	}
 }

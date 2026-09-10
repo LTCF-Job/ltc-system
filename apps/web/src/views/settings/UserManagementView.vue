@@ -2,7 +2,6 @@
   <div class="user-management-view">
     <DataTablePage
       title="使用者管理"
-      :max-width="1230"
       :loading="loading"
       :total="total"
       :page="page"
@@ -50,7 +49,7 @@
       </template>
 
       <template #table>
-        <el-table :data="users" border stripe table-layout="auto" style="width: 100%">
+        <el-table :data="users" border stripe style="width: 100%">
           <el-table-column prop="displayName" label="使用者姓名" min-width="170" class-name="user-name-col">
             <template #default="{ row }">
               <div class="user-name-cell">
@@ -61,7 +60,7 @@
 
           <el-table-column prop="email" label="電子郵件 / 帳號" min-width="200" class-name="user-email-col" show-overflow-tooltip />
 
-          <el-table-column label="身分角色" width="140" align="center">
+          <el-table-column label="身分角色" min-width="140" align="center" class-name="user-nowrap-col user-role-col">
             <template #default="{ row }">
               <span class="role-text" :class="`role-${(row as any).role}`">
                 <span class="role-dot" :class="`dot-${(row as any).role}`"></span>
@@ -70,7 +69,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="權限模式" width="140" align="center">
+          <el-table-column label="權限模式" min-width="140" align="center" class-name="user-nowrap-col user-perm-col">
             <template #default="{ row }">
               <span
                 v-if="(row as any).customPermissions && Object.keys((row as any).customPermissions).length > 0"
@@ -84,7 +83,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="status" label="帳號狀態" width="100" align="center">
+          <el-table-column prop="status" label="帳號狀態" min-width="100" align="center" class-name="user-nowrap-col user-status-col">
             <template #default="{ row }">
               <el-switch
                 v-model="(row as any).status"
@@ -96,13 +95,13 @@
             </template>
           </el-table-column>
 
-          <el-table-column prop="lastLoginAt" label="最後登入" width="170" align="center">
+          <el-table-column prop="lastLoginAt" label="最後登入" min-width="170" align="center" class-name="user-nowrap-col user-login-col">
             <template #default="{ row }">
               <span>{{ (row as any).lastLoginAt ? formatDateTime((row as any).lastLoginAt) : '從未登入' }}</span>
             </template>
           </el-table-column>
 
-          <el-table-column label="操作" width="220" fixed="right" align="center">
+          <el-table-column label="操作" min-width="220" fixed="right" align="center" class-name="user-nowrap-col user-actions-col">
             <template #default="{ row }">
               <TableRowActions>
                 <el-button link type="primary" size="small" @click="openEditDialog(row as any)">
@@ -685,5 +684,37 @@ onMounted(() => {
     color: var(--app-text-secondary);
     margin-left: 6px;
   }
+}
+
+:deep(.user-nowrap-col .cell) {
+  white-space: nowrap;
+}
+
+:deep(.user-name-col .cell) {
+  min-width: 170px;
+}
+
+:deep(.user-email-col .cell) {
+  min-width: 200px;
+}
+
+:deep(.user-role-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.user-perm-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.user-status-col .cell) {
+  min-width: 100px;
+}
+
+:deep(.user-login-col .cell) {
+  min-width: 170px;
+}
+
+:deep(.user-actions-col .cell) {
+  min-width: 220px;
 }
 </style>

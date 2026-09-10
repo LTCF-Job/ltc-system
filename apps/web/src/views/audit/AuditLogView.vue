@@ -57,7 +57,7 @@
       </template>
 
       <template #table>
-        <el-table :data="auditList" stripe border table-layout="auto">
+        <el-table :data="auditList" stripe border>
           <el-table-column
             prop="createdAt"
             label="操作時間"
@@ -75,25 +75,25 @@
               <span>{{ getActorDisplayName(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="動作" width="150" align="center">
+          <el-table-column label="動作" min-width="150" align="center" class-name="audit-nowrap-col action-col">
             <template #default="{ row }">
               <StatusTag :status="(row as any).action" preset="auditAction" variant="chip" />
             </template>
           </el-table-column>
-          <el-table-column label="實體種類" min-width="110" align="center" class-name="entity-type-col">
+          <el-table-column label="實體種類" min-width="110" align="center" class-name="audit-nowrap-col entity-type-col">
             <template #default="{ row }">
               <span>{{ (AUDIT_ENTITY_LABELS as any)[(row as any).entityType] || (row as any).entityType }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="entityName" label="操作對象" class-name="entity-col">
+          <el-table-column prop="entityName" label="操作對象" min-width="160" show-overflow-tooltip class-name="entity-col">
             <template #default="{ row }">
               <span :title="(row as any).entityId ? `實體編號：${(row as any).entityId}` : undefined">
                 {{ getEntityDisplayName(row as any) }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="ipAddress" label="IP 位址" width="120" align="center" />
-          <el-table-column label="操作" width="120" fixed="right" align="center">
+          <el-table-column prop="ipAddress" label="IP 位址" min-width="130" align="center" class-name="audit-nowrap-col ip-col" />
+          <el-table-column label="操作" min-width="120" fixed="right" align="center" class-name="audit-nowrap-col action-btn-col">
             <template #default="{ row }">
               <TableRowActions v-if="(row as any).beforeData || (row as any).afterData">
                 <el-button link type="primary" size="small" @click="openDetail(row as any)">
@@ -146,12 +146,12 @@
             style="width: 100%;"
             max-height="400"
           >
-            <el-table-column label="所屬區塊" width="130" align="center">
+            <el-table-column label="所屬區塊" min-width="130" align="center" class-name="diff-section-col">
               <template #default="{ row }">
                 <span>{{ row.section }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="欄位名稱" min-width="150">
+            <el-table-column label="欄位名稱" min-width="150" class-name="diff-field-col">
               <template #default="{ row }">
                 <span class="field-label">{{ row.label }}</span>
               </template>
@@ -170,7 +170,7 @@
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="狀態" width="90" align="center">
+            <el-table-column label="狀態" min-width="90" align="center" class-name="diff-status-col">
               <template #default="{ row }">
                 <span>{{ row.statusText }}</span>
               </template>
@@ -659,6 +659,10 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.audit-log-view :deep(.audit-nowrap-col .cell) {
+  white-space: nowrap;
+}
+
 .audit-log-view :deep(.op-time-col .cell) {
   white-space: nowrap;
   min-width: 170px;
@@ -669,9 +673,43 @@ onMounted(() => {
   min-width: 110px;
 }
 
+.audit-log-view :deep(.action-col .cell) {
+  white-space: nowrap;
+  min-width: 150px;
+}
+
 .audit-log-view :deep(.entity-type-col .cell) {
   white-space: nowrap;
   min-width: 110px;
+}
+
+.audit-log-view :deep(.entity-col .cell) {
+  min-width: 160px;
+}
+
+.audit-log-view :deep(.ip-col .cell) {
+  white-space: nowrap;
+  min-width: 130px;
+}
+
+.audit-log-view :deep(.action-btn-col .cell) {
+  white-space: nowrap;
+  min-width: 120px;
+}
+
+.audit-log-view :deep(.diff-section-col .cell) {
+  white-space: nowrap;
+  min-width: 130px;
+}
+
+.audit-log-view :deep(.diff-field-col .cell) {
+  white-space: nowrap;
+  min-width: 150px;
+}
+
+.audit-log-view :deep(.diff-status-col .cell) {
+  white-space: nowrap;
+  min-width: 90px;
 }
 
 .entity-badge {

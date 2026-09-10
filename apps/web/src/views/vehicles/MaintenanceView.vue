@@ -3,7 +3,6 @@
     <DataTablePage
       title="車輛維修保養管理"
       description="車隊定期保養、臨時維修紀錄登錄與空白檢查表下載"
-      :max-width="1370"
       :loading="loading"
       v-model:page="page"
       v-model:pageSize="pageSize"
@@ -65,15 +64,15 @@
       </template>
 
       <template #table>
-      <el-table :data="records" border stripe size="small" table-layout="auto" style="width: 100%">
-        <el-table-column prop="serviceDate" label="保養日期" width="110" align="center">
+      <el-table :data="records" border stripe size="small" style="width: 100%">
+        <el-table-column prop="serviceDate" label="保養日期" min-width="110" align="center" class-name="maint-nowrap-col maint-date-col">
           <template #default="{ row }">
             <span>{{ row.serviceDate?.slice(0, 10) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="vehicleName" label="車輛名稱" min-width="120" class-name="vehicle-name-col" />
-        <el-table-column prop="plateNo" label="車牌號碼" width="110" align="center" />
-        <el-table-column prop="mileage" label="里程數 (km)" width="120" align="right">
+        <el-table-column prop="vehicleName" label="車輛名稱" min-width="120" class-name="maint-nowrap-col vehicle-name-col" />
+        <el-table-column prop="plateNo" label="車牌號碼" min-width="110" align="center" class-name="maint-nowrap-col maint-plate-col" />
+        <el-table-column prop="mileage" label="里程數 (km)" min-width="120" align="right" class-name="maint-nowrap-col maint-mileage-col">
           <template #default="{ row }">
             {{ Number(row.mileage).toLocaleString() }}
           </template>
@@ -84,12 +83,12 @@
             {{ row.vendor || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="cost" label="花費金額" width="110" align="right">
+        <el-table-column prop="cost" label="花費金額" min-width="110" align="right" class-name="maint-nowrap-col maint-cost-col">
           <template #default="{ row }">
             <span class="font-bold">${{ Number(row.cost).toLocaleString() }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="收據憑證" width="100" align="center">
+        <el-table-column label="收據憑證" min-width="100" align="center" class-name="maint-nowrap-col maint-receipt-col">
           <template #default="{ row }">
             <el-link
               v-if="row.receiptUrl"
@@ -110,9 +109,10 @@
         <el-table-column
           v-if="authStore.hasPermission('vehicles_maintenance', 'edit') || authStore.hasPermission('vehicles_maintenance', 'delete')"
           label="操作"
-          width="140"
+          min-width="140"
           align="center"
           fixed="right"
+          class-name="maint-nowrap-col maint-actions-col"
         >
           <template #default="{ row }">
             <TableRowActions>
@@ -410,8 +410,23 @@ onMounted(async () => {
   gap: 16px;
 }
 
-:deep(.vehicle-name-col .cell) {
+:deep(.maint-nowrap-col .cell) {
   white-space: nowrap;
+}
+
+:deep(.maint-date-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.vehicle-name-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.maint-plate-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.maint-mileage-col .cell) {
   min-width: 120px;
 }
 
@@ -423,8 +438,19 @@ onMounted(async () => {
   min-width: 140px;
 }
 
+:deep(.maint-cost-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.maint-receipt-col .cell) {
+  min-width: 100px;
+}
+
 :deep(.note-col .cell) {
   min-width: 140px;
 }
 
+:deep(.maint-actions-col .cell) {
+  min-width: 140px;
+}
 </style>

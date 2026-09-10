@@ -14,5 +14,5 @@ func (f *fakeDuplicateStagingStore) Insert(context.Context, DuplicateCandidate) 
 }
 
 func (f *fakeDuplicateStagingStore) ListPending(context.Context) ([]DuplicateCandidate, error) {
-	return nil, nil
+	return f.listResult, nil
 }

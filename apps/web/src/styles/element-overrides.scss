@@ -316,6 +316,7 @@ select {
 
 .el-form-item__label {
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .el-tag {
@@ -356,7 +357,7 @@ select {
 }
 
 .el-table {
-  max-width: 100%;
+  width: 100%;
   --el-table-header-bg-color: transparent;
   --el-table-header-text-color: var(--app-text-secondary);
   --el-table-border-color: var(--app-border-light);
@@ -560,6 +561,7 @@ select {
 }
 
 @media (max-width: 640px) {
+
   // Element Plus 的 .el-form-item 本身以 flex-direction: row 排列 label 與 content，
   // 舊寫法只解除 float 對兩者無效；窄螢幕須改為直向堆疊，label 才會換到獨立一行
   .el-form--label-left .el-form-item,
@@ -773,9 +775,17 @@ select {
   transition: width 0.3s ease-out;
 }
 
-.app-capacity-fill.is-high { background: var(--app-status-danger-fg); }
-.app-capacity-fill.is-mid { background: var(--app-status-warning-fg); }
-.app-capacity-fill.is-low { background: var(--app-status-success-fg); }
+.app-capacity-fill.is-high {
+  background: var(--app-status-danger-fg);
+}
+
+.app-capacity-fill.is-mid {
+  background: var(--app-status-warning-fg);
+}
+
+.app-capacity-fill.is-low {
+  background: var(--app-status-success-fg);
+}
 
 .app-capacity-value {
   font-size: var(--app-font-sm);
@@ -819,7 +829,9 @@ select {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-capacity-fill { transition: none; }
+  .app-capacity-fill {
+    transition: none;
+  }
 }
 
 // ── 全站元件風格：對話框、下拉、切換、選取、輔助元件 ──
@@ -969,7 +981,7 @@ select {
   box-shadow: none;
   overflow: hidden;
 
-  > .el-tabs__header {
+  >.el-tabs__header {
     margin: 0;
     background: var(--app-status-neutral-bg);
     border-bottom: 1px solid var(--app-border-light);
@@ -986,13 +998,14 @@ select {
     }
   }
 
-  > .el-tabs__content {
+  >.el-tabs__content {
     padding: var(--app-space-4);
   }
 }
 
 // 分頁器：頁碼按鈕改圓角，當頁用實心藍取代預設的方塊選取
 .el-pagination {
+
   .btn-prev,
   .btn-next,
   .el-pager li {
@@ -1123,4 +1136,36 @@ select {
     border-color: var(--app-primary);
     background: var(--app-primary-light);
   }
+}
+
+// 全站表格欄位鐵律：所有欄位（表頭與資料儲存格）一律單行不折行、嚴禁擠壓換行
+.el-table th.el-table__cell .cell,
+.el-table td.el-table__cell .cell {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  min-width: 0 !important; // 解除個別頁面殘留之人為寫死 min-width，改由 useDynamicTableLayout 依真實內容動態提供最適寬度
+}
+
+// 表頭內部（文字 + 排序 caret-wrapper + filter icon）強制單行水平對齊，箭頭不換行
+.el-table th.el-table__cell .cell {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  vertical-align: middle;
+
+  .caret-wrapper {
+    flex-shrink: 0;
+  }
+
+  .el-table__column-filter-trigger {
+    flex-shrink: 0;
+  }
+}
+
+// 例外：明確需要換行之自訂區塊（如稽核日誌異動前後 diff、批次錯誤展開明細）
+.el-table td.el-table__cell.allow-wrap .cell,
+.el-table td.el-table__cell .allow-wrap,
+.el-table td.el-table__cell .diff-val {
+  white-space: normal !important;
+  word-break: break-all !important;
 }

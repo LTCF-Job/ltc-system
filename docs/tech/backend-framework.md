@@ -6,6 +6,8 @@ covers:
 
 # 後端框架與分層架構
 
+> 本文件描述目前實作。後續 Clean Architecture＋DDD 的目標邊界、開發規範與遷移順序，請先讀 [應用程式目標架構](application-architecture.md)；目標尚未全面落實，現有架構檢查仍須遵守，切片遷移時同步更新檢查規則。
+
 給要動 `apps/api` 程式碼的人看。技術棧、分層邊界、domain 套件、Auth 機制、response 格式。API 完整路由表另見 [backend-api-reference.md](backend-api-reference.md)，業務流程另見 [backend-flows.md](backend-flows.md)。
 
 ## 技術棧
@@ -38,6 +40,8 @@ internal/domain       跟框架無關的純業務邏輯（見下方）
 internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... 一起跑
 ```
 
+以上是現行命名。目標命名（`domain`／`application`／`adapters`，`internal/sharedkernel`、`internal/bootstrap`）見 [應用程式目標架構](application-architecture.md)；某模組要到完成切片且 `internal/arch/arch_test.go` 擴充到能辨識其新 layout 後，才切換到目標命名，切換前現行命名仍然有效。
+
 目前的能力模組：
 
 | module | 範圍 |
@@ -45,8 +49,8 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 | `masterdata` | 據點、車輛、司機、區域主檔 |
 | `casemgmt` | 個案主檔、排班設定、交通偏好、個案彙整表匯出 |
 | `caseimport` | 個案批次 `.xlsx` 解析、預覽與匯入 |
-| `ride` | 司機接送匯報展開、搭乘紀錄合併與人工更正 |
-| `driverreport` | 車輛匯報表登錄、`.xlsx` 匯入與欄位對應 |
+| `ride` | 搭乘紀錄合併與人工更正、搭乘月曆、衝突裁決；接送匯報的展開與解析屬 `driverreport`，`ride` 透過其 port 消費 |
+| `driverreport` | 車輛匯報表登錄、`.xlsx` 匯入、解析與欄位對應 |
 | `reporting` | 趟數表、新竹時刻表、儀表板、前置檢核、政府申報匯出 |
 | `ops` | 司機出勤、油資、車輛維修 |
 | `notification` | 通知收件人與寄送留痕 |

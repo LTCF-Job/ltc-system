@@ -55,7 +55,7 @@
           <section v-else class="file-panel">
             <div class="file-panel-head">已選擇 {{ rows.length }} 個檔案</div>
 
-            <el-table :data="rows" row-key="key" table-layout="auto" border class="file-table">
+            <el-table v-table-auto-width :data="rows" row-key="key" border class="file-table" style="width: 100%">
               <el-table-column label="檔案名稱" min-width="240" class-name="file-name-col">
                 <template #default="{ row }">
                   <span class="file-name">{{ row.file.name }}</span>
@@ -130,7 +130,7 @@
                 </template>
               </el-table-column>
 
-              <el-table-column label="操作" width="100" align="center" fixed="right" class-name="action-col">
+              <el-table-column label="操作" min-width="100" align="center" fixed="right" class-name="action-col">
                 <template #default="{ row }">
                   <TableRowActions>
                     <el-button
@@ -141,7 +141,7 @@
                       :disabled="running"
                       @click="retryRow(row as BatchFileRow)"
                     >
-                      重試失敗月份
+                      重試
                     </el-button>
                     <el-button link type="danger" size="small" :disabled="running" @click="removeRow(row as BatchFileRow)">
                       移除
@@ -391,23 +391,18 @@
 
         <div v-if="selectedRowForDetail.months.length" class="month-status-box">
           <div class="issues-header">
-            <span class="issues-title">月份處理狀態</span>
-            <span class="text-secondary small">成功月份不會因重試再次寫入</span>
+            <span class="issues-title">涵蓋月份</span>
+            <span class="text-secondary small">整份檔案一次寫入，狀態與上方「目前狀態」一致</span>
           </div>
           <div class="month-status-list">
             <el-tag
               v-for="month in selectedRowForDetail.months"
               :key="month"
-              :type="monthStatusType(selectedRowForDetail.monthStates[month])"
+              :type="monthStatusType(selectedRowForDetail.status)"
               effect="plain"
             >
-              {{ month }}：{{ monthStatusLabel(selectedRowForDetail.monthStates[month]) }}
+              {{ month }}：{{ monthStatusLabel(selectedRowForDetail.status) }}
             </el-tag>
-          </div>
-          <div v-if="canRetryRow(selectedRowForDetail)" class="month-retry-hint">
-            <el-button type="warning" plain size="small" :disabled="running" @click="retryRow(selectedRowForDetail)">
-              僅重試失敗月份
-            </el-button>
           </div>
         </div>
 
@@ -520,7 +515,6 @@ const activeTab = ref<'upload' | 'pending'>('upload')
 // ---- 批次上傳 ----
 
 type RowStatus = 'needsVehicle' | 'queued' | 'analyzing' | 'processing' | 'done' | 'failed'
-type MonthImportStatus = 'pending' | 'processing' | 'succeeded' | 'failed'
 type RowIssue = { level: 'error' | 'warning'; message: string }
 
 const IMPORT_FIELD_LABELS: Record<string, string> = {
@@ -539,8 +533,6 @@ interface BatchFileRow {
   formId: string
   status: RowStatus
   months: string[]
-  monthStates: Record<string, MonthImportStatus>
-  monthMessages: Record<string, string>
   importedCount: number
   rideRecordCount: number
   reaffirmedCount: number
@@ -637,8 +629,6 @@ function onFileChange(file: UploadFile) {
     formId: vehicle ? formByVehicle.value.get(vehicle.id) ?? '' : '',
     status: vehicle ? 'queued' : 'needsVehicle',
     months: [],
-    monthStates: {},
-    monthMessages: {},
     importedCount: 0,
     rideRecordCount: 0,
     reaffirmedCount: 0,
@@ -660,8 +650,6 @@ function onVehiclePicked(row: BatchFileRow, vehicleId: string) {
   row.formId = formByVehicle.value.get(vehicle.id) ?? ''
   row.status = 'queued'
   row.months = []
-  row.monthStates = {}
-  row.monthMessages = {}
   enqueueAnalyze(row)
 }
 
@@ -670,11 +658,11 @@ function removeRow(row: BatchFileRow) {
 }
 
 const formCreationByVehicle = new Map<string, Promise<string>>()
-// 同一個表單、月份與檔案若因重複觸發同時送出，只保留一個前端請求；後端沒有檔案層級的
-// 重複判斷，同月併發是由 LockDriverReportImport 的 advisory lock 擋下。
-const activeMonthImports = new Map<string, Promise<DriverReportCommitResultDTO>>()
-// 不同檔案寫入同一表單月份時也要在前端排隊，避免結果互相競速。
-const monthImportLocks = new Map<string, Promise<void>>()
+// 同一份檔案若因重複觸發同時送出，只保留一個前端請求；後端沒有檔案層級的
+// 重複判斷，同一表單的併發是由 LockDriverReportImport 的 advisory lock 擋下。
+const activeImports = new Map<string, Promise<DriverReportCommitResultDTO>>()
+// 不同檔案寫入同一表單時也要在前端排隊，避免結果互相競速。
+const formImportLocks = new Map<string, Promise<void>>()
 
 async function ensureForm(row: BatchFileRow): Promise<string> {
   const known = formByVehicle.value.get(row.vehicleId)
@@ -701,66 +689,52 @@ async function ensureForm(row: BatchFileRow): Promise<string> {
   return formId
 }
 
-function computeMonths(previewRows: Array<{ errorMessage?: string; serviceDate: string }>): string[] {
-  const months = new Set<string>()
-  for (const r of previewRows) {
-    if (!r.errorMessage && r.serviceDate) months.add(r.serviceDate.slice(0, 7))
-  }
-  return [...months].sort()
+function importKey(formId: string, row: BatchFileRow): string {
+  return [formId, row.file.name, row.file.size, row.file.lastModified].join('::')
 }
 
-function activeMonthImportKey(formId: string, row: BatchFileRow, month: string): string {
-  return [formId, month, row.file.name, row.file.size, row.file.lastModified].join('::')
-}
-
-function commitMonthOnce(
+function commitOnce(
   formId: string,
   row: BatchFileRow,
-  payload: ReturnType<typeof toColumnDecisionPayload>,
-  month: string
+  payload: ReturnType<typeof toColumnDecisionPayload>
 ): Promise<DriverReportCommitResultDTO> {
-  const key = activeMonthImportKey(formId, row, month)
-  const active = activeMonthImports.get(key)
+  const key = importKey(formId, row)
+  const active = activeImports.get(key)
   if (active) return active
 
-  const lockKey = `${formId}::${month}`
-  const previous = monthImportLocks.get(lockKey) ?? Promise.resolve()
+  const previous = formImportLocks.get(formId) ?? Promise.resolve()
   let release!: () => void
   const current = new Promise<void>((resolve) => {
     release = resolve
   })
-  monthImportLocks.set(lockKey, current)
+  formImportLocks.set(formId, current)
 
   const request = (async () => {
     await previous
     try {
-      return await commitImportDriverReport(formId, row.file, payload, month)
+      return await commitImportDriverReport(formId, row.file, payload)
     } finally {
       release()
-      if (monthImportLocks.get(lockKey) === current) monthImportLocks.delete(lockKey)
+      if (formImportLocks.get(formId) === current) formImportLocks.delete(formId)
     }
   })()
-  activeMonthImports.set(key, request)
+  activeImports.set(key, request)
   const clear = () => {
-    if (activeMonthImports.get(key) === request) activeMonthImports.delete(key)
+    if (activeImports.get(key) === request) activeImports.delete(key)
   }
   void request.then(clear, clear)
   return request
 }
 
-function failedMonths(row: BatchFileRow): string[] {
-  return row.months.filter((month) => row.monthStates[month] === 'failed')
-}
-
 function canRetryRow(row: BatchFileRow): boolean {
-  return !running.value && failedMonths(row).length > 0
+  return !running.value && row.status === 'failed'
 }
 
-function monthStatusLabel(status: MonthImportStatus | undefined): string {
-  if (status === 'succeeded') return '成功'
-  if (status === 'processing') return '處理中'
+function monthStatusLabel(status: RowStatus): string {
+  if (status === 'done') return '成功'
   if (status === 'failed') return '失敗'
-  return '待處理'
+  if (status === 'needsVehicle') return '待處理'
+  return '處理中'
 }
 
 function rowResultCounts(row: BatchFileRow) {
@@ -782,11 +756,11 @@ function rowResultPending(row: BatchFileRow): boolean {
   return hasPendingWork(rowResultCounts(row))
 }
 
-function monthStatusType(status: MonthImportStatus | undefined): 'success' | 'warning' | 'danger' | 'info' {
-  if (status === 'succeeded') return 'success'
+function monthStatusType(status: RowStatus): 'success' | 'warning' | 'danger' | 'info' {
+  if (status === 'done') return 'success'
   if (status === 'failed') return 'danger'
-  if (status === 'processing') return 'warning'
-  return 'info'
+  if (status === 'needsVehicle') return 'info'
+  return 'warning'
 }
 
 function collectPreviewIssues(preview: Pick<DriverReportPreviewDTO, 'errors' | 'warnings'>): RowIssue[] {
@@ -862,8 +836,6 @@ async function analyzeRow(row: BatchFileRow) {
     row.formId = formId
     if (!formId) {
       row.months = []
-      row.monthStates = {}
-      row.monthMessages = {}
       row.issues = []
       row.status = 'queued'
       row.message = '尚未建立匯報表，將於匯入時建立'
@@ -871,10 +843,7 @@ async function analyzeRow(row: BatchFileRow) {
     }
     const preview = await dryRunImportDriverReport(formId, row.file)
     row.issues = collectPreviewIssues(preview)
-    const months = computeMonths(preview.previewRows)
-    row.months = months
-    row.monthStates = Object.fromEntries(months.map((month) => [month, 'pending' as MonthImportStatus]))
-    row.monthMessages = {}
+    row.months = preview.coveredMonths
     row.status = 'queued'
     // 錯誤列會被逐列略過，其餘照常寫入；把列號直接放到檔案列上，
     // 使用者不必再展開「檢視說明」才知道哪一列沒進去。
@@ -896,62 +865,39 @@ async function processRow(row: BatchFileRow) {
     const preview = await dryRunImportDriverReport(formId, row.file)
     row.issues = collectPreviewIssues(preview)
     const decisions = buildAutoDecisions(preview.columns)
-    const months = computeMonths(preview.previewRows)
+    row.months = preview.coveredMonths
 
-    if (months.length === 0) {
+    if (row.months.length === 0) {
       row.status = 'failed'
       row.message = row.issues.length ? '檔案沒有可寫入的日期，請依下列原因修正後重新上傳' : '檔案內沒有可匯入的日期'
       return
     }
 
-    row.months = months
-    row.monthStates = Object.fromEntries(
-      months.map((month) => [month, row.monthStates[month] ?? 'pending'])
-    ) as Record<string, MonthImportStatus>
-    row.monthMessages = Object.fromEntries(
-      months
-        .filter((month) => row.monthMessages[month])
-        .map((month) => [month, row.monthMessages[month]])
-    )
     const payload = toColumnDecisionPayload(decisions)
-    for (const month of months) {
-      if (row.monthStates[month] === 'succeeded') continue
-
-      row.monthStates[month] = 'processing'
-      try {
-        const result = await commitMonthOnce(formId, row, payload, month)
-        row.importedCount += result.importedRows
-        row.rideRecordCount += result.rideRecordRows
-        row.reaffirmedCount += result.reaffirmedRows
-        row.conflictCount += result.pendingConflictRows
-        row.backfilledCount += result.backfilledRows
-        row.monthStates[month] = 'succeeded'
-        row.monthMessages[month] = ''
-        row.issues.push(
-          ...result.skippedRows.flatMap((item) =>
-            item.reasons.map((reason) => ({
-              level: 'error' as const,
-              message: `第 ${item.rowIndex} 列${item.reportDate ? `（${item.reportDate}）` : ''}：${reason}`
-            }))
-          ),
-          ...(result.warnings ?? []).map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) })),
-          ...(result.pendingConflictRows > 0
-            ? [{ level: 'warning' as const, message: `${month}：${result.pendingConflictRows} 筆與既有資料不同，已進入待維護等待選擇` }]
-            : [])
-        )
-      } catch (error) {
-        row.monthStates[month] = 'failed'
-        row.monthMessages[month] = rowErrorMessage(error)
-        row.issues.push({ level: 'error', message: `${month}：${row.monthMessages[month]}` })
-      }
-    }
+    const result = await commitOnce(formId, row, payload)
+    row.importedCount += result.importedRows
+    row.rideRecordCount += result.rideRecordRows
+    row.reaffirmedCount += result.reaffirmedRows
+    row.conflictCount += result.pendingConflictRows
+    row.backfilledCount += result.backfilledRows
+    row.months = result.coveredMonths
+    row.issues.push(
+      ...result.skippedRows.flatMap((item) =>
+        item.reasons.map((reason) => ({
+          level: 'error' as const,
+          message: `第 ${item.rowIndex} 列${item.reportDate ? `（${item.reportDate}）` : ''}：${reason}`
+        }))
+      ),
+      ...(result.warnings ?? []).map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) })),
+      ...(result.pendingConflictRows > 0
+        ? [{ level: 'warning' as const, message: `${result.pendingConflictRows} 筆與既有資料不同，已進入待維護等待選擇` }]
+        : [])
+    )
     row.issues = row.issues.filter(
       (issue, index, all) =>
         all.findIndex((candidate) => candidate.level === issue.level && candidate.message === issue.message) === index
     )
-    const failed = failedMonths(row)
-    row.status = failed.length > 0 ? 'failed' : 'done'
-    row.message = failed.length > 0 ? `${failed.length} 個月份匯入失敗，可只重試失敗月份` : ''
+    row.status = 'done'
     row.pendingColumnCount = Object.values(decisions).filter((d) => d.mappingStatus === 'pending').length
   } catch (error) {
     row.status = 'failed'
