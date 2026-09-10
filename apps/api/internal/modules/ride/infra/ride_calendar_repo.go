@@ -70,19 +70,19 @@ func (r *RideRepository) ListCalendarCases(
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.status = 'active'
 		  AND NOT ps.is_pending
-		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
+		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%')
 
 		UNION ALL
 
 		SELECT c.id, c.name, c.claim_end_date,
 		       '00000000-0000-0000-0000-000000000000'::uuid, 0::smallint,
-		       ARRAY[]::smallint[], ARRAY[]::smallint[],
+		       ARRAY[]::smallint[],
 		       $1::date, NULL::date
 		FROM cases c
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.status = 'active'
 		  AND NOT ps.is_pending
-		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
+		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%')
 		  AND NOT EXISTS (
 		    SELECT 1 FROM case_schedules cs2
 		    WHERE cs2.case_id = c.id AND cs2.effective_range && daterange($1::date, $2::date, '[)')
