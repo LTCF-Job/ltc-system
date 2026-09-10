@@ -136,8 +136,8 @@ type VehicleDriversAuditSnapshot struct {
 	EffectiveFrom time.Time   `json:"effectiveFrom"`
 }
 
-// Driver 代表一位司機。NationalIDCipher 是身分證密文，只在 Reveal 用例中解密，
-// 不得離開 application 層。
+// Driver 代表一位司機。NationalIDCipher 是身分證密文，僅於查詢時解密給 NationalID，
+// 密文本身不得離開 application 層。
 type Driver struct {
 	ID               uuid.UUID
 	Name             string
@@ -145,6 +145,7 @@ type Driver struct {
 	NationalIDCipher []byte
 	NationalIDHMAC   []byte
 	NationalIDMasked string
+	NationalID       string
 	Email            *string
 	Status           string
 	// LicenseClass 為駕照類別代碼，LicenseExpiryDate 為駕照有效日期；兩者皆可為空，代表尚未補登。

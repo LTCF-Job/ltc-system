@@ -299,7 +299,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 				"rowId":              rowID,
 				"rowIndex":           actualRowIndex,
 				"name":               name,
-				"nationalId":         crypto.Mask(nationalID),
+				"nationalId":         nationalID,
 				"householdType":      householdType,
 				"gender":             gender,
 				"birthDate":          birthDate,

@@ -27,8 +27,6 @@ var (
 	ErrInvalidScheduleDateRange   = errors.New("schedule effective end date must not be before start date")
 	ErrCaseNotFound               = errors.New("case not found")
 	ErrCaseNameRequired           = errors.New("case name is required")
-	ErrNationalIDNotConfigured    = errors.New("national id is not configured")
-	ErrRevealAuditUnavailable     = errors.New("reveal audit is unavailable")
 	ErrInvalidNationalIDFormat    = errors.New("invalid national id format")
 	ErrDuplicateNationalID        = errors.New("national id already exists")
 	ErrDuplicateCandidateNotFound = errors.New("duplicate candidate not found")
@@ -196,19 +194,27 @@ func (s *CaseService) CreateCase(ctx context.Context, req CreateCaseRequest, act
 		}
 	}
 
-	return &entity, nil
+	return s.attachPlainNationalID(&entity), nil
 }
 
-// ListCases 查詢個案清單（回傳遮罩身分證）。unresolvedLink 為 true 時僅回傳
+// ListCases 查詢個案清單（回傳明碼身分證）。unresolvedLink 為 true 時僅回傳
 // 據點／去回程車輛任一比對不到主檔（raw name 有值但對應 ID 為 null）的個案；
 // excludePending 為 true 時排除這類待維護個案。
 func (s *CaseService) ListCases(ctx context.Context, status, q, region string, page, pageSize int, unresolvedLink, excludePending bool) ([]Case, int64, error) {
-	return s.caseRepo.List(ctx, status, q, region, page, pageSize, unresolvedLink, excludePending)
+	list, total, err := s.caseRepo.List(ctx, status, q, region, page, pageSize, unresolvedLink, excludePending)
+	if err != nil {
+		return nil, 0, err
+	}
+	return s.attachPlainNationalIDs(list), total, nil
 }
 
 // GetCaseByID 取得單筆個案主檔明細。
 func (s *CaseService) GetCaseByID(ctx context.Context, id uuid.UUID) (*Case, error) {
-	return s.caseRepo.GetByID(ctx, id)
+	c, err := s.caseRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.attachPlainNationalID(c), nil
 }
 
 // UpdateCaseInput 代表更新個案主檔所需之輸入，欄位為 nil 表示不變更。設定 SiteID
@@ -373,7 +379,7 @@ func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, in UpdateCas
 			slog.Error("case_audit_write_failed", slog.String("action", "update"), slog.String("case_id", entity.ID.String()), slog.Any("error", err))
 		}
 	}
-	return entity, nil
+	return s.attachPlainNationalID(entity), nil
 }
 
 // Delete 軟刪除個案並收斂其生效中排班。
@@ -469,7 +475,7 @@ func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID 
 			slog.Error("case_audit_write_failed", slog.String("action", "update_transport_preference"), slog.String("case_id", caseID.String()), slog.Any("error", err))
 		}
 	}
-	return after, nil
+	return s.attachPlainNationalID(after), nil
 }
 
 // FindPossibleDuplicate 依身分證字號（非空時）或正規化姓名比對既有個案，供批次匯入
@@ -599,46 +605,13 @@ func (s *CaseService) StageDuplicateCandidate(ctx context.Context, in StageDupli
 	return s.stagingRepo.Insert(ctx, cand)
 }
 
-// ListDuplicateCandidates 取得所有待裁決的疑似重複個案暫存列。
+// ListDuplicateCandidates 取得所有待裁決的疑似重複個案暫存列（含解密後的明碼身分證字號）。
 func (s *CaseService) ListDuplicateCandidates(ctx context.Context) ([]DuplicateCandidate, error) {
-	return s.stagingRepo.ListPending(ctx)
-}
-
-// RevealDuplicateCandidateNationalID 解密單筆暫存列的明文身分證字號供裁決頁比對，並留存稽核日誌；
-// 比照 RevealCaseNationalID 的「加密儲存、稽核後解密顯示」模式。
-func (s *CaseService) RevealDuplicateCandidateNationalID(ctx context.Context, id uuid.UUID, actorID uuid.UUID, actorRole, ip, ua string) (string, error) {
-	cand, err := s.stagingRepo.GetByID(ctx, id)
+	list, err := s.stagingRepo.ListPending(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if cand == nil {
-		return "", ErrDuplicateCandidateNotFound
-	}
-	if len(cand.NationalIDCipher) == 0 {
-		return "", ErrNationalIDNotConfigured
-	}
-	if s.auditRepo == nil {
-		return "", ErrRevealAuditUnavailable
-	}
-
-	entityIDStr := id.String()
-	if err := s.auditRepo.Write(ctx, AuditEntry{
-		ActorID:    &actorID,
-		ActorRole:  &actorRole,
-		Action:     "reveal_pii",
-		EntityType: "case_import_duplicate_rows",
-		EntityID:   &entityIDStr,
-		IPAddress:  &ip,
-		UserAgent:  &ua,
-	}); err != nil {
-		return "", fmt.Errorf("%w: %v", ErrRevealAuditUnavailable, err)
-	}
-
-	plainID, err := crypto.Decrypt(cand.NationalIDCipher, s.cfg.EncryptionKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt national id: %w", err)
-	}
-	return plainID, nil
+	return s.attachPlainNationalIDsToCandidate(list), nil
 }
 
 // ResolveDuplicateCandidate 裁決一筆疑似重複個案：confirmed_new 建立新個案並綁定交通偏好；
@@ -696,7 +669,7 @@ func (s *CaseService) ResolveDuplicateCandidate(ctx context.Context, id uuid.UUI
 	} else if err := resolveFn(ctx); err != nil {
 		return nil, err
 	}
-	return result, nil
+	return s.attachPlainNationalID(result), nil
 }
 
 // DiscardDuplicateCandidate 忽略一筆疑似重複個案：直接刪除暫存列，不建立也不合併任何個案。
@@ -903,42 +876,51 @@ func (s *CaseService) GetActiveScheduleForCaseOnDate(ctx context.Context, caseID
 	return s.caseRepo.GetActiveScheduleForCaseOnDate(ctx, caseID, serviceDate)
 }
 
-// RevealCaseNationalID 解密個案身分證並留存稽核日誌。
-func (s *CaseService) RevealCaseNationalID(ctx context.Context, caseID uuid.UUID, actorID uuid.UUID, actorRole, ip, ua string) (string, error) {
-	caseEntity, err := s.caseRepo.GetByID(ctx, caseID)
+// decryptNationalID 解密身分證密文；密文為空或解密失敗時回傳空字串，不中斷呼叫端的清單／明細查詢。
+func (s *CaseService) decryptNationalID(cipher []byte) string {
+	if len(cipher) == 0 {
+		return ""
+	}
+	plain, err := crypto.Decrypt(cipher, s.cfg.EncryptionKey)
 	if err != nil {
-		return "", err
+		slog.Warn("decrypt national id failed", slog.Any("error", err))
+		return ""
 	}
-	if caseEntity == nil {
-		return "", ErrCaseNotFound
-	}
-	if len(caseEntity.NationalIDCipher) == 0 {
-		return "", ErrNationalIDNotConfigured
-	}
+	return plain
+}
 
-	if s.auditRepo == nil {
-		return "", ErrRevealAuditUnavailable
+// attachPlainNationalID 將解密後的明碼身分證字號填入單筆個案，供 API 回應直接顯示明碼。
+func (s *CaseService) attachPlainNationalID(c *Case) *Case {
+	if c == nil {
+		return c
 	}
+	c.NationalID = s.decryptNationalID(c.NationalIDCipher)
+	return c
+}
 
-	entityIDStr := caseID.String()
-	if err := s.auditRepo.Write(ctx, AuditEntry{
-		ActorID:    &actorID,
-		ActorRole:  &actorRole,
-		Action:     "reveal_pii",
-		EntityType: "cases",
-		EntityID:   &entityIDStr,
-		IPAddress:  &ip,
-		UserAgent:  &ua,
-	}); err != nil {
-		return "", fmt.Errorf("%w: %v", ErrRevealAuditUnavailable, err)
+// attachPlainNationalIDs 為個案清單逐筆解密身分證字號。
+func (s *CaseService) attachPlainNationalIDs(list []Case) []Case {
+	for i := range list {
+		list[i].NationalID = s.decryptNationalID(list[i].NationalIDCipher)
 	}
+	return list
+}
 
-	plainID, err := crypto.Decrypt(caseEntity.NationalIDCipher, s.cfg.EncryptionKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt national id: %w", err)
+// attachPlainNationalIDToCandidate 將解密後的明碼身分證字號填入單筆疑似重複個案暫存列。
+func (s *CaseService) attachPlainNationalIDToCandidate(c *DuplicateCandidate) *DuplicateCandidate {
+	if c == nil {
+		return c
 	}
+	c.NationalID = s.decryptNationalID(c.NationalIDCipher)
+	return c
+}
 
-	return plainID, nil
+// attachPlainNationalIDsToCandidate 為疑似重複個案暫存列清單逐筆解密身分證字號。
+func (s *CaseService) attachPlainNationalIDsToCandidate(list []DuplicateCandidate) []DuplicateCandidate {
+	for i := range list {
+		list[i].NationalID = s.decryptNationalID(list[i].NationalIDCipher)
+	}
+	return list
 }
 
 // CaseImportSkippedRow 是寫入稽核日誌的略過列快照。json tag 即為 audit_log 中

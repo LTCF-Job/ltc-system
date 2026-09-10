@@ -49,7 +49,7 @@ covers:
 判準句（與 [`mutation-audit-policy.md`](../decisions/mutation-audit-policy.md) 一致，該文件為權威來源）：**若稽核寫入失敗而業務資料保留，是否會讓該操作事後無法被查核或追責？** 是 → 阻斷性；否 → 非阻斷性。
 
 1. **阻斷性審計（Blocking Audit）**：
-   - action：`delete`、`permission_change`、`reveal_pii`、`conflict_resolve`、`manual_correction`。涉及核心身分識別、機敏個資檢視（如 `POST /cases/:id/reveal` 身分證明文解密）、權限角色變更、刪除、人工裁決與衝突處理等高風險操作。
+   - action：`delete`、`permission_change`、`conflict_resolve`、`manual_correction`。涉及核心身分識別、權限角色變更、刪除、人工裁決與衝突處理等高風險操作。`reveal_pii` 為歷史動作（身分證揭露 API 已移除，不再產生新紀錄），僅供舊稽核紀錄回溯查詢。
    - 審計日誌寫入與業務寫入處於同一交易內，若審計日誌寫入失敗，**整體操作必須回滾（Rollback）並報錯**。
 2. **非阻斷性觀測（Non-blocking Audit）**：
    - action：一般主檔的 `create`／`update`／`status_change`、匯入匯出的狀態留痕、已完成外部 side effect 的事後觀測、一般日常讀取與排班檢視。**據點／車輛／司機的 create 與 update 屬此級**——現行 `masterdata/app/audit.go` 的 `writeAuditBestEffort`（失敗只 `slog.Error`，不回傳 error）是照此分級實作，不是缺陷。
@@ -59,7 +59,7 @@ covers:
 審計日誌一律必須包含：
 - `actor_id`：操作者帳號 UUID。
 - `actor_role`：操作時之有效角色。
-- `action`：操作動作名稱（如 `case.create`, `case.reveal_national_id`, `driver_report.import`）。
+- `action`：操作動作名稱（如 `case.create`, `driver_report.import`）。
 - `target_type` 與 `target_id`：被操作之實體類型與主鍵。
 - `ip_address` 與 `user_agent`：請求來源網路資訊。
 - `created_at`：操作時間（UTC）。

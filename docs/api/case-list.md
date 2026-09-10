@@ -37,7 +37,7 @@ covers: ["apps/api/internal/modules/casemgmt/transport/case_handler.go", "apps/a
   "id": "uuid",
   "name": "string",
   "nameNormalized": "string",
-  "nationalIdMasked": "string",
+  "nationalId": "string",
   "nationalIdInvalid": false,
   "householdType": "string | null",
   "gender": "string | null",
@@ -67,7 +67,7 @@ covers: ["apps/api/internal/modules/casemgmt/transport/case_handler.go", "apps/a
 }
 ```
 
-身分證密文與 HMAC 索引不對外輸出；明文需另呼叫 `POST /api/v1/cases/:id/reveal`。
+身分證密文與 HMAC 索引不對外輸出；`nationalId` 直接回傳解密後的明碼，不再需要另呼叫揭露 API。
 
 ## Errors
 

@@ -86,37 +86,6 @@ func (h *CaseHandler) Create(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusCreated, newCaseResponse(*entity), nil)
 }
 
-// Reveal 解密個案身分證號。
-func (h *CaseHandler) Reveal(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的個案 ID", nil)
-		return
-	}
-
-	actorID := auth.GetActorID(c)
-	actorRole := auth.GetActorRole(c)
-
-	plainID, err := h.masterService.RevealCaseNationalID(
-		c.Request.Context(), id, actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
-	)
-	if err != nil {
-		if errors.Is(err, app.ErrNationalIDNotConfigured) {
-			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "個案尚未設定身分證資料", nil)
-			return
-		}
-		if errors.Is(err, app.ErrRevealAuditUnavailable) {
-			httpx.RespondErrorCode(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, err, nil)
-			return
-		}
-		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "個案不存在或解密失敗", nil)
-		return
-	}
-
-	httpx.RespondSuccess(c, http.StatusOK, gin.H{"nationalId": plainID}, nil)
-}
-
 // Delete 軟刪除個案並收斂其生效中排班。
 func (h *CaseHandler) Delete(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
@@ -293,36 +262,6 @@ func (h *CaseHandler) ListDuplicateCandidates(c *gin.Context) {
 		return
 	}
 	httpx.RespondSuccess(c, http.StatusOK, newDuplicateCandidateResponses(list), nil)
-}
-
-// RevealDuplicateCandidateNationalID 解密單筆疑似重複個案暫存列的身分證字號，供裁決頁比對。
-func (h *CaseHandler) RevealDuplicateCandidateNationalID(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的暫存列 ID", nil)
-		return
-	}
-
-	actorID := auth.GetActorID(c)
-	actorRole := auth.GetActorRole(c)
-	plainID, err := h.masterService.RevealDuplicateCandidateNationalID(c.Request.Context(), id, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
-	if err != nil {
-		if errors.Is(err, app.ErrDuplicateCandidateNotFound) {
-			httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
-			return
-		}
-		if errors.Is(err, app.ErrNationalIDNotConfigured) {
-			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "此列尚未設定身分證資料", nil)
-			return
-		}
-		if errors.Is(err, app.ErrRevealAuditUnavailable) {
-			httpx.RespondErrorCode(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, err, nil)
-			return
-		}
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "解密失敗", nil)
-		return
-	}
-	httpx.RespondSuccess(c, http.StatusOK, gin.H{"nationalId": plainID}, nil)
 }
 
 // ResolveDuplicateCandidate 裁決一筆疑似重複個案。

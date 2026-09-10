@@ -23,6 +23,7 @@ func testConfig() *config.Config {
 // fakeDriverStore is a deterministic DriverStore test double.
 type fakeDriverStore struct {
 	byID       map[uuid.UUID]*Driver
+	listResult []Driver
 	createErr  error
 	updateErr  error
 	assignErr  error
@@ -51,7 +52,7 @@ func newFakeDriverStore() *fakeDriverStore {
 }
 
 func (f *fakeDriverStore) List(ctx context.Context, q, status string, page, pageSize int) ([]Driver, int64, error) {
-	return nil, 0, nil
+	return f.listResult, int64(len(f.listResult)), nil
 }
 
 func (f *fakeDriverStore) GetByID(ctx context.Context, id uuid.UUID) (*Driver, error) {
@@ -162,6 +163,7 @@ func TestDriverService_Create(t *testing.T) {
 		assert.NotEmpty(t, d.NationalIDCipher)
 		assert.NotEmpty(t, d.NationalIDHMAC)
 		assert.Equal(t, "A12***6789", d.NationalIDMasked)
+		assert.Equal(t, "A123456789", d.NationalID)
 		assert.Equal(t, "active", d.Status)
 		assert.Same(t, d, store.lastCreate)
 
@@ -331,36 +333,23 @@ func TestDriverService_Update(t *testing.T) {
 	})
 }
 
-func TestDriverService_Reveal(t *testing.T) {
+func TestDriverService_List_DecryptsNationalID(t *testing.T) {
 	cfg := testConfig()
 	store := newFakeDriverStore()
-	audit := &fakeMasterAuditWriter{}
-	svc := NewDriverService(store, cfg, audit)
-
 	cipher, err := crypto.Encrypt("A123456789", cfg.EncryptionKey)
 	assert.NoError(t, err)
-	id := uuid.New()
-	store.byID[id] = &Driver{ID: id, NationalIDCipher: cipher}
+	store.listResult = []Driver{
+		{ID: uuid.New(), NationalIDCipher: cipher},
+		{ID: uuid.New(), Name: "無身分證司機"},
+	}
+	svc := NewDriverService(store, cfg, nil)
 
-	plain, err := svc.Reveal(context.Background(), id, uuid.New(), "admin", "127.0.0.1", "test-agent")
-	assert.NoError(t, err)
-	assert.Equal(t, "A123456789", plain)
-	assert.Len(t, audit.entries, 1)
-	assert.Equal(t, "reveal_pii", audit.entries[0].Action)
+	drivers, _, err := svc.List(context.Background(), "", "", 1, 20)
 
-	_, err = svc.Reveal(context.Background(), uuid.New(), uuid.New(), "admin", "", "")
-	assert.ErrorIs(t, err, ErrDriverNotFound)
-}
-
-func TestDriverService_RevealRejectsMissingCipher(t *testing.T) {
-	store := newFakeDriverStore()
-	id := uuid.New()
-	store.byID[id] = &Driver{ID: id, Name: "無身分證司機"}
-	svc := NewDriverService(store, testConfig(), nil)
-
-	_, err := svc.Reveal(context.Background(), id, uuid.New(), "admin", "", "")
-
-	assert.ErrorIs(t, err, ErrNationalIDNotConfigured)
+	require.NoError(t, err)
+	require.Len(t, drivers, 2)
+	assert.Equal(t, "A123456789", drivers[0].NationalID)
+	assert.Empty(t, drivers[1].NationalID)
 }
 
 func TestDriverService_AssignVehicle(t *testing.T) {
@@ -520,6 +509,7 @@ func TestDriverService_UpdateNationalID(t *testing.T) {
 			NationalIDCipher: cipher,
 			NationalIDHMAC:   crypto.Index("A123456789", cfg.HMACKey),
 			NationalIDMasked: crypto.Mask("A123456789"),
+			NationalID:       "A123456789",
 		}
 		return store, id
 	}
@@ -535,9 +525,10 @@ func TestDriverService_UpdateNationalID(t *testing.T) {
 		assert.Equal(t, before.NationalIDCipher, d.NationalIDCipher)
 		assert.Equal(t, before.NationalIDHMAC, d.NationalIDHMAC)
 		assert.Equal(t, before.NationalIDMasked, d.NationalIDMasked)
+		assert.Equal(t, before.NationalID, d.NationalID)
 	})
 
-	t.Run("提供新身分證時同步換掉密文、HMAC 與遮罩值", func(t *testing.T) {
+	t.Run("提供新身分證時同步換掉密文、HMAC、遮罩值與明碼", func(t *testing.T) {
 		store, id := newDriver()
 		before := *store.byID[id]
 		newID := "B234567894"
@@ -548,6 +539,7 @@ func TestDriverService_UpdateNationalID(t *testing.T) {
 		assert.NotEqual(t, before.NationalIDCipher, d.NationalIDCipher)
 		assert.Equal(t, crypto.Index(newID, cfg.HMACKey), d.NationalIDHMAC)
 		assert.Equal(t, crypto.Mask(newID), d.NationalIDMasked)
+		assert.Equal(t, newID, d.NationalID)
 
 		plain, err := crypto.Decrypt(d.NationalIDCipher, cfg.EncryptionKey)
 		require.NoError(t, err)

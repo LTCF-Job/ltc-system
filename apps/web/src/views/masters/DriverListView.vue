@@ -54,7 +54,7 @@
           </el-table-column>
           <el-table-column prop="nationalId" label="身分證字號" min-width="140" align="center" class-name="driver-nowrap-col driver-id-col">
             <template #default="{ row }">
-              <span class="driver-data font-mono">{{ row.nationalIdMasked || '-' }}</span>
+              <span class="driver-data font-mono">{{ row.nationalId || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="gender" label="性別" min-width="70" align="center" class-name="driver-nowrap-col driver-gender-col">
@@ -214,7 +214,7 @@
         <el-form-item label="身分證字號" prop="nationalId">
           <el-input
             v-model="form.nationalId"
-            :placeholder="`目前為 ${editingMasked || '未設定'}，留空表示不變更`"
+            :placeholder="`目前為 ${editingCurrentId || '未設定'}，留空表示不變更`"
             clearable
           />
         </el-form-item>
@@ -328,8 +328,7 @@ import type { DriverDTO, CreateDriverRequest, UpdateDriverRequest, VehicleDTO } 
 
 import { nationalIdRules } from '@/utils/driverForm'
 
-// 編輯時顯示目前的遮罩身分證；表單留空代表不變更，不可用遮罩值預填欄位。
-const editingMasked = ref('')
+const editingCurrentId = ref('')
 
 const authStore = useAuthStore()
 const drivers = ref<DriverDTO[]>([])
@@ -444,7 +443,7 @@ function openEditDialog(row: any) {
   editingId.value = row.id
   form.name = row.name
   form.nationalId = ''
-  editingMasked.value = row.nationalIdMasked || ''
+  editingCurrentId.value = row.nationalId || ''
   form.email = row.email || ''
   form.gender = row.gender || ''
   form.birthDate = row.birthDate ? row.birthDate.substring(0, 10) : null

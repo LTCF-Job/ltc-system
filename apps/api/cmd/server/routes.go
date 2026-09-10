@@ -124,14 +124,12 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.PATCH("/cases/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.Update)
 		apiV1.DELETE("/cases/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "delete"), h.kase.Delete)
 		apiV1.PUT("/cases/:id/transport-preference", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.UpdateTransportPreference)
-		apiV1.POST("/cases/:id/reveal", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.Reveal)
 		apiV1.GET("/cases/:id/schedule", auth.RequirePermission(perm, customPerm, "masters_cases", "view"), h.kase.GetSchedule)
 		apiV1.PUT("/cases/:id/schedule", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.SaveSchedule)
 		apiV1.POST("/cases/schedules", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.CreateSchedule)
 		apiV1.POST("/cases/import", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.caseImport.ImportExcel)
 		apiV1.POST("/masters/import", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.caseImport.ImportExcel)
 		apiV1.GET("/cases/import/duplicates", auth.RequirePermission(perm, customPerm, "masters_cases", "view"), h.kase.ListDuplicateCandidates)
-		apiV1.POST("/cases/import/duplicates/:id/reveal", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.RevealDuplicateCandidateNationalID)
 		apiV1.POST("/cases/import/duplicates/:id/resolve", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.ResolveDuplicateCandidate)
 		// 「忽略此筆」刪的是匯入暫存列而非個案本體，門檻沿用同一組裁決端點的 edit 軸；
 		// masters_cases 的 delete 軸僅 admin 為 true（見 000018），改用它會讓 staff 只能裁決不能忽略。
@@ -155,7 +153,6 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.POST("/drivers", auth.RequirePermission(perm, customPerm, "masters_drivers", "edit"), h.driver.Create)
 		apiV1.PATCH("/drivers/:id", auth.RequirePermission(perm, customPerm, "masters_drivers", "edit"), h.driver.Update)
 		apiV1.DELETE("/drivers/:id", auth.RequirePermission(perm, customPerm, "masters_drivers", "delete"), h.driver.Delete)
-		apiV1.POST("/drivers/:id/reveal", auth.RequirePermission(perm, customPerm, "masters_drivers", "edit"), h.driver.Reveal)
 		apiV1.POST("/drivers/:id/assignments", auth.RequirePermission(perm, customPerm, "masters_drivers", "edit"), h.driver.AssignVehicle)
 		apiV1.DELETE("/drivers/:id/assignments", auth.RequirePermission(perm, customPerm, "masters_drivers", "edit"), h.driver.UnassignVehicle)
 
