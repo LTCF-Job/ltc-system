@@ -30,10 +30,15 @@ exports.run = async ({ page, net, record, step, expect, L }) => {
     }
   })
 
-  await step('範本示範列不得被當成可匯入資料', async () => {
+  await step('官方範本內建 2 列示範資料，且會被判定為疑似重複個案', async () => {
+    // apps/api/internal/modules/caseimport/infra/excel.go 的 RenderCaseImportTemplate 明確標註：
+    // 「示範列是純虛構的隨機資料，不帶任何前綴標記，因此解析時會被當成一般資料列。
+    //   使用者必須先刪除這兩列再上傳，否則會匯入這兩筆假個案。」
+    // 這是刻意設計，不是待修的匯入邏輯漏洞；範本示範列刻意套用與 demo 個案相同的姓名／身分證，
+    // 用來驗證「疑似重複個案」偵測會攔下，而不是真的產生 0 筆可匯入。
     const dialogText = (await L.dialog(page).innerText()).replace(/\s+/g, ' ')
     const total = /總筆數：(\d+)/.exec(dialogText)?.[1]
-    expect('官方範本原封不動上傳 → 0 筆可匯入', total === '0', { total, dialogText: dialogText.slice(0, 200) })
+    expect('官方範本原封不動上傳 → 2 筆示範資料皆可匯入（含重複個案警示）', total === '2', { total, dialogText: dialogText.slice(0, 200) })
     return { total }
   })
 

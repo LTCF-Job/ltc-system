@@ -29,7 +29,7 @@ DELETE FROM caregivers WHERE name LIKE 'QA%';
 DELETE FROM drivers WHERE name LIKE 'QA%';
 DELETE FROM vehicles WHERE display_name LIKE 'QA%' OR plate_no LIKE 'QA%' OR plate_no ~ '^[0-9]{4}-000[0-9]$';
 DELETE FROM sites WHERE name LIKE 'QA%';
-DELETE FROM regions WHERE name LIKE 'QA%' OR name LIKE 'X%' OR name LIKE '<img%';
+-- regions 主檔已於 migration 000048 移除（區域改為 sites.region 自由文字欄位），不再需要單獨清理。
 DELETE FROM holidays WHERE name LIKE 'QA%';
 DELETE FROM notification_recipients WHERE email LIKE 'qa-%';
 DELETE FROM roles WHERE is_system = false AND name LIKE 'QA%';

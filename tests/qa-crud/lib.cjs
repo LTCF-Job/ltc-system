@@ -109,6 +109,22 @@ async function pick(page, label, optionText) {
   await page.waitForTimeout(250)
 }
 
+// 用於 filterable + allow-create 的 el-select：選項存在就點選，不存在就打字後按 Enter 建立。
+async function pickOrCreate(page, label, value) {
+  await item(page, label).locator('.el-select').first().click()
+  await page.waitForTimeout(300)
+  await item(page, label).locator('.el-select input').first().fill(String(value))
+  await page.waitForTimeout(400)
+  const dropdown = page.locator('.el-select-dropdown:visible').last()
+  const opt = dropdown.locator('.el-select-dropdown__item', { hasText: value }).first()
+  if (await opt.count() > 0) {
+    await opt.click()
+  } else {
+    await page.keyboard.press('Enter')
+  }
+  await page.waitForTimeout(250)
+}
+
 async function selectOptions(page, label) {
   await item(page, label).locator('.el-select').first().click()
   await page.waitForTimeout(500)
@@ -146,6 +162,19 @@ async function pickDate(page, label, value) {
   // Esc 會冒泡關掉整個 el-dialog，改點標題列收起日期面板。
   await dialog(page).locator('.el-dialog__header, .el-drawer__header').first().click({ force: true }).catch(() => {})
   await page.waitForTimeout(300)
+}
+
+// 清空 el-date-picker：直接 fill('') 會打開日曆面板且不會自動收起，面板可能疊在對話框按鈕上擋住點擊。
+// 改用滑鼠移入觸發 clearable 的 x 圖示並點擊，跟真實使用者操作一致，也不會留下面板。
+async function clearDate(page, label) {
+  const wrapper = item(page, label).locator('.el-input__wrapper').first()
+  await wrapper.hover()
+  await page.waitForTimeout(200)
+  const clearIcon = item(page, label).locator('.el-input__clear').first()
+  if (await clearIcon.count() > 0) {
+    await clearIcon.click()
+    await page.waitForTimeout(200)
+  }
 }
 
 async function errors(page) {
@@ -274,7 +303,7 @@ async function rowAction(page, rowText, actionText) {
 }
 
 module.exports = {
-  BASE, TAG, launch, dialog, item, dumpForm, fill, pick, selectOptions, radio, check, pickDate,
+  BASE, TAG, launch, dialog, item, dumpForm, fill, pick, pickOrCreate, selectOptions, radio, check, pickDate, clearDate,
   errors, toasts, clearToasts, submit, confirmBox, closeDialog, openCreate, goto,
   tableRows, rowByText, resolveRow, rowAction, download, upload, DOWNLOAD_DIR
 }
