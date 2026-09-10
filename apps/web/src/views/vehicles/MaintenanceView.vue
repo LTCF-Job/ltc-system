@@ -91,7 +91,7 @@
         <el-table-column label="收據憑證" min-width="100" align="center" class-name="maint-nowrap-col maint-receipt-col">
           <template #default="{ row }">
             <el-link
-              v-if="row.receiptUrl"
+              v-if="row.receiptUrl && isSafeReceiptUrl(row.receiptUrl)"
               type="primary"
               :href="row.receiptUrl"
               target="_blank"
@@ -243,6 +243,7 @@ import { listAllVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { downloadBlob } from '@/utils/download'
 import { todayLocal } from '@/utils/formatters'
+import { isSafeReceiptUrl, receiptUrlRule } from '@/utils/receiptUrl'
 import type { MaintenanceLogDTO, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
@@ -281,7 +282,8 @@ const rules = {
   serviceDate: [{ required: true, message: '請選擇保養日期', trigger: 'change' }],
   mileage: [{ required: true, message: '請輸入當前里程數', trigger: 'blur' }],
   items: [{ required: true, message: '請輸入保養項目', trigger: 'blur' }],
-  cost: [{ required: true, message: '請輸入保養金額', trigger: 'blur' }]
+  cost: [{ required: true, message: '請輸入保養金額', trigger: 'blur' }],
+  receiptUrl: [receiptUrlRule]
 }
 
 async function fetchFilterOptions() {

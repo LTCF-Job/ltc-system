@@ -310,7 +310,7 @@
             <el-table-column label="發票/收據憑證" min-width="130" align="center" class-name="fuel-receipt-col">
               <template #default="{ row }">
                 <el-link
-                  v-if="row.receiptUrl"
+                  v-if="row.receiptUrl && isSafeReceiptUrl(row.receiptUrl)"
                   type="primary"
                   :href="row.receiptUrl"
                   target="_blank"
@@ -508,6 +508,7 @@ import {
 import { listHolidays, type HolidayItem } from '@/api/holidays'
 import { listAllDrivers, listAllVehicles } from '@/api/masters'
 import { currentLocalMonth, todayLocal } from '@/utils/formatters'
+import { isSafeReceiptUrl, receiptUrlRule } from '@/utils/receiptUrl'
 import { useAuthStore } from '@/stores/auth'
 import type {
   MonthAttendanceReportDTO,
@@ -588,7 +589,8 @@ const fuelRules = {
   vehicleId: [{ required: true, message: '請選擇車輛', trigger: 'change' }],
   fuelDate: [{ required: true, message: '請選擇加油日期', trigger: 'change' }],
   liters: [{ required: true, message: '請輸入公升數', trigger: 'blur' }],
-  cost: [{ required: true, message: '請輸入金額', trigger: 'blur' }]
+  cost: [{ required: true, message: '請輸入金額', trigger: 'blur' }],
+  receiptUrl: [receiptUrlRule]
 }
 
 async function fetchOptions() {
