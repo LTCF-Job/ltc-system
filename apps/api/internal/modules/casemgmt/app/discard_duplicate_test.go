@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ltc-system/apps/api/internal/domain/crypto"
 )
 
 // fakeDuplicateStagingStore 是 DuplicateStagingStore 的確定性測試替身。介面中 discard 路徑
@@ -18,6 +19,8 @@ type fakeDuplicateStagingStore struct {
 	deleteCalls []uuid.UUID
 	deleteRows  int64
 	deleteErr   error
+	resolveRows int64
+	listResult  []DuplicateCandidate
 }
 
 func (f *fakeDuplicateStagingStore) GetByID(context.Context, uuid.UUID) (*DuplicateCandidate, error) {
@@ -28,7 +31,7 @@ func (f *fakeDuplicateStagingStore) GetByID(context.Context, uuid.UUID) (*Duplic
 }
 
 func (f *fakeDuplicateStagingStore) Resolve(context.Context, uuid.UUID, string, uuid.UUID, *uuid.UUID) (int64, error) {
-	return 0, nil
+	return f.resolveRows, nil
 }
 
 func (f *fakeDuplicateStagingStore) Delete(_ context.Context, id uuid.UUID) (int64, error) {
@@ -96,7 +99,7 @@ func TestDiscardDuplicateCandidate_DeletesRowAndWritesAudit(t *testing.T) {
 	assert.Equal(t, cand.SheetName, snapshot["sheetName"])
 	assert.Equal(t, cand.RowKey, snapshot["rowKey"])
 	assert.Equal(t, cand.DuplicateCaseID.String(), snapshot["duplicateCaseId"])
-	for _, piiField := range []string{"nationalIdCipher", "nationalIdMasked", "homeAddress", "registeredAddress", "birthDate"} {
+	for _, piiField := range []string{"nationalIdCipher", "nationalIdMasked", "nationalId", "homeAddress", "registeredAddress", "birthDate"} {
 		_, exists := snapshot[piiField]
 		assert.False(t, exists, "稽核快照不得包含個資欄位 %s", piiField)
 	}
@@ -197,4 +200,56 @@ func TestResolveDuplicateCandidate_RejectsDiscardedDecision(t *testing.T) {
 	_, err := svc.ResolveDuplicateCandidate(context.Background(), uuid.New(), "discarded", nil, false, uuid.New(), "admin", "", "")
 
 	assert.ErrorIs(t, err, ErrInvalidDuplicateDecision, "忽略只走專屬端點，不混用裁決路徑")
+}
+
+func TestResolveDuplicateCandidate_ConfirmedNew_DecryptsNationalID(t *testing.T) {
+	cfg := testConfig()
+	id := uuid.New()
+	cand := pendingCandidate(id)
+	cipher, err := crypto.Encrypt("A123456789", cfg.EncryptionKey)
+	require.NoError(t, err)
+	cand.NationalIDCipher = cipher
+	staging := &fakeDuplicateStagingStore{candidate: cand, resolveRows: 1}
+	svc := NewCaseService(cfg, newFakeCaseStore(), nil, nil, staging)
+
+	result, err := svc.ResolveDuplicateCandidate(context.Background(), id, "confirmed_new", nil, false, uuid.New(), "admin", "", "")
+
+	require.NoError(t, err)
+	assert.Equal(t, "A123456789", result.NationalID)
+}
+
+func TestResolveDuplicateCandidate_MergedExisting_DecryptsNationalID(t *testing.T) {
+	cfg := testConfig()
+	id := uuid.New()
+	cand := pendingCandidate(id)
+	staging := &fakeDuplicateStagingStore{candidate: cand, resolveRows: 1}
+	store := newFakeCaseStore()
+	targetID := uuid.New()
+	cipher, err := crypto.Encrypt("B234567894", cfg.EncryptionKey)
+	require.NoError(t, err)
+	store.byID[targetID] = &Case{ID: targetID, NationalIDCipher: cipher}
+	svc := NewCaseService(cfg, store, nil, nil, staging)
+
+	result, err := svc.ResolveDuplicateCandidate(context.Background(), id, "merged_existing", &targetID, false, uuid.New(), "admin", "", "")
+
+	require.NoError(t, err)
+	assert.Equal(t, "B234567894", result.NationalID)
+}
+
+func TestListDuplicateCandidates_DecryptsNationalID(t *testing.T) {
+	cfg := testConfig()
+	cipher, err := crypto.Encrypt("A123456789", cfg.EncryptionKey)
+	require.NoError(t, err)
+	staging := &fakeDuplicateStagingStore{listResult: []DuplicateCandidate{
+		{ID: uuid.New(), NationalIDCipher: cipher},
+		{ID: uuid.New(), Name: "無身分證列"},
+	}}
+	svc := NewCaseService(cfg, newFakeCaseStore(), nil, nil, staging)
+
+	list, err := svc.ListDuplicateCandidates(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, list, 2)
+	assert.Equal(t, "A123456789", list[0].NationalID)
+	assert.Empty(t, list[1].NationalID)
 }

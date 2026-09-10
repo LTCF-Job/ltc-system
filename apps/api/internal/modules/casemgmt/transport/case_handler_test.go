@@ -135,7 +135,7 @@ func TestCaseHandler_List_DoesNotLeakEncryptedNationalID(t *testing.T) {
 	assert.NotContains(t, body, "nationalIdCipher")
 	assert.NotContains(t, body, "nationalIdHmac")
 	assert.Contains(t, body, `"homeAddress"`)
-	assert.Contains(t, body, `"nationalIdMasked"`)
+	assert.Contains(t, body, `"nationalId"`)
 }
 
 // TestCaseHandler_Get_ResponseIsCamelCase 確認單筆查詢回應為 camelCase 契約，

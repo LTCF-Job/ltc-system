@@ -307,7 +307,6 @@ async function fetchDetail() {
 
     if (!res) return
 
-    res.nationalId = res.nationalId || res.nationalIdMasked || ''
     if (sched) {
       res.activeSchedule = sched?.data ?? sched
     }

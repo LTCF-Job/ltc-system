@@ -73,7 +73,6 @@ declare module 'vue' {
     ElUpload: typeof import('element-plus/es')['ElUpload']
     ImportPreviewDialog: typeof import('./components/ImportPreviewDialog.vue')['default']
     InlineOptionPicker: typeof import('./components/InlineOptionPicker.vue')['default']
-    MaskedId: typeof import('./components/MaskedId.vue')['default']
     PageHeader: typeof import('./components/PageHeader.vue')['default']
     PrecheckResult: typeof import('./components/PrecheckResult.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

@@ -43,7 +43,7 @@ covers:
 
 ### 3.1 審計等級劃分
 1. **阻斷性審計（Blocking Audit）**：
-   - 涉及核心身分識別、機敏個資檢視（如 `POST /cases/:id/reveal` 身分證明文解密）、權限角色變更、批次刪除等高風險操作。
+   - 涉及核心身分識別、權限角色變更、批次刪除等高風險操作。
    - 審計日誌寫入與業務寫入處於同一交易內，若審計日誌寫入失敗，**整體操作必須回滾（Rollback）並報錯**。
 2. **非阻斷性觀測（Non-blocking Audit）**：
    - 一般日常讀取、排班檢視或次要更新。
@@ -53,7 +53,7 @@ covers:
 審計日誌一律必須包含：
 - `actor_id`：操作者帳號 UUID。
 - `actor_role`：操作時之有效角色。
-- `action`：操作動作名稱（如 `case.create`, `case.reveal_national_id`, `driver_report.import`）。
+- `action`：操作動作名稱（如 `case.create`, `driver_report.import`）。
 - `target_type` 與 `target_id`：被操作之實體類型與主鍵。
 - `ip_address` 與 `user_agent`：請求來源網路資訊。
 - `created_at`：操作時間（UTC）。

@@ -309,7 +309,7 @@
       <el-descriptions v-if="duplicateResolveTarget" :column="1" border size="small">
         <el-descriptions-item label="匯入姓名">{{ duplicateResolveTarget.name }}</el-descriptions-item>
         <el-descriptions-item label="身分證字號">
-          {{ duplicateResolveNationalId || duplicateResolveTarget.nationalIdMasked || '未提供' }}
+          {{ duplicateResolveTarget.nationalId || '未提供' }}
         </el-descriptions-item>
         <el-descriptions-item label="疑似重複之既有個案">{{ duplicateResolveTarget.duplicateCaseName }}</el-descriptions-item>
         <el-descriptions-item label="據點">{{ duplicateResolveTarget.siteNameRaw || duplicateResolveTarget.siteName || '-' }}</el-descriptions-item>
@@ -447,7 +447,6 @@ import {
   commitImportCases,
   updateCaseTransportPreference,
   listCaseDuplicateCandidates,
-  revealCaseDuplicateCandidateNationalId,
   resolveCaseDuplicateCandidate,
   discardCaseDuplicateCandidate
 } from '@/api/cases'
@@ -867,27 +866,17 @@ async function handlePendingEditSubmit() {
   }
 }
 
-// 疑似重複個案人工裁決：開啟時先解密明文供比對（若有身分證字號），裁決前用
-// ElMessageBox 二次確認，避免誤觸「確認為新個案」或「視為既有個案」。
+// 疑似重複個案人工裁決：裁決前用 ElMessageBox 二次確認，避免誤觸
+// 「確認為新個案」或「視為既有個案」。
 const duplicateResolveVisible = ref(false)
 const duplicateResolveTarget = ref<CaseDuplicateCandidateDTO | null>(null)
-const duplicateResolveNationalId = ref('')
 const duplicateResolveSaving = ref(false)
 const duplicateMergeRemarks = ref(true)
 
-async function openDuplicateResolve(row: PendingDuplicateRow) {
+function openDuplicateResolve(row: PendingDuplicateRow) {
   duplicateResolveTarget.value = row
-  duplicateResolveNationalId.value = ''
   duplicateMergeRemarks.value = true
   duplicateResolveVisible.value = true
-  if (row.nationalIdMasked) {
-    try {
-      const { nationalId } = await revealCaseDuplicateCandidateNationalId(row.id)
-      duplicateResolveNationalId.value = nationalId
-    } catch {
-      // 全域攔截器負責顯示 API 錯誤；解密失敗時維持顯示遮罩值。
-    }
-  }
 }
 
 async function handleDuplicateResolve(decision: 'confirmed_new' | 'merged_existing') {

@@ -390,32 +390,30 @@ func TestUpdateCase_RejectsBlankName(t *testing.T) {
 	assert.Equal(t, "原姓名", store.byID[caseID].Name)
 }
 
-func TestRevealCaseNationalID_RejectsMissingCipher(t *testing.T) {
-	store := newFakeCaseStore()
-	caseID := uuid.New()
-	store.byID[caseID] = &Case{ID: caseID, Name: "無身分證個案"}
-	svc := NewCaseService(testConfig(), store, nil, nil, nil)
-
-	_, err := svc.RevealCaseNationalID(context.Background(), caseID, uuid.New(), "admin", "", "")
-
-	assert.ErrorIs(t, err, ErrNationalIDNotConfigured)
-}
-
-func TestRevealCaseNationalID_RequiresDurableAudit(t *testing.T) {
+func TestGetCaseByID_DecryptsNationalID(t *testing.T) {
 	store := newFakeCaseStore()
 	caseID := uuid.New()
 	cipher, err := crypto.Encrypt("A123456789", testConfig().EncryptionKey)
 	require.NoError(t, err)
 	store.byID[caseID] = &Case{ID: caseID, NationalIDCipher: cipher}
-	audit := &fakeCaseAuditWriter{}
-	svc := NewCaseService(testConfig(), store, audit, nil, nil)
+	svc := NewCaseService(testConfig(), store, nil, nil, nil)
 
-	plainID, err := svc.RevealCaseNationalID(context.Background(), caseID, uuid.New(), "admin", "", "")
+	entity, err := svc.GetCaseByID(context.Background(), caseID)
 
 	require.NoError(t, err)
-	assert.Equal(t, "A123456789", plainID)
-	require.Len(t, audit.entries, 1)
-	assert.Equal(t, "reveal_pii", audit.entries[0].Action)
+	assert.Equal(t, "A123456789", entity.NationalID)
+}
+
+func TestGetCaseByID_EmptyCipherYieldsEmptyNationalID(t *testing.T) {
+	store := newFakeCaseStore()
+	caseID := uuid.New()
+	store.byID[caseID] = &Case{ID: caseID, Name: "無身分證個案"}
+	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+
+	entity, err := svc.GetCaseByID(context.Background(), caseID)
+
+	require.NoError(t, err)
+	assert.Empty(t, entity.NationalID)
 }
 
 func TestRecordSkippedCaseImport_SanitizesPII(t *testing.T) {
@@ -442,16 +440,20 @@ func TestRecordSkippedCaseImport_SanitizesPII(t *testing.T) {
 }
 
 func TestUpdateCaseTransportPreference_PutUsesExplicitFullReplacement(t *testing.T) {
+	cfg := testConfig()
 	store := newFakeCaseStore()
-	svc := NewCaseService(testConfig(), store, nil, nil, nil)
+	svc := NewCaseService(cfg, store, nil, nil, nil)
 	caseID := uuid.New()
-	store.byID[caseID] = &Case{ID: caseID}
+	cipher, err := crypto.Encrypt("A123456789", cfg.EncryptionKey)
+	require.NoError(t, err)
+	store.byID[caseID] = &Case{ID: caseID, NationalIDCipher: cipher}
 
-	_, err := svc.UpdateCaseTransportPreference(context.Background(), caseID, nil, nil, "未比對到的去程車", "未比對到的回程車")
+	result, err := svc.UpdateCaseTransportPreference(context.Background(), caseID, nil, nil, "未比對到的去程車", "未比對到的回程車")
 
 	require.NoError(t, err)
 	assert.Nil(t, store.lastUpsertPref.outboundVehicleID, "PUT 未提供的去程車 ID 應明確傳遞 nil 代表清除")
 	assert.Nil(t, store.lastUpsertPref.inboundVehicleID)
 	assert.Equal(t, "未比對到的去程車", store.lastUpsertPref.outboundVehicleNameRaw)
 	assert.Equal(t, "未比對到的回程車", store.lastUpsertPref.inboundVehicleNameRaw)
+	assert.Equal(t, "A123456789", result.NationalID)
 }

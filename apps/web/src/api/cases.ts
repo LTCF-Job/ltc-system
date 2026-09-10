@@ -26,18 +26,7 @@ export async function listCases(params?: {
 }): Promise<Paged<CaseDTO>> {
   const res = await apiClient.get('/cases', { params })
   const fallback = createPaginationMeta(params?.page, params?.pageSize)
-  const result = unwrapPaged<CaseDTO>(res, fallback)
-  return {
-    ...result,
-    data: result.data.map(normalizeCase)
-  }
-}
-
-function normalizeCase(item: CaseDTO): CaseDTO {
-  return {
-    ...item,
-    nationalId: item.nationalId || item.nationalIdMasked || ''
-  }
+  return unwrapPaged<CaseDTO>(res, fallback)
 }
 
 export async function listAllCases(params?: Omit<NonNullable<Parameters<typeof listCases>[0]>, 'page' | 'pageSize'>): Promise<CaseDTO[]> {
@@ -56,17 +45,17 @@ export async function listAllCases(params?: Omit<NonNullable<Parameters<typeof l
 
 export async function getCase(id: string): Promise<CaseDTO> {
   const res = await apiClient.get(`/cases/${id}`)
-  return normalizeCase(unwrapData<CaseDTO>(res))
+  return unwrapData<CaseDTO>(res)
 }
 
 export async function createCase(data: CreateCaseRequest): Promise<CaseDTO> {
   const res = await apiClient.post('/cases', data)
-  return normalizeCase(unwrapData<CaseDTO>(res))
+  return unwrapData<CaseDTO>(res)
 }
 
 export async function updateCase(id: string, data: UpdateCaseRequest): Promise<CaseDTO> {
   const res = await apiClient.patch(`/cases/${id}`, data)
-  return normalizeCase(unwrapData<CaseDTO>(res))
+  return unwrapData<CaseDTO>(res)
 }
 
 export async function deleteCase(id: string): Promise<void> {
@@ -79,7 +68,7 @@ export async function updateCaseTransportPreference(
   data: UpdateCaseTransportPreferenceRequest
 ): Promise<CaseDTO> {
   const res = await apiClient.put(`/cases/${id}/transport-preference`, data)
-  return normalizeCase(unwrapData<CaseDTO>(res))
+  return unwrapData<CaseDTO>(res)
 }
 
 export async function downloadCaseImportTemplate(): Promise<Blob> {
@@ -89,11 +78,6 @@ export async function downloadCaseImportTemplate(): Promise<Blob> {
 export async function exportCaseProfileWorkbook(caseIds?: string[]): Promise<Blob> {
   const params = caseIds && caseIds.length > 0 ? { caseIds: caseIds.join(',') } : undefined
   return apiClient.get('/cases/export', { params, responseType: 'blob' })
-}
-
-export async function revealCaseId(id: string): Promise<{ nationalId: string }> {
-  const res = await apiClient.post(`/cases/${id}/reveal`)
-  return unwrapData<{ nationalId: string }>(res)
 }
 
 export async function getCaseSchedule(caseId: string): Promise<CaseScheduleDTO | null> {
@@ -129,14 +113,9 @@ export async function listCaseDuplicateCandidates(): Promise<CaseDuplicateCandid
   return unwrapData<CaseDuplicateCandidateDTO[]>(res)
 }
 
-export async function revealCaseDuplicateCandidateNationalId(id: string): Promise<{ nationalId: string }> {
-  const res = await apiClient.post(`/cases/import/duplicates/${id}/reveal`)
-  return unwrapData<{ nationalId: string }>(res)
-}
-
 export async function resolveCaseDuplicateCandidate(id: string, data: ResolveDuplicateCandidateRequest): Promise<CaseDTO> {
   const res = await apiClient.post(`/cases/import/duplicates/${id}/resolve`, data)
-  return normalizeCase(unwrapData<CaseDTO>(res))
+  return unwrapData<CaseDTO>(res)
 }
 
 // discardCaseDuplicateCandidate 忽略一筆疑似重複個案，直接把暫存列從系統刪除，不建立個案。

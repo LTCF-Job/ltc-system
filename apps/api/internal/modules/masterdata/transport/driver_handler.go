@@ -166,37 +166,6 @@ func (h *DriverHandler) Update(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, newDriverResponse(*d), nil)
 }
 
-// Reveal 解密司機身分證明碼。
-func (h *DriverHandler) Reveal(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		respondInvalidID(c, "無效的司機 ID")
-		return
-	}
-
-	actorID := auth.GetActorID(c)
-	actorRole := auth.GetActorRole(c)
-	plainID, err := h.svc.Reveal(c.Request.Context(), id, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
-	if err != nil {
-		if errors.Is(err, app.ErrDriverNotFound) {
-			respondNotFound(c, "查無司機資料")
-			return
-		}
-		if errors.Is(err, app.ErrNationalIDNotConfigured) {
-			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "司機尚未設定身分證資料", nil)
-			return
-		}
-		if errors.Is(err, app.ErrRevealAuditUnavailable) {
-			httpx.RespondErrorCode(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, err, nil)
-			return
-		}
-		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
-		return
-	}
-
-	httpx.RespondSuccess(c, http.StatusOK, gin.H{"nationalId": plainID}, nil)
-}
-
 // Delete 軟刪除司機。
 func (h *DriverHandler) Delete(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))

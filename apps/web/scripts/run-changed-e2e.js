@@ -20,7 +20,7 @@ const FEATURE_SPEC_MAP = [
   {
     spec: 'tests/e2e/03-cases.spec.ts',
     name: '個案與排班',
-    patterns: [/views\/cases/, /api\/cases\.ts/, /components\/MaskedId\.vue/, /components\/ImportPreviewDialog\.vue/]
+    patterns: [/views\/cases/, /api\/cases\.ts/, /components\/ImportPreviewDialog\.vue/]
   },
   {
     spec: 'tests/e2e/04-masters.spec.ts',

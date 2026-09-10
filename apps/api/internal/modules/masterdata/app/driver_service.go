@@ -33,9 +33,16 @@ func NewDriverService(store DriverStore, cfg *config.Config, auditRepo AuditWrit
 	return &DriverService{store: store, cfg: cfg, auditRepo: auditRepo, txRunner: txRunner}
 }
 
-// List 查詢司機清單。
+// List 查詢司機清單（回傳明碼身分證）。
 func (s *DriverService) List(ctx context.Context, q, status string, page, pageSize int) ([]Driver, int64, error) {
-	return s.store.List(ctx, q, status, page, pageSize)
+	list, total, err := s.store.List(ctx, q, status, page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range list {
+		list[i].NationalID = s.decryptNationalID(list[i].NationalIDCipher)
+	}
+	return list, total, nil
 }
 
 // driverLicenseClasses 是允許的駕照類別代碼，與 drivers.license_class 的 CHECK 約束一致。
@@ -107,6 +114,7 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors
 		NationalIDCipher: cipherText,
 		NationalIDHMAC:   hmacIdx,
 		NationalIDMasked: crypto.Mask(nationalID),
+		NationalID:       nationalID,
 		Email:            in.Email,
 		Status:           "active",
 
@@ -196,8 +204,7 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 		existing.NameNormalized = namenorm.Normalize(*in.Name)
 	}
 	if in.NationalID != nil {
-		// 身分證改動要同步重算密文、HMAC 索引與遮罩值，三者必須一致，
-		// 否則 Reveal 解出來的明碼會跟畫面顯示的遮罩對不上。
+		// 身分證改動要同步重算密文、HMAC 索引、遮罩值與明碼快取，四者必須一致。
 		nationalID := strings.ToUpper(strings.TrimSpace(*in.NationalID))
 		if !crypto.ValidateNationalID(nationalID) {
 			return nil, ErrInvalidDriverNationalID
@@ -211,6 +218,7 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 			existing.NationalIDHMAC = crypto.Index(nationalID, s.cfg.HMACKey)
 			existing.NationalIDMasked = crypto.Mask(nationalID)
 		}
+		existing.NationalID = nationalID
 	}
 	if in.Email != nil {
 		existing.Email = in.Email
@@ -263,37 +271,17 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 	return existing, nil
 }
 
-// Reveal 解密司機身分證明碼；高風險揭露必須先成功寫入稽核紀錄。
-func (s *DriverService) Reveal(ctx context.Context, id, actorID uuid.UUID, actorRole, ip, ua string) (string, error) {
-	d, err := s.store.GetByID(ctx, id)
+// decryptNationalID 解密身分證密文；密文為空或解密失敗時回傳空字串，不中斷呼叫端的清單／明細查詢。
+func (s *DriverService) decryptNationalID(cipher []byte) string {
+	if len(cipher) == 0 {
+		return ""
+	}
+	plain, err := crypto.Decrypt(cipher, s.cfg.EncryptionKey)
 	if err != nil {
-		if errors.Is(err, ErrDriverNotFound) {
-			return "", ErrDriverNotFound
-		}
-		return "", fmt.Errorf("failed to get driver: %w", err)
+		slog.Warn("decrypt driver national id failed", "error", err)
+		return ""
 	}
-	if d == nil {
-		return "", ErrDriverNotFound
-	}
-	if len(d.NationalIDCipher) == 0 {
-		return "", ErrNationalIDNotConfigured
-	}
-	if s.auditRepo == nil {
-		return "", ErrRevealAuditUnavailable
-	}
-	entityIDStr := id.String()
-	if err := s.auditRepo.Write(ctx, AuditEntry{
-		ActorID:    &actorID,
-		ActorRole:  &actorRole,
-		Action:     "reveal_pii",
-		EntityType: "drivers",
-		EntityID:   &entityIDStr,
-		IPAddress:  &ip,
-		UserAgent:  &ua,
-	}); err != nil {
-		return "", fmt.Errorf("%w: %v", ErrRevealAuditUnavailable, err)
-	}
-	return crypto.Decrypt(d.NationalIDCipher, s.cfg.EncryptionKey)
+	return plain
 }
 
 // AssignVehicleInput 代表指派司機車輛所需之輸入。指派不再由使用者輸入期間：

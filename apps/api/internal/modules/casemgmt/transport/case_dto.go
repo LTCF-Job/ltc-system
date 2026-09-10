@@ -208,7 +208,7 @@ type CaseResponse struct {
 	ID                     uuid.UUID  `json:"id"`
 	Name                   string     `json:"name"`
 	NameNormalized         string     `json:"nameNormalized"`
-	NationalIDMasked       string     `json:"nationalIdMasked"`
+	NationalID             string     `json:"nationalId"`
 	NationalIDInvalid      bool       `json:"nationalIdInvalid"`
 	HouseholdType          *string    `json:"householdType"`
 	Gender                 *string    `json:"gender"`
@@ -244,7 +244,7 @@ func newCaseResponse(c app.Case) CaseResponse {
 		ID:                     c.ID,
 		Name:                   c.Name,
 		NameNormalized:         c.NameNormalized,
-		NationalIDMasked:       c.NationalIDMasked,
+		NationalID:             c.NationalID,
 		NationalIDInvalid:      c.NationalIDInvalid,
 		HouseholdType:          c.HouseholdType,
 		Gender:                 c.Gender,
@@ -276,14 +276,13 @@ func newCaseResponse(c app.Case) CaseResponse {
 	}
 }
 
-// DuplicateCandidateResponse 代表回傳給前端的待裁決疑似重複個案暫存列。身分證字號
-// 只提供遮罩值，明文需另外呼叫 reveal API 並留下稽核紀錄後才會回傳。
+// DuplicateCandidateResponse 代表回傳給前端的待裁決疑似重複個案暫存列。
 type DuplicateCandidateResponse struct {
 	ID                     uuid.UUID  `json:"id"`
 	RowIndex               int        `json:"rowIndex"`
 	SheetName              string     `json:"sheetName"`
 	Name                   string     `json:"name"`
-	NationalIDMasked       string     `json:"nationalIdMasked"`
+	NationalID             string     `json:"nationalId"`
 	NationalIDInvalid      bool       `json:"nationalIdInvalid"`
 	HouseholdType          *string    `json:"householdType"`
 	Gender                 *string    `json:"gender"`
@@ -315,7 +314,7 @@ func newDuplicateCandidateResponse(c app.DuplicateCandidate) DuplicateCandidateR
 		RowIndex:               c.RowIndex,
 		SheetName:              c.SheetName,
 		Name:                   c.Name,
-		NationalIDMasked:       c.NationalIDMasked,
+		NationalID:             c.NationalID,
 		NationalIDInvalid:      c.NationalIDInvalid,
 		HouseholdType:          c.HouseholdType,
 		Gender:                 c.Gender,
