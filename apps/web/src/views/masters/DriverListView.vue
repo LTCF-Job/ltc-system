@@ -2,7 +2,6 @@
   <div class="driver-list-view">
     <DataTablePage
       title="司機管理"
-      :max-width="1680"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -49,70 +48,70 @@
 
       <!-- 表格 -->
       <template #table>
-        <el-table :data="drivers" border stripe table-layout="auto" style="width: 100%">
-          <el-table-column prop="name" label="司機姓名" min-width="110" align="center" class-name="driver-name-col">
+        <el-table :data="drivers" border stripe style="width: 100%">
+          <el-table-column prop="name" label="司機姓名" min-width="110" align="center" class-name="driver-nowrap-col driver-name-col">
             <template #default="{ row }"><span class="driver-name">{{ row.name }}</span></template>
           </el-table-column>
-          <el-table-column prop="nationalId" label="身分證字號" width="140" align="center">
+          <el-table-column prop="nationalId" label="身分證字號" min-width="140" align="center" class-name="driver-nowrap-col driver-id-col">
             <template #default="{ row }">
               <span class="driver-data font-mono">{{ row.nationalIdMasked || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="gender" label="性別" width="70" align="center">
+          <el-table-column prop="gender" label="性別" min-width="70" align="center" class-name="driver-nowrap-col driver-gender-col">
             <template #default="{ row }">
               <span class="driver-data">{{ row.gender || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="birthDate" label="生日" width="120" align="center">
+          <el-table-column prop="birthDate" label="生日" min-width="120" align="center" class-name="driver-nowrap-col driver-birth-col">
             <template #default="{ row }">
               <span class="driver-data">{{ formatDate(row.birthDate) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="歲數" width="70" align="center">
+          <el-table-column label="歲數" min-width="70" align="center" class-name="driver-nowrap-col driver-age-col">
             <template #default="{ row }">
               <span class="driver-data font-mono">{{ calcAge(row.birthDate) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="hasProfessionalLicense" label="職業駕照" width="90" align="center">
+          <el-table-column prop="hasProfessionalLicense" label="職業駕照" min-width="90" align="center" class-name="driver-nowrap-col driver-pro-license-col">
             <template #default="{ row }">
               <span class="driver-data font-semibold text-emerald-600">
                 {{ row.hasProfessionalLicense ? 'V' : '-' }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="hasTransferCert" label="異動登記書" width="105" align="center">
+          <el-table-column prop="hasTransferCert" label="異動登記書" min-width="105" align="center" class-name="driver-nowrap-col driver-transfer-cert-col">
             <template #default="{ row }">
               <span class="driver-data font-semibold text-emerald-600">
                 {{ row.hasTransferCert ? 'V' : '-' }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="licenseClass" label="駕照類別" min-width="120" align="center" class-name="license-class-col">
+          <el-table-column prop="licenseClass" label="駕照類別" min-width="120" align="center" class-name="driver-nowrap-col license-class-col">
             <template #default="{ row }">
               <span class="driver-data license-value">
                 {{ licenseClassLabel(row.licenseClass) }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="licenseExpiryDate" label="駕照有效日期" min-width="130" align="center" class-name="license-expiry-col">
+          <el-table-column prop="licenseExpiryDate" label="駕照有效日期" min-width="130" align="center" class-name="driver-nowrap-col license-expiry-col">
             <template #default="{ row }">
               <span class="driver-data license-value">{{ formatDate(row.licenseExpiryDate) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="employmentDate" label="到職日" width="120" align="center">
+          <el-table-column prop="employmentDate" label="到職日" min-width="120" align="center" class-name="driver-nowrap-col driver-employment-col">
             <template #default="{ row }">
               <span class="driver-data">{{ formatDate(row.employmentDate) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="phone" label="聯絡電話" width="130" align="center">
+          <el-table-column prop="phone" label="聯絡電話" min-width="130" align="center" class-name="driver-nowrap-col driver-phone-col">
             <template #default="{ row }">
               <span class="driver-data">{{ row.phone || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="email" label="電子信箱" min-width="180" show-overflow-tooltip class-name="email-col">
+          <el-table-column prop="email" label="電子信箱" min-width="180" show-overflow-tooltip class-name="driver-nowrap-col email-col">
             <template #default="{ row }"><span class="driver-data">{{ row.email || '-' }}</span></template>
           </el-table-column>
-          <el-table-column label="目前指派車輛" min-width="220" class-name="assigned-vehicle-col">
+          <el-table-column label="目前指派車輛" min-width="220" class-name="driver-nowrap-col assigned-vehicle-col">
             <template #default="{ row }">
               <InlineOptionPicker
                 v-if="authStore.hasPermission('masters_drivers', 'edit')"
@@ -133,12 +132,12 @@
               <span v-else class="assignment-empty">尚未指派</span>
             </template>
           </el-table-column>
-          <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip>
+          <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip class-name="driver-remarks-col">
             <template #default="{ row }">
               <span class="driver-data">{{ row.remarks || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="狀態" width="130" align="center">
+          <el-table-column prop="status" label="狀態" min-width="130" align="center" class-name="driver-nowrap-col driver-status-col">
             <template #default="{ row }">
               <el-tooltip
                 v-if="authStore.hasPermission('masters_drivers', 'edit')"
@@ -170,9 +169,10 @@
           <el-table-column
             v-if="authStore.hasPermission('masters_drivers', 'edit') || authStore.hasPermission('masters_drivers', 'delete')"
             label="操作"
-            width="140"
+            min-width="140"
             fixed="right"
             align="center"
+            class-name="driver-nowrap-col driver-actions-col"
           >
             <template #default="{ row }">
               <TableRowActions>
@@ -599,6 +599,7 @@ executeFetch()
 .driver-data {
   color: var(--app-text-regular);
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 /* table-layout="auto" 下 min-width 欄位需自行鎖 nowrap，否則欄寬吃緊時會逐字換行 */
@@ -606,8 +607,36 @@ executeFetch()
   white-space: nowrap;
 }
 
+:deep(.driver-nowrap-col .cell) {
+  white-space: nowrap;
+}
+
 :deep(.driver-name-col .cell) {
   min-width: 110px;
+}
+
+:deep(.driver-id-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.driver-gender-col .cell) {
+  min-width: 70px;
+}
+
+:deep(.driver-birth-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.driver-age-col .cell) {
+  min-width: 70px;
+}
+
+:deep(.driver-pro-license-col .cell) {
+  min-width: 90px;
+}
+
+:deep(.driver-transfer-cert-col .cell) {
+  min-width: 105px;
 }
 
 :deep(.license-class-col .cell) {
@@ -618,12 +647,32 @@ executeFetch()
   min-width: 130px;
 }
 
+:deep(.driver-employment-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.driver-phone-col .cell) {
+  min-width: 130px;
+}
+
 :deep(.email-col .cell) {
-  min-width: 200px;
+  min-width: 180px;
 }
 
 :deep(.assigned-vehicle-col .cell) {
   min-width: 220px;
+}
+
+:deep(.driver-remarks-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.driver-status-col .cell) {
+  min-width: 130px;
+}
+
+:deep(.driver-actions-col .cell) {
+  min-width: 140px;
 }
 
 .assignment-empty {

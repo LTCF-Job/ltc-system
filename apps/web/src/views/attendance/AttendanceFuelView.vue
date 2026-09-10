@@ -182,7 +182,6 @@
 
       <el-tab-pane label="車輛油資登錄" name="fuel">
         <DataTablePage
-          :max-width="1100"
           :loading="fuelLoading"
           v-model:page="fuelPage"
           v-model:pageSize="fuelPageSize"
@@ -285,7 +284,7 @@
           </el-row>
 
           <!-- 油資表格 -->
-          <el-table :data="fuelLogs" border stripe size="small" table-layout="auto" style="width: 100%;">
+          <el-table :data="fuelLogs" border stripe size="small" style="width: 100%;">
             <el-table-column prop="fuelDate" label="加油日期" min-width="120" align="center" class-name="fuel-date-col">
               <template #default="{ row }">
                 <span>{{ row.fuelDate?.slice(0, 10) }}</span>
@@ -324,9 +323,10 @@
             <el-table-column
               v-if="authStore.hasPermission('attendance_fuel', 'edit') || authStore.hasPermission('attendance_fuel', 'delete')"
               label="操作"
-              width="140"
+              min-width="140"
               align="center"
               fixed="right"
+              class-name="fuel-actions-col"
             >
               <template #default="{ row }">
                 <TableRowActions>
@@ -1171,6 +1171,11 @@ onMounted(async () => {
 :deep(.fuel-receipt-col .cell) {
   white-space: nowrap;
   min-width: 130px;
+}
+
+:deep(.fuel-actions-col .cell) {
+  white-space: nowrap;
+  min-width: 140px;
 }
 
 .mt-3 {

@@ -52,11 +52,10 @@
           :data="vehicles"
           border
           stripe
-          table-layout="auto"
           style="width: 100%"
           @row-dblclick="(row: any) => handleRowDblClick(row)"
         >
-          <el-table-column type="index" label="編號" width="70" align="center" :index="rowIndex" />
+          <el-table-column type="index" label="編號" min-width="70" align="center" :index="rowIndex" class-name="vehicle-nowrap-col vehicle-index-col" />
 
           <el-table-column prop="plateNo" label="車號" min-width="120" class-name="vehicle-nowrap-col vehicle-plateno-col">
             <template #default="{ row }">
@@ -65,6 +64,33 @@
           </el-table-column>
 
           <el-table-column prop="displayName" label="車別" min-width="180" class-name="vehicle-nowrap-col vehicle-displayname-col" />
+
+          <el-table-column label="駕駛司機" min-width="200" class-name="vehicle-nowrap-col vehicle-current-driver-col">
+            <template #default="{ row }">
+              <InlineOptionPicker
+                v-if="authStore.hasPermission('masters_vehicles', 'edit')"
+                :model-value="(row.drivers || []).map((d: any) => d.id)"
+                :options="driverOptions"
+                multiple
+                placeholder="尚未指派"
+                :loading="savingVehicleId === row.id"
+                :disabled="savingVehicleId === row.id || row.status !== 'active'"
+                @change="(val) => handleInlineSetDrivers(row as any, val as string[])"
+              />
+              <div v-else-if="row.drivers && row.drivers.length" class="vehicle-driver-tags">
+                <el-tag
+                  v-for="d in row.drivers"
+                  :key="d.id"
+                  size="small"
+                  type="info"
+                  effect="plain"
+                >
+                  {{ d.name }}
+                </el-tag>
+              </div>
+              <span v-else class="vehicle-empty-text">尚未指派</span>
+            </template>
+          </el-table-column>
 
           <el-table-column prop="siteName" label="據點" min-width="160" class-name="vehicle-nowrap-col vehicle-sitename-col">
             <template #default="{ row }">
@@ -111,7 +137,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="證件資料" min-width="200" class-name="vehicle-documents-col">
+          <el-table-column label="證件資料" min-width="100" class-name="vehicle-nowrap-col vehicle-documents-col">
             <template #default="{ row }">
               <div v-if="vehicleDocumentLabels(row as any).length" class="vehicle-document-tags">
                 <el-tag
@@ -128,34 +154,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="駕駛司機" min-width="200" class-name="vehicle-current-driver-col">
-            <template #default="{ row }">
-              <InlineOptionPicker
-                v-if="authStore.hasPermission('masters_vehicles', 'edit')"
-                :model-value="(row.drivers || []).map((d: any) => d.id)"
-                :options="driverOptions"
-                multiple
-                placeholder="尚未指派"
-                :loading="savingVehicleId === row.id"
-                :disabled="savingVehicleId === row.id || row.status !== 'active'"
-                @change="(val) => handleInlineSetDrivers(row as any, val as string[])"
-              />
-              <div v-else-if="row.drivers && row.drivers.length" class="vehicle-driver-tags">
-                <el-tag
-                  v-for="d in row.drivers"
-                  :key="d.id"
-                  size="small"
-                  type="info"
-                  effect="plain"
-                >
-                  {{ d.name }}
-                </el-tag>
-              </div>
-              <span v-else class="vehicle-empty-text">尚未指派</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip>
+          <el-table-column prop="remarks" label="備註" min-width="140" show-overflow-tooltip class-name="vehicle-remarks-col">
             <template #default="{ row }">
               <span class="vehicle-data">{{ row.remarks || '-' }}</span>
             </template>
@@ -165,7 +164,7 @@
             <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
           </el-table-column>
 
-          <el-table-column prop="status" label="狀態" width="130" align="center">
+          <el-table-column prop="status" label="狀態" min-width="130" align="center" class-name="vehicle-nowrap-col vehicle-status-col">
             <template #default="{ row }">
               <el-tooltip
                 v-if="authStore.hasPermission('masters_vehicles', 'edit')"
@@ -197,9 +196,10 @@
           <el-table-column
             v-if="authStore.hasPermission('masters_vehicles', 'edit') || authStore.hasPermission('masters_vehicles', 'delete')"
             label="操作"
-            width="140"
+            min-width="140"
             fixed="right"
             align="center"
+            class-name="vehicle-nowrap-col vehicle-actions-col"
           >
             <template #default="{ row }">
               <TableRowActions>
@@ -475,12 +475,23 @@ executeFetch()
 </script>
 
 <style scoped>
-.vehicle-driver-tags,
-.vehicle-document-tags {
+.vehicle-driver-tags {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.vehicle-document-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  width: max-content;
+}
+
+.vehicle-document-tags :deep(.el-tag) {
+  flex-shrink: 0;
 }
 
 .vehicle-empty-text {
@@ -490,6 +501,10 @@ executeFetch()
 
 :deep(.vehicle-nowrap-col .cell) {
   white-space: nowrap;
+}
+
+:deep(.vehicle-index-col .cell) {
+  min-width: 70px;
 }
 
 :deep(.vehicle-plateno-col .cell) {
@@ -536,6 +551,14 @@ executeFetch()
   min-width: 140px;
 }
 
+:deep(.vehicle-documents-col .cell) {
+  min-width: 100px;
+}
+
+:deep(.vehicle-remarks-col .cell) {
+  min-width: 140px;
+}
+
 :deep(.vehicle-createdat-col .cell) {
   min-width: 170px;
 }
@@ -544,4 +567,11 @@ executeFetch()
   min-width: 200px;
 }
 
+:deep(.vehicle-status-col .cell) {
+  min-width: 130px;
+}
+
+:deep(.vehicle-actions-col .cell) {
+  min-width: 140px;
+}
 </style>

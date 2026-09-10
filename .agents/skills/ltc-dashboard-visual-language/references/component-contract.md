@@ -106,7 +106,22 @@ Token 定義在 `apps/web/src/styles/tokens.scss`；共用元件在 `apps/web/sr
 
 ## 表格欄位
 
-- 視窗寬度足夠時，欄位內容一律單行完整顯示，不主動換行或提前截斷；欄寬不夠但頁面還有空間，應該讓表格本身變寬去容納內容，而不是用固定寬度把內容擠成多行或提前用省略號蓋掉——只有視窗真的不夠寬時，才輪到 `show-overflow-tooltip`（省略號＋hover）或水平捲動接手。
+- **【核心鐵律】所有欄位（含表頭標題 `th` 與資料列儲存格 `td`）一律單行完整顯示、嚴禁折行**：
+  - 視窗寬度足夠時，所有欄位內容一律單行完整顯示，不主動換行或提前截斷。
+  - 欄寬不夠但頁面還有空間時，應該讓表格本身依內容自然撐寬，由外層容器之水平捲動（`overflow-x: auto`）或長文字欄位之 `show-overflow-tooltip`（省略號＋hover 提示）接手，**絕對不得使用過窄固定寬度把內容擠成多行，或將「編號」、「狀態」、「性別」、「操作」等表頭與內容逐字斷行**。
+  - 表單標籤（`el-form-item__label`）同理一律單行，嚴禁拆行。
+  - 全站已於 `apps/web/src/styles/element-overrides.scss` 注入全域強制防護：
+    ```scss
+    .el-table th.el-table__cell .cell,
+    .el-table td.el-table__cell .cell {
+      white-space: nowrap;
+      word-break: keep-all;
+    }
+    .el-form-item__label {
+      white-space: nowrap;
+    }
+    ```
+  - 唯一例外：僅針對特定結構化文字比對需求（如系統操作紀錄異動前後之 `.diff-val` 區塊），顯式標註 `.allow-wrap` 或專屬 class 時方可換行。除此之外全站任何常規表格與表單欄位嚴禁換行。
 - **任何**套用 `<el-table table-layout="auto">` 的頁面（不限於下一條的「縮起不撐滿」pattern），只要欄位可能換行，都要同時做到兩件事，缺一都不會生效：① 固定 `width` 改成 `min-width`；② 依欄位有沒有自訂 `<template>#default` 補對應的 nowrap 鎖定——有自訂 template 就在裡面的 `<span>` 直接補 `white-space: nowrap`（例如 `.xxx-value { white-space: nowrap; }`）；沒有自訂 template（純 `<el-table-column prop="..." min-width="N" />`）就加 `class-name="xxx-col"`，並在同檔案 `<style scoped>` 補一條 `:deep(.xxx-col .cell) { white-space: nowrap; }`。`table-layout="auto"` 底下固定 `width` 只會鎖死欄寬讓文字換行、不會依內容自動撐開；`min-width` 欄位若沒鎖 nowrap，欄寬吃緊時一樣會被壓成逐字換行——這正是 2026-09-01 在 `CaregiverListView.vue` 踩到、後來排查全站 10 個頁面都中招的漏洞：只加了 `class-name` 卻忘記補對應的 `:deep()` CSS 規則。**改完後務必自我檢查**：對每個新加的 `class-name="xxx-col"`，同檔案要能 grep 到對應的 `:deep(.xxx-col .cell)` 規則；反之每個新加的 `:deep()` nowrap 規則，也要能在 template 找到對應的 `class-name`——兩邊對不上就是漏了一半，不算改完。想自然伸展的欄位另外要注意：不加 `show-overflow-tooltip`（底層是 `overflow: hidden`，`table-layout="auto"` 量測欄寬時會把它當成可裁切內容直接給極小寬度）。欄位加總寬度超過版面時交給 `DataTablePage` 既有的 `.table-container { overflow-x: auto }` 處理水平捲動，不做裁切省略。
 - 需要「表格寬度依內容縮起、不撐滿頁面，但視窗夠寬時不截斷內容」的頁面（例如欄位長度變化大、不適合套用固定 `max-width` 的矩陣型表格），在上一條的基礎上再加：scoped `:deep(.el-table) { width: max-content; }`。`.el-table` 本體是 `div`，內建 `width: 100%`，光拿掉 inline `style="width:100%"` 沒用（`div` 的 `width: auto` 預設仍撐滿容器），必須顯式蓋成 `max-content` 才會縮到「各欄寬度加總」。**`<el-table>` 標籤上如果還留著 `style="width: 100%"`，這條 `:deep()` 規則會被 inline style 蓋過去、完全不生效**（inline style 優先權高於任何 class 選擇器）——套用這個 pattern 時務必把 inline `style="width: 100%"` 一併拿掉，不是「加規則就好」。這個 pattern 跟 `DataTablePage` 的 `:max-width` 數字上限是兩套不同機制，不要混用：`:max-width` 是開發者手動估算的欄寬總和，靠 `min-width: max-content` 防止被壓縮，並非「縮到內容」；只有這條 `width: max-content` scoped 規則才是真正依內容縮起。
 - 這個 pattern 若用在**沒有包在 `DataTablePage` 裡**的表格（例如「待維護」頁籤常見的 `<div class="xxx-panel"><el-table>` 這種直接寫在頁面裡、不經過 `DataTablePage` 的區塊），該容器 div 要自己補 `overflow-x: auto`——`DataTablePage` 的 `.table-container` 內建這條規則，這種獨立面板沒有，內容超版面寬時沒有 `overflow-x: auto` 頂多是撐破面板讓整個頁面跳出橫向卷軸，而不是卷軸包在面板內；2026-09 的個案清單／照護人員管理待維護頁籤都踩過這個漏洞。

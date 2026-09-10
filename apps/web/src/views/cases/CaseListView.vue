@@ -3,7 +3,6 @@
     <el-tabs v-model="activeTab" type="border-card" class="case-tabs" @tab-change="handleTabChange">
     <el-tab-pane label="個案清單" name="list">
     <DataTablePage
-      :max-width="1680"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="total"
@@ -79,49 +78,49 @@
       <!-- 表格內容 -->
       <template #table>
         <el-table :data="cases" border stripe style="width: 100%">
-          <el-table-column prop="name" label="姓名" width="110" align="center" />
-          <el-table-column prop="nationalId" label="身分證字號" min-width="150" align="center">
+          <el-table-column prop="name" label="姓名" min-width="110" align="center" class-name="case-nowrap-col case-name-col" />
+          <el-table-column prop="nationalId" label="身分證字號" min-width="150" align="center" class-name="case-nowrap-col case-id-col">
             <template #default="{ row }">
               <span class="font-mono text-id">{{ row.nationalId || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="birthDate" label="生日" min-width="110" align="center">
+          <el-table-column prop="birthDate" label="生日" min-width="110" align="center" class-name="case-nowrap-col case-birth-col">
             <template #default="{ row }">
               <span>{{ row.birthDate ? formatDate(row.birthDate) : (row.birthDateRaw || '-') }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="gender" label="性別" width="70" align="center">
+          <el-table-column prop="gender" label="性別" min-width="70" align="center" class-name="case-nowrap-col case-gender-col">
             <template #default="{ row }">
               <span>{{ row.gender || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="householdType" label="戶別" min-width="110" align="center">
+          <el-table-column prop="householdType" label="戶別" min-width="110" align="center" class-name="case-nowrap-col case-household-col">
             <template #default="{ row }">
               <span>{{ row.householdType || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="siteName" label="據點" min-width="140" align="center">
+          <el-table-column prop="siteName" label="據點" min-width="140" align="center" class-name="case-nowrap-col case-site-col">
             <template #default="{ row }">
               <span>{{ row.siteName || row.siteNameRaw || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="caregiverName" label="照護人員" min-width="120" align="center">
+          <el-table-column prop="caregiverName" label="照護人員" min-width="120" align="center" class-name="case-nowrap-col case-caregiver-col">
             <template #default="{ row }">
               <span>{{ row.caregiverName || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="serviceUsageType" label="服務使用類型" min-width="190" align="center">
+          <el-table-column prop="serviceUsageType" label="服務使用類型" min-width="190" align="center" class-name="case-nowrap-col case-usage-col">
             <template #default="{ row }">
               <span>{{ SERVICE_USAGE_TYPE_LABELS[row.serviceUsageType as ServiceUsageType] || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="homeAddress" label="居住地址" min-width="190" show-overflow-tooltip />
-          <el-table-column prop="remarks" label="備註" min-width="160" show-overflow-tooltip>
+          <el-table-column prop="homeAddress" label="居住地址" min-width="190" show-overflow-tooltip class-name="case-address-col" />
+          <el-table-column prop="remarks" label="備註" min-width="160" show-overflow-tooltip class-name="case-remarks-col">
             <template #default="{ row }">
               <span>{{ row.remarks || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="狀態" width="115" align="center">
+          <el-table-column prop="status" label="狀態" min-width="115" align="center" class-name="case-nowrap-col case-status-col">
             <template #default="{ row }">
               <el-dropdown
                 v-if="authStore.hasPermission('masters_cases', 'edit')"
@@ -150,7 +149,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="操作" width="140" fixed="right" align="center">
+          <el-table-column label="操作" min-width="140" fixed="right" align="center" class-name="case-nowrap-col case-actions-col">
             <template #default="{ row }">
               <TableRowActions>
                 <el-button
@@ -183,7 +182,7 @@
     <el-tab-pane label="待維護" name="unresolved">
       <div v-loading="unresolvedLoading" class="pending-panel">
         <el-empty v-if="!unresolvedLoading && pendingRows.length === 0" description="目前沒有待維護的個案" />
-        <el-table v-else :data="pendingRows" border stripe table-layout="auto" row-key="key">
+        <el-table v-else v-table-auto-width :data="pendingRows" border stripe row-key="key" style="width: 100%">
           <el-table-column prop="name" label="姓名" min-width="90" class-name="unresolved-name-col" />
           <el-table-column label="問題" min-width="260" class-name="unresolved-issue-col">
             <template #default="{ row }">
@@ -194,7 +193,7 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="180" fixed="right" align="center" class-name="unresolved-action-col">
+          <el-table-column label="操作" min-width="180" fixed="right" align="center" class-name="unresolved-nowrap-col unresolved-action-col">
             <template #default="{ row }">
               <TableRowActions>
                 <el-button v-if="row.kind === 'case'" link type="primary" size="small" @click="openPendingCaseEdit(row as PendingCaseRow)">
@@ -1065,6 +1064,62 @@ refreshCaseRegionOptions()
    欄位當筆內容較短就會被壓到只剩幾 px，跟其他有內容的欄位比例明顯不一致。
    要另外用 class-name 補一條 :deep() min-width 才是真的鎖住下限
    （見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
+:deep(.case-nowrap-col .cell) {
+  white-space: nowrap;
+}
+
+:deep(.case-name-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.case-id-col .cell) {
+  min-width: 150px;
+}
+
+:deep(.case-birth-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.case-gender-col .cell) {
+  min-width: 70px;
+}
+
+:deep(.case-household-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.case-site-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.case-caregiver-col .cell) {
+  min-width: 120px;
+}
+
+:deep(.case-usage-col .cell) {
+  min-width: 190px;
+}
+
+:deep(.case-address-col .cell) {
+  min-width: 190px;
+}
+
+:deep(.case-remarks-col .cell) {
+  min-width: 160px;
+}
+
+:deep(.case-status-col .cell) {
+  min-width: 115px;
+}
+
+:deep(.case-actions-col .cell) {
+  min-width: 140px;
+}
+
+:deep(.unresolved-nowrap-col .cell) {
+  white-space: nowrap;
+}
+
 :deep(.unresolved-name-col .cell) {
   white-space: nowrap;
   min-width: 90px;
@@ -1075,7 +1130,8 @@ refreshCaseRegionOptions()
 }
 
 :deep(.unresolved-action-col .cell) {
-  min-width: 120px;
+  white-space: nowrap;
+  min-width: 180px;
 }
 
 .inline-value,

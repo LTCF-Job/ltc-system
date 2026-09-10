@@ -16,6 +16,7 @@
 
 ## 3. 前端通用規格守則
 - **時間顯示格式**：全站時間一律只顯示到秒數（`YYYY-MM-DD HH:mm:ss`，純時間 `HH:mm:ss`），統一透過 `@/utils/formatters` 格式化，嚴禁直接輸出 raw ISO 8601、毫秒或時區字尾。
+- **表格與表單欄位單行鐵律**：全站表格與表單所有欄位（表頭標題、資料儲存格與標籤）一律單行完整顯示、嚴禁文字折行。空間不足由水平捲軸（`overflow-x: auto`）或 Tooltip 接手，嚴禁使用過窄固定寬度將文字折成多行；全站透過 `element-overrides.scss` 全域強制鎖定 `white-space: nowrap; word-break: keep-all;`，除明確標記允許換行之 diff 異動比較區塊外，任何欄位不得折行。
 - **非技術性提示**：前端 UI 嚴禁輸出 raw SQL、panic、500 或堆疊追蹤；一律轉譯為使用者視角之白話提示，並附帶統一錯誤代碼（如 `[ERROR_CODE]`）。
 
 ## 4. 驗證證據紀律

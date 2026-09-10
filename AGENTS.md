@@ -39,6 +39,7 @@
 - Go API 已完成模組化：每個業務能力現行為 `internal/modules/<capability>/{transport,app,infra}`，模組之間只透過 `cmd/server` 注入的 port 協作。邊界由 `internal/arch/arch_test.go` 強制，其 baseline 為空——這代表現行 layout 沒有已知違規，**不代表**目標 layout（`{domain,application,adapters}`，見 `docs/tech/application-architecture.md`）已受保護；該文件定義的目標命名要到對應模組完成切片且 `arch_test.go` 擴充後才生效，切換前仍用現行命名。
 - Vue 3 SPA 逐步朝 `app / features / shared` 的 feature-oriented 結構遷移。
 - 前端時間顯示規格：時間一律只顯示到秒數（`YYYY-MM-DD HH:mm:ss`，純時間 `HH:mm:ss`），統一透過 `@/utils/formatters` 格式化，嚴禁直接輸出 raw ISO 8601、毫秒或時區字尾。
+- 前端表格與表單欄位單行鐵律：全站表格與表單所有欄位（表頭標題、資料列儲存格與表單標籤）一律單行完整顯示、嚴禁文字折行。空間不足由水平捲軸（`overflow-x: auto`）或 Tooltip 接手，嚴禁使用過窄固定寬度將文字折成多行；全站透過 `element-overrides.scss` 全域強制鎖定 `white-space: nowrap; word-break: keep-all;`，除明確標記允許換行之 diff 異動比較區塊外，任何欄位不得折行。
 - API DTO、domain model、persistence model 與 mock fixture 保持不同責任。
 - 重構採逐功能切片進行，先建立新邊界，再移動被觸碰的功能；保留既有路由、回應 envelope、權限規則與業務行為。
 

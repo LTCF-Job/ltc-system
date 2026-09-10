@@ -84,19 +84,20 @@
       </template>
 
       <el-table
+        v-table-auto-width
         :data="scheduleData?.outbound || []"
         border
         stripe
         size="small"
-        table-layout="auto"
+        style="width: 100%"
         :cell-class-name="getCellClass"
       >
-        <el-table-column label="趟次" width="90" align="center">
+        <el-table-column label="趟次" min-width="90" align="center" class-name="schedule-nowrap-col run-no-col">
           <template #default="{ row }">
             <span>第 {{ row.runNo }} 趟</span>
           </template>
         </el-table-column>
-        <el-table-column prop="caseName" label="個案姓名" min-width="110" class-name="case-name-col">
+        <el-table-column prop="caseName" label="個案姓名" min-width="110" class-name="schedule-nowrap-col case-name-col">
           <template #default="{ row }">
             <span class="font-bold text-nowrap">{{ row.caseName }}</span>
           </template>
@@ -106,19 +107,19 @@
             {{ row.note || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="departTime" label="出發時間" width="95" align="center">
+        <el-table-column prop="departTime" label="出發時間" min-width="100" align="center" class-name="schedule-nowrap-col depart-time-col">
           <template #default="{ row }">
             <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="origin" label="出發地 (住家)" min-width="180" show-overflow-tooltip class-name="origin-col" />
-        <el-table-column prop="arriveTime" label="抵達時間" width="95" align="center">
+        <el-table-column prop="arriveTime" label="抵達時間" min-width="100" align="center" class-name="schedule-nowrap-col arrive-time-col">
           <template #default="{ row }">
             {{ row.arriveTime || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="destination" label="目的地 (據點)" min-width="180" show-overflow-tooltip class-name="destination-col" />
-        <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="vehicle-name-col" />
+        <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="schedule-nowrap-col vehicle-name-col" />
       </el-table>
       <el-empty
         v-if="!scheduleData?.outbound || scheduleData.outbound.length === 0"
@@ -136,19 +137,20 @@
       </template>
 
       <el-table
+        v-table-auto-width
         :data="scheduleData?.inbound || []"
         border
         stripe
         size="small"
-        table-layout="auto"
+        style="width: 100%"
         :cell-class-name="getCellClass"
       >
-        <el-table-column label="趟次" width="90" align="center">
+        <el-table-column label="趟次" min-width="90" align="center" class-name="schedule-nowrap-col run-no-col">
           <template #default="{ row }">
             <span>第 {{ row.runNo }} 趟</span>
           </template>
         </el-table-column>
-        <el-table-column prop="caseName" label="個案姓名" min-width="110" class-name="case-name-col">
+        <el-table-column prop="caseName" label="個案姓名" min-width="110" class-name="schedule-nowrap-col case-name-col">
           <template #default="{ row }">
             <span class="font-bold text-nowrap">{{ row.caseName }}</span>
           </template>
@@ -158,19 +160,19 @@
             {{ row.note || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="departTime" label="出發時間" width="95" align="center">
+        <el-table-column prop="departTime" label="出發時間" min-width="100" align="center" class-name="schedule-nowrap-col depart-time-col">
           <template #default="{ row }">
             <span>{{ row.departTime }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="origin" label="出發地 (據點)" min-width="180" show-overflow-tooltip class-name="origin-col" />
-        <el-table-column prop="arriveTime" label="抵達時間" width="95" align="center">
+        <el-table-column prop="arriveTime" label="抵達時間" min-width="100" align="center" class-name="schedule-nowrap-col arrive-time-col">
           <template #default="{ row }">
             {{ row.arriveTime || '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="destination" label="目的地 (住家)" min-width="180" show-overflow-tooltip class-name="destination-col" />
-        <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="vehicle-name-col" />
+        <el-table-column prop="vehicleName" label="承接車輛" min-width="110" align="center" class-name="schedule-nowrap-col vehicle-name-col" />
       </el-table>
       <el-empty
         v-if="!scheduleData?.inbound || scheduleData.inbound.length === 0"
@@ -331,6 +333,22 @@ onMounted(async () => {
   display: none;
 }
 
+
+:deep(.schedule-nowrap-col .cell) {
+  white-space: nowrap;
+}
+
+:deep(.run-no-col .cell) {
+  min-width: 90px;
+}
+
+:deep(.depart-time-col .cell) {
+  min-width: 100px;
+}
+
+:deep(.arrive-time-col .cell) {
+  min-width: 100px;
+}
 
 :deep(.vehicle-name-col .cell) {
   white-space: nowrap;

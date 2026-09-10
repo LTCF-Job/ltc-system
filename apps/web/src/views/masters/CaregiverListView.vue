@@ -4,7 +4,6 @@
       <el-tab-pane label="照護人員清單" name="list">
         <DataTablePage
           title="照護人員管理"
-          :max-width="1280"
           v-model:page="page"
           v-model:pageSize="pageSize"
           :total="total"
@@ -43,7 +42,7 @@
           </template>
 
           <template #table>
-            <el-table :data="caregivers" border stripe table-layout="auto" style="width: 100%">
+            <el-table :data="caregivers" border stripe style="width: 100%">
               <el-table-column label="類型" min-width="90" align="center" class-name="type-col">
                 <template #default="{ row }">
                   <span class="type-value" :class="{ 'empty-value': !row.type }">
@@ -109,7 +108,7 @@
                 </template>
               </el-table-column>
 
-              <el-table-column label="操作" width="140" fixed="right" align="center">
+              <el-table-column label="操作" min-width="140" fixed="right" align="center" class-name="action-col">
                 <template #default="{ row }">
                   <TableRowActions>
                     <el-button link type="primary" size="small" @click="openEditDialog(row)">
@@ -136,7 +135,7 @@
       <el-tab-pane label="待維護" name="pending">
         <div v-loading="pendingLoading" class="pending-panel">
           <el-empty v-if="!pendingLoading && pendingCaregivers.length === 0" description="目前沒有待維護的照護人員" />
-          <el-table v-else :data="pendingCaregivers" border stripe table-layout="auto">
+          <el-table v-else v-table-auto-width :data="pendingCaregivers" border stripe style="width: 100%">
             <el-table-column label="姓名" min-width="120" class-name="name-col">
               <template #default="{ row }">
                 <span :class="{ 'empty-value': !row.name }">{{ row.name || '（未填寫）' }}</span>
@@ -164,7 +163,7 @@
                 <span class="missing-fields">缺少：{{ missingFields(row as CaregiverDTO).join('、') }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="150" align="center" class-name="pending-action-col">
+            <el-table-column label="操作" min-width="150" align="center" class-name="pending-action-col">
               <template #default="{ row }">
                 <TableRowActions>
                   <el-button link type="primary" size="small" @click="openEditDialog(row)">編輯</el-button>
@@ -636,7 +635,10 @@ executeFetch()
    總寬度的預算，不會變成該欄真正的 CSS min-width，要另外補一條 :deep() min-width
    才是真的鎖住下限（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
 .pending-panel :deep(.pending-contact-col .cell) { min-width: 140px; }
-.pending-panel :deep(.pending-action-col .cell) { min-width: 100px; }
+.pending-panel :deep(.pending-action-col .cell) {
+  white-space: nowrap;
+  min-width: 150px;
+}
 .pending-panel :deep(.pending-notes-col .cell) { min-width: 180px; }
 .pending-panel :deep(.pending-missing-col .cell) { min-width: 160px; }
 .pending-panel :deep(.name-col .cell) { min-width: 120px; }
@@ -688,6 +690,11 @@ executeFetch()
 
 :deep(.notes-col .cell) {
   min-width: 180px;
+}
+
+:deep(.action-col .cell) {
+  white-space: nowrap;
+  min-width: 140px;
 }
 
 .empty-value {

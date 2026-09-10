@@ -55,7 +55,7 @@
           <section v-else class="file-panel">
             <div class="file-panel-head">已選擇 {{ rows.length }} 個檔案</div>
 
-            <el-table :data="rows" row-key="key" table-layout="auto" border class="file-table">
+            <el-table v-table-auto-width :data="rows" row-key="key" border class="file-table" style="width: 100%">
               <el-table-column label="檔案名稱" min-width="240" class-name="file-name-col">
                 <template #default="{ row }">
                   <span class="file-name">{{ row.file.name }}</span>
@@ -130,7 +130,7 @@
                 </template>
               </el-table-column>
 
-              <el-table-column label="操作" width="100" align="center" fixed="right" class-name="action-col">
+              <el-table-column label="操作" min-width="100" align="center" fixed="right" class-name="action-col">
                 <template #default="{ row }">
                   <TableRowActions>
                     <el-button

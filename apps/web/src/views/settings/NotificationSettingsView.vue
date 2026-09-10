@@ -1,6 +1,6 @@
 <template>
   <div class="notification-settings-view">
-    <DataTablePage title="通知收件人管理" :max-width="1160" :loading="loading">
+    <DataTablePage title="通知收件人管理" :loading="loading">
       <template #filter>
         <el-input
           v-model="searchQuery"
@@ -58,18 +58,18 @@
         :data="filteredRecipientList"
         stripe
         border
-        table-layout="auto"
         style="width: 100%;"
         @selection-change="handleTableSelectionChange"
       >
         <el-table-column
           v-if="authStore.hasPermission('settings_notifications', 'delete')"
           type="selection"
-          width="48"
+          min-width="48"
           align="center"
+          class-name="notif-nowrap-col notif-selection-col"
         />
 
-        <el-table-column label="通知主題" min-width="140" class-name="topic-col">
+        <el-table-column label="通知主題" min-width="140" class-name="notif-nowrap-col topic-col">
           <template #default="{ row }">
             <span class="topic-label">{{ (NOTIFICATION_TOPIC_LABELS as any)[row.topic] || row.topic }}</span>
           </template>
@@ -87,7 +87,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="啟用狀態" width="110" align="center">
+        <el-table-column label="啟用狀態" min-width="110" align="center" class-name="notif-nowrap-col notif-status-col">
           <template #default="{ row }">
             <el-switch
               :model-value="row.active"
@@ -97,7 +97,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="createdAt" label="建立時間" width="170" align="center">
+        <el-table-column prop="createdAt" label="建立時間" min-width="170" align="center" class-name="notif-nowrap-col notif-date-col">
           <template #default="{ row }">
             <span>{{ formatDateTime(row.createdAt) }}</span>
           </template>
@@ -106,9 +106,10 @@
         <el-table-column
           v-if="authStore.hasPermission('settings_notifications', 'edit') || authStore.hasPermission('settings_notifications', 'delete')"
           label="操作"
-          width="150"
+          min-width="150"
           fixed="right"
           align="center"
+          class-name="notif-nowrap-col notif-actions-col"
         >
           <template #default="{ row }">
             <TableRowActions>
@@ -591,8 +592,12 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.topic-label {
+:deep(.notif-nowrap-col .cell) {
   white-space: nowrap;
+}
+
+:deep(.notif-selection-col .cell) {
+  min-width: 48px;
 }
 
 :deep(.topic-col .cell) {
@@ -605,6 +610,18 @@ onMounted(() => {
 
 :deep(.display-name-col .cell) {
   min-width: 180px;
+}
+
+:deep(.notif-status-col .cell) {
+  min-width: 110px;
+}
+
+:deep(.notif-date-col .cell) {
+  min-width: 170px;
+}
+
+:deep(.notif-actions-col .cell) {
+  min-width: 150px;
 }
 
 /* 新增外部信箱對話框樣式 */
