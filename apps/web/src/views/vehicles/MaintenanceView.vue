@@ -91,7 +91,7 @@
         <el-table-column label="收據憑證" min-width="100" align="center" class-name="maint-nowrap-col maint-receipt-col">
           <template #default="{ row }">
             <el-link
-              v-if="isSafeReceiptUrl(row.receiptUrl)"
+              v-if="row.receiptUrl && isSafeReceiptUrl(row.receiptUrl)"
               type="primary"
               :href="row.receiptUrl"
               target="_blank"
@@ -243,6 +243,7 @@ import { listAllVehicles } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { downloadBlob } from '@/utils/download'
 import { todayLocal } from '@/utils/formatters'
+import { isSafeReceiptUrl, receiptUrlRule } from '@/utils/receiptUrl'
 import type { MaintenanceLogDTO, VehicleDTO } from '@/types/api'
 
 const authStore = useAuthStore()
@@ -285,29 +286,13 @@ const form = reactive<{
   note: ''
 })
 
-// 畫面渲染前的最後一道防線：即使資料庫裡存有表單驗證上線前留下的舊資料（例如
-// javascript: 開頭的協定），也不要把它輸出成可點擊的 <a href>。
-function isSafeReceiptUrl(url?: string | null): boolean {
-  return !!url && /^https?:\/\//i.test(url)
-}
-
-// 只允許 http/https 開頭的網址，擋掉 javascript: 之類會被當成可點擊連結渲染、
-// 造成儲存型 XSS 的協定。
-function validateReceiptUrl(_rule: unknown, value: string, callback: (error?: Error) => void) {
-  if (!value) return callback()
-  if (!/^https?:\/\//i.test(value)) {
-    return callback(new Error('收據連結必須是 http 或 https 開頭的網址'))
-  }
-  callback()
-}
-
 const rules = {
   vehicleId: [{ required: true, message: '請選擇車輛', trigger: 'change' }],
   serviceDate: [{ required: true, message: '請選擇保養日期', trigger: 'change' }],
   mileage: [{ required: true, message: '請輸入當前里程數', trigger: 'blur' }],
   items: [{ required: true, message: '請輸入保養項目', trigger: 'blur' }],
   cost: [{ required: true, message: '請輸入保養金額', trigger: 'blur' }],
-  receiptUrl: [{ validator: validateReceiptUrl, trigger: 'blur' }]
+  receiptUrl: [receiptUrlRule]
 }
 
 async function fetchFilterOptions() {

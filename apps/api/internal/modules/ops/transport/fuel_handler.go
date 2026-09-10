@@ -111,6 +111,11 @@ func (h *FuelHandler) Create(c *gin.Context) {
 		return
 	}
 
+	if !isValidReceiptURL(req.ReceiptURL) {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "收據連結必須為 http:// 或 https:// 開頭的網址", nil)
+		return
+	}
+
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
 
@@ -161,6 +166,11 @@ func (h *FuelHandler) Update(c *gin.Context) {
 	fuelDate, err := time.Parse("2006-01-02", req.FuelDate)
 	if err != nil {
 		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "加油日期格式必須為 YYYY-MM-DD", nil)
+		return
+	}
+
+	if !isValidReceiptURL(req.ReceiptURL) {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "收據連結必須為 http:// 或 https:// 開頭的網址", nil)
 		return
 	}
 
