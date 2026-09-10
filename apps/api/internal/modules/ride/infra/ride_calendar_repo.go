@@ -182,7 +182,7 @@ func (r *RideRepository) ListRideRecordsInRange(
 		LEFT JOIN vehicles v ON rr.vehicle_id = v.id AND v.deleted_at IS NULL
 		LEFT JOIN drivers d ON rr.driver_id = d.id
 		WHERE rr.service_date >= $1 AND rr.service_date < $2
-		  AND ($4 = '' OR c.name ILIKE '%' || $4 || '%')
+		  AND ($3 = '' OR c.name ILIKE '%' || $3 || '%')
 		ORDER BY rr.service_date ASC, rr.leg_seq ASC
 	`
 	db := pgxdb.FromContext(ctx, r.db)
