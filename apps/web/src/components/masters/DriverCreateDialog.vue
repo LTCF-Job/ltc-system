@@ -134,7 +134,8 @@ const form = reactive<CreateDriverRequest>({
 
 const rules = {
   name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }],
-  nationalId: nationalIdRules(true)
+  nationalId: nationalIdRules(true),
+  email: [{ type: 'email', message: '請輸入正確的電子郵件格式', trigger: 'blur' }]
 }
 
 async function loadVehicles() {

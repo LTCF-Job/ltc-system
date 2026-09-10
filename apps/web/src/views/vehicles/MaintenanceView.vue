@@ -91,7 +91,7 @@
         <el-table-column label="收據憑證" min-width="100" align="center" class-name="maint-nowrap-col maint-receipt-col">
           <template #default="{ row }">
             <el-link
-              v-if="row.receiptUrl"
+              v-if="isSafeReceiptUrl(row.receiptUrl)"
               type="primary"
               :href="row.receiptUrl"
               target="_blank"
@@ -265,10 +265,19 @@ const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 const formRef = ref<FormInstance>()
 
-const form = reactive({
+const form = reactive<{
+  vehicleId: string
+  serviceDate: string
+  mileage: number | null
+  items: string
+  vendor: string
+  cost: number
+  receiptUrl: string
+  note: string
+}>({
   vehicleId: '',
   serviceDate: '',
-  mileage: 0,
+  mileage: null,
   items: '',
   vendor: '',
   cost: 0,
@@ -276,12 +285,29 @@ const form = reactive({
   note: ''
 })
 
+// 畫面渲染前的最後一道防線：即使資料庫裡存有表單驗證上線前留下的舊資料（例如
+// javascript: 開頭的協定），也不要把它輸出成可點擊的 <a href>。
+function isSafeReceiptUrl(url?: string | null): boolean {
+  return !!url && /^https?:\/\//i.test(url)
+}
+
+// 只允許 http/https 開頭的網址，擋掉 javascript: 之類會被當成可點擊連結渲染、
+// 造成儲存型 XSS 的協定。
+function validateReceiptUrl(_rule: unknown, value: string, callback: (error?: Error) => void) {
+  if (!value) return callback()
+  if (!/^https?:\/\//i.test(value)) {
+    return callback(new Error('收據連結必須是 http 或 https 開頭的網址'))
+  }
+  callback()
+}
+
 const rules = {
   vehicleId: [{ required: true, message: '請選擇車輛', trigger: 'change' }],
   serviceDate: [{ required: true, message: '請選擇保養日期', trigger: 'change' }],
   mileage: [{ required: true, message: '請輸入當前里程數', trigger: 'blur' }],
   items: [{ required: true, message: '請輸入保養項目', trigger: 'blur' }],
-  cost: [{ required: true, message: '請輸入保養金額', trigger: 'blur' }]
+  cost: [{ required: true, message: '請輸入保養金額', trigger: 'blur' }],
+  receiptUrl: [{ validator: validateReceiptUrl, trigger: 'blur' }]
 }
 
 async function fetchFilterOptions() {
@@ -324,7 +350,7 @@ function openCreateDialog() {
   editingId.value = null
   form.vehicleId = queryVehicleId.value || ''
   form.serviceDate = todayLocal()
-  form.mileage = 0
+  form.mileage = null
   form.items = ''
   form.vendor = ''
   form.cost = 0
@@ -352,11 +378,13 @@ async function handleSave() {
     if (!valid) return
     saving.value = true
     try {
+      // 通過 validate 後 mileage 保證已填寫，這裡轉型別給 API（number | null → number）。
+      const payload = { ...form, mileage: form.mileage as number }
       if (editingId.value) {
-        await updateMaintenance(editingId.value, form)
+        await updateMaintenance(editingId.value, payload)
         ElMessage.success('保養紀錄修改成功')
       } else {
-        await createMaintenance(form)
+        await createMaintenance(payload)
         ElMessage.success('保養紀錄新增成功')
       }
       dialogVisible.value = false

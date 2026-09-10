@@ -10,6 +10,8 @@ var (
 	ErrInvalidDriverNationalID = errors.New("invalid driver national id format")
 	// ErrInvalidDriverLicenseClass 代表駕照類別不在允許的代碼清單內。
 	ErrInvalidDriverLicenseClass = errors.New("invalid driver license class")
+	// ErrInvalidDriverEmail 代表司機電子信箱格式不正確。
+	ErrInvalidDriverEmail = errors.New("invalid driver email format")
 	// ErrDuplicateNationalID 代表身分證字號已被其他司機登記。
 	ErrDuplicateNationalID    = errors.New("driver national id already exists")
 	ErrInvalidStatus          = errors.New("invalid status")

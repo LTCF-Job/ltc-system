@@ -2,12 +2,16 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ErrHolidayDateConflict 代表手動新增假日時，該日期已存在其他假日設定。
+var ErrHolidayDateConflict = errors.New("holiday date already has a setting")
 
 // Holiday 代表一個國定假日或停駛日。
 type Holiday struct {
@@ -106,15 +110,18 @@ type UpsertHolidayInput struct {
 	IsDayOff    bool
 }
 
+// UpsertHoliday 手動新增單一國定假日。這是使用者在畫面上「新增休假日／上班日」唯一的建立入口，
+// 沒有對應的編輯功能，因此該日期已有任何既存假日設定（不論來源）一律視為衝突並拒絕，
+// 避免靜默覆蓋掉原本的假日名稱／類型。政府行事曆批次匯入走 BatchUpsert，語意不同，不受此檢查影響。
 func (s *HolidayService) UpsertHoliday(ctx context.Context, in UpsertHolidayInput, actorID uuid.UUID, actorRole string) (*Holiday, error) {
-	var before *Holiday
-	if s.auditRepo != nil {
-		if reader, ok := s.repo.(HolidayReader); ok {
-			var err error
-			before, err = reader.GetByDate(ctx, in.HolidayDate)
-			if err != nil {
-				return nil, err
-			}
+	reader, hasReader := s.repo.(HolidayReader)
+	if hasReader {
+		existing, err := reader.GetByDate(ctx, in.HolidayDate)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			return nil, ErrHolidayDateConflict
 		}
 	}
 	source := in.Source
@@ -132,14 +139,8 @@ func (s *HolidayService) UpsertHoliday(ctx context.Context, in UpsertHolidayInpu
 	}
 	if s.auditRepo != nil {
 		dateStr := h.HolidayDate.Format("2006-01-02")
-		action := "create"
-		var beforeData interface{}
-		if before != nil {
-			action = "update"
-			beforeData = before.AuditSnapshot()
-		}
-		if err := s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: action, EntityType: "holiday", EntityID: &dateStr, BeforeData: beforeData, AfterData: h.AuditSnapshot()}); err != nil {
-			slog.Error("holiday audit write failed", "action", action, "entity_id", dateStr, "error", err)
+		if err := s.auditRepo.Write(ctx, AuditEntry{ActorID: &actorID, ActorRole: &actorRole, Action: "create", EntityType: "holiday", EntityID: &dateStr, AfterData: h.AuditSnapshot()}); err != nil {
+			slog.Error("holiday audit write failed", "action", "create", "entity_id", dateStr, "error", err)
 		}
 	}
 	return h, nil

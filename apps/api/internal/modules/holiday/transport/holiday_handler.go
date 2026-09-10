@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -54,7 +55,7 @@ func (h *HolidayHandler) List(c *gin.Context) {
 	httpx.RespondSuccess(c, http.StatusOK, newHolidayResponses(holidays), nil)
 }
 
-// Create 新增或更新單一國定假日。
+// Create 新增單一國定假日；該日期已存在任何假日設定時回報 409 衝突，不做覆蓋。
 func (h *HolidayHandler) Create(c *gin.Context) {
 	var req CreateHolidayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -87,6 +88,10 @@ func (h *HolidayHandler) Create(c *gin.Context) {
 		IsDayOff:    isDayOff,
 	}, actorID, actorRole)
 	if err != nil {
+		if errors.Is(err, app.ErrHolidayDateConflict) {
+			httpx.RespondError(c, http.StatusConflict, httpx.CodeValidationFailed, "此日期已有假日設定，如需修改請先刪除後再新增", nil)
+			return
+		}
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "儲存國定假日失敗", nil)
 		return
 	}

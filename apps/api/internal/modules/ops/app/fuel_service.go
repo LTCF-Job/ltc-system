@@ -48,13 +48,17 @@ type FuelLogInput struct {
 
 // Create 新增油資紀錄並寫入稽核日誌。
 func (s *FuelService) Create(ctx context.Context, in FuelLogInput, actorID *uuid.UUID, actorRole *string, auditContexts ...AuditContext) (*FuelLog, error) {
+	receiptURL, err := normalizeReceiptURL(in.ReceiptURL)
+	if err != nil {
+		return nil, err
+	}
 	item := &FuelLog{
 		VehicleID:  in.VehicleID,
 		DriverID:   in.DriverID,
 		FuelDate:   in.FuelDate,
 		Liters:     in.Liters,
 		Cost:       in.Cost,
-		ReceiptURL: in.ReceiptURL,
+		ReceiptURL: receiptURL,
 		CreatedBy:  in.CreatedBy,
 	}
 	if err := s.fuelRepo.Create(ctx, item); err != nil {
@@ -75,6 +79,10 @@ func (s *FuelService) Update(ctx context.Context, id uuid.UUID, in FuelLogInput,
 			return nil, err
 		}
 	}
+	receiptURL, err := normalizeReceiptURL(in.ReceiptURL)
+	if err != nil {
+		return nil, err
+	}
 	item := &FuelLog{
 		ID:         id,
 		VehicleID:  in.VehicleID,
@@ -82,7 +90,7 @@ func (s *FuelService) Update(ctx context.Context, id uuid.UUID, in FuelLogInput,
 		FuelDate:   in.FuelDate,
 		Liters:     in.Liters,
 		Cost:       in.Cost,
-		ReceiptURL: in.ReceiptURL,
+		ReceiptURL: receiptURL,
 	}
 	if err := s.fuelRepo.Update(ctx, item); err != nil {
 		return nil, err

@@ -310,7 +310,7 @@
             <el-table-column label="發票/收據憑證" min-width="130" align="center" class-name="fuel-receipt-col">
               <template #default="{ row }">
                 <el-link
-                  v-if="row.receiptUrl"
+                  v-if="isSafeReceiptUrl(row.receiptUrl)"
                   type="primary"
                   :href="row.receiptUrl"
                   target="_blank"
@@ -584,11 +584,28 @@ const fuelForm = reactive({
   receiptUrl: ''
 })
 
+// 只允許 http/https 開頭的網址，擋掉 javascript: 之類會被當成可點擊連結渲染、
+// 造成儲存型 XSS 的協定。
+function validateReceiptUrl(_rule: unknown, value: string, callback: (error?: Error) => void) {
+  if (!value) return callback()
+  if (!/^https?:\/\//i.test(value)) {
+    return callback(new Error('收據連結必須是 http 或 https 開頭的網址'))
+  }
+  callback()
+}
+
+// 畫面渲染前的最後一道防線：即使資料庫裡存有表單驗證上線前留下的舊資料，也不要把它
+// 輸出成可點擊的 <a href>。
+function isSafeReceiptUrl(url?: string | null): boolean {
+  return !!url && /^https?:\/\//i.test(url)
+}
+
 const fuelRules = {
   vehicleId: [{ required: true, message: '請選擇車輛', trigger: 'change' }],
   fuelDate: [{ required: true, message: '請選擇加油日期', trigger: 'change' }],
   liters: [{ required: true, message: '請輸入公升數', trigger: 'blur' }],
-  cost: [{ required: true, message: '請輸入金額', trigger: 'blur' }]
+  cost: [{ required: true, message: '請輸入金額', trigger: 'blur' }],
+  receiptUrl: [{ validator: validateReceiptUrl, trigger: 'blur' }]
 }
 
 async function fetchOptions() {
