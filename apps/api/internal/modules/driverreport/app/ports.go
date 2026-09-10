@@ -112,8 +112,9 @@ type MonthSubmissionDetail struct {
 	Answers       map[string]string
 }
 
-// MonthRideEntry 是某份匯報表某個月展開後的一筆個案搭乘紀錄，供總覽頁鑽取查看這個月
-// 實際寫入了哪些個案、哪些趟次。
+// MonthRideEntry 是某份匯報表某個月依原始回報內容整理出的一筆個案搭乘紀錄，供總覽頁鑽取
+// 查看這個月上傳了哪些個案、哪些趟次；DriverID 恆為 nil，DriverName 是回報列上的原始駕駛人
+// 文字，不代表已比對到司機主檔或已正式生效寫入 ride_records。
 type MonthRideEntry struct {
 	CaseID      uuid.UUID
 	CaseName    string
@@ -179,7 +180,9 @@ type RideIngestor interface {
 	BackfillDriver(ctx context.Context, driverNameRaw string, driverID uuid.UUID) (int, []time.Time, error)
 	// ListSubmissionsForFormMonth 取出某份匯報表在指定月份區間內的逐日原始回報，供總覽頁鑽取單一月份的完整內容。
 	ListSubmissionsForFormMonth(ctx context.Context, formID uuid.UUID, monthStart, monthEnd time.Time) ([]MonthSubmissionDetail, error)
-	// ListRideEntriesForFormMonth 取出某份匯報表在指定月份區間內展開後的個案搭乘紀錄，供總覽頁鑽取單一月份實際寫入了哪些個案與趟次。
+	// ListRideEntriesForFormMonth 依指定月份區間內上傳的原始回報內容（已完成個案／趟次對應的欄位）
+	// 現場整理出逐個案搭乘紀錄，供總覽頁鑽取單一月份與逐日回報明細對照；不代表已正式生效寫入
+	// ride_records／ride_sources。
 	ListRideEntriesForFormMonth(ctx context.Context, formID uuid.UUID, monthStart, monthEnd time.Time) ([]MonthRideEntry, error)
 }
 

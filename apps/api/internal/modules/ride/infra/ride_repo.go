@@ -3,12 +3,15 @@ package infra
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"ltc-system/apps/api/internal/domain/merge"
 	"ltc-system/apps/api/internal/modules/ride/app"
 	"ltc-system/apps/api/internal/platform/pgxdb"
 )
@@ -615,36 +618,143 @@ func (r *RideRepository) ListSubmissionsForFormMonth(ctx context.Context, formID
 	return out, rows.Err()
 }
 
-// ListRideEntriesForFormMonth 取出某份匯報表在 [monthStart, monthEnd) 區間內展開後的個案搭乘
-// 紀錄，供總覽頁鑽取單一月份實際寫入了哪些個案與趟次。
+// ListRideEntriesForFormMonth 依「這份匯報表 [monthStart, monthEnd) 區間內上傳的原始回報內容」
+// （form_submissions + 已完成對應的 form_columns）現場整理出逐個案搭乘紀錄，供總覽頁鑽取單一
+// 月份時與「逐日回報明細」對照。刻意不查 ride_sources／ride_records：那兩張表只保留已比對到
+// 司機主檔、且欄位已完成人工對應的正式生效資料，駕駛人比對不到或欄位尚未對應完成時會完全沒有
+// 展開紀錄，導致這個頁籤看起來像是「什麼都沒上傳」；改讀原始回報內容後才能忠實呈現使用者實際
+// 上傳了什麼，涵蓋範圍與「逐日回報明細」一致。也因此這裡不代表已正式生效寫入 ride_records。
 func (r *RideRepository) ListRideEntriesForFormMonth(ctx context.Context, formID uuid.UUID, monthStart, monthEnd time.Time) ([]app.MonthRideEntry, error) {
-	query := `
-		SELECT rs.case_id, COALESCE(c.name, ''), rs.service_date, rs.leg_seq, rs.reported,
-		       rs.driver_id, COALESCE(d.name, ''), rs.vehicle_id
-		FROM ride_sources rs
-		JOIN form_submissions fs ON fs.id = rs.submission_id
-		LEFT JOIN cases c ON c.id = rs.case_id
-		LEFT JOIN drivers d ON d.id = rs.driver_id
-		WHERE fs.form_id = $1 AND rs.service_date >= $2 AND rs.service_date < $3
-		ORDER BY rs.service_date ASC, rs.leg_seq ASC
-	`
 	db := pgxdb.FromContext(ctx, r.db)
-	rows, err := db.Query(ctx, query, formID, monthStart, monthEnd)
+
+	var vehicleID uuid.UUID
+	if err := db.QueryRow(ctx, `SELECT vehicle_id FROM driver_report_forms WHERE id = $1`, formID).Scan(&vehicleID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	colQuery := `
+		SELECT fc.column_header, fc.case_id, COALESCE(c.name, ''), fc.leg_seq
+		FROM form_columns fc
+		LEFT JOIN cases c ON c.id = fc.case_id
+		WHERE fc.form_id = $1 AND fc.mapping_status = 'mapped'
+		  AND fc.case_id IS NOT NULL AND fc.leg_seq IS NOT NULL
+	`
+	colRows, err := db.Query(ctx, colQuery, formID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var out []app.MonthRideEntry
-	for rows.Next() {
-		var e app.MonthRideEntry
-		if err := rows.Scan(&e.CaseID, &e.CaseName, &e.ServiceDate, &e.LegSeq, &e.Reported,
-			&e.DriverID, &e.DriverName, &e.VehicleID); err != nil {
+	type mappedColumn struct {
+		CaseID   uuid.UUID
+		CaseName string
+		LegSeq   int16
+	}
+	columnsByHeader := map[string]mappedColumn{}
+	for colRows.Next() {
+		var header string
+		var col mappedColumn
+		if err := colRows.Scan(&header, &col.CaseID, &col.CaseName, &col.LegSeq); err != nil {
+			colRows.Close()
 			return nil, err
 		}
-		out = append(out, e)
+		columnsByHeader[header] = col
 	}
-	return out, rows.Err()
+	colErr := colRows.Err()
+	colRows.Close()
+	if colErr != nil {
+		return nil, colErr
+	}
+	if len(columnsByHeader) == 0 {
+		return nil, nil
+	}
+
+	subQuery := `
+		SELECT service_date, COALESCE(driver_name_raw, ''), payload->'answers'
+		FROM form_submissions
+		WHERE form_id = $1 AND service_date >= $2 AND service_date < $3
+		ORDER BY service_date ASC
+	`
+	subRows, err := db.Query(ctx, subQuery, formID, monthStart, monthEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer subRows.Close()
+
+	// slotKey 對齊 reconcileRideSource 判斷「同一筆搭乘」的鍵：同一個案、同一服務日期、同一趟次。
+	// 同一個個案／趟次在 form_columns 上有時會存在不只一個已對應欄位（例如表頭文字在不同月份
+	// 微調過、舊欄位未清除），若同一天兩個欄位都有值，直接各自輸出會讓同一筆搭乘紀錄重複出現
+	// 兩次；這裡比照 ride_sources 原本「同一 slot 只留一筆」的語意做合併，兩欄有分歧時以「有搭乘」
+	// 優先，避免看起來像是缺勤。
+	type slotKey struct {
+		CaseID      uuid.UUID
+		ServiceDate time.Time
+		LegSeq      int16
+	}
+	entries := map[slotKey]*app.MonthRideEntry{}
+
+	for subRows.Next() {
+		var serviceDate time.Time
+		var driverNameRaw string
+		var answersRaw []byte
+		if err := subRows.Scan(&serviceDate, &driverNameRaw, &answersRaw); err != nil {
+			return nil, err
+		}
+		answers := map[string]string{}
+		if len(answersRaw) > 0 {
+			if err := json.Unmarshal(answersRaw, &answers); err != nil {
+				return nil, err
+			}
+		}
+		for header, col := range columnsByHeader {
+			value, exists := answers[header]
+			if !exists {
+				continue
+			}
+			reported, ok := merge.ParseReportedValue(value)
+			if !ok {
+				continue
+			}
+			key := slotKey{CaseID: col.CaseID, ServiceDate: serviceDate, LegSeq: col.LegSeq}
+			if existing, found := entries[key]; found {
+				if reported == "boarded" {
+					existing.Reported = "boarded"
+				}
+				continue
+			}
+			entries[key] = &app.MonthRideEntry{
+				CaseID:      col.CaseID,
+				CaseName:    col.CaseName,
+				ServiceDate: serviceDate,
+				LegSeq:      col.LegSeq,
+				Reported:    reported,
+				DriverID:    nil,
+				DriverName:  driverNameRaw,
+				VehicleID:   vehicleID,
+			}
+		}
+	}
+	if err := subRows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([]app.MonthRideEntry, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, *e)
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].ServiceDate.Equal(out[j].ServiceDate) {
+			return out[i].ServiceDate.Before(out[j].ServiceDate)
+		}
+		if out[i].LegSeq != out[j].LegSeq {
+			return out[i].LegSeq < out[j].LegSeq
+		}
+		return out[i].CaseName < out[j].CaseName
+	})
+
+	return out, nil
 }
 
 // DeleteDerivedRideRecord 刪除純由匯入衍生的搭乘紀錄；帶有人工更正、衝突裁決或
