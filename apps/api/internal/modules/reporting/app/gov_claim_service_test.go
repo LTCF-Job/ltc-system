@@ -446,6 +446,38 @@ func TestCreateGovClaimJob_PrecheckErrorBlocksJobCreation(t *testing.T) {
 	assert.Empty(t, store.created, "檢核未過不得建立匯出工作")
 }
 
+func TestCreateGovClaimJob_NoClaimableDataFailsJob(t *testing.T) {
+	// 一份檔案都產不出來時不能靜默回成功：使用者只會看到「已產生 0 份」配一張空表格，
+	// 分不出是月份選錯、個案在待維護，還是根本沒有已上車的搭乘紀錄。
+	caseA := uuid.New()
+	store := &fakeExportStore{jobID: uuid.New()}
+
+	_, err := newService(&fakeSourceReader{}, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{}).
+		CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseA))
+
+	assert.ErrorIs(t, err, app.ErrNoExportData)
+	assert.Len(t, store.created, 1, "工作已建立，失敗紀錄要留在歷史清單上")
+	assert.Equal(t, []string{"指定條件下沒有可申報的資料"}, store.failed, "失敗原因要講清楚，不能只給通用訊息")
+	assert.Empty(t, store.completed, "查無資料不得標記為完成")
+}
+
+func TestCreateGovClaimJob_PartialCasesStillExport(t *testing.T) {
+	// 對比上一則：只要有任何一位個案報得出來就照樣匯出，不因為其他個案沒資料而整批擋下。
+	caseWithData, caseWithoutData := uuid.New(), uuid.New()
+	driver := uuid.New()
+	store := &fakeExportStore{jobID: uuid.New()}
+
+	_, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{
+		newSource(t, caseWithData, "C001", "蔡曾切", driver, 1, 1, "outbound", "09:40"),
+	}}, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{}).
+		CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseWithData, caseWithoutData))
+
+	require.NoError(t, err)
+	assert.Empty(t, store.failed)
+	require.Len(t, store.completed, 1)
+	assert.Equal(t, "蔡曾切", store.completed[0].CaseName)
+}
+
 func TestCreateGovClaimJob_InvalidPeriod(t *testing.T) {
 	store := &fakeExportStore{jobID: uuid.New()}
 	input := newInput(app.GovClaimModeDirect, uuid.New())

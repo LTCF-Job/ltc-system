@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -298,7 +299,10 @@ func (s *DriverReportService) persistColumnDecisions(
 		if status == "" {
 			status = "pending"
 		}
-		if status == "mapped" && (d.CaseID == nil || d.LegSeq == nil) {
+		// 個案編號一併判斷空字串：repository 寫入時走 NULLIF($3,'')::uuid，指向空字串的
+		// 指標會被寫成 NULL，配上 mapped 就是一列「已對應卻沒有個案」的孤兒——該欄從此
+		// 展不出搭乘紀錄，待維護頁又因為狀態是 mapped 而看不到它。
+		if status == "mapped" && (d.CaseID == nil || strings.TrimSpace(*d.CaseID) == "" || d.LegSeq == nil) {
 			return nil, fmt.Errorf("欄位「%s」標記為已對應，但缺少個案或趟次", d.ColumnHeader)
 		}
 		columnIndex, previousStatus, err := s.repo.UpdateColumnMappingByHeader(ctx, formID, d.ColumnHeader, status, d.CaseID, d.LegSeq)

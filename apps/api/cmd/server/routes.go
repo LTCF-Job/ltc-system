@@ -191,6 +191,11 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.POST("/exports/precheck", auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.Precheck)
 		apiV1.GET("/exports", auth.RequirePermission(perm, customPerm, "exports", "view"), h.export.List)
 		apiV1.POST("/exports", auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.Create)
+		// 依區域批次匯出一次可能產出數十至數百份檔案並逐一上傳 object storage，
+		// 會超過全域 WriteTimeout，比照匯報表匯入解除這個請求的逾時。
+		apiV1.POST("/exports/by-region", extendedImportDeadlineMiddleware(), auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.CreateByRegion)
+		apiV1.GET("/exports/batch-download", auth.RequirePermission(perm, customPerm, "exports", "view"), h.export.DownloadBatch)
+		apiV1.POST("/exports/site-trip-summary", auth.RequirePermission(perm, customPerm, "exports", "view"), h.export.DownloadSiteTripSummary)
 		apiV1.GET("/exports/:id", auth.RequirePermission(perm, customPerm, "exports", "view"), h.export.Get)
 		apiV1.GET("/exports/:id/download", auth.RequirePermission(perm, customPerm, "exports", "view"), h.export.Download)
 		apiV1.GET("/exports/:id/files/:caseId/download", auth.RequirePermission(perm, customPerm, "exports", "view"), h.export.DownloadCaseFile)

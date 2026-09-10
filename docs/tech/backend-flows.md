@@ -135,12 +135,29 @@ merge.MergeRideSources（同車取最新、跨車 OR）
 
 一個個案一個月產一份 `.xlsx`，欄位比照政府範本的 33 欄（`domain/govform.Headers33`，工作表名「工作表1」）。
 
-1. 使用者在「政府申報匯出」頁選申報年月、申報地區、申報個案（可多選）與匯出檔案模式（直接下載／壓縮檔）。
-2. `GET/POST /exports/precheck` 以年月、地區與選取的 `caseIds` 建立 `ClaimScope` 後跑 `PrecheckService.RunPrecheck`，回傳 `PrecheckReport`；資料庫查詢失敗或有任何 error（目前只有未裁決混車衝突）就擋住匯出，前端列出 issue 讓使用者回去修。個案資料缺漏是 `warning`，不擋匯出。
+「政府申報匯出」頁有三個分頁籤，差別只在**怎麼圈出申報對象**與**產出什麼**：
+
+| 分頁籤 | 選取方式 | 產出 | 進 `export_jobs` |
+|---|---|---|---|
+| 逐案勾選 | 單月 + 逐案勾選 | 33 欄申報檔（一案一月一份） | 是 |
+| 以據點 | 多據點 + 多月 | **一份趟數彙總表**（每案逐月趟數 + 跨月加總） | 否 |
+| 以區域 | 多區域 + 多月 | 33 欄申報檔，逐月各一個工作，打包 zip | 是 |
+
+據點與區域一律先由 `ClaimCaseResolver` 展開成一組 `caseIds`，再走既有的 `ClaimScope`——
+`ClaimScope` 的形狀沒有改變。展開時會排除軟刪除（`deleted_at`）與待維護個案；區域取自
+`cases.site_id → sites.region`（`cases.region` 已於 migration 000048 移除），比對用 `btrim` 後
+等值而非模糊比對，避免「新竹」誤命中「新竹縣」。
+
+1. 使用者在「政府申報匯出」頁選申報年月、申報範圍（個案／據點／區域）與匯出檔案模式（直接下載／壓縮檔）。
+2. `GET/POST /exports/precheck` 以年月與選取的 `caseIds` 建立 `ClaimScope` 後跑 `PrecheckService.RunPrecheck`，回傳 `PrecheckReport`；資料庫查詢失敗或有任何 error（目前只有未裁決混車衝突）就擋住匯出，前端列出 issue 讓使用者回去修。個案資料缺漏是 `warning`，不擋匯出。多月份走 `RunPrecheckMulti` 逐月檢核後合併（見 `backend-business-rules.md`）。
    `POST /exports` 會以同一組年月、地區與 `caseIds` 建立 scope 並查詢申報來源，避免前置檢核與實際匯出檢查不同資料集。
 3. `POST /exports` 交給 `GovClaimService.CreateGovClaimJob` 同步產檔（專案沒有背景 worker）：
    - `GovClaimRepository.QueryGovClaimSources` 一次撈齊該月 `effective_status = 'boarded'` 且沒有未裁決衝突的趟次，join `cases`／`case_schedules`／`schedule_legs`／`sites`／`vehicles`／`drivers`；`case_schedules`／`sites`／`schedule_legs` 全部是 LEFT JOIN，個案在該服務日沒有排班時該列仍會出現（排班衍生欄位為 NULL），交由下一步明確計入資料缺漏清單，不會被 INNER JOIN 整列濾掉、讓「缺排班」在結果上完全看不見。
    - 逐筆呼叫 `domain/govform.BuildClaimRow` 組出 33 欄，再用 `SortClaimRows` 排成「leg1 整月 → leg2 整月」。缺排班趟次、缺司機、缺出發時間等資料**只把該欄位留白**，不套用預設值硬湊，也不把整列丟掉；缺了什麼逐案逐欄計入 `dataGaps` 回報。**缺資料一律不阻擋匯出**，工作照樣標記成功，前端「政府申報匯出」頁在完成畫面直接列出留白原因。只有連留白都組不出列（例如服務日期無法換算民國年）才會少掉那一列，計入 `BUILD_ROW_FAILED`。
+     **但「一份檔案都產不出來」不屬於這個原則**：`len(files) == 0` 時回 `ErrNoExportData`，工作標記
+     `failed` 並在歷史紀錄留下「指定條件下沒有可申報的資料」，API 回 422 `NO_EXPORT_DATA`。不阻擋
+     指的是缺欄位仍照樣出檔，不是零結果也回成功——靜默成功只會讓使用者看到「已產生 0 份」配一張
+     空表格，分不出是月份選錯、個案在待維護，還是根本沒有已上車的搭乘紀錄。
    - `ExcelRenderer.RenderGovClaim` 產出每個個案的工作簿位元組；壓縮檔模式再由 `ZipArchiver.BuildZip` 打包。
    - 單一交易寫入 `export_lines`（申報列快照）、`export_job_files`（逐案檔案中繼資料）與 `export_jobs` 狀態；原始 XLSX 同步寫入 private Supabase Storage 的 `exports/{jobId}/{fileName}`，資料庫只保存 object path、checksum 與大小。
 4. 下載時優先從 private object storage 讀取匯出成功當下的完整 XLSX，API 驗證權限後才代為轉送，禁止前端取得 service-role key。舊資料若沒有 object path，才由 `export_lines.raw_payload` 快照重繪；快照的第 1 欄與第 7 欄（個案／服務人員身分證）一律留空，只存 `driverId`，重繪時才由密文解密補回，明文身分證不落資料庫。

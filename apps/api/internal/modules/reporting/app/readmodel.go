@@ -53,6 +53,25 @@ type ReportVehicleTripSummary struct {
 	Rows    []ReportTripSummaryCaseRow
 }
 
+// ScopedCase 代表由據點或區域解析出來的申報對象個案。
+type ScopedCase struct {
+	ID       uuid.UUID
+	Name     string
+	SiteID   *uuid.UUID
+	SiteName string
+	Region   string
+}
+
+// SiteTripCount 代表單一個案在單一月份的趟數。
+type SiteTripCount struct {
+	CaseID    uuid.UUID
+	CaseName  string
+	SiteID    *uuid.UUID
+	SiteName  string
+	PeriodYM  string
+	TripCount int
+}
+
 // ReportHsinchuScheduleRow 代表新竹接送時刻表查詢列。
 type ReportHsinchuScheduleRow struct {
 	Direction   string

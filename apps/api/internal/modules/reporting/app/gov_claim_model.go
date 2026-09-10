@@ -157,8 +157,24 @@ type ExportJobAuditSnapshot struct {
 	Mode       string                   `json:"mode"`
 	TotalCases int                      `json:"totalCases"`
 	TotalRows  int                      `json:"totalRows"`
+	Scope      ExportScopeSnapshot      `json:"scope"`
 	Cases      []ExportJobAuditCaseFile `json:"cases"`
 }
+
+// ExportScopeSnapshot 記錄這次匯出是用什麼條件選出個案的，只寫入稽核日誌。
+// 沒有它就分不出「使用者逐案勾了 62 個人」與「使用者選了一個區域剛好有 62 個人」，
+// 事後追查匯錯範圍時差很多。
+type ExportScopeSnapshot struct {
+	// Type 為 cases（逐案勾選，預設）或 region（依區域批次展開）。
+	Type    string   `json:"type"`
+	Regions []string `json:"regions,omitempty"`
+}
+
+// ExportScopeTypeCases 代表逐案勾選；零值即為此模式。
+const ExportScopeTypeCases = "cases"
+
+// ExportScopeTypeRegion 代表依區域批次展開。
+const ExportScopeTypeRegion = "region"
 
 // ExportJobAuditCaseFile 是稽核快照中單一個案的匯出檔案摘要。
 type ExportJobAuditCaseFile struct {

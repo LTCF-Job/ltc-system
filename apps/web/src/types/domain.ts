@@ -1,5 +1,11 @@
 // 全系統列舉常數與正體中文標籤對照表（集中管理，禁止在視圖模板寫死）
 
+// 區域沒有列舉值域：regions 主檔已於 migration 000048 移除，值只存在於 sites.region
+// 這個自由文字欄位，選項由據點主檔即時彙整（見 composables/useRegionOptions）。
+// 這個別名存在的意義是讓 api.d.ts 的 `region?: Region | null` 有型別可指——在此之前
+// 它 import 了一個根本不存在的名稱，被 skipLibCheck 掩蓋，等於整串 region 欄位沒有型別。
+export type Region = string
+
 export type UserRole =
   | 'admin'
   | 'viewer'

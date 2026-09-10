@@ -17,6 +17,13 @@ export function useRocMonth() {
     return `${d.year() - 1911}${d.format('MM')}`
   }
 
+  // 多月匯出用：把一組西元月份換算成民國 5 碼，去重並升冪排序。
+  // 使用者勾選的順序不固定，但送出去的月份清單決定要產幾份申報檔、批次檔名的起訖月份
+  // 也由頭尾決定，順序與重複都必須先收斂。
+  function toRocPeriodYmList(months: (Date | string)[]): string[] {
+    return Array.from(new Set(months.map((month) => toRocPeriodYm(month)))).sort()
+  }
+
   function formatRocMonthLabel(rocMonth: string): string {
     if (!rocMonth) return ''
     const parts = rocMonth.split('-')
@@ -36,6 +43,7 @@ export function useRocMonth() {
   return {
     toRocMonth,
     toRocPeriodYm,
+    toRocPeriodYmList,
     formatRocMonthLabel,
     rocToGregorianMonth
   }

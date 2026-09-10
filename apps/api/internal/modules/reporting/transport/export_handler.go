@@ -18,30 +18,49 @@ const xlsxContentType = "application/vnd.openxmlformats-officedocument.spreadshe
 
 // ExportHandler 處理政府申報匯出與前置檢核請求。
 type ExportHandler struct {
-	precheckService *app.PrecheckService
-	govClaimService *app.GovClaimService
+	precheckService  *app.PrecheckService
+	govClaimService  *app.GovClaimService
+	regionClaimSvc   *app.RegionClaimService
+	siteTripSummary  *app.SiteTripSummaryService
+	claimCaseResolve app.ClaimCaseResolver
 }
 
 // NewExportHandler 建立 ExportHandler 實例。
-func NewExportHandler(precheckService *app.PrecheckService, govClaimService *app.GovClaimService) *ExportHandler {
-	return &ExportHandler{precheckService: precheckService, govClaimService: govClaimService}
+func NewExportHandler(
+	precheckService *app.PrecheckService,
+	govClaimService *app.GovClaimService,
+	regionClaimSvc *app.RegionClaimService,
+	siteTripSummary *app.SiteTripSummaryService,
+	claimCaseResolve app.ClaimCaseResolver,
+) *ExportHandler {
+	return &ExportHandler{
+		precheckService:  precheckService,
+		govClaimService:  govClaimService,
+		regionClaimSvc:   regionClaimSvc,
+		siteTripSummary:  siteTripSummary,
+		claimCaseResolve: claimCaseResolve,
+	}
 }
 
 // Precheck 執行匯出前置檢核（支援 GET Query 與 POST JSON Body）。
+//
+// 三組輸入互為相容的擴充：periodYms 未給時退回單一 periodYm；regions 未給時沿用
+// caseIds。這樣三個分頁籤共用同一支端點，逐案勾選的既有請求形狀完全不變。
 func (h *ExportHandler) Precheck(c *gin.Context) {
 	periodYM := c.Query("periodYm")
 	if periodYM == "" {
 		periodYM = c.DefaultQuery("month", "11507")
 	}
-	caseIDValues := c.QueryArray("caseIds")
-	if len(caseIDValues) == 0 && c.Query("caseIds") != "" {
-		caseIDValues = strings.Split(c.Query("caseIds"), ",")
-	}
+	periodYMValues := queryList(c, "periodYms")
+	caseIDValues := queryList(c, "caseIds")
+	regionValues := queryList(c, "regions")
 
 	if c.Request.Method == http.MethodPost {
 		var req struct {
-			PeriodYM string   `json:"periodYm"`
-			CaseIDs  []string `json:"caseIds"`
+			PeriodYM  string   `json:"periodYm"`
+			PeriodYMs []string `json:"periodYms"`
+			CaseIDs   []string `json:"caseIds"`
+			Regions   []string `json:"regions"`
 		}
 		if err := httpx.BindJSONStrict(c, &req); err != nil {
 			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
@@ -50,35 +69,139 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 		if req.PeriodYM != "" {
 			periodYM = req.PeriodYM
 		}
+		periodYMValues = req.PeriodYMs
 		caseIDValues = req.CaseIDs
+		regionValues = req.Regions
 	}
 
-	caseIDs := make([]uuid.UUID, 0, len(caseIDValues))
-	for _, rawID := range caseIDValues {
-		rawID = strings.TrimSpace(rawID)
-		if rawID == "" {
-			continue
-		}
-		caseID, err := uuid.Parse(rawID)
-		if err != nil {
-			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
-			return
-		}
-		caseIDs = append(caseIDs, caseID)
+	if len(periodYMValues) == 0 {
+		periodYMValues = []string{periodYM}
 	}
-
-	_, start, end, err := app.ParseClaimPeriod(periodYM)
+	months, err := app.ParseClaimMonths(periodYMValues)
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		respondExportError(c, err)
 		return
 	}
-	report, err := h.precheckService.RunPrecheck(c.Request.Context(), app.NewClaimScope(start, end, caseIDs))
+
+	caseIDs, ok := parseUUIDList(c, caseIDValues)
+	if !ok {
+		return
+	}
+
+	// 依區域檢核時，先把區域展開成個案再送進檢核，讓檢核範圍與實際匯出範圍一致。
+	if len(regionValues) > 0 {
+		cases, err := h.claimCaseResolve.ListCasesByRegions(c.Request.Context(), regionValues)
+		if err != nil {
+			httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+			return
+		}
+		for _, item := range cases {
+			caseIDs = append(caseIDs, item.ID)
+		}
+	}
+
+	report, err := h.precheckService.RunPrecheckMulti(c.Request.Context(), months, caseIDs)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
 	httpx.RespondSuccess(c, http.StatusOK, toPrecheckResultResponse(report), nil)
+}
+
+// CreateByRegion 依區域批次建立逐月申報匯出工作。
+func (h *ExportHandler) CreateByRegion(c *gin.Context) {
+	var req createRegionExportRequest
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
+		return
+	}
+
+	result, err := h.regionClaimSvc.CreateRegionClaimJobs(c.Request.Context(), app.RegionClaimInput{
+		Regions:       req.Regions,
+		PeriodYMs:     req.PeriodYMs,
+		CreatedBy:     auth.GetActorID(c),
+		CreatedByName: auth.GetActorName(c),
+		ActorRole:     auth.GetActorRole(c),
+	})
+	if err != nil {
+		respondExportError(c, err)
+		return
+	}
+
+	httpx.RespondSuccess(c, http.StatusAccepted, toRegionExportResultResponse(result), nil)
+}
+
+// DownloadBatch 把多筆匯出工作的檔案合併成單一壓縮檔下載。
+func (h *ExportHandler) DownloadBatch(c *gin.Context) {
+	jobIDs, ok := parseUUIDList(c, queryList(c, "jobIds"))
+	if !ok {
+		return
+	}
+	if len(jobIDs) == 0 {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, app.ErrExportJobNotFound, nil)
+		return
+	}
+
+	fileName, archive, err := h.govClaimService.RenderBatchZip(c.Request.Context(), jobIDs)
+	if err != nil {
+		respondExportError(c, err)
+		return
+	}
+
+	writeAttachment(c, "application/zip", fileName, fileName, archive)
+}
+
+// DownloadSiteTripSummary 產生並下載據點趟數彙總表。
+//
+// 這支端點不建立匯出工作：趟數彙總表是管理用統計，不是報給政府的申報檔，
+// 不進 export_jobs 的不可變快照與稽核軌跡（見 SiteTripSummaryService 的說明）。
+func (h *ExportHandler) DownloadSiteTripSummary(c *gin.Context) {
+	var req siteTripSummaryRequest
+	if err := httpx.BindJSONStrict(c, &req); err != nil {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
+		return
+	}
+
+	siteIDs, ok := parseUUIDList(c, req.SiteIDs)
+	if !ok {
+		return
+	}
+
+	fileName, content, err := h.siteTripSummary.Generate(c.Request.Context(), siteIDs, req.PeriodYMs)
+	if err != nil {
+		respondExportError(c, err)
+		return
+	}
+
+	writeAttachment(c, xlsxContentType, fileName, fileName, content)
+}
+
+// queryList 讀取重複出現的 query 參數，並相容逗號分隔的單一參數寫法。
+func queryList(c *gin.Context, name string) []string {
+	values := c.QueryArray(name)
+	if len(values) == 1 && strings.Contains(values[0], ",") {
+		values = strings.Split(values[0], ",")
+	}
+	return values
+}
+
+// parseUUIDList 解析字串清單為 UUID；空白項目略過，格式錯誤即整批拒絕。
+func parseUUIDList(c *gin.Context, raw []string) ([]uuid.UUID, bool) {
+	ids := make([]uuid.UUID, 0, len(raw))
+	for _, item := range raw {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		id, err := uuid.Parse(item)
+		if err != nil {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+			return nil, false
+		}
+		ids = append(ids, id)
+	}
+	return ids, true
 }
 
 // List 取得申報匯出工作歷史紀錄清單。
@@ -116,14 +239,9 @@ func (h *ExportHandler) Create(c *gin.Context) {
 		return
 	}
 
-	caseIDs := make([]uuid.UUID, 0, len(req.CaseIDs))
-	for _, raw := range req.CaseIDs {
-		id, err := uuid.Parse(raw)
-		if err != nil {
-			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
-			return
-		}
-		caseIDs = append(caseIDs, id)
+	caseIDs, ok := parseUUIDList(c, req.CaseIDs)
+	if !ok {
+		return
 	}
 
 	job, err := h.govClaimService.CreateGovClaimJob(c.Request.Context(), app.CreateGovClaimInput{

@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+
+	"github.com/google/uuid"
 )
 
 // PrecheckRepositoryPort 定義前置檢核資料查詢介面。
@@ -47,26 +49,23 @@ func NewPrecheckService(repo PrecheckRepositoryPort) *PrecheckService {
 	return &PrecheckService{repo: repo}
 }
 
-// RunPrecheck 執行指定月份與區域之申報前置檢核（規格書 7.6）。
+// RunPrecheck 執行指定月份之申報前置檢核（規格書 7.6）。
+//
+// 目前只有兩項檢核：個案資料缺漏（warning，不擋）與未裁決混車衝突（error，擋）。
+// 規格書列的其他檢核項目（例如個案配給額度）尚未實作，也不會出現在報告中——這裡原本有
+// 一則恆常輸出的 QUOTA_CHECK_SKIPPED info，但每次都出現、永遠不會變的提示對操作者沒有
+// 資訊量，已移除。infoCount 保留是為了維持 TotalInfos 的對外契約。
 func (s *PrecheckService) RunPrecheck(ctx context.Context, scope ClaimScope) (*PrecheckReport, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("precheck repository is not configured")
+	}
+
 	var issues []PrecheckIssue
 	errorCount := 0
 	warningCount := 0
 	infoCount := 0
 
-	// 1. 固定 Info: 配給額度檢查未執行（決議）
-	issues = append(issues, PrecheckIssue{
-		Severity: SeverityInfo,
-		Code:     "QUOTA_CHECK_SKIPPED",
-		Message:  "個案配給額度檢查未執行——尚未取得額度計算規則",
-	})
-	infoCount++
-
-	if s.repo == nil {
-		return nil, fmt.Errorf("precheck repository is not configured")
-	}
-
-	// 2. 檢查是否有個案缺必要欄位 (身分證、住址、使用類型)。
+	// 1. 檢查是否有個案缺必要欄位 (身分證、住址、使用類型)。
 	// 缺資料只留白該欄位，不阻擋匯出；擋下整批會讓其餘報得出來的資料一起報不出去。
 	incompleteCases, err := s.repo.FindIncompleteActiveCases(ctx, scope)
 	if err != nil {
@@ -85,7 +84,7 @@ func (s *PrecheckService) RunPrecheck(ctx context.Context, scope ClaimScope) (*P
 		warningCount++
 	}
 
-	// 3. 未裁決衝突（混車）會使申報來源不確定，是唯一仍阻擋匯出的檢核項目：
+	// 2. 未裁決衝突（混車）會使申報來源不確定，是唯一仍阻擋匯出的檢核項目：
 	// 缺資料只是欄位留白，混車卻會讓報出去的資料本身是錯的。
 	conflicts, err := s.repo.FindUnresolvedConflicts(ctx, scope)
 	if err != nil {
@@ -112,4 +111,62 @@ func (s *PrecheckService) RunPrecheck(ctx context.Context, scope ClaimScope) (*P
 		TotalInfos:    infoCount,
 		Issues:        issues,
 	}, nil
+}
+
+// RunPrecheckMulti 對多個月份各跑一次檢核後合併成單一報告。
+//
+// 兩種項目的合併方式刻意不同：
+//   - MISSING_CASE_PROFILE 講的是個案主檔缺欄位，與月份無關，跨月會重複命中同一個案，
+//     因此依 caseId 去重，否則選 6 個月就會看到同一個案的同一則警告出現 6 次。
+//   - UNRESOLVED_CONFLICT 綁定特定日期的特定搭乘紀錄，每一筆都要各自裁決，全部保留。
+//
+// 逐月項目一律在 details 補上 periodYm，否則使用者看不出是哪一個月出問題。
+func (s *PrecheckService) RunPrecheckMulti(ctx context.Context, months []ClaimMonth, caseIDs []uuid.UUID) (*PrecheckReport, error) {
+	if len(months) == 0 {
+		return nil, ErrPeriodsRequired
+	}
+
+	merged := &PrecheckReport{Issues: []PrecheckIssue{}}
+	seenCaseProfile := make(map[string]bool)
+
+	for _, month := range months {
+		report, err := s.RunPrecheck(ctx, month.Scope(caseIDs))
+		if err != nil {
+			return nil, err
+		}
+		for _, issue := range report.Issues {
+			if issue.Code == "MISSING_CASE_PROFILE" {
+				caseID := fmt.Sprintf("%v", issue.Details["caseId"])
+				if seenCaseProfile[caseID] {
+					continue
+				}
+				seenCaseProfile[caseID] = true
+			} else {
+				issue.Details = withPeriodYM(issue.Details, month.PeriodYM)
+			}
+
+			merged.Issues = append(merged.Issues, issue)
+			switch issue.Severity {
+			case SeverityError:
+				merged.TotalErrors++
+			case SeverityWarning:
+				merged.TotalWarnings++
+			case SeverityInfo:
+				merged.TotalInfos++
+			}
+		}
+	}
+
+	merged.Passed = merged.TotalErrors == 0
+	return merged, nil
+}
+
+// withPeriodYM 複製一份 details 並補上月份，不就地改寫來源報告的 map。
+func withPeriodYM(details map[string]interface{}, periodYM string) map[string]interface{} {
+	copied := make(map[string]interface{}, len(details)+1)
+	for k, v := range details {
+		copied[k] = v
+	}
+	copied["periodYm"] = periodYM
+	return copied
 }

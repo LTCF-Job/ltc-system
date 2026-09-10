@@ -2,6 +2,7 @@ package transport
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"ltc-system/apps/api/internal/modules/reporting/app"
@@ -14,6 +15,41 @@ type createExportJobRequest struct {
 	PeriodYM string   `json:"periodYm" binding:"required"`
 	Mode     string   `json:"mode" binding:"required,oneof=direct zip"`
 	CaseIDs  []string `json:"caseIds" binding:"required,min=1,dive,uuid"`
+}
+
+// createRegionExportRequest 代表依區域批次建立申報匯出的請求本體。
+//
+// 刻意與 createExportJobRequest 分開而不是把欄位加上去：逐案勾選流程完全不動，
+// 回歸風險為零；BindJSONStrict 也會擋掉送錯端點的多餘欄位。
+// periodYms 上限 12 是為了控制同步產檔的量體（一區域一個月可能就是數十份檔案）。
+type createRegionExportRequest struct {
+	Regions   []string `json:"regions" binding:"required,min=1,dive,min=1"`
+	PeriodYMs []string `json:"periodYms" binding:"required,min=1,max=12,dive,len=5"`
+}
+
+// siteTripSummaryRequest 代表據點趟數彙總表的請求本體。
+type siteTripSummaryRequest struct {
+	SiteIDs   []string `json:"siteIds" binding:"required,min=1,dive,uuid"`
+	PeriodYMs []string `json:"periodYms" binding:"required,min=1,max=12,dive,len=5"`
+}
+
+// regionExportMonthResponse 代表批次匯出中單一月份的結果。
+type regionExportMonthResponse struct {
+	PeriodYM     string             `json:"periodYm"`
+	Succeeded    bool               `json:"succeeded"`
+	ErrorMessage string             `json:"errorMessage,omitempty"`
+	Job          *exportJobResponse `json:"job,omitempty"`
+}
+
+// regionExportResultResponse 代表依區域批次匯出的整體結果。
+type regionExportResultResponse struct {
+	Regions          []string                    `json:"regions"`
+	PeriodYMs        []string                    `json:"periodYms"`
+	CaseCount        int                         `json:"caseCount"`
+	TotalFiles       int                         `json:"totalFiles"`
+	Months           []regionExportMonthResponse `json:"months"`
+	BatchDownloadURL string                      `json:"batchDownloadUrl,omitempty"`
+	BatchFileName    string                      `json:"batchFileName,omitempty"`
 }
 
 // exportJobFileResponse 代表匯出結果中的單一個案工作簿。
@@ -118,6 +154,41 @@ func toExportJobListResponse(jobs []app.GovClaimJob) []exportJobResponse {
 		})
 	}
 	return result
+}
+
+// toRegionExportResultResponse 組出批次匯出的回應，含跨月合併下載連結。
+func toRegionExportResultResponse(result app.RegionClaimResult) regionExportResultResponse {
+	resp := regionExportResultResponse{
+		Regions:    result.Regions,
+		PeriodYMs:  result.PeriodYMs,
+		CaseCount:  result.CaseCount,
+		TotalFiles: result.TotalFiles,
+		Months:     make([]regionExportMonthResponse, 0, len(result.Months)),
+	}
+
+	for _, month := range result.Months {
+		item := regionExportMonthResponse{
+			PeriodYM:     month.PeriodYM,
+			Succeeded:    month.Succeeded,
+			ErrorMessage: month.ErrorMessage,
+		}
+		if month.Succeeded {
+			job := toExportJobResponse(month.Job)
+			item.Job = &job
+		}
+		resp.Months = append(resp.Months, item)
+	}
+
+	if len(result.SucceededJobIDs) > 0 {
+		query := url.Values{}
+		for _, id := range result.SucceededJobIDs {
+			query.Add("jobIds", id.String())
+		}
+		resp.BatchDownloadURL = "/api/v1/exports/batch-download?" + query.Encode()
+		resp.BatchFileName = app.BatchZipFileName(result.PeriodYMs)
+	}
+
+	return resp
 }
 
 func caseFileDownloadURL(jobID, caseID string) string {

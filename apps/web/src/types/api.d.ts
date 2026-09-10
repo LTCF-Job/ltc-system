@@ -788,16 +788,44 @@ export interface PrecheckResultDTO {
 export interface CreateExportJobRequest {
   jobType: ExportJobType;
   periodYm: string; // 民國 5 碼，如 11507
-  region?: Region | null;
   mode: ExportMode;
   caseIds: string[];
+}
+
+// 以區域批次匯出：逐月各建立一個匯出工作
+export interface RegionExportRequest {
+  regions: string[];
+  periodYms: string[]; // 民國 5 碼，最多 12 個月
+}
+
+export interface RegionExportMonthDTO {
+  periodYm: string;
+  succeeded: boolean;
+  errorMessage?: string;
+  job?: ExportJobDTO;
+}
+
+export interface RegionExportResultDTO {
+  regions: string[];
+  periodYms: string[];
+  caseCount: number;
+  totalFiles: number;
+  months: RegionExportMonthDTO[];
+  // 跨月合併下載；所有月份都失敗時不會有值
+  batchDownloadUrl?: string;
+  batchFileName?: string;
+}
+
+// 據點趟數彙總表：即時產檔，不建立匯出工作
+export interface SiteTripSummaryRequest {
+  siteIds: string[];
+  periodYms: string[];
 }
 
 // 匯出結果中的單一個案工作簿（一個個案一個月一份）
 export interface ExportJobFileDTO {
   caseId: string;
   caseName: string;
-  region?: Region | null;
   rowCount: number;
   fileName: string;
   downloadUrl: string;
@@ -815,7 +843,6 @@ export interface ExportJobDTO {
   id: string;
   jobType: ExportJobType;
   periodYm: string;
-  region?: Region | null;
   mode: ExportMode;
   status: ExportJobStatus;
   totalCases?: number;

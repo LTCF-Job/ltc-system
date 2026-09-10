@@ -31,6 +31,8 @@ type CreateGovClaimInput struct {
 	CreatedBy     uuid.UUID
 	CreatedByName string
 	ActorRole     string
+	// Scope 只影響稽核快照，記錄這批個案是怎麼選出來的；零值即逐案勾選。
+	Scope ExportScopeSnapshot
 }
 
 // GovClaimService 產生政府申報工作簿：查詢趟次、組出 33 欄申報列、寫入快照並輸出檔案。
@@ -199,6 +201,7 @@ func (s *GovClaimService) recordExportAudit(ctx context.Context, job GovClaimJob
 			Mode:       string(job.Mode),
 			TotalCases: job.TotalCases,
 			TotalRows:  job.TotalRows,
+			Scope:      normalizeExportScope(input.Scope),
 			Cases:      cases,
 		},
 	})
@@ -268,9 +271,76 @@ func (s *GovClaimService) RenderZip(ctx context.Context, jobID uuid.UUID) (strin
 	return ZipFileName(job.PeriodYM), archive, nil
 }
 
-// ZipFileName 組出壓縮檔檔名；未指定地區時以 all 標示。
+// RenderBatchZip 把多筆匯出工作的檔案合併成單一壓縮檔，供批次匯出一次下載。
+//
+// 每個月份是一個獨立的 export_job（export_job_files 有 UNIQUE(job_id, case_id)，
+// 同一個案的不同月份塞不進同一個 job），因此跨月下載必須在這裡合併。zip 內以民國年月
+// 分資料夾，避免使用者解開後面對一坨扁平的檔案。
+// 非成功狀態的工作直接略過：它沒有檔案可取，不該讓整包下載失敗。
+func (s *GovClaimService) RenderBatchZip(ctx context.Context, jobIDs []uuid.UUID) (string, []byte, error) {
+	if len(jobIDs) == 0 {
+		return "", nil, ErrExportJobNotFound
+	}
+
+	periodYMs := make([]string, 0, len(jobIDs))
+	entries := make([]ZipEntry, 0)
+	for _, jobID := range jobIDs {
+		job, err := s.store.GetJob(ctx, jobID)
+		if err != nil {
+			return "", nil, err
+		}
+		if job.Status != ExportStatusSucceeded {
+			continue
+		}
+		periodYMs = append(periodYMs, job.PeriodYM)
+		for _, f := range job.Files {
+			content, err := s.loadImmutableFile(ctx, job.ID, f.CaseID)
+			if err != nil {
+				return "", nil, err
+			}
+			entries = append(entries, ZipEntry{
+				Name:    fmt.Sprintf("%s/%s", job.PeriodYM, f.FileName),
+				Content: content,
+			})
+		}
+	}
+
+	if len(entries) == 0 {
+		return "", nil, ErrNoExportData
+	}
+
+	sort.Strings(periodYMs)
+	archive, err := s.archiver.BuildZip(entries)
+	if err != nil {
+		return "", nil, fmt.Errorf("build batch zip: %w", err)
+	}
+	return BatchZipFileName(periodYMs), archive, nil
+}
+
+// ZipFileName 組出壓縮檔檔名。
 func ZipFileName(periodYM string) string {
 	return fmt.Sprintf("gov-claim-%s.zip", periodYM)
+}
+
+// BatchZipFileName 組出跨月批次壓縮檔檔名，以起訖月份標示涵蓋範圍。
+func BatchZipFileName(periodYMs []string) string {
+	if len(periodYMs) == 0 {
+		return "gov-claim.zip"
+	}
+	first := periodYMs[0]
+	last := periodYMs[len(periodYMs)-1]
+	if first == last {
+		return ZipFileName(first)
+	}
+	return fmt.Sprintf("gov-claim-%s-%s.zip", first, last)
+}
+
+// normalizeExportScope 讓稽核快照永遠有明確的來源標記，零值視為逐案勾選。
+func normalizeExportScope(scope ExportScopeSnapshot) ExportScopeSnapshot {
+	if scope.Type == "" {
+		scope.Type = ExportScopeTypeCases
+	}
+	return scope
 }
 
 // buildJobContent 查詢趟次並組出逐案工作簿、申報列快照與跳過清單。
@@ -324,9 +394,15 @@ func (s *GovClaimService) buildJobContent(
 			lines = append(lines, line)
 		}
 	}
-	// 缺資料的欄位留白後照樣產檔並回報缺漏，不阻擋範圍內其餘資料（含一列都組不出來、
-	// 檔案數為 0 的情況）——申報作業本就逐月執行，使用者需要的是先拿到報得出來的資料，
-	// 而不是被整批擋下後才回頭排查。
+	// 缺資料的欄位留白後照樣產檔並回報缺漏，不阻擋範圍內其餘資料——申報作業本就逐月
+	// 執行，使用者需要的是先拿到報得出來的資料，而不是被整批擋下後才回頭排查。
+	//
+	// 但「一份檔案都產不出來」不屬於這個原則：不阻擋指的是缺欄位仍照樣出檔，不是零結果
+	// 也回成功。靜默成功只會讓使用者看到「已產生 0 份」配一張空表格，分不出是月份選錯、
+	// 個案在待維護，還是根本沒有已上車的搭乘紀錄。
+	if len(files) == 0 {
+		return nil, nil, nil, ErrNoExportData
+	}
 	return files, lines, gaps.list(), nil
 }
 
@@ -591,7 +667,13 @@ func uniqueFileName(used map[string]bool, caseName, periodYM string) string {
 	return name
 }
 
+// exportFailureMessage 產生要寫進 export_jobs.error_message、會被使用者看到的失敗原因。
+// 內部錯誤細節一律不外洩，只有「查無可申報資料」這個使用者自己能處理的情況要講清楚，
+// 否則歷史紀錄上只會留下一句通用的失敗訊息，等於沒說。
 func exportFailureMessage(err error) string {
+	if errors.Is(err, ErrNoExportData) {
+		return "指定條件下沒有可申報的資料"
+	}
 	return "產生申報檔案失敗"
 }
 

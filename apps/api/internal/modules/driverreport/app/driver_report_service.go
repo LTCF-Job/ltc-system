@@ -177,7 +177,9 @@ func (s *DriverReportService) ListColumns(ctx context.Context, formID, mappingSt
 // UpdateColumnMapping 更新單一欄位之對應狀態；欄位剛從待維護變成已對應時，順便用
 // 既有回報中已存的原始資料回填搭乘紀錄，回傳補寫筆數，讓使用者不必重新上傳檔案。
 func (s *DriverReportService) UpdateColumnMapping(ctx context.Context, colID, status string, caseID *string, legSeq *int16) (int, error) {
-	if status == "mapped" && (caseID == nil || legSeq == nil) {
+	// 空字串一併擋下：repository 走 NULLIF($3,'')::uuid，指向空字串的指標會寫成 NULL，
+	// 配上 mapped 就成了「已對應卻沒有個案」的孤兒列，該欄從此展不出搭乘紀錄。
+	if status == "mapped" && (caseID == nil || strings.TrimSpace(*caseID) == "" || legSeq == nil) {
 		return 0, errors.New("標記為已對應時必須同時指定個案與趟次")
 	}
 

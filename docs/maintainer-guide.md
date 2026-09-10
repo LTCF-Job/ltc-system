@@ -62,8 +62,7 @@ ltc-system/
 │  │  │  ├─ modules/       audit、case、caregiver、driver report、ride...
 │  │  │  ├─ platform/      auth、config、db、httpx、middleware
 │  │  │  └─ arch/          modular boundary architecture test
-│  │  ├─ migrations/       PostgreSQL schema migrations
-│  │  └─ seed/             baseline、demo seed、reference data
+│  │  └─ migrations/       PostgreSQL schema migrations
 │  └─ web/
 │     └─ src/
 │        ├─ api/            Axios API client、DTO/types
@@ -187,14 +186,13 @@ route meta 目前以 `title`、`module` 等頁面資訊為主，沒有一份獨�
 ### Migration
 
 - schema migration 位於 `apps/api/migrations/`，以序號檔名決定執行順序。
-- up／down 內容、index、foreign key、soft-delete 欄位與 constraint 是資料契約；修改欄位時必須同步 repository、DTO、seed、報表 query 與文件。
+- up／down 內容、index、foreign key、soft-delete 欄位與 constraint 是資料契約；修改欄位時必須同步 repository、DTO、報表 query 與文件。
 - `apps/api/cmd/migrate` 會依 migration runner 執行 schema，並可在設定允許時執行 default admin bootstrap。
 - migration runner 目前沒有可取代人工協調的跨 instance lock；正式環境要避免多個 migration job 同時執行。
 
 ### Seed
 
-- `apps/api/seed/` 的 baseline／reference data 是開發與測試資料來源，不是 production 真實資料。
-- seed 必須跟目前 schema 的 constraint、欄位與 enum/status 保持一致；舊 demo seed 可能與最新 migration 漂移，執行前先看 review report。
+- 本專案不維護 baseline／demo seed 檔；`apps/api/seed/demo/` 已於 2026-09-11 移除（先前的 8 筆案例種子資料早與 schema 脫鉤，且沒有任何程式碼路徑會執行它）。local 環境資料由開發者自行建立或透過 API／UI 操作產生，不依賴預設資料。
 - default admin 只有在同時提供 `DEFAULT_ADMIN_EMAIL`、`DEFAULT_ADMIN_PASSWORD` 以及可用的 Supabase Admin 設定時才會嘗試建立／補上 admin metadata；文件與 repository 不能記錄真實密碼。
 
 ### 資料責任

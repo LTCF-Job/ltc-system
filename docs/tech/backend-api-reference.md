@@ -117,6 +117,23 @@ form field `columnDecisions` 帶入預覽畫面就地確認的欄位對應（JSO
 | GET | `/exports/:id` | viewer, staff, admin | 單筆匯出工作詳情，含逐案檔案清單 `files` |
 | GET | `/exports/:id/files/:caseId/download` | viewer, staff, admin | 下載單一個案的申報 `.xlsx` |
 | GET | `/exports/:id/download` | viewer, staff, admin | 下載整包 `.zip`；非壓縮檔模式回 400 |
+| POST | `/exports/by-region` | staff, admin | 依區域批次匯出：`{regions[], periodYms[]}`，逐月各建立一個工作 |
+| GET | `/exports/batch-download` | viewer, staff, admin | 合併多筆工作的檔案成單一 `.zip`；`?jobIds=a&jobIds=b` |
+| POST | `/exports/site-trip-summary` | viewer, staff, admin | 據點趟數彙總表：`{siteIds[], periodYms[]}`，直接回 `.xlsx` 位元組 |
+
+`/exports/precheck` 的 body 可另外帶 `periodYms`（民國 5 碼陣列，與 `periodYm` 擇一）與
+`regions`（與 `caseIds` 擇一；區域會先展開成個案再檢核），三個分頁籤共用同一支端點。
+
+`POST /exports/by-region` 一律以壓縮檔模式產出，`periodYms` 上限 12 個月，並掛上與匯報表匯入
+相同的延長逾時 middleware（一次可能產出數百份檔案並逐一上傳 object storage）。回應為
+`{jobs[], batchDownloadUrl, batchFileName, totalFiles}`，**一個月一筆工作**——`export_job_files`
+有 `UNIQUE(job_id, case_id)`，同一位個案的不同月份無法共存於同一個工作。
+
+`POST /exports/site-trip-summary` **不建立匯出工作**：趟數彙總表是管理用統計而非申報檔，
+不進 `export_jobs` 的不可變快照與稽核軌跡，因此也不會出現在歷史匯出紀錄。
+
+以上三支與 `POST /exports` 在查無任何可申報資料時一律回 **422 `NO_EXPORT_DATA`**（訊息
+「指定條件下沒有可申報的資料」），不再靜默回成功並產出 0 份檔案。
 
 ## 假日主檔 `holidayH`
 
