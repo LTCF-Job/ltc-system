@@ -64,17 +64,6 @@
               <template #title>未回報清單</template>
             </el-menu-item>
           </el-sub-menu>
-
-          <el-menu-item v-if="authStore.hasPermission('attendance_fuel')" index="/attendance">
-            <el-icon><Clock /></el-icon>
-            <template #title>出勤與油資管理</template>
-          </el-menu-item>
-
-          <el-menu-item v-if="authStore.hasPermission('vehicles_maintenance')" index="/vehicles/maintenance">
-            <el-icon><Management /></el-icon>
-            <template #title>車輛維修保養</template>
-          </el-menu-item>
-
           </el-menu-item-group>
 
           <el-menu-item-group>
@@ -94,21 +83,6 @@
             >
               <el-icon><Connection /></el-icon>
               <template #title>批次上傳與待維護資料</template>
-            </el-menu-item>
-          </el-sub-menu>
-
-          <el-sub-menu v-if="authStore.hasPermission('reports_trip_summary') || authStore.hasPermission('reports_hsinchu_schedule')" index="reports">
-            <template #title>
-              <el-icon><DataAnalysis /></el-icon>
-              <span>報表管理</span>
-            </template>
-            <el-menu-item v-if="authStore.hasPermission('reports_trip_summary')" index="/reports/trip-summary">
-              <el-icon><List /></el-icon>
-              <template #title>車輛趟數表</template>
-            </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('reports_hsinchu_schedule')" index="/reports/hsinchu-schedule">
-              <el-icon><Tickets /></el-icon>
-              <template #title>新竹接送時刻表</template>
             </el-menu-item>
           </el-sub-menu>
 
@@ -148,37 +122,6 @@
             </el-menu-item>
           </el-sub-menu>
 
-          </el-menu-item-group>
-
-          <el-menu-item-group>
-            <template #title><span class="nav-group-label">系統</span></template>
-          <el-menu-item v-if="authStore.hasPermission('audit_logs')" index="/audit">
-            <el-icon><Notebook /></el-icon>
-            <template #title>系統操作紀錄</template>
-          </el-menu-item>
-
-          <el-sub-menu v-if="authStore.hasPermission('settings_users') || authStore.hasPermission('settings_roles') || authStore.hasPermission('settings_notifications') || authStore.hasPermission('settings_holidays')" index="settings">
-            <template #title>
-              <el-icon><Setting /></el-icon>
-              <span>系統設定</span>
-            </template>
-            <el-menu-item v-if="authStore.hasPermission('settings_users')" index="/settings/users">
-              <el-icon><Postcard /></el-icon>
-              <template #title>使用者管理</template>
-            </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('settings_roles')" index="/settings/roles">
-              <el-icon><Medal /></el-icon>
-              <template #title>角色身分管理</template>
-            </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('settings_notifications')" index="/settings/notifications">
-              <el-icon><Message /></el-icon>
-              <template #title>通知收件人</template>
-            </el-menu-item>
-            <el-menu-item v-if="authStore.hasPermission('settings_holidays')" index="/settings/holidays">
-              <el-icon><Timer /></el-icon>
-              <template #title>政府假日與工作日設定</template>
-            </el-menu-item>
-          </el-sub-menu>
           </el-menu-item-group>
         </el-menu>
       </el-scrollbar>
@@ -274,11 +217,9 @@ import {
   Van,
   Odometer,
   User,
-  Management,
   Location,
   Avatar,
   DocumentCopy,
-  Upload,
   Connection,
   Calendar,
   Grid,
@@ -287,19 +228,9 @@ import {
   Fold,
   ArrowDown,
   Bell,
-  DataAnalysis,
-  List,
-  Setting,
   Lock,
   UserFilled,
-  Tickets,
-  Notebook,
-  Clock,
-  Timer,
-  Folder,
-  Postcard,
-  Medal,
-  Message
+  Folder
 } from '@element-plus/icons-vue'
 
 import { useAuthStore } from '@/stores/auth'
