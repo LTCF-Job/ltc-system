@@ -11,6 +11,28 @@ type GovClaimSourceReader interface {
 	QueryGovClaimSources(ctx context.Context, scope ClaimScope) ([]GovClaimSource, error)
 }
 
+// ClaimCaseResolver 把據點或區域換算成申報範圍內的個案。
+//
+// 解析結果會固化進 export_jobs.filter_case_ids，因此之後個案轉據點或改區域，
+// 歷史匯出仍看得出當時實際報了哪些個案。
+type ClaimCaseResolver interface {
+	ListCasesBySites(ctx context.Context, siteIDs []uuid.UUID) ([]ScopedCase, error)
+	ListCasesByRegions(ctx context.Context, regions []string) ([]ScopedCase, error)
+}
+
+// SiteTripSummaryReader 查詢據點趟數彙總表所需的逐案逐月趟數。
+type SiteTripSummaryReader interface {
+	QuerySiteTripCounts(ctx context.Context, siteIDs []uuid.UUID, months []ClaimMonth) ([]SiteTripCount, error)
+}
+
+// SiteTripSummaryRenderer 產生據點趟數彙總表位元組。
+//
+// 刻意獨立於 Renderer：趟數彙總表是管理用統計，與申報／時刻表三支報表沒有共同的
+// 使用者，硬塞進同一個介面只會讓所有實作與測試替身一起被迫長大。
+type SiteTripSummaryRenderer interface {
+	RenderSiteTripSummary(report SiteTripSummaryReport) ([]byte, error)
+}
+
 // ExportJobStore 保存匯出工作、逐案檔案中繼資料與申報列快照。
 type ExportJobStore interface {
 	CreateJob(ctx context.Context, job ExportJobCreate) (uuid.UUID, error)

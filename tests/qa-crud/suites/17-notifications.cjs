@@ -4,7 +4,12 @@ exports.run = async ({ page, net, record, step, L }) => {
   await L.goto(page, '/settings/notifications')
 
   await L.openCreate(page, '新增外部信箱')
-  await step('主題與信箱都空白', () => L.submit(page, net, '確認新增'))
+  await step('主題與信箱都空白（確認按鈕停用）', async () => {
+    // 確認按鈕在沒有任何有效信箱時是 :confirm-disabled，Playwright 對停用按鈕的 click 只會一直等到逾時，
+    // 改成直接檢查按鈕的 disabled 狀態，符合現在「送出前就擋住」的前端行為。
+    const btn = L.dialog(page).locator('button', { hasText: '確認新增' }).last()
+    return { disabled: await btn.isDisabled() }
+  })
 
   await L.openCreate(page, '新增外部信箱')
   await step('單一合法信箱', async () => {
@@ -37,7 +42,9 @@ exports.run = async ({ page, net, record, step, L }) => {
   await step('編輯第一筆', async () => {
     await L.rowAction(page, 'qa-one@example.com', '編輯')
     const before = await L.dumpForm(page)
-    return { before, result: await L.submit(page, net, /確認|儲存/.source) }
+    // 編輯對話框的 DialogFooter 沒有覆寫 confirm-text，走預設「儲存」；
+    // 原本傳 /確認|儲存/.source 會把正則物件轉成字面字串，hasText 傳字串只比對子字串，永遠找不到按鈕。
+    return { before, result: await L.submit(page, net) }
   })
 
   await L.goto(page, '/settings/notifications')

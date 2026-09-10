@@ -359,7 +359,8 @@ const form = reactive<CreateDriverRequest & UpdateDriverRequest>({
 
 const rules = {
   name: [{ required: true, message: '請輸入司機姓名', trigger: 'blur' }],
-  nationalId: nationalIdRules(false)
+  nationalId: nationalIdRules(false),
+  email: [{ type: 'email', message: '請輸入正確的電子郵件格式', trigger: 'blur' }]
 }
 
 const {

@@ -136,9 +136,7 @@ func main() {
 		caseDuplicateFinder{svc: caseSvc},
 		caseDuplicateStager{svc: caseSvc},
 		importSiteLookup{repo: mdSiteRepo},
-		importVehicleLookup{repo: mdVehicleRepo},
 		importCaregiverLookup{repo: caregiverRepo},
-		caseRepo,
 		excelAdapter,
 		excelAdapter,
 		txRunner,
@@ -187,6 +185,9 @@ func main() {
 	excelRenderer := reportinfra.NewExcelRenderer()
 	precheckSvc := reportapp.NewPrecheckService(precheckRepo)
 	govClaimSvc := reportapp.NewGovClaimService(cfg, govClaimRepo, exportJobRepo, excelRenderer, reportinfra.NewZipArchiver(), precheckSvc, reportingAuditWriter{svc: auditSvc})
+	claimCaseRepo := reportinfra.NewClaimCaseRepository(pool)
+	regionClaimSvc := reportapp.NewRegionClaimService(claimCaseRepo, govClaimSvc)
+	siteTripSummarySvc := reportapp.NewSiteTripSummaryService(claimCaseRepo, reportinfra.NewSiteTripSummaryRepository(pool), excelRenderer)
 	holidayProvider := holidayapp.GovernmentHolidayProvider(&holidayinfra.GovernmentHolidayHTTPClient{
 		Endpoint: holidayinfra.GovernmentHolidayCSVEndpoint,
 		Client:   &http.Client{Timeout: cfg.GovernmentHolidayAPITimeout},
@@ -229,7 +230,7 @@ func main() {
 		vehicle:      mastertransport.NewVehicleHandler(vehicleSvc),
 		driver:       mastertransport.NewDriverHandler(driverSvc),
 		ride:         ridetransport.NewRideHandler(rideSvc),
-		export:       reporttransport.NewExportHandler(precheckSvc, govClaimSvc),
+		export:       reporttransport.NewExportHandler(precheckSvc, govClaimSvc, regionClaimSvc, siteTripSummarySvc, claimCaseRepo),
 		notification: notifytransport.NewNotificationHandler(notificationSvc),
 		holiday:      holidaytransport.NewHolidayHandler(holidaySvc),
 		report:       reporttransport.NewReportHandler(reportSvc),

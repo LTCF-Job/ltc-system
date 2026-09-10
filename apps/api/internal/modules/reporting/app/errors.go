@@ -17,4 +17,16 @@ var (
 	ErrCaseIDsRequired = errors.New("case ids are required")
 	// ErrInvalidPeriodYM 申報年月格式不是民國 5 碼（例如 11507）。
 	ErrInvalidPeriodYM = errors.New("invalid ROC period, expected RRRMM")
+	// ErrNoExportData 指定條件下一份申報檔都產不出來。
+	//
+	// 這與「某些欄位缺資料」是兩回事：缺欄位一律留白照樣出檔（不阻擋原則），
+	// 但整批連一列都組不出來時如果還回成功，使用者只會看到「已產生 0 份」配一張
+	// 空表格，完全看不出是月份選錯、個案在待維護，還是根本沒有搭乘紀錄。
+	ErrNoExportData = errors.New("no claimable data in the given scope")
+	// ErrRegionsRequired 依區域批次匯出時未指定任何區域。
+	ErrRegionsRequired = errors.New("regions are required")
+	// ErrSiteIDsRequired 依據點匯出時未指定任何據點。
+	ErrSiteIDsRequired = errors.New("site ids are required")
+	// ErrPeriodsRequired 未指定任何申報月份。
+	ErrPeriodsRequired = errors.New("period ym list is required")
 )

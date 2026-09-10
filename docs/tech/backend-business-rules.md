@@ -76,15 +76,20 @@ covers:
 
 ## 匯出前置檢核（`PrecheckService.RunPrecheck`）
 
-⚠️ **目前只有三項檢核**，規格書列的其他檢核項目（例如個案配給額度）**尚未實作**，不要誤以為 precheck 通過就代表資料完全沒問題：
+⚠️ **目前只有兩項檢核**，規格書列的其他檢核項目（例如個案配給額度）**尚未實作**，不要誤以為 precheck 通過就代表資料完全沒問題：
 
 | 順序 | Severity | Code | 判斷條件 |
 |---|---|---|---|
-| 1 | `info`（固定出現） | `QUOTA_CHECK_SKIPPED` | 恆常提示：配給額度檢查未執行（規則尚未取得，不影響 `Passed`） |
-| 2 | `warning` | `MISSING_CASE_PROFILE` | 該地區有效個案缺身分證、住家地址、服務類別或服務使用類型任一欄位 |
-| 3 | `error` | `UNRESOLVED_CONFLICT` | 該地區有 `ride_records` 存在未裁決的混車衝突（`resolve-conflict` 還沒處理） |
+| 1 | `warning` | `MISSING_CASE_PROFILE` | 該範圍有效個案缺身分證、住家地址、服務類別或服務使用類型任一欄位 |
+| 2 | `error` | `UNRESOLVED_CONFLICT` | 該範圍有 `ride_records` 存在未裁決的混車衝突（`resolve-conflict` 還沒處理） |
 
-`Passed = (errorCount == 0)`——只有 `error` 等級的項目會擋匯出，`warning`／`info` 只是提示不會擋。**未裁決混車衝突是唯一會擋下匯出的檢核項目**：缺資料只會讓該欄位在申報檔留白，混車卻會讓報出去的資料本身是錯的。
+`Passed = (errorCount == 0)`——只有 `error` 等級的項目會擋匯出，`warning` 只是提示不會擋。**未裁決混車衝突是唯一會擋下匯出的檢核項目**：缺資料只會讓該欄位在申報檔留白，混車卻會讓報出去的資料本身是錯的。
+
+`TotalInfos` 欄位保留但目前恆為 0。這裡原本有一則恆常輸出的 `QUOTA_CHECK_SKIPPED` info（「個案配給額度檢查未執行」），每次檢核都出現、永遠不會變，對操作者沒有資訊量，已移除；不要再加回這類固定提示。
+
+### 多月份檢核（`PrecheckService.RunPrecheckMulti`）
+
+多月匯出逐月各跑一次 `RunPrecheck` 再合併，不把月份併成 min~max 單一區間（選取月份可能不連續）。合併規則刻意不同：`MISSING_CASE_PROFILE` 講的是個案主檔狀態、與月份無關，依 `caseId` 去重；`UNRESOLVED_CONFLICT` 綁定特定日期的特定搭乘紀錄、每筆都要各自裁決，全部保留並在 `details.periodYm` 標示月份。`Passed` 為所有月份皆通過。
 
 ## 個案彙整表匯出（`CaseService.GenerateCaseProfileWorkbook`）
 

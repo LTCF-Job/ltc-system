@@ -91,6 +91,14 @@ func (h *DriverHandler) Create(c *gin.Context) {
 			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "駕照類別不正確", nil)
 			return
 		}
+		if errors.Is(err, app.ErrInvalidDriverEmail) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "電子信箱格式不正確", nil)
+			return
+		}
+		if errors.Is(err, app.ErrDuplicateNationalID) {
+			httpx.RespondError(c, http.StatusConflict, httpx.CodeValidationFailed, "此身分證字號已被其他司機使用", nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 		return
 	}
@@ -153,6 +161,10 @@ func (h *DriverHandler) Update(c *gin.Context) {
 		}
 		if errors.Is(err, app.ErrInvalidDriverNationalID) {
 			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "身分證檢查碼錯誤", nil)
+			return
+		}
+		if errors.Is(err, app.ErrInvalidDriverEmail) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "電子信箱格式不正確", nil)
 			return
 		}
 		if errors.Is(err, app.ErrDuplicateNationalID) {

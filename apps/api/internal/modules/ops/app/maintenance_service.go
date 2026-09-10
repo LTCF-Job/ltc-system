@@ -2,10 +2,33 @@ package app
 
 import (
 	"context"
+	"errors"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ErrInvalidReceiptURL 代表收據連結不是合法的 http/https 網址；拒絕例如 javascript: 這類
+// 會在畫面上被當成可點擊連結渲染、進而造成儲存型 XSS 的協定。
+var ErrInvalidReceiptURL = errors.New("receipt url must be an http or https link")
+
+// normalizeReceiptURL 將空白視為未填寫（nil，選填欄位），其餘內容必須是 http/https 開頭的合法網址。
+func normalizeReceiptURL(in *string) (*string, error) {
+	if in == nil {
+		return nil, nil
+	}
+	value := strings.TrimSpace(*in)
+	if value == "" {
+		return nil, nil
+	}
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, ErrInvalidReceiptURL
+	}
+	return &value, nil
+}
 
 // MaintenanceService 提供車輛維修保養管理與空白表產生服務。
 type MaintenanceService struct {
@@ -50,6 +73,10 @@ type MaintenanceLogInput struct {
 
 // Create 新增維修保養紀錄並記錄稽核留痕。
 func (s *MaintenanceService) Create(ctx context.Context, in MaintenanceLogInput, actorID *uuid.UUID, actorRole *string, auditContexts ...AuditContext) (*MaintenanceLog, error) {
+	receiptURL, err := normalizeReceiptURL(in.ReceiptURL)
+	if err != nil {
+		return nil, err
+	}
 	item := &MaintenanceLog{
 		VehicleID:   in.VehicleID,
 		ServiceDate: in.ServiceDate,
@@ -57,7 +84,7 @@ func (s *MaintenanceService) Create(ctx context.Context, in MaintenanceLogInput,
 		Items:       in.Items,
 		Vendor:      in.Vendor,
 		Cost:        in.Cost,
-		ReceiptURL:  in.ReceiptURL,
+		ReceiptURL:  receiptURL,
 		Note:        in.Note,
 		CreatedBy:   in.CreatedBy,
 	}
@@ -79,6 +106,10 @@ func (s *MaintenanceService) Update(ctx context.Context, id uuid.UUID, in Mainte
 			return nil, err
 		}
 	}
+	receiptURL, err := normalizeReceiptURL(in.ReceiptURL)
+	if err != nil {
+		return nil, err
+	}
 	item := &MaintenanceLog{
 		ID:          id,
 		VehicleID:   in.VehicleID,
@@ -87,7 +118,7 @@ func (s *MaintenanceService) Update(ctx context.Context, id uuid.UUID, in Mainte
 		Items:       in.Items,
 		Vendor:      in.Vendor,
 		Cost:        in.Cost,
-		ReceiptURL:  in.ReceiptURL,
+		ReceiptURL:  receiptURL,
 		Note:        in.Note,
 	}
 	if err := s.maintenanceRepo.Update(ctx, item); err != nil {

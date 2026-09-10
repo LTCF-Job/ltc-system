@@ -34,12 +34,19 @@ covers: ["apps/web/src/router/index.ts"]
 | `/settings/holidays` | `views/settings/HolidayCalendarView.vue` | admin/staff/dispatcher/viewer | `holidays*` |
 | `/exports` | `views/exports/ExportView.vue` | admin/staff/dispatcher | `exports/precheck`、`exports/*` |
 
+`/exports` 是三個分頁籤共用一頁，權限一律沿用 `exports`，沒有另外的模組鍵。`ExportView.vue`
+只保留分頁籤外殼與歷史匯出紀錄，三種模式各自是獨立的 panel 元件（見下方共用元件表）。
+
 ## 共用元件（非路由）
 
 不對應獨立路由，是被上面頁面內嵌使用的：
 
 | 元件 | 被誰用 | 用途 |
 |---|---|---|
+| `views/exports/components/ByCasePanel.vue` | `ExportView` | 逐案勾選：單月 + 個案多選，產 33 欄申報檔 |
+| `views/exports/components/BySitePanel.vue` | `ExportView` | 以據點：多據點 + 多月，產一份趟數彙總表（不留匯出紀錄） |
+| `views/exports/components/ByRegionPanel.vue` | `ExportView` | 以區域：多區域 + 多月，逐月批次產申報檔並打包下載 |
+| `views/exports/components/ExportResultCard.vue` | `ByCasePanel` | 單次匯出結果：資料缺漏提示與逐案／整包下載 |
 | `views/cases/ScheduleEditor.vue` | `CaseDetailView` | 編輯個案的星期／時段排班 |
 | `views/rides/RideManualEntryDialog.vue` | `RideCalendarView` | 月曆空白格人工補登回報的彈窗 |
 | `views/rides/RideCorrectionDrawer.vue` | `RideIssuesView` | 異常搭乘的更正／衝突裁決側邊欄 |

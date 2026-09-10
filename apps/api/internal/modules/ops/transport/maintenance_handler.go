@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -103,6 +104,11 @@ func (h *MaintenanceHandler) Create(c *gin.Context) {
 		return
 	}
 
+	if !isValidReceiptURL(req.ReceiptURL) {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "收據連結必須為 http:// 或 https:// 開頭的網址", nil)
+		return
+	}
+
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
 
@@ -118,6 +124,10 @@ func (h *MaintenanceHandler) Create(c *gin.Context) {
 		CreatedBy:   actorID,
 	}, &actorID, &actorRole, auditContext(c))
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidReceiptURL) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "收據連結必須是 http 或 https 開頭的網址", nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
@@ -156,6 +166,11 @@ func (h *MaintenanceHandler) Update(c *gin.Context) {
 		return
 	}
 
+	if !isValidReceiptURL(req.ReceiptURL) {
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "收據連結必須為 http:// 或 https:// 開頭的網址", nil)
+		return
+	}
+
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
 
@@ -170,6 +185,10 @@ func (h *MaintenanceHandler) Update(c *gin.Context) {
 		Note:        req.Note,
 	}, &actorID, &actorRole, auditContext(c))
 	if err != nil {
+		if errors.Is(err, app.ErrInvalidReceiptURL) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "收據連結必須是 http 或 https 開頭的網址", nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}

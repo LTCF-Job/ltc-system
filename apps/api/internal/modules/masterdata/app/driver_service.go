@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -68,6 +69,23 @@ func normalizeLicenseClass(in *string) (*string, error) {
 	return &value, nil
 }
 
+// normalizeDriverEmail 將空白或空字串視為未填寫（nil，選填欄位），其餘內容須為合法 email 格式；
+// 前端表單留空時固定送出空字串而非省略欄位，因此不能用 binding 的 omitempty 判斷（該規則只把
+// nil pointer 視為未填，non-nil 的空字串仍會被 email tag 擋下），必須在這裡手動處理。
+func normalizeDriverEmail(in *string) (*string, error) {
+	if in == nil {
+		return nil, nil
+	}
+	value := strings.TrimSpace(*in)
+	if value == "" {
+		return nil, nil
+	}
+	if _, err := mail.ParseAddress(value); err != nil {
+		return nil, ErrInvalidDriverEmail
+	}
+	return &value, nil
+}
+
 // CreateDriverInput 代表新增司機所需之輸入。
 type CreateDriverInput struct {
 	Name                   string
@@ -101,6 +119,11 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors
 		return nil, err
 	}
 
+	email, err := normalizeDriverEmail(in.Email)
+	if err != nil {
+		return nil, err
+	}
+
 	hmacIdx := crypto.Index(nationalID, s.cfg.HMACKey)
 	cipherText, err := crypto.Encrypt(nationalID, s.cfg.EncryptionKey)
 	if err != nil {
@@ -115,7 +138,7 @@ func (s *DriverService) Create(ctx context.Context, in CreateDriverInput, actors
 		NationalIDHMAC:   hmacIdx,
 		NationalIDMasked: crypto.Mask(nationalID),
 		NationalID:       nationalID,
-		Email:            in.Email,
+		Email:            email,
 		Status:           "active",
 
 		LicenseClass:           licenseClass,
@@ -221,7 +244,11 @@ func (s *DriverService) Update(ctx context.Context, id uuid.UUID, in UpdateDrive
 		existing.NationalID = nationalID
 	}
 	if in.Email != nil {
-		existing.Email = in.Email
+		email, err := normalizeDriverEmail(in.Email)
+		if err != nil {
+			return nil, err
+		}
+		existing.Email = email
 	}
 	if in.Status != nil {
 		if *in.Status != "active" && *in.Status != "inactive" {

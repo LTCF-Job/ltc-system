@@ -1,152 +1,19 @@
 <template>
   <div class="export-view">
     <PageHeader title="政府申報匯出" />
-    <!-- 匯出條件設定卡片 -->
-    <el-card shadow="never" class="export-settings-card">
-      <template #header>
-        <span class="card-title">政府申報表匯出設定</span>
-      </template>
 
-      <el-form
-        :model="form"
-        label-width="140px"
-        :disabled="!authStore.hasPermission('exports', 'edit')"
-      >
-        <el-row :gutter="16">
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="申報年月 (民國)">
-              <div class="roc-month-picker">
-                <el-date-picker
-                  v-model="selectedDate"
-                  type="month"
-                  format="YYYY-MM"
-                  value-format="YYYY-MM"
-                  placeholder="選擇月份"
-                  style="width: 160px"
-                  :clearable="false"
-                />
-                <span class="roc-label">{{ formatRocMonthLabel(currentRocMonth) }}</span>
-              </div>
-            </el-form-item>
-          </el-col>
-
-        </el-row>
-
-        <el-row :gutter="16">
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="申報個案">
-              <div class="case-picker">
-                <el-button plain @click="caseDialogVisible = true">選擇個案</el-button>
-                <span class="case-picker-summary">{{ selectedCaseSummary }}</span>
-              </div>
-            </el-form-item>
-          </el-col>
-
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="匯出檔案模式" class="mode-form-item">
-              <el-radio-group v-model="form.mode">
-                <el-radio value="direct">直接下載</el-radio>
-                <el-radio value="zip">壓縮檔</el-radio>
-              </el-radio-group>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="16">
-          <el-col :span="24">
-            <div v-if="authStore.hasPermission('exports', 'edit')" class="action-buttons">
-              <el-button
-                plain
-                :loading="checking"
-                @click="handleRunPrecheck"
-              >
-                執行前置檢核
-              </el-button>
-
-              <el-button
-                type="primary"
-                :loading="exporting"
-                @click="handleStartExport"
-              >
-                <el-icon><Download /></el-icon>
-                開始產生申報檔
-              </el-button>
-            </div>
-          </el-col>
-        </el-row>
-      </el-form>
-    </el-card>
-
-    <!-- 匯出結果：逐案下載清單或整包壓縮檔 -->
-    <el-card v-if="currentJob" shadow="never" class="job-card">
-      <template #header>
-        <span class="card-title">本次匯出結果</span>
-      </template>
-
-      <div class="job-info">
-        <span>申報年月：{{ formatRocMonthLabel(rocMonthOf(currentJob.periodYm)) }}</span>
-        <span>模式：{{ EXPORT_MODE_LABELS[currentJob.mode] }}</span>
-        <span>個案數：{{ currentJob.totalCases ?? 0 }}</span>
-        <span>申報行數：{{ currentJob.totalRows ?? 0 }}</span>
-      </div>
-
-      <el-alert
-        v-if="currentJob.dataGaps?.length"
-        type="warning"
-        show-icon
-        :closable="false"
-        title="部分欄位資料不完整，該欄位已留白匯出"
-        class="skip-alert"
-      >
-        <ul class="skip-list">
-          <li v-for="(gap, index) in currentJob.dataGaps" :key="index">
-            {{ gap.caseName }}：{{ dataGapLabel(gap.reason) }}（{{ gap.count }} 筆）
-          </li>
-        </ul>
-      </el-alert>
-
-      <!-- 直接下載：一個個案一列，由使用者自行點選，避免瀏覽器擋下連續下載 -->
-      <el-table
-        v-if="currentJob.mode === 'direct'"
-        :data="currentJob.files || []"
-        border
-        stripe
-        class="file-table"
-      >
-        <el-table-column prop="caseName" label="姓名" width="120" />
-        <el-table-column prop="rowCount" label="申報行數" width="100" align="center" />
-        <el-table-column prop="fileName" label="檔案名稱" min-width="200" show-overflow-tooltip />
-        <el-table-column label="操作" width="120" fixed="right" align="center">
-          <template #default="{ row }">
-            <el-button
-              link
-              type="primary"
-              size="small"
-              :loading="downloadingCaseId === row.caseId"
-              @click="handleDownloadCaseFile(row as ExportJobFileDTO)"
-            >
-              下載
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <div v-else class="zip-download">
-        <el-button type="success" :loading="downloadingZip" @click="handleDownloadZip">
-          <el-icon><Download /></el-icon>
-          下載壓縮檔 ({{ currentJob.zipFileName }})
-        </el-button>
-      </div>
-    </el-card>
-
-    <!-- 前置檢核結果呈現區塊 -->
-    <el-card v-if="precheckResult" shadow="never" class="precheck-card">
-      <template #header>
-        <span class="card-title">前置檢核報告</span>
-      </template>
-
-      <PrecheckResult :result="precheckResult" />
-    </el-card>
+    <!-- 三種選取模式共用同一頁：逐案勾選、以據點統計趟數、以區域批次產申報檔 -->
+    <el-tabs v-model="activeTab" class="export-tabs">
+      <el-tab-pane label="逐案勾選" name="by-case">
+        <ByCasePanel :can-edit="canEdit" @exported="fetchHistory" />
+      </el-tab-pane>
+      <el-tab-pane label="以據點（趟數彙總）" name="by-site">
+        <BySitePanel :can-edit="canEdit" />
+      </el-tab-pane>
+      <el-tab-pane label="以區域（批次申報檔）" name="by-region">
+        <ByRegionPanel :can-edit="canEdit" @exported="fetchHistory" />
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 歷史匯出紀錄：只供查看當時匯出的個案，不重複提供檔案下載 -->
     <el-card shadow="never" class="history-card">
@@ -169,11 +36,12 @@
             <span>{{ formatDateTime(row.createdAt) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="狀態" width="100" align="center">
+        <el-table-column label="狀態" min-width="180" align="center">
           <template #default="{ row }">
             <el-tag size="small" :type="row.status === 'succeeded' ? 'success' : 'danger'">
               {{ EXPORT_STATUS_LABELS[row.status as ExportJobStatus] || row.status }}
             </el-tag>
+            <span v-if="row.errorMessage" class="history-error">{{ row.errorMessage }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right" align="center">
@@ -191,14 +59,6 @@
         </el-table-column>
       </el-table>
     </el-card>
-
-    <CaseSelectDialog
-      v-model="caseDialogVisible"
-      title="選擇申報個案"
-      confirm-text="確認選擇"
-      :initial-selected-ids="form.caseIds"
-      @confirm="handleCaseSelected"
-    />
 
     <el-dialog
       v-model="historyDetailVisible"
@@ -230,178 +90,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
-import CaseSelectDialog from '@/components/CaseSelectDialog.vue'
-import { Download } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import PrecheckResult from '@/components/PrecheckResult.vue'
-import { formatDateTime, currentLocalMonth } from '@/utils/formatters'
-import {
-  precheckExport,
-  createExportJob,
-  getExportJob,
-  listExportJobs,
-  downloadExportCaseFile,
-  downloadExportZip
-} from '@/api/exports'
+import ByCasePanel from './components/ByCasePanel.vue'
+import BySitePanel from './components/BySitePanel.vue'
+import ByRegionPanel from './components/ByRegionPanel.vue'
+import { formatDateTime } from '@/utils/formatters'
+import { getExportJob, listExportJobs } from '@/api/exports'
 import { useAuthStore } from '@/stores/auth'
 import { useRocMonth } from '@/composables/useRocMonth'
-import { downloadBlob } from '@/utils/download'
-import {
-  EXPORT_STATUS_LABELS,
-  EXPORT_MODE_LABELS,
-  EXPORT_DATA_GAP_LABELS
-} from '@/types/domain'
+import { EXPORT_STATUS_LABELS, EXPORT_MODE_LABELS } from '@/types/domain'
 import type { ExportMode, ExportJobStatus } from '@/types/domain'
-import type {
-  PrecheckResultDTO,
-  ExportJobDTO,
-  ExportJobFileDTO,
-  CreateExportJobRequest
-} from '@/types/api'
-
+import type { ExportJobDTO } from '@/types/api'
 
 const authStore = useAuthStore()
-const { toRocMonth, toRocPeriodYm, formatRocMonthLabel } = useRocMonth()
+const { formatRocMonthLabel } = useRocMonth()
 
-const selectedDate = ref<string>(currentLocalMonth())
-const checking = ref(false)
-const exporting = ref(false)
-const precheckResult = ref<PrecheckResultDTO | null>(null)
-const currentJob = ref<ExportJobDTO | null>(null)
+const canEdit = computed(() => authStore.hasPermission('exports', 'edit'))
+
+const activeTab = ref<'by-case' | 'by-site' | 'by-region'>('by-case')
 const historyJobs = ref<ExportJobDTO[]>([])
 const loadingHistory = ref(false)
-const caseDialogVisible = ref(false)
-const downloadingCaseId = ref<string>('')
-const downloadingZip = ref(false)
 const historyDetailVisible = ref(false)
 const historyDetail = ref<ExportJobDTO | null>(null)
 const loadingHistoryDetail = ref(false)
-
-const currentRocMonth = computed(() => toRocMonth(selectedDate.value))
-
-const form = reactive<{
-  mode: ExportMode
-  caseIds: string[]
-  caseNames: string[]
-}>({
-  mode: 'direct',
-  caseIds: [],
-  caseNames: []
-})
-
-const selectedCaseSummary = computed(() => {
-  if (form.caseIds.length === 0) return '尚未選擇個案'
-  const preview = form.caseNames.slice(0, 3).join('、')
-  const suffix = form.caseNames.length > 3 ? ' 等' : ''
-  return `已選擇 ${form.caseIds.length} 筆：${preview}${suffix}`
-})
 
 // 民國 5 碼（11507）轉成顯示用的 115-07
 function rocMonthOf(periodYm: string): string {
   if (!periodYm || periodYm.length !== 5) return periodYm
   return `${periodYm.slice(0, 3)}-${periodYm.slice(3)}`
-}
-
-function dataGapLabel(reason: string): string {
-  return EXPORT_DATA_GAP_LABELS[reason] || reason
-}
-
-function handleCaseSelected(cases: { id: string; name: string }[]) {
-  form.caseIds = cases.map((c) => c.id)
-  form.caseNames = cases.map((c) => c.name)
-  caseDialogVisible.value = false
-}
-
-async function handleRunPrecheck() {
-  // caseIds 為空時後端會把檢核範圍放大成整月全部個案，結果與使用者以為的不同。
-  if (form.caseIds.length === 0) {
-    ElMessage.warning('請先選擇要申報的個案')
-    return
-  }
-  checking.value = true
-  try {
-    const res = await precheckExport({
-      periodYm: toRocPeriodYm(selectedDate.value),
-      caseIds: [...form.caseIds]
-    })
-    precheckResult.value = res
-  } finally {
-    checking.value = false
-  }
-}
-
-async function handleStartExport() {
-  if (form.caseIds.length === 0) {
-    ElMessage.warning('請先選擇要申報的個案')
-    return
-  }
-
-  await handleRunPrecheck()
-
-  if (precheckResult.value?.hasErrors) {
-    ElMessage.error('前置檢核存在未裁決的混車衝突，無法執行匯出，請先完成裁決。')
-    return
-  }
-
-  if (precheckResult.value?.hasWarnings) {
-    await ElMessageBox.confirm(
-      '本次匯出有個案資料不完整，缺少的欄位會留白匯出，確定仍要繼續執行匯出？',
-      '匯出警告確認',
-      {
-        confirmButtonText: '繼續匯出',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-  }
-
-  exporting.value = true
-  try {
-    const jobReq: CreateExportJobRequest = {
-      jobType: 'gov_claim',
-      periodYm: toRocPeriodYm(selectedDate.value),
-      mode: form.mode,
-      caseIds: [...form.caseIds]
-    }
-
-    currentJob.value = await createExportJob(jobReq)
-    ElMessage.success(`已產生 ${currentJob.value.totalCases ?? 0} 份申報檔案`)
-    await fetchHistory()
-  } catch {
-    // 全域攔截器負責顯示 API 錯誤。
-  } finally {
-    exporting.value = false
-  }
-}
-
-async function handleDownloadCaseFile(file: ExportJobFileDTO) {
-  if (!currentJob.value) return
-  downloadingCaseId.value = file.caseId
-  try {
-    const blob = await downloadExportCaseFile(currentJob.value.id, file.caseId)
-    downloadBlob(blob, file.fileName)
-    ElMessage.success(`${file.fileName} 下載成功`)
-  } catch {
-    // 全域攔截器負責顯示 API 錯誤。
-  } finally {
-    downloadingCaseId.value = ''
-  }
-}
-
-async function handleDownloadZip() {
-  if (!currentJob.value) return
-  downloadingZip.value = true
-  try {
-    const blob = await downloadExportZip(currentJob.value.id)
-    downloadBlob(blob, currentJob.value.zipFileName || 'gov-claim.zip')
-    ElMessage.success('壓縮檔下載成功')
-  } catch {
-    // 全域攔截器負責顯示 API 錯誤。
-  } finally {
-    downloadingZip.value = false
-  }
 }
 
 async function openHistoryDetail(row: ExportJobDTO) {
@@ -422,6 +139,8 @@ async function fetchHistory() {
   try {
     const res = await listExportJobs({ pageSize: 10 })
     historyJobs.value = res.data
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
   } finally {
     loadingHistory.value = false
   }
@@ -439,7 +158,13 @@ onMounted(() => {
   gap: 16px;
 }
 
-.export-settings-card, .precheck-card, .job-card, .history-card {
+.export-tabs {
+  :deep(.el-tabs__content) {
+    overflow: visible;
+  }
+}
+
+.history-card {
   border-radius: 8px;
 }
 
@@ -449,64 +174,10 @@ onMounted(() => {
   color: var(--app-primary);
 }
 
-.roc-month-picker {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-
-  .roc-label {
-    font-weight: bold;
-    color: var(--app-primary);
-  }
-}
-
-.case-picker {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-
-  .case-picker-summary {
-    color: var(--app-text-secondary);
-    font-size: 13px;
-  }
-}
-
-.mode-form-item {
-  margin-bottom: 0;
-}
-
-.action-buttons {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-}
-
-.job-info {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  flex-wrap: wrap;
-  font-weight: 500;
-}
-
-.skip-alert {
-  margin-top: 12px;
-
-  .skip-list {
-    margin: 4px 0 0;
-    padding-left: 18px;
-  }
-}
-
-.file-table {
-  margin-top: 12px;
-}
-
-.zip-download {
-  margin-top: 12px;
-  display: flex;
-  justify-content: flex-start;
+.history-error {
+  margin-left: 8px;
+  color: var(--app-text-secondary);
+  font-size: 13px;
 }
 
 .history-detail-meta {
@@ -516,19 +187,5 @@ onMounted(() => {
   margin-bottom: 12px;
   color: var(--app-text-secondary);
   font-size: 13px;
-}
-
-@media (max-width: 640px) {
-  .roc-month-picker,
-  .case-picker,
-  .action-buttons,
-  .job-info {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .action-buttons {
-    justify-content: flex-start;
-  }
 }
 </style>

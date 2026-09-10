@@ -68,15 +68,16 @@ node tests/qa-crud/run.cjs 03-vehicles 04-drivers
 python tests/qa-crud/xlsx.py fill "tests/qa-crud/downloads/個案批次匯入範本.xlsx" tests/qa-crud/fixtures/case-import-filled.xlsx tests/qa-crud/fixtures/case-import-rows.json 2
 ```
 
-```bash
-python tests/qa-crud/xlsx.py fill "tests/qa-crud/downloads/照護人員批次匯入範本.xlsx" tests/qa-crud/fixtures/caregiver-import-filled.xlsx tests/qa-crud/fixtures/caregiver-import-rows.json 2
-```
+照護人員批次匯入的前端入口已於 commit d59060f 隱藏（見 `13-caregiver-import.cjs` 檔頭註解），`照護人員批次匯入範本.xlsx` 已無法透過畫面下載，`caregiver-import-filled.xlsx` 這份 fixture 目前沒有任何 suite 在用，故不再需要重新產生；若前端重新開放入口，再一併復原這份 fixture 與 `13-caregiver-import.cjs`。
 
-司機匯報測試檔不套範本，直接依欄位順序（民國日期／駕駛人／各個案欄／備註）產生，檔名要含車輛車次才會自動比對到車輛：
+司機匯報測試檔不套範本，直接依欄位順序（民國日期／駕駛人／各個案欄／備註）產生。批次上傳頁改成拖拉檔案、依**檔名比對車輛顯示名稱**自動選車（`DriverReportImportView.vue` 的 `detectVehicle`），已無下載官方範本的按鈕（僅後端 API 保留），故連「只有表頭」的空白範本也要用 `create` 直接產生，不能再用 `10-templates-download` 抓：
 
 ```bash
-python tests/qa-crud/xlsx.py create "tests/qa-crud/fixtures/AAA-123 (回覆).xlsx" tests/qa-crud/fixtures/driver-report-rows.json 司機接送匯報
+python tests/qa-crud/xlsx.py create "tests/qa-crud/fixtures/QA匯報測試車接送匯報範本.xlsx" tests/qa-crud/fixtures/driver-report-blank-rows.json 司機接送匯報
+python tests/qa-crud/xlsx.py create "tests/qa-crud/fixtures/QA匯報測試車 (回覆).xlsx" tests/qa-crud/fixtures/driver-report-rows.json 司機接送匯報
 ```
+
+檔名裡的「QA匯報測試車」要跟 `20-driver-report-import.cjs` 裡的 `VEHICLE_NAME` 常數一致；該 suite 執行前會自動確保這台車（與 `driver-report-rows.json` 表頭引用的個案）存在，不依賴本機資料庫既有的示範資料——這台本機 docker 資料庫是多個 session 長期共用、內容會被其他 session 的測試改動，不能假設 demo seed 的原始資料還在。
 
 `*-rows.json` 是二維陣列，一個內層陣列一列，可直接編輯來調整測試組合。
 

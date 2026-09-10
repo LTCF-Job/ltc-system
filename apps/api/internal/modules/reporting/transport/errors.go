@@ -15,10 +15,14 @@ func respondExportError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, app.ErrPrecheckBlocked):
 		httpx.RespondErrorCode(c, http.StatusUnprocessableEntity, httpx.CodePrecheckFailed, err, nil)
+	case errors.Is(err, app.ErrNoExportData):
+		httpx.RespondErrorCode(c, http.StatusUnprocessableEntity, httpx.CodeNoExportData, err, nil)
 	case errors.Is(err, app.ErrExportJobNotFound), errors.Is(err, app.ErrExportFileNotFound):
 		httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
 	case errors.Is(err, app.ErrNotZipJob), errors.Is(err, app.ErrInvalidPeriodYM),
-		errors.Is(err, app.ErrCaseIDsRequired), errors.Is(err, app.ErrInvalidExportMode):
+		errors.Is(err, app.ErrCaseIDsRequired), errors.Is(err, app.ErrInvalidExportMode),
+		errors.Is(err, app.ErrRegionsRequired), errors.Is(err, app.ErrSiteIDsRequired),
+		errors.Is(err, app.ErrPeriodsRequired):
 		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
 	default:
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)

@@ -8,7 +8,7 @@ exports.run = async ({ page, net, record, step, L }) => {
   await step('空白送出', () => L.submit(page, net))
 
   await L.openCreate(page, '新增個案')
-  await step('只填姓名', async () => {
+  await step('只填姓名（缺所屬據點／照護人員）', async () => {
     await L.fill(page, '個案姓名', NAME + 'A')
     return L.submit(page, net)
   })
@@ -20,30 +20,31 @@ exports.run = async ({ page, net, record, step, L }) => {
     return L.submit(page, net)
   })
 
+  let siteOptions = []
+  let caregiverOptions = []
   await L.openCreate(page, '新增個案')
   await step('全欄位新增', async () => {
     await L.fill(page, '個案姓名', NAME + 'C')
     await L.fill(page, '身分證字號', 'A800000014')
-    await L.pick(page, '申報區域', '苗栗縣')
-    await L.fill(page, '住家地址', '苗栗縣QA路9號')
+    siteOptions = await L.selectOptions(page, '所屬據點')
+    if (siteOptions.length > 0) await L.pick(page, '所屬據點', siteOptions[0])
+    caregiverOptions = await L.selectOptions(page, '照護人員')
+    if (caregiverOptions.length > 0) await L.pick(page, '照護人員', caregiverOptions[0])
+    await L.fill(page, '戶籍地址', '苗栗縣QA戶籍路9號')
+    await L.fill(page, '居住地址', '苗栗縣QA路9號')
     await L.radio(page, '服務類別', '1. 補助')
     const usage = await L.selectOptions(page, '服務使用類型')
     if (usage.length > 0) await L.pick(page, '服務使用類型', usage[0])
     await L.fill(page, '備註', 'QA 全欄位個案')
-    return { usageOptions: usage, result: await L.submit(page, net) }
-  })
-
-  await L.openCreate(page, '新增個案')
-  await step('選 DB 不允許的申報區域（臺北市）', async () => {
-    await L.fill(page, '個案姓名', NAME + 'D')
-    await L.pick(page, '申報區域', '臺北市')
-    return L.submit(page, net)
+    return { siteOptions, caregiverOptions, usageOptions: usage, result: await L.submit(page, net) }
   })
 
   await L.openCreate(page, '新增個案')
   await step('身分證與既有個案重複', async () => {
     await L.fill(page, '個案姓名', NAME + 'E')
     await L.fill(page, '身分證字號', 'A800000014')
+    if (siteOptions.length > 0) await L.pick(page, '所屬據點', siteOptions[0])
+    if (caregiverOptions.length > 0) await L.pick(page, '照護人員', caregiverOptions[0])
     return L.submit(page, net)
   })
 
@@ -80,7 +81,8 @@ exports.run = async ({ page, net, record, step, L }) => {
 
   await L.goto(page, '/cases')
   await step('刪除個案', async () => {
-    await L.rowAction(page, NAME + 'A', '刪除')
+    // NAME+'A' 因缺所屬據點／照護人員（皆為必填）未能建立成功，改刪除確實建立成功的 NAME+'C'。
+    await L.rowAction(page, NAME + 'C', '刪除')
     return L.confirmBox(page, net)
   })
 }

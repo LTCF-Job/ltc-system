@@ -216,6 +216,49 @@ func TestDriverService_Create(t *testing.T) {
 		}
 	})
 
+	t.Run("email", func(t *testing.T) {
+		tests := []struct {
+			name       string
+			email      *string
+			wantErr    error
+			wantStored *string
+		}{
+			{name: "accepts a valid email", email: strPtr("driver@example.com"), wantStored: strPtr("driver@example.com")},
+			{name: "trims surrounding spaces", email: strPtr("  driver@example.com  "), wantStored: strPtr("driver@example.com")},
+			{name: "treats empty string as unset", email: strPtr("")},
+			{name: "treats blank spaces as unset", email: strPtr("   ")},
+			{name: "treats omitted value as unset"},
+			{name: "rejects an invalid format", email: strPtr("not-an-email"), wantErr: ErrInvalidDriverEmail},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				store := newFakeDriverStore()
+				svc := NewDriverService(store, cfg, nil)
+
+				d, err := svc.Create(context.Background(), CreateDriverInput{
+					Name:       "測試司機",
+					NationalID: "A123456789",
+					Email:      tt.email,
+				})
+
+				if tt.wantErr != nil {
+					assert.ErrorIs(t, err, tt.wantErr)
+					assert.Nil(t, store.lastCreate)
+					return
+				}
+
+				assert.NoError(t, err)
+				if tt.wantStored == nil {
+					assert.Nil(t, d.Email)
+				} else {
+					require.NotNil(t, d.Email)
+					assert.Equal(t, *tt.wantStored, *d.Email)
+				}
+			})
+		}
+	})
+
 	t.Run("creates driver and assigns vehicle when vehicleID provided", func(t *testing.T) {
 		store := newFakeDriverStore()
 		svc := NewDriverService(store, cfg, nil)
@@ -279,6 +322,43 @@ func TestDriverService_Update(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "trailer", *d.LicenseClass)
 		assert.Equal(t, newExpiry, *d.LicenseExpiryDate)
+	})
+
+	t.Run("email 未提供時保留原值", func(t *testing.T) {
+		id := uuid.New()
+		store := newFakeDriverStore()
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Status: "active", Email: strPtr("old@example.com")}
+		svc := NewDriverService(store, cfg, nil)
+
+		d, err := svc.Update(context.Background(), id, UpdateDriverInput{Name: strPtr("新名字")})
+
+		assert.NoError(t, err)
+		require.NotNil(t, d.Email)
+		assert.Equal(t, "old@example.com", *d.Email)
+	})
+
+	t.Run("email 送空字串會清空原值", func(t *testing.T) {
+		id := uuid.New()
+		store := newFakeDriverStore()
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Status: "active", Email: strPtr("old@example.com")}
+		svc := NewDriverService(store, cfg, nil)
+
+		d, err := svc.Update(context.Background(), id, UpdateDriverInput{Email: strPtr("")})
+
+		assert.NoError(t, err)
+		assert.Nil(t, d.Email)
+	})
+
+	t.Run("email 格式錯誤時拒絕更新", func(t *testing.T) {
+		id := uuid.New()
+		store := newFakeDriverStore()
+		store.byID[id] = &Driver{ID: id, Name: "舊名字", Status: "active", Email: strPtr("old@example.com")}
+		svc := NewDriverService(store, cfg, nil)
+
+		_, err := svc.Update(context.Background(), id, UpdateDriverInput{Email: strPtr("not-an-email")})
+
+		assert.ErrorIs(t, err, ErrInvalidDriverEmail)
+		assert.Nil(t, store.lastUpdate)
 	})
 
 	t.Run("接受合法的狀態值", func(t *testing.T) {
