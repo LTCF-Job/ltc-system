@@ -197,6 +197,11 @@ type TxRunner interface {
 	WithTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
+// SavepointRunner 讓匯入能逐列隔離失敗；未實作時退回「一列失敗即整份回滾」的舊行為。
+type SavepointRunner interface {
+	WithSavepoint(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
 // DriverReportOption 調整司機匯報匯入的業務時間來源。
 type DriverReportOption func(*DriverReportService)
 

@@ -60,9 +60,10 @@ func (s *DriverReportService) CommitDriverReport(
 	rows := tables[0]
 
 	result := &CommitResult{
-		SkippedRows: []SkippedRow{},
-		Warnings:    []ImportWarningItem{},
-		Status:      "pending",
+		SkippedRows:   []SkippedRow{},
+		Warnings:      []ImportWarningItem{},
+		Status:        "pending",
+		CoveredMonths: preview.CoveredMonths,
 	}
 	importable := collectImportableRows(preview.PreviewRows, result)
 
@@ -98,6 +99,7 @@ func (s *DriverReportService) CommitDriverReport(
 		// 這台車其他未出現在本次檔案的資料完全不受影響（見
 		// docs/decisions/driver-report-import-overwrite.md）。
 		submittedAt := s.now()
+		savepoints, _ := s.txRunner.(SavepointRunner)
 		for _, row := range importable {
 			// 保留這一列所有欄位的原始值，含尚未對應個案的欄位：日後在待維護頁面完成
 			// 綁定時，直接用這裡存的 form_submissions 回填搭乘紀錄，不必重新上傳檔案。
@@ -107,24 +109,43 @@ func (s *DriverReportService) CommitDriverReport(
 			}
 
 			driverID := parseOptionalUUID(row.preview.DriverID)
-			outcome, err := s.rideIngestor.IngestSubmission(txCtx, formID, form.VehicleID, Submission{
-				ServiceDate: row.serviceDate,
-				SubmittedAt: submittedAt,
-				DriverRaw:   row.preview.DriverRaw,
-				DriverID:    driverID,
-				Remark:      row.preview.Remark,
-				Answers:     answers,
-			})
-			if err != nil {
-				return fmt.Errorf("第 %d 列寫入搭乘紀錄失敗：%w", row.preview.RowIndex, err)
+			var outcome IngestOutcome
+			writeRow := func(rowCtx context.Context) error {
+				var err error
+				outcome, err = s.rideIngestor.IngestSubmission(rowCtx, formID, form.VehicleID, Submission{
+					ServiceDate: row.serviceDate,
+					SubmittedAt: submittedAt,
+					DriverRaw:   row.preview.DriverRaw,
+					DriverID:    driverID,
+					Remark:      row.preview.Remark,
+					Answers:     answers,
+				})
+				if err != nil {
+					return fmt.Errorf("寫入搭乘紀錄失敗：%w", err)
+				}
+				// 比對到司機時順便同步當天出勤月曆；比對不到的維持既有「駕駛人待維護」流程，
+				// 不在這裡處理。
+				if driverID != nil {
+					if err := s.attendanceRegistrar.SyncFromImport(rowCtx, *driverID, row.serviceDate); err != nil {
+						return fmt.Errorf("同步司機出勤失敗：%w", err)
+					}
+				}
+				return nil
 			}
 
-			// 比對到司機時順便同步當天出勤月曆；比對不到的維持既有「駕駛人待維護」流程，
-			// 不在這裡處理。
-			if driverID != nil {
-				if err := s.attendanceRegistrar.SyncFromImport(txCtx, *driverID, row.serviceDate); err != nil {
-					return fmt.Errorf("第 %d 列同步司機出勤失敗：%w", row.preview.RowIndex, err)
+			if savepoints == nil {
+				// 沒有 SavepointRunner 時退回舊行為：這一列的寫入沒有 savepoint 保護，
+				// 失敗無法單獨回滾，只能讓外層整份交易一起回滾。
+				if err := writeRow(txCtx); err != nil {
+					return fmt.Errorf("第 %d 列：%w", row.preview.RowIndex, err)
 				}
+			} else if rowErr := savepoints.WithSavepoint(txCtx, writeRow); rowErr != nil {
+				result.SkippedRows = append(result.SkippedRows, SkippedRow{
+					RowIndex:   row.preview.RowIndex,
+					ReportDate: row.preview.ReportDate,
+					Reasons:    []string{rowErr.Error()},
+				})
+				continue
 			}
 
 			result.ImportedRows++
@@ -138,8 +159,8 @@ func (s *DriverReportService) CommitDriverReport(
 
 		// 必須跑在上面的逐列寫入之後：form_submissions 是「一車一天一筆」原地更新，
 		// 先補寫會讀到這幾天更新前的舊答案，再被本次的新值比出一筆並不存在的衝突。
-		// 檔案涵蓋的日期全部排除（不只本次宣告的月份）：跨月檔案是逐月各送一次 commit，
-		// 尚未輪到的那些月份此刻還是上一次上傳的舊值，補進去就會被下一輪比出假衝突。
+		// 現在整份檔案一次 commit 寫完（不再逐月拆送），所以這裡排除的就是本次寫入的
+		// 全部日期，不會再有「尚未輪到、還是舊值」的月份殘留在排除清單之外。
 		fileDates := collectFileServiceDates(preview.PreviewRows)
 		for _, target := range backfillTargets {
 			written, err := s.rideIngestor.BackfillColumn(txCtx, formID, form.VehicleID, target.columnHeader, target.columnIndex, target.caseID, target.legSeq, fileDates)

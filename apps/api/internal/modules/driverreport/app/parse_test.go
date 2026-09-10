@@ -51,6 +51,7 @@ func (s *stubStore) UpsertColumns(context.Context, uuid.UUID, []ColumnDraft) err
 func (s *stubStore) UpdateColumnMappingByID(context.Context, string, string, *string, *int16) (uuid.UUID, string, int, string, error) {
 	return uuid.Nil, "", 0, "", nil
 }
+
 // UpdateColumnMappingByHeader 依 existing 裡的欄位回答更新前狀態，讓測試能用「欄位原本
 // 是 pending 還是 mapped」控制匯入路徑要不要觸發回填。
 func (s *stubStore) UpdateColumnMappingByHeader(_ context.Context, _ uuid.UUID, header, _ string, _ *string, _ *int16) (int, string, error) {
@@ -206,6 +207,25 @@ func TestParseDriverReport_RowsOutsideDeclaredMonthAreErrorRowsNotWholeFileRejec
 	require.Len(t, result.PreviewRows, 3)
 	assert.Contains(t, result.PreviewRows[0].ErrorMessage, "不屬於本次宣告匯入的 2026-04")
 	assert.Equal(t, "2026-03-02", result.PreviewRows[0].ServiceDate, "月份不符的列仍保留已解析出的服務日期供畫面顯示")
+	assert.Equal(t, []string{"2026-03"}, result.CoveredMonths, "CoveredMonths 回報檔案實際涵蓋的月份，不受宣告月份篩掉")
+}
+
+func TestParseDriverReport_WithoutDeclaredMonthImportsAllDates(t *testing.T) {
+	// 不帶 yearMonth 時單次全檔匯入：跨月檔案的每一列都照常寫入，不再被標成錯誤列。
+	table := [][]string{
+		{"民國日期", "駕駛人", "1.吳桂(去程竹3) [去程]", "備註"},
+		{"1150302", "林彥衡", "有坐", ""},
+		{"1150401", "林彥衡", "有坐", ""},
+	}
+	svc := newTestService(table, nil)
+
+	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"), "")
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, result.ErrorRows)
+	assert.Empty(t, result.Errors)
+	assert.Equal(t, 2, result.ValidRows)
+	assert.Equal(t, []string{"2026-03", "2026-04"}, result.CoveredMonths)
 }
 
 func TestParseDriverReport_UnknownDriverIsWarningNotError(t *testing.T) {
@@ -262,10 +282,55 @@ func TestParseDriverReport_AcceptsLeadingTimestampColumn(t *testing.T) {
 	assert.Equal(t, 1, result.PreviewRows[0].BoardedCount)
 }
 
-func TestParseDriverReport_IgnoresColumnsAfterRemark(t *testing.T) {
-	// 備註欄之後若還殘留欄位（如表單後續編修累加的舊題目），一律忽略，不當成個案欄匯入。
+func TestParseDriverReport_ImportsRideColumnsAfterRemark(t *testing.T) {
+	// 備註／問題回報欄之後仍可能有真正的個案欄（如 Google 表單依填寫順序累加的後續個案），
+	// 只有不帶 [去程]／[回程] 標記的殘留欄位才略過不匯入。
 	table := [][]string{
-		{"民國日期", "駕駛人", "1.吳桂(去程竹3) [去程]", "備註", "10.李吳素娥 [去程]"},
+		{"民國日期", "駕駛人", "1.甲 [去程]", "備註", "2.乙 [去程]", "2.乙 [回程]", "第 21 欄"},
+		{"1150302", "林彥衡", "有坐", "無", "有坐", "沒坐", ""},
+	}
+	svc := newTestService(table, nil)
+
+	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"), "")
+	require.NoError(t, err)
+
+	require.Len(t, result.Columns, 3)
+	assert.Equal(t, "1.甲 [去程]", result.Columns[0].ColumnHeader)
+	assert.Equal(t, 3, result.Columns[0].ColumnIndex)
+	assert.Equal(t, "2.乙 [去程]", result.Columns[1].ColumnHeader)
+	assert.Equal(t, 5, result.Columns[1].ColumnIndex)
+	assert.Equal(t, "2.乙 [回程]", result.Columns[2].ColumnHeader)
+	assert.Equal(t, 6, result.Columns[2].ColumnIndex)
+	assert.Equal(t, "無", result.PreviewRows[0].Remark)
+
+	require.Len(t, result.Warnings, 1)
+	assert.Contains(t, result.Warnings[0].Message, "已略過不匯入")
+	assert.Contains(t, result.Warnings[0].Message, "第 21 欄")
+	assert.NotContains(t, result.Warnings[0].Message, "2.乙")
+}
+
+func TestParseDriverReport_DuplicateHeaderLiteralOnlyKeepsFirst(t *testing.T) {
+	// form_columns 以表頭文字為唯一鍵，同一批寫入若有重複字面，後出現的會靜默覆蓋欄號；
+	// 解析階段先去重並提醒，避免欄位讀錯。
+	table := [][]string{
+		{"民國日期", "駕駛人", "1.甲 [去程]", "備註", "1.甲 [去程]"},
+		{"1150302", "林彥衡", "有坐", "無", "有坐"},
+	}
+	svc := newTestService(table, nil)
+
+	result, err := svc.ParseDriverReport(context.Background(), uuid.MustParse(testFormID), strings.NewReader("x"), "")
+	require.NoError(t, err)
+
+	require.Len(t, result.Columns, 1)
+	assert.Equal(t, 3, result.Columns[0].ColumnIndex)
+	require.Len(t, result.Warnings, 1)
+	assert.Contains(t, result.Warnings[0].Message, "1.甲 [去程]")
+}
+
+func TestParseDriverReport_IgnoresColumnsAfterRemark(t *testing.T) {
+	// 備註欄之後不帶 [去程]／[回程] 標記的殘留欄位（表單編修留下的空白編號欄）一律忽略。
+	table := [][]string{
+		{"民國日期", "駕駛人", "1.吳桂(去程竹3) [去程]", "備註", "第 10 欄"},
 		{"1150302", "林彥衡", "有坐", "無", "有坐"},
 	}
 	svc := newTestService(table, nil)
@@ -278,7 +343,7 @@ func TestParseDriverReport_IgnoresColumnsAfterRemark(t *testing.T) {
 	assert.Equal(t, "無", result.PreviewRows[0].Remark)
 	require.Len(t, result.Warnings, 1)
 	assert.Contains(t, result.Warnings[0].Message, "已略過不匯入")
-	assert.Contains(t, result.Warnings[0].Message, "10.李吳素娥 [去程]")
+	assert.Contains(t, result.Warnings[0].Message, "第 10 欄")
 }
 
 func TestParseDriverReport_RejectsWrongHeader(t *testing.T) {

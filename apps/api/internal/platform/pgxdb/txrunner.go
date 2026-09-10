@@ -58,6 +58,36 @@ func (r *TxRunner) WithTx(ctx context.Context, fn func(ctx context.Context) erro
 	return fn(context.WithValue(ctx, ctxKey{}, tx))
 }
 
+// WithSavepoint 在既有事務內以 savepoint 執行 fn，fn 失敗時只回滾這個 savepoint，
+// 讓呼叫端能跳過個別失敗項目而保住同一筆事務中其餘已寫入的內容。
+func (r *TxRunner) WithSavepoint(ctx context.Context, fn func(ctx context.Context) error) (err error) {
+	tx, ok := TxFromContext(ctx)
+	if !ok {
+		// 沒有外層事務可掛 savepoint，直接執行
+		return fn(ctx)
+	}
+
+	// pgx.Tx.Begin 在既有事務內呼叫時建立的是 SAVEPOINT，不是新的頂層交易
+	sp, err := tx.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin savepoint: %w", err)
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			_ = sp.Rollback(ctx)
+			panic(p)
+		}
+		if err != nil {
+			_ = sp.Rollback(ctx)
+			return
+		}
+		err = sp.Commit(ctx)
+	}()
+
+	return fn(context.WithValue(ctx, ctxKey{}, sp))
+}
+
 // FromContext 取得目前 context 綁定的事務；若無則回傳 fallback（通常是 repository 自身的 pool）。
 func FromContext(ctx context.Context, fallback Querier) Querier {
 	if tx, ok := ctx.Value(ctxKey{}).(pgx.Tx); ok {

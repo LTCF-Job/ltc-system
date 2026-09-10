@@ -35,15 +35,16 @@ func (s *recordingStore) UpsertColumns(_ context.Context, _ uuid.UUID, drafts []
 
 // fakeIngestor 記錄每次寫入的呼叫，讓測試能斷言傳入值與彙整結果。
 type fakeIngestor struct {
-	events         []string
-	submissions    []Submission
-	ingestOutcome  IngestOutcome
-	ingestErr      error
-	importedMonths []ImportedMonth
-	importedErr    error
-	backfillCalls  []backfillCall
-	backfillResult int
-	backfillErr    error
+	events          []string
+	submissions     []Submission
+	ingestOutcome   IngestOutcome
+	ingestErr       error
+	failServiceDate string // 只讓這個日期（2006-01-02）的列失敗，其餘列照常寫入
+	importedMonths  []ImportedMonth
+	importedErr     error
+	backfillCalls   []backfillCall
+	backfillResult  int
+	backfillErr     error
 
 	submissionsForForms  []SubmissionAnswerRow
 	unmatchedDrivers     []UnmatchedDriverSubmission
@@ -97,6 +98,9 @@ func (f *fakeIngestor) ListImportedMonths(context.Context) ([]ImportedMonth, err
 func (f *fakeIngestor) IngestSubmission(_ context.Context, _, _ uuid.UUID, s Submission) (IngestOutcome, error) {
 	if f.ingestErr != nil {
 		return IngestOutcome{}, f.ingestErr
+	}
+	if f.failServiceDate != "" && s.ServiceDate.Format("2006-01-02") == f.failServiceDate {
+		return IngestOutcome{}, errors.New("boom")
 	}
 	f.events = append(f.events, "ingest")
 	f.submissions = append(f.submissions, s)
@@ -195,6 +199,14 @@ func (f *fakeAttendanceRegistrar) SyncFromImport(_ context.Context, driverID uui
 type directTxRunner struct{}
 
 func (directTxRunner) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	return fn(ctx)
+}
+
+// savepointTxRunner 額外實作 SavepointRunner，用來驗證 commit.go 在有逐列隔離能力時
+// 確實跳過失敗列繼續處理，而不是整份回滾（真正的 savepoint 回滾語意由 pgxdb 套件負責）。
+type savepointTxRunner struct{ directTxRunner }
+
+func (savepointTxRunner) WithSavepoint(ctx context.Context, fn func(ctx context.Context) error) error {
 	return fn(ctx)
 }
 
@@ -374,6 +386,47 @@ func TestCommitDriverReport_IngestFailureAbortsWholeImport(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.False(t, store.markedImported, "交易中止時不得更新最後匯入時間")
+}
+
+func TestCommitDriverReport_SavepointIsolatesFailingRowFromOthers(t *testing.T) {
+	// 有 SavepointRunner 時，單列寫入失敗只跳過那一列並記錄原因，其餘列照常寫入，
+	// 不再讓一筆壞資料拖累整份交易回滾。
+	table := [][]string{
+		{"民國日期", "駕駛人", "1.吳桂(去程竹3) [去程]", "備註"},
+		{"1150302", "林彥衡", "有坐", ""},
+		{"1150303", "林彥衡", "有坐", ""},
+	}
+	ingestor := &fakeIngestor{failServiceDate: "2026-03-02"}
+	store := &recordingStore{stubStore: &stubStore{
+		existing: []ColumnMapping{mappedColumnMapping()},
+		form: &ReportForm{
+			ID:                 uuid.MustParse(testFormID),
+			VehicleID:          uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+			VehicleDisplayName: "竹南2車",
+		},
+	}}
+	svc := NewDriverReportService(
+		store,
+		stubExcel{table: table},
+		nil,
+		stubCases{list: []CaseRef{{ID: testCaseID, Name: "吳桂", NameNormalized: "吳桂"}}},
+		stubDrivers{known: map[string]DriverRef{"林彥衡": {ID: uuid.New(), Name: "林彥衡"}}},
+		ingestor,
+		&fakeAttendanceRegistrar{},
+		nil,
+		savepointTxRunner{},
+	)
+
+	result, err := commit(svc, "")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "succeeded", result.Status)
+	assert.Equal(t, 1, result.ImportedRows, "只有 3/2 那列失敗，3/3 仍要寫入")
+	require.Len(t, result.SkippedRows, 1)
+	assert.Equal(t, 2, result.SkippedRows[0].RowIndex)
+	assert.Contains(t, result.SkippedRows[0].Reasons[0], "boom")
+	assert.True(t, store.markedImported, "還有列成功寫入時仍要更新最後匯入時間")
 }
 
 func TestCommitDriverReport_AllRowsMalformedWritesNothing(t *testing.T) {

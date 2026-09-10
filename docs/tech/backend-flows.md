@@ -72,9 +72,17 @@ covers:
 帶有 `corrected_at`、`conflict_resolved_at` 或 `not_claimed_aa09` 的紀錄一律保留，人工成果
 不會被匯入或補綁定流程覆蓋。
 
-寫入落在同一個 `pgxdb.TxRunner` 交易內。解析層級的失敗仍逐列略過，但資料庫層級的失敗會整份
-回滾，`last_imported_at` 不更新。`RideRepository` 與 `DriverReportRepository` 都改用
-`pgxdb.FromContext` 取用外層交易。
+寫入落在同一個 `pgxdb.TxRunner` 交易內。解析層級的失敗逐列略過；單列的資料庫寫入
+（`IngestSubmission` 與後續的 `SyncFromImport`）包在 `pgxdb.TxRunner.WithSavepoint` 開的
+savepoint 內，失敗只回滾這一列、記入 `CommitResult.SkippedRows`，其餘列照常寫入——一台已停用
+的個案或一筆格式異常不再拖累整份交易。只有交易層級的失敗（取不到匯入鎖、`persistColumnDecisions`
+失敗、`BackfillColumn` 失敗）才會整份回滾，`last_imported_at` 不更新。`RideRepository` 與
+`DriverReportRepository` 都改用 `pgxdb.FromContext` 取用外層交易。
+
+檔案跨月時不再由前端逐月各送一次 commit：`ParseDriverReport` 解析時把所有列的服務日期去重
+收進 `CoveredMonths`（`PreviewResult`／`CommitResult` 都有這欄），單次 `dryRun=false` 請求
+即寫完整份檔案；`yearMonth` 仍是選填參數，帶了才會把該月以外的列標成錯誤列，不帶時全部照常
+寫入。
 
 ```
 使用者上傳匯報表 .xlsx

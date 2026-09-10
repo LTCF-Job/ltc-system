@@ -524,6 +524,7 @@ export interface DriverReportPreviewDTO {
   errorRows: number;
   warningRows: number;
   unmappedColumns: number;
+  coveredMonths: string[];
   columns: DriverReportPreviewColumn[];
   previewRows: DriverReportPreviewRow[];
   errors: Array<{
@@ -558,6 +559,7 @@ export interface DriverReportCommitResultDTO {
   pendingConflictRows: number;
   backfilledRows: number;
   mappedColumns: number;
+  coveredMonths: string[];
   skippedRows: Array<{
     rowIndex: number;
     reportDate: string;

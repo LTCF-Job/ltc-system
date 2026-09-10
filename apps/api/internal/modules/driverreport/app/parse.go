@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -66,8 +67,8 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 	driverIdx := dateIdx + 1
 
 	rawHeaderRow := trimTrailingEmpty(rows[headerRowIdx])
-	caseHeaders := rawHeaderRow[driverIdx+1 : remarkIdx]
-	columns, err := s.buildColumnPreviews(ctx, formID, caseHeaders, driverIdx+1)
+	cells, ignoredHeaders := collectCaseHeaders(rawHeaderRow, driverIdx, remarkIdx)
+	columns, err := s.buildColumnPreviews(ctx, formID, cells)
 	if err != nil {
 		return nil, err
 	}
@@ -83,32 +84,25 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 		Warnings:    []ImportWarningItem{},
 	}
 
-	// 備註／問題回報欄位後的欄位不匯入，在此記錄提醒供前端說明檢視
-	if len(rawHeaderRow) > remarkIdx+1 {
-		var ignoredHeaders []string
-		for _, h := range rawHeaderRow[remarkIdx+1:] {
-			if th := strings.TrimSpace(h); th != "" {
-				ignoredHeaders = append(ignoredHeaders, th)
-			}
+	// 殘留欄位（問題回報之後不帶去程／回程標記、或表頭重複）不匯入，在此記錄提醒供前端說明檢視
+	if len(ignoredHeaders) > 0 {
+		remarkName := strings.TrimSpace(rawHeaderRow[remarkIdx])
+		if remarkName == "" {
+			remarkName = headerRemark
 		}
-		if len(ignoredHeaders) > 0 {
-			remarkName := strings.TrimSpace(rawHeaderRow[remarkIdx])
-			if remarkName == "" {
-				remarkName = headerRemark
-			}
-			sampleCount := 3
-			if len(ignoredHeaders) < sampleCount {
-				sampleCount = len(ignoredHeaders)
-			}
-			samples := strings.Join(ignoredHeaders[:sampleCount], "、")
-			result.Warnings = append(result.Warnings, ImportWarningItem{
-				RowIndex: headerRowIdx + 1,
-				Field:    remarkName,
-				Message:  fmt.Sprintf("「%s」欄位之後的 %d 個欄位已略過不匯入（如：%s 等）", remarkName, len(ignoredHeaders), samples),
-			})
+		sampleCount := 3
+		if len(ignoredHeaders) < sampleCount {
+			sampleCount = len(ignoredHeaders)
 		}
+		samples := strings.Join(ignoredHeaders[:sampleCount], "、")
+		result.Warnings = append(result.Warnings, ImportWarningItem{
+			RowIndex: headerRowIdx + 1,
+			Field:    remarkName,
+			Message:  fmt.Sprintf("「%s」欄位之後的 %d 個欄位已略過不匯入（如：%s 等）", remarkName, len(ignoredHeaders), samples),
+		})
 	}
 
+	coveredMonths := map[string]struct{}{}
 	for i := headerRowIdx + 1; i < len(rows); i++ {
 		rowNum := i + 1
 		dateRaw := cellAt(rows[i], dateIdx)
@@ -130,6 +124,7 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 			continue
 		}
 		row.ServiceDate = serviceDate.Format("2006-01-02")
+		coveredMonths[row.ServiceDate[:7]] = struct{}{}
 
 		// 有宣告月份時，落在該月之外的列僅標記為錯誤、不計入可匯入範圍
 		if monthDeclared && !strings.HasPrefix(row.ServiceDate, monthPrefix) {
@@ -188,6 +183,13 @@ func (s *DriverReportService) ParseDriverReport(ctx context.Context, formID uuid
 	}
 	result.Columns = columns
 
+	months := make([]string, 0, len(coveredMonths))
+	for m := range coveredMonths {
+		months = append(months, m)
+	}
+	sort.Strings(months)
+	result.CoveredMonths = months
+
 	return result, nil
 }
 
@@ -206,8 +208,7 @@ func parseYearMonth(raw string) (time.Time, bool, error) {
 
 // buildColumnPreviews 把檔案表頭與既有 form_columns 對照起來；沒對應過的欄位
 // 以姓名相似度推薦個案，並由 [去程]／[回程] 標記推薦趟次。
-// colOffset 是 caseHeaders[0] 在原始列中的 0-based 位置，用來還原每欄實際的 ColumnIndex。
-func (s *DriverReportService) buildColumnPreviews(ctx context.Context, formID uuid.UUID, caseHeaders []string, colOffset int) ([]ColumnPreview, error) {
+func (s *DriverReportService) buildColumnPreviews(ctx context.Context, formID uuid.UUID, cells []headerCell) ([]ColumnPreview, error) {
 	existing, err := s.repo.ListColumnsWithMapping(ctx, formID.String(), "")
 	if err != nil {
 		return nil, err
@@ -218,12 +219,13 @@ func (s *DriverReportService) buildColumnPreviews(ctx context.Context, formID uu
 	}
 
 	var candidates []CaseRef
-	columns := make([]ColumnPreview, 0, len(caseHeaders))
+	columns := make([]ColumnPreview, 0, len(cells))
 
-	for i, h := range caseHeaders {
+	for _, cell := range cells {
+		h := cell.text
 		parsed := namenorm.ParseColumnHeader(h)
 		col := ColumnPreview{
-			ColumnIndex:   colOffset + i + 1,
+			ColumnIndex:   cell.index + 1,
 			ColumnHeader:  h,
 			CleanedName:   parsed.CleanedName,
 			Direction:     parsed.Direction,
@@ -297,6 +299,44 @@ func legSeqForDirection(direction string) *int16 {
 	}
 }
 
+// headerCell 保留表頭在原始列中的 0-based 位置，讓收集後不連續的欄位仍算得出正確 ColumnIndex。
+type headerCell struct {
+	index int
+	text  string
+}
+
+// collectCaseHeaders 取出所有要匯入的個案欄，並回傳被排除的表頭供提醒使用。
+func collectCaseHeaders(header []string, driverIdx, remarkIdx int) (cells []headerCell, ignored []string) {
+	seen := make(map[string]struct{})
+	collect := func(i int, requireRideKind bool) {
+		text := strings.TrimSpace(header[i])
+		if text == "" {
+			return
+		}
+		// 問題回報欄之後殘留的編號欄沒有方向標記，不是個案欄
+		if requireRideKind && namenorm.ParseColumnHeader(text).Kind != "ride" {
+			ignored = append(ignored, text)
+			return
+		}
+		// form_columns 以表頭文字為唯一鍵，重複字面會讓後出現的一份靜默覆蓋欄號
+		if _, dup := seen[text]; dup {
+			ignored = append(ignored, text)
+			return
+		}
+		seen[text] = struct{}{}
+		cells = append(cells, headerCell{index: i, text: text})
+	}
+
+	for i := driverIdx + 1; i < remarkIdx; i++ {
+		collect(i, false)
+	}
+	// 問題回報欄之後只收帶 [去程]／[回程] 的個案欄
+	for i := remarkIdx + 1; i < len(header); i++ {
+		collect(i, true)
+	}
+	return cells, ignored
+}
+
 // findReportHeader 找出表頭列，回傳日期欄與備註欄的 0-based 位置（駕駛人固定緊接在日期欄後）。
 func findReportHeader(rows [][]string) (headerRowIdx, dateIdx, remarkIdx int, err error) {
 	for idx, row := range rows {
@@ -313,7 +353,8 @@ func findReportHeader(rows [][]string) (headerRowIdx, dateIdx, remarkIdx int, er
 			continue
 		}
 		remarkIdx = -1
-		// 以內容搜尋定位，不要求整列最後一格；備註欄之後不論還有多少殘留欄位一律略過不匯入
+		// 以內容搜尋定位，不要求整列最後一格；備註欄只是個案欄與殘留欄位的分段點，
+		// 之後仍可能有個案欄（見 collectCaseHeaders），不代表整段都不匯入
 		for i := dateIdx + 2; i < len(header); i++ {
 			cell := strings.TrimSpace(header[i])
 			if cell == headerRemark || strings.Contains(cell, "問題回報") {
