@@ -44,6 +44,20 @@ request 或含有身分證密文、HMAC、明文身分證、地址與聯絡資�
        └─ mutation success → audit failure 只記 server log，排入既有重試／監控責任
 ```
 
+**判準句**（本文件為權威來源，`docs/tech/mutation-audit-specification.md` §3.1 與
+`docs/tech/application-architecture.md` §6 皆指向這裡，不得各自另訂分級）：
+若稽核寫入失敗而業務資料保留，是否會讓該操作事後無法被查核或無法被追責？
+是 → 阻斷性；否 → 非阻斷性。
+
+| 等級 | action | 失敗時行為 |
+|---|---|---|
+| 阻斷性 | `delete`、`permission_change`、`reveal_pii`、`conflict_resolve`、`manual_correction` | 整筆交易回滾並報錯 |
+| 非阻斷性 | 一般主檔 `create`／`update`／`status_change`、`import`、`export_requested`、`export_succeeded`、`export_failed` | mutation 維持成功，稽核失敗只記結構化 server log |
+
+依此判準，據點／車輛／司機等一般主檔的 `create`／`update` 屬非阻斷性；`delete`
+屬阻斷性。`masterdata/app/audit.go` 的 `writeAuditBestEffort`（失敗只 `slog.Error`，
+不回傳 error）是照此分級實作的一般主檔路徑，不是待修正的缺陷。
+
 Supabase user mutation 先以外部結果判定成功，再把 audit failure 視為可補償的
 觀測事件；密碼、PII reveal 與 permission change 仍須採用各自 service 的高風險
 阻擋規則。匯入與匯出會分別記錄實際的 import／export 狀態，不把 request accepted

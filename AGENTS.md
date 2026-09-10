@@ -20,7 +20,7 @@
 - **JWT、登入、actor、角色、權限矩陣、權限 cache 或使用者管理**：讀 `.agents/skills/auth-permission-guidelines/SKILL.md`，並參閱 `docs/tech/frontend-permission-logic.md`、`docs/decisions/role-permission-api-authorization.md`。
 - **migration、schema、index、constraint、seed 或資料庫版本**：讀 `.agents/skills/migration-guidelines/SKILL.md`、`.agents/skills/supabase-postgres-best-practices/SKILL.md`，並參閱 `docs/tech/maintainer-runbook.md`。
 - **業務日期、民國日期、時區、排班、搭乘、假日、狀態、合併或待維護隔離**：讀 `docs/tech/backend-business-rules.md`、`docs/decisions/pending-data-visibility.md`、`docs/tech/system-logic-specification.md`（待維護全站隔離）。
-- **後端架構、Go 分層、use case、repository、SQL、演算法或流程**：讀 `.agents/skills/backend-architecture/SKILL.md` 與 `.agents/skills/go-backend-code-style/SKILL.md`，並參閱 `docs/tech/backend-flows.md`、`docs/tech/backend-framework.md`。
+- **後端架構、Go 分層、use case、repository、SQL、演算法或流程**：讀 `.agents/skills/backend-architecture/SKILL.md` 與 `.agents/skills/go-backend-code-style/SKILL.md`，並參閱 `docs/tech/backend-flows.md`、`docs/tech/backend-framework.md`；涉及目標架構、package 命名切換或遷移階段時，先讀 `docs/tech/application-architecture.md`。
 - **Go unit test、table-driven test、domain rule、parser 或 service test**：讀 `.agents/skills/golang-unit-testing/SKILL.md`，並參閱 `docs/tech/backend-business-rules.md`。
 - **前端架構、Vue 3、頁面拆分、composable、Pinia、API client 或 TypeScript contract**：讀 `.agents/skills/frontend-architecture/SKILL.md`，並參閱 `docs/tech/frontend-flows.md`、`docs/tech/frontend-pages.md`、`docs/tech/frontend-framework.md`。
 - **後台 UI 資訊架構、CRUD 工作台、表格、篩選、批次操作、審核流程或稽核頁面**：讀 `.agents/skills/admin-ui-design/SKILL.md`、`.agents/skills/ltc-dashboard-visual-language/SKILL.md`，並遵守 `docs/tech/system-logic-specification.md`（主檔 CRUD、錯誤代碼友善呈現）。
@@ -36,7 +36,7 @@
 
 本專案採前後端分離的 modular monolith：
 
-- Go API 已完成模組化：每個業務能力是 `internal/modules/<capability>/{transport,app,infra}`，模組之間只透過 `cmd/server` 注入的 port 協作。邊界由 `internal/arch/arch_test.go` 強制，其 baseline 為空。
+- Go API 已完成模組化：每個業務能力現行為 `internal/modules/<capability>/{transport,app,infra}`，模組之間只透過 `cmd/server` 注入的 port 協作。邊界由 `internal/arch/arch_test.go` 強制，其 baseline 為空——這代表現行 layout 沒有已知違規，**不代表**目標 layout（`{domain,application,adapters}`，見 `docs/tech/application-architecture.md`）已受保護；該文件定義的目標命名要到對應模組完成切片且 `arch_test.go` 擴充後才生效，切換前仍用現行命名。
 - Vue 3 SPA 逐步朝 `app / features / shared` 的 feature-oriented 結構遷移。
 - 前端時間顯示規格：時間一律只顯示到秒數（`YYYY-MM-DD HH:mm:ss`，純時間 `HH:mm:ss`），統一透過 `@/utils/formatters` 格式化，嚴禁直接輸出 raw ISO 8601、毫秒或時區字尾。
 - API DTO、domain model、persistence model 與 mock fixture 保持不同責任。

@@ -7,7 +7,9 @@ description: Use when adding, changing, or reviewing anything under apps/api —
 
 Use this skill to keep backend changes aligned with the repository's existing boundaries. It is architecture guidance, not a mandate to replace the current framework or directory layout.
 
-`apps/api` is a modular monolith: one package trio per business capability under `internal/modules/<capability>/{transport,app,infra}`, plus `internal/platform/*` and `internal/domain/*` as shared kernels. Modules collaborate only through ports that `cmd/server` injects.
+`apps/api` is a modular monolith: one package trio per business capability, plus a shared technical kernel and a shared business kernel. Modules collaborate only through ports that the composition root injects.
+
+Today that trio is `internal/modules/<capability>/{transport,app,infra}`, the shared kernels are `internal/platform/*` and `internal/domain/*`, and the composition root is `cmd/server`. The target layout — `{domain,application,adapters}`, `internal/sharedkernel`, `internal/bootstrap` (`docs/tech/application-architecture.md`) — applies to a module only once it has been sliced into it; until then, use the current names.
 
 **Working in `apps/api` starts by reading [layering-rules.md](references/layering-rules.md)** — the capability map, import matrix, model ownership, cross-module recipe, and the step list for adding an endpoint or a module. Those rules are encoded in `apps/api/internal/arch/arch_test.go`, whose baseline is empty: a boundary violation fails `go test ./...` and is a defect to fix, not an entry to add. The rest of this file is the reasoning behind those rules and applies to backend work generally.
 

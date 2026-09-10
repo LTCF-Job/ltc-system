@@ -2,6 +2,8 @@
 
 本目錄包含系統所有核心業務邏輯規範、前後端架構、API 對照、操作流程與運維文件。
 
+架構開發入口：[應用程式目標架構與開發規範](application-architecture.md) 定義後端 Clean Architecture＋DDD、前端 Vue 3 功能模組架構及遷移順序。此為目標設計；現況仍由前後端 framework 文件與原始碼佐證。
+
 ---
 
 ## 1. 核心業務與工程規範 (Specifications & Standards)

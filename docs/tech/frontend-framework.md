@@ -6,6 +6,8 @@ covers:
 
 # 前端框架與專案結構
 
+> 本文件描述目前實作。後續 Vue 3 功能模組架構、Query／Pinia 狀態分工與遷移順序，請先讀 [應用程式目標架構](application-architecture.md)；新目錄與新增依賴尚未實作。
+
 給要動 `apps/web` 程式碼的人看。技術棧、目錄結構、資料流、路由與權限、狀態管理原則。頁面完整清單另見 [frontend-pages.md](frontend-pages.md)，功能流程另見 [frontend-flows.md](frontend-flows.md)。
 
 ## 技術棧
@@ -35,6 +37,8 @@ src/
   types/         TypeScript 型別；api.d.ts 是自動產生的，不要手改
   styles/        共用樣式，含 Element Plus 樣式覆寫
 ```
+
+以上是現行的技術分類目錄。目標是 `app / pages / features / shared` 的功能模組分類，見 [應用程式目標架構](application-architecture.md) §8；本次切片前現行目錄仍是唯一有效結構。
 
 ## 資料怎麼流
 
