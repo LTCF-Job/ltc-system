@@ -14,7 +14,7 @@
       <template #filter>
         <el-input
           v-model="filters.q"
-          placeholder="搜尋姓名／編號／身分證／地址"
+          placeholder="搜尋姓名／身分證／地址"
           clearable
           style="width: 240px"
           @keyup.enter="handleSearch"
@@ -413,12 +413,13 @@
     <!-- 新增個案彈窗：跟待維護資料頁籤的「新增個案並綁定」共用同一個元件與 API -->
     <CaseCreateDialog v-model="createDialogVisible" @created="handleCaseCreated" />
 
-    <!-- 匯出個案資料：勾選欲匯出的個案，欄位維持固定申報格式 -->
+    <!-- 匯出個案資料：勾選欲匯出的個案，欄位維持固定申報格式；可用區域篩選快速勾選整個區域 -->
     <CaseSelectDialog
       v-model="exportDialogVisible"
       title="匯出個案資料"
       confirm-text="確認匯出"
       :confirm-loading="exporting"
+      :region-options="caseRegionOptions"
       @confirm="handleConfirmExport"
     />
   </div>
@@ -455,6 +456,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
 import { formatDate } from '@/utils/formatters'
+import { isValidNationalID } from '@/utils/nationalId'
 import { emptyVehicleForm, vehicleFormRules } from '@/utils/vehicleForm'
 import {
   CASE_STATUS_LABELS,
@@ -514,6 +516,18 @@ const {
     region: ''
   },
   onFetch: async () => {
+    const trimmedQuery = filters.q.trim()
+    // 身分證是加密儲存，僅能做精確比對；輸入完整合法身分證字號時改抓全量清單（含身分證明碼）在前端比對，
+    // 不完整或非法格式一律落到一般姓名／地址搜尋，不做任何模糊比對。
+    if (trimmedQuery && isValidNationalID(trimmedQuery)) {
+      const target = trimmedQuery.toUpperCase()
+      const allMatches = await listAllCases({ status: filters.status, region: filters.region })
+      const matched = allMatches.filter((c) => c.nationalId?.toUpperCase() === target)
+      cases.value = matched
+      total.value = matched.length
+      return
+    }
+
     const res = await listCases({
       page: page.value,
       pageSize: pageSize.value,

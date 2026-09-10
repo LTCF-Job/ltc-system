@@ -13,6 +13,19 @@
         clearable
         style="width: 220px"
       />
+      <el-select
+        v-if="regionOptions.length > 0"
+        v-model="selectedRegions"
+        multiple
+        collapse-tags
+        clearable
+        filterable
+        placeholder="依區域快速勾選"
+        style="width: 220px"
+        @change="handleRegionChange"
+      >
+        <el-option v-for="option in regionOptions" :key="option" :label="option" :value="option" />
+      </el-select>
       <div class="case-select-actions">
         <el-button size="small" @click="handleSelectAll">全選</el-button>
         <el-button size="small" @click="handleClearSelection">取消全選</el-button>
@@ -32,6 +45,9 @@
     >
       <el-table-column type="selection" width="45" :reserve-selection="true" />
       <el-table-column prop="name" label="姓名" width="110" />
+      <el-table-column v-if="regionOptions.length > 0" prop="siteId" label="區域" width="100">
+        <template #default="{ row }">{{ rowRegion(row.siteId) || '-' }}</template>
+      </el-table-column>
       <el-table-column prop="status" label="狀態" width="90" align="center">
         <template #default="{ row }">{{ CASE_STATUS_LABELS[row.status as CaseStatus] || row.status }}</template>
       </el-table-column>
@@ -55,6 +71,7 @@ import { ref, computed, nextTick } from 'vue'
 import type { TableInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { listAllCases } from '@/api/cases'
+import { listAllSites } from '@/api/masters'
 import { CASE_STATUS_LABELS } from '@/types/domain'
 import type { CaseStatus } from '@/types/domain'
 import type { CaseDTO } from '@/types/api'
@@ -66,12 +83,15 @@ const props = withDefaults(
     confirmText?: string
     confirmLoading?: boolean
     initialSelectedIds?: string[]
+    // 傳入區域選項時，顯示「依區域快速勾選」下拉；選擇區域會自動勾選該區域內的所有個案
+    regionOptions?: string[]
   }>(),
   {
     title: '選擇個案',
     confirmText: '確認',
     confirmLoading: false,
-    initialSelectedIds: () => []
+    initialSelectedIds: () => [],
+    regionOptions: () => []
   }
 )
 
@@ -85,6 +105,13 @@ const loading = ref(false)
 const keyword = ref('')
 const candidates = ref<CaseDTO[]>([])
 const selectedRows = ref<CaseDTO[]>([])
+const selectedRegions = ref<string[]>([])
+// 個案本身不帶區域欄位，區域是透過所屬據點（site）取得，故另外用 siteId 查表
+const siteRegionMap = ref<Record<string, string>>({})
+
+function rowRegion(siteId?: string): string {
+  return (siteId && siteRegionMap.value[siteId]) || ''
+}
 
 const filteredCandidates = computed(() => {
   const text = keyword.value.trim().toLowerCase()
@@ -96,11 +123,17 @@ const filteredCandidates = computed(() => {
 
 async function loadCandidates() {
   keyword.value = ''
+  selectedRegions.value = []
   selectedRows.value = []
   tableRef.value?.clearSelection()
   loading.value = true
   try {
-    candidates.value = await listAllCases()
+    const tasks: [Promise<CaseDTO[]>, Promise<void>] = [
+      listAllCases(),
+      props.regionOptions.length > 0 ? loadSiteRegionMap() : Promise.resolve()
+    ]
+    const [caseList] = await Promise.all(tasks)
+    candidates.value = caseList
     await nextTick()
     restoreInitialSelection()
   } catch {
@@ -108,6 +141,20 @@ async function loadCandidates() {
   } finally {
     loading.value = false
   }
+}
+
+async function loadSiteRegionMap() {
+  const sites = await listAllSites()
+  siteRegionMap.value = Object.fromEntries(sites.map((site) => [site.id, site.region || '']))
+}
+
+// 選擇區域時自動勾選該區域內的所有個案（累加勾選，不影響已手動勾選的其他列）
+function handleRegionChange(regions: string[]) {
+  if (regions.length === 0) return
+  const wanted = new Set(regions)
+  candidates.value
+    .filter((row) => wanted.has(rowRegion(row.siteId)))
+    .forEach((row) => tableRef.value?.toggleRowSelection(row, true))
 }
 
 // 重新開啟對話框時沿用上次的勾選，避免使用者為了改一筆而重勾整份清單
