@@ -14,8 +14,12 @@ exports.run = async ({ page, record, step, L }) => {
   })
   await L.closeDialog(page)
 
+  // commit d59060f「前端隱藏批次匯入與下載範本按鈕，保留後端完整 API 功能」：
+  // 「下載匯入範本」按鈕跟批次匯入入口在同一個對話框內，該對話框已無任何按鈕能開啟（見 13-caregiver-import.cjs），
+  // 故此步驟必定逾時，改為記錄跳過原因。
   await L.goto(page, '/masters/caregivers')
-  await step('照護人員匯入範本', () => L.download(page, '下載匯入範本'))
+  await step('照護人員匯入範本（前端入口已隱藏，跳過）', async () =>
+    ({ skipped: true, reason: '批次匯入與下載範本按鈕已於 commit d59060f 從畫面隱藏，僅後端 API 保留' }))
 
   await L.goto(page, '/vehicles/maintenance')
   await step('車輛保養空白表', () => L.download(page, '下載空白保養表'))

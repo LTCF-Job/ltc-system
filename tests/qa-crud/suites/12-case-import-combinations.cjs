@@ -2,8 +2,35 @@ const path = require('node:path')
 
 exports.name = '個案匯入欄位組合驗證'
 
+// case-import-rows.json 第 6 列（QA匯入F主檔存在）用固定的「苗栗縣站」／「謝文彬」測「主檔存在時可直接匯入」，
+// 但這台本機 docker 的 sites/caregivers 主檔是長期累積、會被別的 session 改動的活資料，
+// 不能假設 demo seed 內建的示範資料一定還在。上傳前先確保這兩筆主檔存在，測試才不會被主檔被誰清掉所連累。
+async function ensureMasterData(page, L) {
+  await L.goto(page, '/masters/sites')
+  const hasSite = (await (await L.resolveRow(page, '苗栗縣站')).count()) > 0
+  if (!hasSite) {
+    await L.openCreate(page, '新增據點')
+    await L.fill(page, '據點名稱', '苗栗縣站')
+    await L.pickOrCreate(page, '區域', '苗栗縣')
+    await L.fill(page, '據點地址', '苗栗縣苗栗市自治路50號')
+    await L.submit(page, { calls: [] })
+  }
+
+  await L.goto(page, '/masters/caregivers')
+  const hasCaregiver = (await (await L.resolveRow(page, '謝文彬')).count()) > 0
+  if (!hasCaregiver) {
+    await L.openCreate(page, '新增照護人員')
+    await L.pick(page, '類型', '照專')
+    await L.pickOrCreate(page, '單位', '苗栗縣站')
+    await L.fill(page, '姓名', '謝文彬')
+    await L.submit(page, { calls: [] }, '確認送出')
+  }
+}
+
 exports.run = async ({ page, net, record, step, expect, L }) => {
   const file = path.join(__dirname, '..', 'fixtures', 'case-import-filled.xlsx')
+
+  await step('確保匯入檔引用的主檔（苗栗縣站／謝文彬）存在', () => ensureMasterData(page, L))
 
   // net.calls 的 body 有長度上限，截斷後 JSON.parse 會失敗，改直接取計數欄位。
   const commitCounts = (calls) => {

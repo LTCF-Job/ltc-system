@@ -12,7 +12,7 @@ exports.run = async ({ page, net, record, L }) => {
 
   await L.openCreate(page, '新增照護人員')
   await L.pick(page, '類型', '個管')
-  await L.pick(page, '單位', '測試單位')
+  await L.pickOrCreate(page, '單位', '苗栗縣站')
   await L.fill(page, '姓名', NAME + 'A')
   await L.fill(page, '聯絡方式', '0912-345-678')
   await L.fill(page, '備註', 'QA 建立的完整資料')

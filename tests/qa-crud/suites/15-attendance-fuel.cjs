@@ -15,7 +15,9 @@ exports.run = async ({ page, net, record, step, L }) => {
 
   await step('登記出勤狀態', async () => {
     if ((await page.locator('.el-dialog:visible').count()) === 0) return { note: '沒有開啟對話框' }
-    return L.submit(page, net, /儲存|確認/.source)
+    // 原本傳入 /儲存|確認/.source 會把正則物件轉成字面字串 "儲存|確認"，
+    // hasText 傳字串只會做子字串比對，永遠找不到按鈕；DialogFooter 預設文字就是「儲存」。
+    return L.submit(page, net)
   })
   await L.closeDialog(page)
 
