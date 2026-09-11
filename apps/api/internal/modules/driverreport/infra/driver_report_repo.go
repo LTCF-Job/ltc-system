@@ -177,7 +177,16 @@ func (r *DriverReportRepository) ListColumnsWithMapping(ctx context.Context, for
 }
 
 // UpsertColumns 登記檔案中出現的欄位。以表頭文字為衝突鍵，個案增減造成的欄號位移
-// 不會覆蓋到別的個案；已對應過的欄位只更新欄號與推薦值，保留人工確認的對應結果。
+// 不會覆蓋到別的個案；已對應過的欄位只更新欄號，保留人工確認的對應結果（case_id／
+// mapping_status 都不在這裡的 SET 清單內）。
+//
+// suggested_case_id 與 suggestion_score 一律整組用本次算出的新值覆蓋，不與舊值分別合併：
+// 兩者是同一次 bestCaseMatch 計算出的配對，舊版曾用 COALESCE(既有值, 新值) 保留舊 id、
+// GREATEST(既有值, 新值) 保留歷史最高分，若舊 id 之後因個案被刪除／合併而變成 NULL，
+// score 卻沒有連動歸零，就會出現「suggested_case_id 是 NULL 但 suggestion_score > 0」
+// 的孤兒分數，畫面顯示「無相符個案」卻寫著高信心度的矛盾。candidates 每次都是重新查詢
+// 當下的有效個案（見 buildColumnPreviews），所以新值本來就是最新、最正確的推薦，不需要
+// 也不應該跟歷史值合併。
 func (r *DriverReportRepository) UpsertColumns(ctx context.Context, formID uuid.UUID, drafts []app.ColumnDraft) error {
 	if r.db == nil {
 		return ErrNoDatabase
@@ -195,8 +204,8 @@ func (r *DriverReportRepository) UpsertColumns(ctx context.Context, formID uuid.
 		SET column_index = EXCLUDED.column_index,
 		    cleaned_name = EXCLUDED.cleaned_name,
 		    kind = EXCLUDED.kind,
-		    suggested_case_id = COALESCE(form_columns.suggested_case_id, EXCLUDED.suggested_case_id),
-		    suggestion_score = GREATEST(form_columns.suggestion_score, EXCLUDED.suggestion_score),
+		    suggested_case_id = EXCLUDED.suggested_case_id,
+		    suggestion_score = EXCLUDED.suggestion_score,
 		    updated_at = now()
 	`
 	for _, d := range drafts {
