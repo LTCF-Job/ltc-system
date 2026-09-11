@@ -55,7 +55,7 @@ type Config struct {
 }
 
 // ParseTrustedProxies 解析逗號分隔的 proxy IP／CIDR，拒絕模糊或空白項目。
-// 空字串回傳 nil，讓 local 可停用 proxy 信任；production 由 LoadFromEnv 另外要求設定。
+// 空字串回傳 nil，讓未經固定 ingress proxy 的環境停用 proxy 信任。
 func ParseTrustedProxies(raw string) ([]string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return nil, nil
@@ -111,16 +111,14 @@ func LoadFromEnv() (*Config, error) {
 		return nil, errors.New("ALLOWED_ORIGINS is required when APP_ENV=production")
 	}
 
-	// ClientIP 只有在明確列出 ingress proxy 後才能讀取 X-Forwarded-For；production
-	// 不接受空值，避免讓稽核 IP 可被偽造。local 未設定時只信任本機 loopback。
+	// ClientIP 只有在明確列出 ingress proxy 後才能讀取 X-Forwarded-For；空值會由
+	// router 傳入 nil，明確停用 proxy 信任，避免讓稽核 IP 可被偽造。local 未設定時
+	// 只信任本機 loopback。
 	if cfg.AppEnv == "local" && strings.TrimSpace(cfg.TrustedProxies) == "" {
 		cfg.TrustedProxies = "127.0.0.1,::1"
 	}
 	if _, err := ParseTrustedProxies(cfg.TrustedProxies); err != nil {
 		return nil, err
-	}
-	if cfg.AppEnv == "production" && strings.TrimSpace(cfg.TrustedProxies) == "" {
-		return nil, errors.New("TRUSTED_PROXIES is required when APP_ENV=production")
 	}
 
 	// 寄信是明確的 feature flag：未開啟時即使誤留 RESEND_API_KEY 也不能偷偷外送；

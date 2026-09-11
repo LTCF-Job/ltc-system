@@ -20,7 +20,7 @@ ENCRYPTION_KEY=<32 bytes base64>
 HMAC_KEY=<32 bytes base64，不可跟 ENCRYPTION_KEY 一樣>
 ```
 
-`APP_ENV=production` 時另外強制要求 `SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`、`TRUSTED_PROXIES`，缺一個就直接拒絕啟動。通知寄信則由 `NOTIFICATION_EMAIL_ENABLED` 明確控制；開啟時才必須提供 `RESEND_API_KEY` 與 `NOTIFY_FROM`。
+`APP_ENV=production` 時另外強制要求 `SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`；`TRUSTED_PROXIES` 為選填，留空時會明確停用 `X-Forwarded-For` 信任，避免把未驗證的標頭當成稽核 IP。只有在服務前方有可明確列出的 ingress proxy 時才設定實際 IP／CIDR，禁止填全網段。通知寄信則由 `NOTIFICATION_EMAIL_ENABLED` 明確控制；開啟時才必須提供 `RESEND_API_KEY` 與 `NOTIFY_FROM`。
 
 ## 技術文件
 

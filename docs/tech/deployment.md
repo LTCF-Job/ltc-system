@@ -86,7 +86,7 @@ rows, err := db.Query(ctx, query, pgxdb.UUIDStrings(caseIDs))
 | 變數 | 本機 `.env` | Cloud Run | 說明 |
 |---|---|---|---|
 | `PORT` | `8080` | Cloud Run 自動注入，不用設 | HTTP 監聽埠 |
-| `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL`、`SUPABASE_URL`（或 `SUPABASE_PROJECT_REF`）、`SUPABASE_SERVICE_ROLE_KEY`、`ALLOWED_ORIGINS` 與 `TRUSTED_PROXIES`，否則直接拒絕啟動 |
+| `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL`、`SUPABASE_URL`（或 `SUPABASE_PROJECT_REF`）、`SUPABASE_SERVICE_ROLE_KEY` 與 `ALLOWED_ORIGINS`；`TRUSTED_PROXIES` 可選，留空時採 no-proxy 模式 |
 | `ALLOW_INSECURE_MOCK_AUTH` | `true`（僅本機） | `false` | 本機 API 接受 `mock_jwt_`；production 禁止開啟 |
 | `DATABASE_URL` | Supabase 連線池網址 | 同左，存在 Secret Manager | 見上方 pgbouncer 說明 |
 | `DB_MAX_CONNS` / `DB_MIN_CONNS` | `5` / `2` | 同左 | 對應 `pgxpool` 的 `MaxConns`／`MinConns`；另可設定 `DB_MAX_CONN_LIFETIME`、`DB_MAX_CONN_IDLE_TIME` |
@@ -94,7 +94,7 @@ rows, err := db.Query(ctx, query, pgxdb.UUIDStrings(caseIDs))
 | `SUPABASE_JWKS_URL` | 可留空（本機不驗簽） | `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json` | `production` 必填 |
 | `SUPABASE_PROJECT_REF` | Supabase 專案 ref | 同左 | |
 | `ALLOWED_ORIGINS` | 不需要（`local` 時 CORS 全開） | 逗號分隔的網域清單 | `production` 必填，見下方常見錯誤 |
-| `TRUSTED_PROXIES` | `127.0.0.1,::1` | 實際 ingress proxy 的 IP／CIDR 清單 | `production` 必填；只填真正會改寫 `X-Forwarded-For` 的 proxy，禁止填全網段 |
+| `TRUSTED_PROXIES` | `127.0.0.1,::1` | 實際 ingress proxy 的 IP／CIDR 清單 | 選填；留空時不信任 `X-Forwarded-For`。只有在有固定 proxy 時填入真正會改寫標頭的來源，禁止填全網段 |
 | `SUPABASE_URL` | 可由 `SUPABASE_PROJECT_REF` 推導 | 同左 | private object storage API 的專案網址；正式環境用 service-role key 存取，不可暴露給前端 |
 | `SUPABASE_SERVICE_ROLE_KEY` | 可留空 | Secret Manager | private export object storage 與使用者管理 API；正式環境必填 |
 | `STORAGE_BUCKET` | `ltc-exports` | 同左 | 必須在 Supabase Storage 建立為 private bucket；匯出檔案存於 `exports/{jobId}/{fileName}` |

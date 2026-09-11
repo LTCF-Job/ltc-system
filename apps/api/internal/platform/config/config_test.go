@@ -76,11 +76,15 @@ func TestLoadFromEnv_ProductionRequiresAllowedOrigins(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnv_ProductionRequiresTrustedProxies(t *testing.T) {
+func TestLoadFromEnv_ProductionAllowsEmptyTrustedProxies(t *testing.T) {
 	setProductionEnv(t)
 	t.Setenv("TRUSTED_PROXIES", "")
-	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("expected error when APP_ENV=production without TRUSTED_PROXIES, got nil")
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("expected production to start without TRUSTED_PROXIES, got error: %v", err)
+	}
+	if cfg.TrustedProxies != "" {
+		t.Fatalf("expected empty TRUSTED_PROXIES to keep no-proxy mode, got %q", cfg.TrustedProxies)
 	}
 }
 
