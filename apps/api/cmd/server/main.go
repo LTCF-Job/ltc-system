@@ -143,13 +143,11 @@ func main() {
 	)
 	importSvc.SetIdempotencyStore(caseRepo)
 	var emailSender notifyapp.EmailSender
-	if cfg.ResendAPIKey != "" {
+	if cfg.NotificationEmailEnabled {
 		emailSender = notifyinfra.NewResendEmailSender(cfg.ResendAPIKey, cfg.NotifyFrom, &http.Client{Timeout: 10 * time.Second})
 	} else {
-		// 未設定寄信 provider 時通知仍寫入資料庫，只是不對外送出；production 留一筆警告，避免誤以為信已寄達
-		if cfg.AppEnv == "production" {
-			slog.Warn("RESEND_API_KEY is not set, notification emails are only logged and never delivered")
-		}
+		// feature flag 關閉時即使環境裡殘留 provider key，也固定只記錄不外送，避免設定漂移造成意外寄信。
+		slog.Warn("notification emails are disabled; notification messages are only logged and never delivered")
 		emailSender = &notifyapp.LogEmailSender{}
 	}
 	notificationSvc := notifyapp.NewNotificationService(

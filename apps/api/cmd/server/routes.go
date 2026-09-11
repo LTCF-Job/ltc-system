@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -57,6 +58,13 @@ type handlers struct {
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
 func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.PermissionResolver, customPerm auth.CustomPermissionResolver, userState auth.UserStateResolver) *gin.Engine {
 	r := gin.New()
+	trustedProxies, err := config.ParseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		panic(fmt.Sprintf("invalid TRUSTED_PROXIES: %v", err))
+	}
+	if err := r.SetTrustedProxies(trustedProxies); err != nil {
+		panic(fmt.Sprintf("failed to configure trusted proxies: %v", err))
+	}
 	// 識別碼要先於其他 middleware 產生，panic 與 404 的錯誤回應才帶得到它。
 	r.Use(httpx.RequestIDMiddleware())
 	r.Use(recoveryMiddleware())
@@ -89,20 +97,14 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		c.JSON(http.StatusOK, gin.H{"status": "ready", "database": "connected"})
 	})
 
-	// 保留既有 /api/health，相容舊監控；其 HTTP 狀態同步反映 readiness。
+	// 保留既有 /api/health 路徑；response 刻意只保留穩定 status 欄位，外部監控應以
+	// HTTP status 與 status 判斷。需要 database 詳情時使用內部 readiness endpoint。
 	r.GET("/api/health", func(c *gin.Context) {
-		dbStatus := "connected"
-		httpStatus := http.StatusOK
 		if pool == nil || pool.Ping(c.Request.Context()) != nil {
-			dbStatus = "disconnected"
-			httpStatus = http.StatusServiceUnavailable
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
+			return
 		}
-		c.JSON(httpStatus, gin.H{
-			"status":   "ok",
-			"env":      cfg.AppEnv,
-			"database": dbStatus,
-			"time":     time.Now().UTC().Format(time.RFC3339),
-		})
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	// 需要 JWT 認證之 API 群組

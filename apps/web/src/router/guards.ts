@@ -1,6 +1,28 @@
-import type { Router } from 'vue-router'
+import type { RouteLocationNormalized, Router } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
+
+type RoutePermission = { module: string; action?: 'view' | 'edit' | 'delete' }
+type GuardRoute = Pick<RouteLocationNormalized, 'meta'>
+
+function canEnterRoute(to: GuardRoute, authStore: ReturnType<typeof useAuthStore>): boolean {
+  const anyPermissions = to.meta.anyPermissions
+  if (Array.isArray(anyPermissions)) {
+    return (anyPermissions as RoutePermission[]).some(({ module, action = 'view' }) => authStore.hasPermission(module, action))
+  }
+  if (typeof to.meta.module === 'string') {
+    return authStore.hasPermission(to.meta.module, 'view')
+  }
+  return true
+}
+
+function firstAccessibleRoute(router: Router, authStore: ReturnType<typeof useAuthStore>) {
+  const route = router.getRoutes().find((candidate) => {
+    const hasPermissionMeta = typeof candidate.meta.module === 'string' || Array.isArray(candidate.meta.anyPermissions)
+    return candidate.name !== 'Forbidden' && !candidate.redirect && hasPermissionMeta && canEnterRoute(candidate, authStore)
+  })
+  return route?.name ? { name: route.name } : { name: 'Forbidden' }
+}
 
 export function setupRouterGuards(router: Router) {
   router.beforeEach(async (to, from, next) => {
@@ -36,17 +58,15 @@ export function setupRouterGuards(router: Router) {
 
     // 避免已登入使用者停留在登入頁
     if (to.path === '/login' && authStore.isAuthenticated) {
-      next('/')
+      next(firstAccessibleRoute(router, authStore))
       return
     }
 
     // 3. 模組權限比對：畫面顯示與 API 放行一律以後端 /auth/me 回傳的權限矩陣為準
-    if (to.meta.module && typeof to.meta.module === 'string') {
-      if (!authStore.hasPermission(to.meta.module, 'view')) {
-        ElMessage.warning('您的帳號未被授權檢視該功能區塊')
-        next('/')
-        return
-      }
+    if (!canEnterRoute(to, authStore)) {
+      ElMessage.warning('您的帳號未被授權檢視該功能區塊')
+      next({ name: 'Forbidden', query: { from: to.fullPath } })
+      return
     }
 
     next()

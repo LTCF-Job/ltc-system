@@ -23,6 +23,7 @@ make migrate-down    # 回滾最新一支
 ```
 
 `DATABASE_URL` 要指向 Supabase 的連線池網址（port 6543，pgbouncer transaction pooling）。
+`000054_rls_future_tables` 是不可逆的 public table security hardening；當它是最新 migration 時，`migrate-down` 會明確拒絕並保留 `schema_migrations` 紀錄，避免 rollback 意外重新開放 Data API 存取。Migration job 必須使用具備 `CREATE EVENT TRIGGER` 權限的 database identity；權限不足時 migration 會以 transaction rollback fail closed，不應改用較低權限帳號繞過。
 
 ### Migration 發布相容性
 
@@ -34,7 +35,7 @@ Release B: Backfill 與資料驗證，App 切換至新結構
 Release C: 確認舊版已不再讀寫後，才移除舊欄位或舊表
 ```
 
-同一個 release 不得先執行破壞性 `DROP` 再部署只支援新結構的 App。Pull request CI 會檢查 migration 的 up/down 配對，並在乾淨 PostgreSQL service 中執行完整 up、down、up 與 transaction integration test；實際正式資料庫仍需依部署流程執行 migration job。
+同一個 release 不得先執行破壞性 `DROP` 再部署只支援新結構的 App。Pull request CI 會檢查 migration 的 up/down 配對，並在乾淨 PostgreSQL service 中執行完整 up；對不可逆的 `000054` 會驗證 rollback 被拒絕且 migration tracking／security state 保留，再執行 transaction integration test。實際正式資料庫仍需依部署流程執行 migration job。
 
 ### 已知坑：手動塞 `auth.users` 一定要補 `auth.identities`
 
@@ -85,7 +86,7 @@ rows, err := db.Query(ctx, query, pgxdb.UUIDStrings(caseIDs))
 | 變數 | 本機 `.env` | Cloud Run | 說明 |
 |---|---|---|---|
 | `PORT` | `8080` | Cloud Run 自動注入，不用設 | HTTP 監聽埠 |
-| `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL`、`SUPABASE_URL`（或 `SUPABASE_PROJECT_REF`）、`SUPABASE_SERVICE_ROLE_KEY` 與 `ALLOWED_ORIGINS`，否則直接拒絕啟動 |
+| `APP_ENV` | `local` | `production` | `production` 時會強制要求 `SUPABASE_JWKS_URL`、`SUPABASE_URL`（或 `SUPABASE_PROJECT_REF`）、`SUPABASE_SERVICE_ROLE_KEY`、`ALLOWED_ORIGINS` 與 `TRUSTED_PROXIES`，否則直接拒絕啟動 |
 | `ALLOW_INSECURE_MOCK_AUTH` | `true`（僅本機） | `false` | 本機 API 接受 `mock_jwt_`；production 禁止開啟 |
 | `DATABASE_URL` | Supabase 連線池網址 | 同左，存在 Secret Manager | 見上方 pgbouncer 說明 |
 | `DB_MAX_CONNS` / `DB_MIN_CONNS` | `5` / `2` | 同左 | 對應 `pgxpool` 的 `MaxConns`／`MinConns`；另可設定 `DB_MAX_CONN_LIFETIME`、`DB_MAX_CONN_IDLE_TIME` |
@@ -93,12 +94,14 @@ rows, err := db.Query(ctx, query, pgxdb.UUIDStrings(caseIDs))
 | `SUPABASE_JWKS_URL` | 可留空（本機不驗簽） | `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json` | `production` 必填 |
 | `SUPABASE_PROJECT_REF` | Supabase 專案 ref | 同左 | |
 | `ALLOWED_ORIGINS` | 不需要（`local` 時 CORS 全開） | 逗號分隔的網域清單 | `production` 必填，見下方常見錯誤 |
+| `TRUSTED_PROXIES` | `127.0.0.1,::1` | 實際 ingress proxy 的 IP／CIDR 清單 | `production` 必填；只填真正會改寫 `X-Forwarded-For` 的 proxy，禁止填全網段 |
 | `SUPABASE_URL` | 可由 `SUPABASE_PROJECT_REF` 推導 | 同左 | private object storage API 的專案網址；正式環境用 service-role key 存取，不可暴露給前端 |
 | `SUPABASE_SERVICE_ROLE_KEY` | 可留空 | Secret Manager | private export object storage 與使用者管理 API；正式環境必填 |
 | `STORAGE_BUCKET` | `ltc-exports` | 同左 | 必須在 Supabase Storage 建立為 private bucket；匯出檔案存於 `exports/{jobId}/{fileName}` |
 | `STORAGE_SIGNED_URL_TTL` | `24h` | 同左 | |
-| `RESEND_API_KEY` | 可留空 | 可留空（目前未設定） | 選填。設定後才會透過 Resend API 實際寄出通知信；留空時通知仍寫入資料庫，由 `LogEmailSender` 只寫 log 不外送 |
-| `NOTIFY_FROM` | `.env` 明確設定 | 同左 | 只在 `RESEND_API_KEY` 有設定時必填，否則啟動即失敗；通知寄件人地址 |
+| `NOTIFICATION_EMAIL_ENABLED` | `false` | `false` 或 `true` | 明確控制是否真的外送通知；`false` 時即使有 provider key 也只寫 log |
+| `RESEND_API_KEY` | 可留空 | `NOTIFICATION_EMAIL_ENABLED=true` 時必填 | `true` 時透過 Resend API 實際寄出通知信 |
+| `NOTIFY_FROM` | 可留空 | `NOTIFICATION_EMAIL_ENABLED=true` 時必填 | Resend 已驗證網域的通知寄件人地址 |
 | `SENTRY_DSN` | 可留空 | 錯誤追蹤 | |
 | `LOG_LEVEL` | `info` | 同左 | |
 

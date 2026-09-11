@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -91,6 +92,23 @@ func (r *RoleRepository) GetByKey(ctx context.Context, key string) (*app.Role, e
 		return nil, err
 	}
 	return &role, nil
+}
+
+// GetPermissionVersion 只取得角色更新時間，供授權 cache 命中時做輕量版本比對。
+func (r *RoleRepository) GetPermissionVersion(ctx context.Context, key string) (string, error) {
+	if r.db == nil {
+		return "", fmt.Errorf("role database is not configured")
+	}
+	db := pgxdb.FromContext(ctx, r.db)
+	var updatedAt time.Time
+	err := db.QueryRow(ctx, `SELECT updated_at FROM roles WHERE key = $1`, key).Scan(&updatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return "missing", nil
+		}
+		return "", err
+	}
+	return updatedAt.UTC().Format(time.RFC3339Nano), nil
 }
 
 // Create 新增角色。

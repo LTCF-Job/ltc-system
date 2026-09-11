@@ -33,6 +33,8 @@ services:
       DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/ltc_system?sslmode=disable
       ENCRYPTION_KEY: MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=
       HMAC_KEY: OTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=
+      TRUSTED_PROXIES: 127.0.0.1,::1
+      NOTIFICATION_EMAIL_ENABLED: "false"
       LOG_LEVEL: info
     depends_on:
       postgres:

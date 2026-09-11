@@ -28,9 +28,15 @@ type UserStateResolver interface {
 	Validate(ctx context.Context, actorID uuid.UUID, role string) (bool, error)
 }
 
-// VersionedUserStateResolver 以共享資料來源版本標記帳號狀態，讓停用／角色異動可跨 replica 立即失效。
+// VersionedUserStateResolver 以共享資料來源版本標記回源取得的帳號狀態；未過期的
+// process-local 項目會搭配 UserStateVersionResolver 先做輕量版本比對。
 type VersionedUserStateResolver interface {
 	ValidateVersioned(ctx context.Context, actorID uuid.UUID, role string) (bool, string, error)
+}
+
+// UserStateVersionResolver 只查詢帳號安全狀態的共享版本，避免 cache hit 時重新載入完整投影。
+type UserStateVersionResolver interface {
+	ValidateVersion(ctx context.Context, actorID uuid.UUID) (string, error)
 }
 
 // newSupabaseJWKS 建立向 Supabase JWKS 端點取金鑰並自動輪替的 Keyfunc；未設定 URL 時回傳 nil。
@@ -102,7 +108,9 @@ func MiddlewareWithUserState(cfg *config.Config, userState UserStateResolver) gi
 	}
 
 	return func(c *gin.Context) {
-		c.Request = c.Request.WithContext(requestmeta.With(c.Request.Context(), c.ClientIP(), c.Request.UserAgent()))
+		requestCtx := requestmeta.With(c.Request.Context(), c.ClientIP(), c.Request.UserAgent())
+		requestCtx, _ = WithRequestSecurityState(requestCtx)
+		c.Request = c.Request.WithContext(requestCtx)
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "未提供認證憑證", nil)

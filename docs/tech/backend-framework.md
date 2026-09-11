@@ -118,6 +118,6 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 集中在 `internal/platform/config/config.go`，啟動時直接驗證並在缺漏必填值時拒絕啟動：
 
 - 必填：`APP_ENV`（僅接受 `local` 或 `production`）、`DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`（兩把 32 bytes base64 金鑰，且不可相同）。
-- `APP_ENV=production` 時額外必填：`SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`。
+- `APP_ENV=production` 時額外必填：`SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`、`TRUSTED_PROXIES`。
 - 選填：`PORT`、`DB_MAX_CONNS`、`DB_MIN_CONNS`、`DB_MAX_CONN_LIFETIME`、`DB_MAX_CONN_IDLE_TIME`、`SUPABASE_PROJECT_REF`、`STORAGE_BUCKET`、`STORAGE_SIGNED_URL_TTL`、`GOOGLE_SA_JSON`、`SENTRY_DSN`、`LOG_LEVEL`。
-- `RESEND_API_KEY` 為選填，設定後才改用 Resend API 寄信，此時 `NOTIFY_FROM` 必填；未設定時（含 `APP_ENV=production`）一律使用 `LogEmailSender`，通知只寫入資料庫與 log。
+- `NOTIFICATION_EMAIL_ENABLED` 明確控制寄信；`false` 時一律使用 `LogEmailSender`，即使 `RESEND_API_KEY` 存在也只寫入資料庫與 log。設為 `true` 時 `RESEND_API_KEY` 與 `NOTIFY_FROM` 都必填。

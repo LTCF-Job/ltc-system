@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -53,6 +54,27 @@ func (r *UserSecurityStateRepository) GetSecurityState(ctx context.Context, id u
 		}
 	}
 	return &state, nil
+}
+
+// GetSecurityStateVersion 只取得共享 permission_version，供授權 cache 命中時做輕量版本比對。
+func (r *UserSecurityStateRepository) GetSecurityStateVersion(ctx context.Context, id uuid.UUID) (string, error) {
+	if r.db == nil {
+		return "", fmt.Errorf("user security state database is not configured")
+	}
+	db := pgxdb.FromContext(ctx, r.db)
+	var version int64
+	err := db.QueryRow(ctx, `
+		SELECT permission_version
+		FROM auth_user_security_states
+		WHERE user_id = $1
+	`, id).Scan(&version)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return "missing", nil
+		}
+		return "", err
+	}
+	return strconv.FormatInt(version, 10), nil
 }
 
 // UpsertSecurityState 建立或遞增使用者的共享授權版本。

@@ -1,18 +1,14 @@
 import { test, expect, request as playwrightRequest } from '@playwright/test'
 
-// 對真正部署的 Supabase Auth 與 Demo Cloud Run API 做 API 層級驗證。
+// 對真正部署的 Supabase Auth 與 API 做 API 層級驗證。
 // 必要環境變數缺一則整份跳過，本機或還沒設好 CI secrets 時不會讓 pipeline 失敗。
 const SUPABASE_URL = process.env.LIVE_SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.LIVE_SUPABASE_ANON_KEY
-const DEMO_API_BASE_URL = process.env.LIVE_DEMO_API_BASE_URL
-const DEMO_TEST_EMAIL = process.env.LIVE_DEMO_TEST_EMAIL
-const DEMO_TEST_PASSWORD = process.env.LIVE_DEMO_TEST_PASSWORD
-const PROD_API_BASE_URL = process.env.LIVE_PROD_API_BASE_URL
-const PROD_TEST_EMAIL = process.env.LIVE_PROD_TEST_EMAIL
-const PROD_TEST_PASSWORD = process.env.LIVE_PROD_TEST_PASSWORD
+const API_BASE_URL = process.env.LIVE_API_BASE_URL?.replace(/\/+$/, '')
+const TEST_EMAIL = process.env.LIVE_TEST_EMAIL
+const TEST_PASSWORD = process.env.LIVE_TEST_PASSWORD
 
-const canRunDemoSuite = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && DEMO_API_BASE_URL && DEMO_TEST_EMAIL && DEMO_TEST_PASSWORD)
-const canRunCrossPlaneMatrix = Boolean(canRunDemoSuite && PROD_API_BASE_URL && PROD_TEST_EMAIL && PROD_TEST_PASSWORD)
+const canRunApiSuite = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && API_BASE_URL && TEST_EMAIL && TEST_PASSWORD)
 
 async function signIn(email: string, password: string) {
   const api = await playwrightRequest.newContext()
@@ -26,63 +22,29 @@ async function signIn(email: string, password: string) {
   return body.access_token as string
 }
 
-test.describe('Demo data-plane（真實 Supabase + 真實部署 API）', () => {
-  test.skip(!canRunDemoSuite, '缺少 LIVE_SUPABASE_URL / LIVE_SUPABASE_ANON_KEY / LIVE_DEMO_API_BASE_URL / LIVE_DEMO_TEST_EMAIL / LIVE_DEMO_TEST_PASSWORD')
+test.describe('Live API data-plane（真實 Supabase + 真實部署 API）', () => {
+  test.skip(!canRunApiSuite, '缺少 LIVE_SUPABASE_URL / LIVE_SUPABASE_ANON_KEY / LIVE_API_BASE_URL / LIVE_TEST_EMAIL / LIVE_TEST_PASSWORD')
 
-  test('Demo 測試帳號可用真實 Supabase 登入，且 Demo API 接受其 JWT', async () => {
-    const token = await signIn(DEMO_TEST_EMAIL!, DEMO_TEST_PASSWORD!)
+  test('測試帳號可用真實 Supabase 登入，且 API /auth/me 接受其 JWT', async () => {
+    const token = await signIn(TEST_EMAIL!, TEST_PASSWORD!)
     const api = await playwrightRequest.newContext()
-    const res = await api.get(`${DEMO_API_BASE_URL}/regions`, {
+    const res = await api.get(`${API_BASE_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` }
     })
     expect(res.status()).toBe(200)
+    const body = await res.json()
+    expect(body.data.id).toBeTruthy()
+    expect(body.data.permissions).toBeTruthy()
     await api.dispose()
   })
 
-  test('重置端點回傳 datasetVersion 與 resetAt，重置後基準資料可讀', async () => {
-    const token = await signIn(DEMO_TEST_EMAIL!, DEMO_TEST_PASSWORD!)
+  test('API health endpoint 僅回傳公開狀態欄位', async () => {
     const api = await playwrightRequest.newContext()
-
-    const resetRes = await api.post(`${DEMO_API_BASE_URL}/demo/reset`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    expect(resetRes.status()).toBe(200)
-    const resetBody = await resetRes.json()
-    expect(resetBody.data.datasetVersion).toBeTruthy()
-    expect(resetBody.data.resetAt).toBeTruthy()
-
-    const casesRes = await api.get(`${DEMO_API_BASE_URL}/cases`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    expect(casesRes.status()).toBe(200)
-    const casesBody = await casesRes.json()
-    expect(Array.isArray(casesBody.data)).toBeTruthy()
-    expect(casesBody.data.length).toBeGreaterThan(0)
-
+    const healthURL = API_BASE_URL!.replace(/\/api\/v1\/?$/, '/api/health')
+    const res = await api.get(healthURL)
+    expect([200, 503]).toContain(res.status())
+    const body = await res.json()
+    expect(Object.keys(body).sort()).toEqual(['status'])
     await api.dispose()
-  })
-
-  test.describe('JWT data-plane 拒絕矩陣', () => {
-    test.skip(!canRunCrossPlaneMatrix, '缺少 LIVE_PROD_API_BASE_URL / LIVE_PROD_TEST_EMAIL / LIVE_PROD_TEST_PASSWORD')
-
-    test('正式帳號的 JWT 會被 Demo API 拒絕', async () => {
-      const prodToken = await signIn(PROD_TEST_EMAIL!, PROD_TEST_PASSWORD!)
-      const api = await playwrightRequest.newContext()
-      const res = await api.get(`${DEMO_API_BASE_URL}/regions`, {
-        headers: { Authorization: `Bearer ${prodToken}` }
-      })
-      expect(res.status()).toBe(401)
-      await api.dispose()
-    })
-
-    test('Demo 帳號的 JWT 會被正式 API 拒絕', async () => {
-      const demoToken = await signIn(DEMO_TEST_EMAIL!, DEMO_TEST_PASSWORD!)
-      const api = await playwrightRequest.newContext()
-      const res = await api.get(`${PROD_API_BASE_URL}/regions`, {
-        headers: { Authorization: `Bearer ${demoToken}` }
-      })
-      expect(res.status()).toBe(401)
-      await api.dispose()
-    })
   })
 })

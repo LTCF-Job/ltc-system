@@ -7,6 +7,8 @@ covers: ["apps/api/cmd/server/routes.go"]
 
 Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/health`（不驗證）跟 `/api/v1/ingest/google-form`（走 `X-Ingest-Token`）。實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
 
+公開 `/api/health` 只回傳 `{"status":"ok"}`（database 不可用時為 HTTP 503 與 `{"status":"not_ready"}`），不再提供環境、資料庫連線細節或時間戳；外部 consumer 不應依賴已移除的診斷欄位。需要內部 readiness 詳情時使用 `/api/readyz`。
+
 下表「角色」欄列的是**目前系統五個內建角色（viewer/dispatcher/staff/driver/admin）實際能通過的結果**，不是授權機制本身：所有 API 路由都透過 `auth.RequirePermission(module, action)` 查角色的模組權限矩陣（`roles.permissions`，可在「角色身分管理」頁調整，自訂角色的實際存取範圍以矩陣為準，不受下表侷限）。機制細節見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。
 
 架構背景見 [backend-framework.md](backend-framework.md)，每支端點背後的業務流程見 [backend-flows.md](backend-flows.md)。

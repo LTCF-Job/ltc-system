@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	identityapp "ltc-system/apps/api/internal/modules/identity/app"
+	"ltc-system/apps/api/internal/platform/auth"
 )
 
 // fakeAdminProvider 是 identityapp.AdminIdentityProvider 的最小假實作，只用來驗證
@@ -90,4 +91,46 @@ func TestUserCustomPermissionResolver_Configured_GetUserError_Propagates(t *test
 	// 已設定金鑰但查詢本身失敗（網路、逾時等）不是 fail-open 範圍，應正常回傳 error
 	// 讓 RequirePermission 視為系統錯誤，不能誤判為「沒有個人覆蓋」而放行。
 	assert.ErrorIs(t, err, assert.AnError)
+}
+
+type fakeSecurityStateStore struct {
+	state    *identityapp.UserSecurityState
+	getCalls int
+}
+
+func (f *fakeSecurityStateStore) GetSecurityState(ctx context.Context, id uuid.UUID) (*identityapp.UserSecurityState, error) {
+	f.getCalls++
+	return f.state, nil
+}
+func (f *fakeSecurityStateStore) UpsertSecurityState(ctx context.Context, state identityapp.UserSecurityState) error {
+	return nil
+}
+func (f *fakeSecurityStateStore) UpdateCustomPermissions(ctx context.Context, id uuid.UUID, perms map[string]identityapp.ModulePermission) error {
+	return nil
+}
+func (f *fakeSecurityStateStore) DeleteSecurityState(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
+func TestUserSecurityStateResolver_ReusesStateWithinRequest(t *testing.T) {
+	actorID := uuid.New()
+	store := &fakeSecurityStateStore{state: &identityapp.UserSecurityState{
+		UserID:            actorID,
+		Status:            "active",
+		RoleKey:           "staff",
+		PermissionVersion: 3,
+		CustomPermissions: map[string]identityapp.ModulePermission{
+			"masters_cases": {View: true, Edit: false, Delete: false},
+		},
+	}}
+	resolver := userSecurityStateResolver{store: store}
+	ctx, _ := auth.WithRequestSecurityState(context.Background())
+
+	first, err := resolver.load(ctx, actorID)
+	require.NoError(t, err)
+	second, err := resolver.load(ctx, actorID)
+	require.NoError(t, err)
+
+	assert.Equal(t, first, second)
+	assert.Equal(t, 1, store.getCalls, "同一 request 的 user state 與 custom permission 不應重複讀取投影")
 }

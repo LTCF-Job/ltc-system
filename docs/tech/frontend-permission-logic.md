@@ -32,8 +32,8 @@ covers:
 1. 已登入但權限尚未載入完成（`!permissionsLoaded`，例如剛按 F5）→ `await authStore.loadPermissions()` 待其完成。
 2. 權限載入失敗 → 清除 session；受保護路由導去 `/login`，公開路由繼續放行。
 3. 路由不是 `meta.public` 且使用者未登入 → 導去 `/login`。
-4. 已登入卻要進 `/login` → 導去首頁。
-5. `meta.module` 有設定值 → 呼叫 `authStore.hasPermission(module, 'view')`，沒權限就導回首頁並跳警告訊息。
+4. 已登入卻要進 `/login` → 導向第一個有 view permission 的功能路由；若沒有任何可進入路由才顯示 `Forbidden`。
+5. 路由若有 `meta.module`，或 `meta.anyPermissions`，就依指定的 view permission 判斷；沒有權限時導向獨立的 `Forbidden` 頁，不再導回可能本身也無權限的首頁。
 
 **沒有 `meta.roles` 這回事了**——`router/index.ts` 的每個路由只保留 `meta.module`，不再有平行存在、且早已跟真實判斷脫鉤的角色字串陣列。過去 `meta.roles` 只是文件性質的標註、不影響實際放行，這個誤導來源已經整個拿掉。
 
@@ -42,6 +42,8 @@ covers:
 `SYSTEM_MODULES` 仍是模組 id 到顯示名稱的對照表，供「角色身分管理」頁渲染可勾選的模組清單，例如 `masters_cases`、`rides_calendar`、`settings_users`、`settings_holidays`、`ops_tasks`。**新增頁面／新增模組時只需要做兩件事**：`SYSTEM_MODULES` 加一筆、路由 `meta.module` 指到這個新模組 id——角色的權限值完全由後端 `roles.permissions`（「角色身分管理」頁編輯的那份資料）決定，前端不再需要為每個角色手動列一份預設權限表。
 
 `ops_tasks` 目前沒有對應的前端頁面（純後端排程維運任務），`SYSTEM_MODULES` 收錄它只是讓角色管理頁能夠授權，屬預期行為。
+
+`/driver-reports/import` 是 upload 與待維護共用頁：路由允許 `driver_reports:view` 或 `driver_report_mappings:view` 任一權限；頁面內的車輛、個案、司機、出勤查詢與各項寫入按鈕仍依各自 API 所需 permission gate，避免進入頁面就呼叫未授權端點。
 
 ## 個人自訂權限覆蓋
 

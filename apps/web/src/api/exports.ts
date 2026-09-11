@@ -26,7 +26,9 @@ export async function precheckExport(params: {
 export async function createRegionExportJobs(
   data: RegionExportRequest
 ): Promise<RegionExportResultDTO> {
-  const res = await apiClient.post('/exports/by-region', data)
+  // 後端會逐月產檔並上傳 object storage，時間可能超過全域 30 秒 timeout；
+  // 在非同步工作架構完成前，這個同步端點必須由 client 等待完整回應。
+  const res = await apiClient.post('/exports/by-region', data, { timeout: 0 })
   return unwrapData<RegionExportResultDTO>(res)
 }
 

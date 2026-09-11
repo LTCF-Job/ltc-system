@@ -21,8 +21,10 @@ func clearEnv(t *testing.T) {
 	t.Setenv("ENCRYPTION_KEY", devDefaultEncryptionKeyB64)
 	t.Setenv("HMAC_KEY", devDefaultHMACKeyB64)
 	t.Setenv("ALLOWED_ORIGINS", "")
+	t.Setenv("TRUSTED_PROXIES", "")
 	t.Setenv("RESEND_API_KEY", "")
 	t.Setenv("NOTIFY_FROM", "")
+	t.Setenv("NOTIFICATION_EMAIL_ENABLED", "false")
 }
 
 // setProductionEnv 設定一組通過所有 production 驗證的環境變數，供各測試單獨拿掉其中一項。
@@ -37,8 +39,10 @@ func setProductionEnv(t *testing.T) {
 	t.Setenv("ENCRYPTION_KEY", testEncryptionKeyB64)
 	t.Setenv("HMAC_KEY", testHMACKeyB64)
 	t.Setenv("ALLOWED_ORIGINS", "https://example.vercel.app")
+	t.Setenv("TRUSTED_PROXIES", "10.0.0.0/8")
 	t.Setenv("RESEND_API_KEY", "resend-test-key")
 	t.Setenv("NOTIFY_FROM", "noreply@example.com")
+	t.Setenv("NOTIFICATION_EMAIL_ENABLED", "true")
 }
 
 func TestLoadFromEnv_RequiresAppEnv(t *testing.T) {
@@ -72,25 +76,77 @@ func TestLoadFromEnv_ProductionRequiresAllowedOrigins(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnv_ProductionAllowsMissingResendAPIKey(t *testing.T) {
+func TestLoadFromEnv_ProductionRequiresTrustedProxies(t *testing.T) {
+	setProductionEnv(t)
+	t.Setenv("TRUSTED_PROXIES", "")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("expected error when APP_ENV=production without TRUSTED_PROXIES, got nil")
+	}
+}
+
+func TestLoadFromEnv_ProductionAllowsDisabledNotificationEmail(t *testing.T) {
 	setProductionEnv(t)
 	t.Setenv("RESEND_API_KEY", "")
 	t.Setenv("NOTIFY_FROM", "")
+	t.Setenv("NOTIFICATION_EMAIL_ENABLED", "false")
 	cfg, err := LoadFromEnv()
 	if err != nil {
-		t.Fatalf("expected production to start without RESEND_API_KEY, got error: %v", err)
+		t.Fatalf("expected production to start when notification email is disabled, got error: %v", err)
 	}
 	if cfg.ResendAPIKey != "" {
 		t.Fatalf("expected empty ResendAPIKey, got %q", cfg.ResendAPIKey)
 	}
+	if cfg.NotificationEmailEnabled {
+		t.Fatal("expected notification email to stay disabled")
+	}
 }
 
-func TestLoadFromEnv_RequiresNotifyFromWhenResendAPIKeySet(t *testing.T) {
+func TestLoadFromEnv_RequiresResendAPIKeyWhenNotificationEmailEnabled(t *testing.T) {
+	setProductionEnv(t)
+	t.Setenv("RESEND_API_KEY", "")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("expected error when notification email is enabled without RESEND_API_KEY, got nil")
+	}
+}
+
+func TestLoadFromEnv_RequiresNotifyFromWhenNotificationEmailEnabled(t *testing.T) {
 	setProductionEnv(t)
 	t.Setenv("RESEND_API_KEY", "resend-test-key")
 	t.Setenv("NOTIFY_FROM", "")
 	if _, err := LoadFromEnv(); err == nil {
-		t.Fatal("expected error when RESEND_API_KEY is set without NOTIFY_FROM, got nil")
+		t.Fatal("expected error when notification email is enabled without NOTIFY_FROM, got nil")
+	}
+}
+
+func TestLoadFromEnv_DisabledNotificationEmailIgnoresProviderValues(t *testing.T) {
+	setProductionEnv(t)
+	t.Setenv("NOTIFICATION_EMAIL_ENABLED", "false")
+	t.Setenv("NOTIFY_FROM", "")
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("expected disabled notification email to ignore provider values, got error: %v", err)
+	}
+	if cfg.NotificationEmailEnabled {
+		t.Fatal("expected notification email to stay disabled")
+	}
+}
+
+func TestParseTrustedProxies(t *testing.T) {
+	proxies, err := ParseTrustedProxies(" 127.0.0.1, 10.0.0.0/8,::1 ")
+	if err != nil {
+		t.Fatalf("expected valid proxy list, got error: %v", err)
+	}
+	if got, want := len(proxies), 3; got != want {
+		t.Fatalf("expected %d proxies, got %d", want, got)
+	}
+	if _, err := ParseTrustedProxies("127.0.0.1,,10.0.0.0/8"); err == nil {
+		t.Fatal("expected empty proxy entry to be rejected")
+	}
+	if _, err := ParseTrustedProxies("not-a-proxy"); err == nil {
+		t.Fatal("expected invalid proxy value to be rejected")
+	}
+	if _, err := ParseTrustedProxies("0.0.0.0/0"); err == nil {
+		t.Fatal("expected catch-all proxy network to be rejected")
 	}
 }
 

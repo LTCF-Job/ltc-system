@@ -20,7 +20,7 @@ ENCRYPTION_KEY=<32 bytes base64>
 HMAC_KEY=<32 bytes base64，不可跟 ENCRYPTION_KEY 一樣>
 ```
 
-`APP_ENV=production` 時另外強制要求 `SUPABASE_JWKS_URL` 跟 `ALLOWED_ORIGINS`，缺一個就直接拒絕啟動。
+`APP_ENV=production` 時另外強制要求 `SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`、`TRUSTED_PROXIES`，缺一個就直接拒絕啟動。通知寄信則由 `NOTIFICATION_EMAIL_ENABLED` 明確控制；開啟時才必須提供 `RESEND_API_KEY` 與 `NOTIFY_FROM`。
 
 ## 技術文件
 

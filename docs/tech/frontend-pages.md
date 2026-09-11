@@ -19,7 +19,7 @@ covers: ["apps/web/src/router/index.ts"]
 | `/masters/caregivers` | `views/masters/CaregiverListView.vue` | admin/staff/dispatcher/viewer | `caregivers/*`、`caregivers/import`、`caregivers/template` |
 | `/driver-reports`（重導向 `/driver-reports/status`） | — | admin/staff/dispatcher/viewer | — |
 | `/driver-reports/status` | `views/driverReports/DriverReportStatusView.vue` | admin/staff/dispatcher/viewer | `driver-reports`、`driver-reports`（建表） |
-| `/driver-reports/import`（`/driver-reports/batch-import`、`/driver-reports/mappings` 皆重導向於此） | `views/driverReports/DriverReportImportView.vue` | admin/staff/dispatcher/viewer | `vehicles`、`cases`、`driver-reports`、`driver-reports`（建表）、`driver-reports/:id/import`、`driver-reports/columns*`、`cases`（新增，待維護頁籤快速建立個案） |
+| `/driver-reports/import`（`/driver-reports/batch-import`、`/driver-reports/mappings` 皆重導向於此） | `views/driverReports/DriverReportImportView.vue` | `driver_reports:view` 或 `driver_report_mappings:view` | 各 upload／待維護 API 依其 `driver_reports`、`driver_report_mappings`、`masters_*`、`attendance_fuel` permission 分別 gate；沒有權限的區塊不載入 |
 | `/rides` | `views/rides/RideCalendarView.vue`（含 `RideManualEntryDialog.vue`） | 全部 | `rides/calendar`、`rides/manual-report` |
 | `/rides/issues` | `views/rides/RideIssuesView.vue`（含 `RideCorrectionDrawer.vue`） | admin/staff/dispatcher/viewer | `rides/issues`、`rides/:id`、`rides/:id/resolve-conflict` |
 | `/rides/missing` | `views/rides/MissingRidesView.vue` | admin/staff/dispatcher/viewer | `rides/missing` |

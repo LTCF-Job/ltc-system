@@ -290,7 +290,7 @@ covers:
    - 後端 `transport/*_dto.go` 與前端 `src/types/api.d.ts`（或 `src/api/*.ts`）是否完全對齊。
    - 資料庫為 `NULL` 的欄位在前端型別中是否標記為可選（`optional` / `null`）。
 3. **權限矩陣同步**：
-   - 後端路由掛載之 `middleware.RequirePermission(module, action)`，必須與前端路由表 `meta.module` 及前端 `hasPermission(module, action)` 保持 100% 同步。
+   - 後端路由掛載之 `middleware.RequirePermission(module, action)`，必須與前端路由表的 `meta.module`／`meta.anyPermissions` 及前端 `hasPermission(module, action)` 保持 100% 同步。
    - 嚴防「前端畫面上看到按鈕，點擊後卻收到後端 403 FORBIDDEN」或「後端 API 已開放但前端選單被隱藏」的脫鉤現象。
 4. **錯誤代碼一致性**：
    - 後端新引進的錯誤碼（`internal/platform/httpx/response.go`），必須同步登記至前端 `src/api/errorCodes.ts` 的 `API_ERROR_MESSAGES` 對照表，並撰寫對應的單元測試。
