@@ -23,15 +23,32 @@ const (
 	ContextKeyActorName = "actor_name"
 )
 
-// UserStateResolver 讓高風險 API 在 JWT 尚未過期時仍能即時拒絕已停用帳號。
+// UserState 是 UserStateResolver 查詢後端使用者狀態的結果。分成三種而非單純的
+// active／inactive 布林值，是為了讓中介層能區分「帳號真的被停用」與「JWT 裡的角色
+// 宣告已經跟資料庫不一致（例如管理員剛改過角色，使用者還沒重新登入）」——後者不是帳號
+// 出了問題，只是需要重新登入換發新 JWT，兩者顯示給使用者的訊息不應該一樣。
+type UserState int
+
+const (
+	// UserStateActive 代表帳號啟用中且 JWT 角色與資料庫一致，可放行請求。
+	UserStateActive UserState = iota
+	// UserStateDisabled 代表帳號已被停用或查無此帳號。
+	UserStateDisabled
+	// UserStateRoleMismatch 代表帳號本身仍是啟用狀態，但 JWT 內的角色宣告與資料庫
+	// 目前的角色不同，需要重新登入才能取得新角色。
+	UserStateRoleMismatch
+)
+
+// UserStateResolver 讓高風險 API 在 JWT 尚未過期時仍能即時拒絕已停用帳號，或要求
+// 角色已變更的使用者重新登入。
 type UserStateResolver interface {
-	Validate(ctx context.Context, actorID uuid.UUID, role string) (bool, error)
+	Validate(ctx context.Context, actorID uuid.UUID, role string) (UserState, error)
 }
 
 // VersionedUserStateResolver 以共享資料來源版本標記回源取得的帳號狀態；未過期的
 // process-local 項目會搭配 UserStateVersionResolver 先做輕量版本比對。
 type VersionedUserStateResolver interface {
-	ValidateVersioned(ctx context.Context, actorID uuid.UUID, role string) (bool, string, error)
+	ValidateVersioned(ctx context.Context, actorID uuid.UUID, role string) (UserState, string, error)
 }
 
 // UserStateVersionResolver 只查詢帳號安全狀態的共享版本，避免 cache hit 時重新載入完整投影。
@@ -181,7 +198,7 @@ func MiddlewareWithUserState(cfg *config.Config, userState UserStateResolver) gi
 			return
 		}
 		if userState != nil {
-			active, err := userState.Validate(c.Request.Context(), GetActorID(c), GetActorRole(c))
+			state, err := userState.Validate(c.Request.Context(), GetActorID(c), GetActorRole(c))
 			if err != nil {
 				// 這裡是所有已驗證請求的必經路徑，錯誤不記錄就只剩一個沒有成因的 503；
 				// 訊息只進伺服器日誌，回應本身仍維持非技術性字串。
@@ -195,8 +212,15 @@ func MiddlewareWithUserState(cfg *config.Config, userState UserStateResolver) gi
 				httpx.RespondError(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "無法確認使用者狀態", nil)
 				return
 			}
-			if !active {
+			switch state {
+			case UserStateDisabled:
 				httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "使用者帳號已停用", nil)
+				return
+			case UserStateRoleMismatch:
+				// 帳號本身沒問題，只是角色已被管理員變更、JWT 裡的舊角色宣告過期，
+				// 不應該說成「帳號已停用」誤導使用者；狀態碼仍是 401，前端既有的
+				// 401 分支會導向重新登入，效果等同要求換發新 JWT。
+				httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "您的權限已更新，請重新登入", nil)
 				return
 			}
 		}

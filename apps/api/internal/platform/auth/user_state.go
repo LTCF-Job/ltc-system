@@ -19,7 +19,7 @@ type CachedUserStateResolver struct {
 }
 
 type userStateCacheEntry struct {
-	active  bool
+	state   UserState
 	role    string
 	version string
 	expires time.Time
@@ -35,7 +35,7 @@ func NewCachedUserStateResolver(source UserStateResolver, ttl time.Duration) *Ca
 
 // Validate 命中未過期快取時先查輕量版本；版本相同直接沿用狀態，版本變更或 cache miss
 // 才回源查詢並更新快取。
-func (c *CachedUserStateResolver) Validate(ctx context.Context, actorID uuid.UUID, role string) (bool, error) {
+func (c *CachedUserStateResolver) Validate(ctx context.Context, actorID uuid.UUID, role string) (UserState, error) {
 	now := time.Now()
 	c.mu.RLock()
 	entry, cached := c.cache[actorID]
@@ -44,35 +44,35 @@ func (c *CachedUserStateResolver) Validate(ctx context.Context, actorID uuid.UUI
 		if versionSource, ok := c.source.(UserStateVersionResolver); ok {
 			version, err := versionSource.ValidateVersion(ctx, actorID)
 			if err != nil {
-				return false, err
+				return UserStateDisabled, err
 			}
 			if version == entry.version {
-				return entry.active, nil
+				return entry.state, nil
 			}
 		} else {
-			return entry.active, nil
+			return entry.state, nil
 		}
 	}
 
 	if source, ok := c.source.(VersionedUserStateResolver); ok {
-		active, version, err := source.ValidateVersioned(ctx, actorID, role)
+		state, version, err := source.ValidateVersioned(ctx, actorID, role)
 		if err != nil {
-			return false, err
+			return UserStateDisabled, err
 		}
 		c.mu.Lock()
-		c.cache[actorID] = userStateCacheEntry{active: active, role: role, version: version, expires: now.Add(c.ttl)}
+		c.cache[actorID] = userStateCacheEntry{state: state, role: role, version: version, expires: now.Add(c.ttl)}
 		c.mu.Unlock()
-		return active, nil
+		return state, nil
 	}
 
-	active, err := c.source.Validate(ctx, actorID, role)
+	state, err := c.source.Validate(ctx, actorID, role)
 	if err != nil {
-		return false, err
+		return UserStateDisabled, err
 	}
 	c.mu.Lock()
-	c.cache[actorID] = userStateCacheEntry{active: active, role: role, expires: now.Add(c.ttl)}
+	c.cache[actorID] = userStateCacheEntry{state: state, role: role, expires: now.Add(c.ttl)}
 	c.mu.Unlock()
-	return active, nil
+	return state, nil
 }
 
 // InvalidateUser 讓帳號停用／角色異動在本機不等待 TTL。

@@ -218,21 +218,29 @@ func (r userSecurityStateResolver) ResolveVersion(ctx context.Context, actorID u
 	return fmt.Sprintf("%d", state.PermissionVersion), nil
 }
 
-func (r userSecurityStateResolver) Validate(ctx context.Context, actorID uuid.UUID, role string) (bool, error) {
-	active, _, err := r.ValidateVersioned(ctx, actorID, role)
-	return active, err
+func (r userSecurityStateResolver) Validate(ctx context.Context, actorID uuid.UUID, role string) (auth.UserState, error) {
+	userState, _, err := r.ValidateVersioned(ctx, actorID, role)
+	return userState, err
 }
 
-func (r userSecurityStateResolver) ValidateVersioned(ctx context.Context, actorID uuid.UUID, role string) (bool, string, error) {
+// ValidateVersioned 分別判斷「帳號是否啟用」與「JWT 角色是否與資料庫一致」，回傳對應的
+// auth.UserState，讓中介層能區分兩者並給出不同訊息，不再統一說成「帳號已停用」。
+func (r userSecurityStateResolver) ValidateVersioned(ctx context.Context, actorID uuid.UUID, role string) (auth.UserState, string, error) {
 	state, err := r.load(ctx, actorID)
 	if err != nil {
-		return false, "error", err
+		return auth.UserStateDisabled, "error", err
 	}
 	if state == nil {
-		return false, "missing", nil
+		return auth.UserStateDisabled, "missing", nil
 	}
-	roleMatches := state.RoleKey == "" || state.RoleKey == role
-	return state.Status == "active" && roleMatches, fmt.Sprintf("%d", state.PermissionVersion), nil
+	version := fmt.Sprintf("%d", state.PermissionVersion)
+	if state.Status != "active" {
+		return auth.UserStateDisabled, version, nil
+	}
+	if state.RoleKey != "" && state.RoleKey != role {
+		return auth.UserStateRoleMismatch, version, nil
+	}
+	return auth.UserStateActive, version, nil
 }
 
 // ValidateVersion 只讀取使用者安全狀態的 permission_version；狀態本身仍由 cache entry

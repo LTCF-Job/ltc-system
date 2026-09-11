@@ -134,3 +134,94 @@ func TestUserSecurityStateResolver_ReusesStateWithinRequest(t *testing.T) {
 	assert.Equal(t, first, second)
 	assert.Equal(t, 1, store.getCalls, "同一 request 的 user state 與 custom permission 不應重複讀取投影")
 }
+
+// TestUserSecurityStateResolver_ValidateVersioned_DisabledAccount 確認帳號非 active 時
+// 回傳 UserStateDisabled，不論角色參數為何。
+func TestUserSecurityStateResolver_ValidateVersioned_DisabledAccount(t *testing.T) {
+	actorID := uuid.New()
+	store := &fakeSecurityStateStore{state: &identityapp.UserSecurityState{
+		UserID: actorID, Status: "inactive", RoleKey: "staff", PermissionVersion: 3,
+	}}
+	resolver := userSecurityStateResolver{store: store}
+
+	state, version, err := resolver.ValidateVersioned(context.Background(), actorID, "staff")
+
+	require.NoError(t, err)
+	assert.Equal(t, auth.UserStateDisabled, state)
+	assert.Equal(t, "3", version, "已停用時仍要回傳真實版本號，讓快取的版本比對邏輯不受影響")
+}
+
+// TestUserSecurityStateResolver_ValidateVersioned_MissingAccount 確認查無使用者安全狀態時
+// 回傳 UserStateDisabled，比照既有「查無資料視為已停用」的行為。
+func TestUserSecurityStateResolver_ValidateVersioned_MissingAccount(t *testing.T) {
+	actorID := uuid.New()
+	store := &fakeSecurityStateStore{state: nil}
+	resolver := userSecurityStateResolver{store: store}
+
+	state, version, err := resolver.ValidateVersioned(context.Background(), actorID, "staff")
+
+	require.NoError(t, err)
+	assert.Equal(t, auth.UserStateDisabled, state)
+	assert.Equal(t, "missing", version)
+}
+
+// TestUserSecurityStateResolver_ValidateVersioned_RoleMismatch 確認帳號啟用中、但資料庫角色
+// 與呼叫參數不同時回傳 UserStateRoleMismatch，而不是跟已停用共用同一個結果。
+func TestUserSecurityStateResolver_ValidateVersioned_RoleMismatch(t *testing.T) {
+	actorID := uuid.New()
+	store := &fakeSecurityStateStore{state: &identityapp.UserSecurityState{
+		UserID: actorID, Status: "active", RoleKey: "admin", PermissionVersion: 7,
+	}}
+	resolver := userSecurityStateResolver{store: store}
+
+	state, version, err := resolver.ValidateVersioned(context.Background(), actorID, "staff")
+
+	require.NoError(t, err)
+	assert.Equal(t, auth.UserStateRoleMismatch, state)
+	assert.Equal(t, "7", version)
+}
+
+// TestUserSecurityStateResolver_ValidateVersioned_ActiveMatchingRole 確認帳號啟用中且角色
+// 一致時回傳 UserStateActive。
+func TestUserSecurityStateResolver_ValidateVersioned_ActiveMatchingRole(t *testing.T) {
+	actorID := uuid.New()
+	store := &fakeSecurityStateStore{state: &identityapp.UserSecurityState{
+		UserID: actorID, Status: "active", RoleKey: "staff", PermissionVersion: 1,
+	}}
+	resolver := userSecurityStateResolver{store: store}
+
+	state, _, err := resolver.ValidateVersioned(context.Background(), actorID, "staff")
+
+	require.NoError(t, err)
+	assert.Equal(t, auth.UserStateActive, state)
+}
+
+// TestUserSecurityStateResolver_ValidateVersioned_EmptyRoleKeyAlwaysMatches 確認 RoleKey
+// 為空字串時（尚未指定明確角色）視為角色一致，比照既有行為，不因本次改動變嚴格。
+func TestUserSecurityStateResolver_ValidateVersioned_EmptyRoleKeyAlwaysMatches(t *testing.T) {
+	actorID := uuid.New()
+	store := &fakeSecurityStateStore{state: &identityapp.UserSecurityState{
+		UserID: actorID, Status: "active", RoleKey: "", PermissionVersion: 1,
+	}}
+	resolver := userSecurityStateResolver{store: store}
+
+	state, _, err := resolver.ValidateVersioned(context.Background(), actorID, "anything")
+
+	require.NoError(t, err)
+	assert.Equal(t, auth.UserStateActive, state)
+}
+
+// TestUserSecurityStateResolver_Validate_DelegatesToValidateVersioned 確認未攜帶版本資訊的
+// Validate 與 ValidateVersioned 回傳一致的狀態。
+func TestUserSecurityStateResolver_Validate_DelegatesToValidateVersioned(t *testing.T) {
+	actorID := uuid.New()
+	store := &fakeSecurityStateStore{state: &identityapp.UserSecurityState{
+		UserID: actorID, Status: "active", RoleKey: "admin", PermissionVersion: 1,
+	}}
+	resolver := userSecurityStateResolver{store: store}
+
+	state, err := resolver.Validate(context.Background(), actorID, "staff")
+
+	require.NoError(t, err)
+	assert.Equal(t, auth.UserStateRoleMismatch, state)
+}
