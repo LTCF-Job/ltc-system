@@ -70,7 +70,7 @@ API 預設 listen address 依 `PORT`／config 設定，常見本機位址是 `ht
 
 | 類別 | 主要設定 | 用途與注意事項 |
 | --- | --- | --- |
-| API runtime | `APP_ENV`、`PORT`、`ALLOWED_ORIGINS`、`TRUSTED_PROXIES`、`LOG_LEVEL` | `local` 允許開發降級；production 應 fail closed，且只信任實際 ingress proxy |
+| API runtime | `APP_ENV`、`PORT`、`ALLOWED_ORIGINS`、`TRUSTED_PROXIES`、`LOG_LEVEL` | `local` 允許開發降級；production 應 fail closed，`TRUSTED_PROXIES` 留空時不信任 `X-Forwarded-For`，有固定 ingress 時才信任實際 proxy |
 | Database | `DATABASE_URL`、`DB_MAX_OPEN_CONNS`、`DB_MAX_IDLE_CONNS` | PostgreSQL／Supabase DB pool；migration 與 server 應指向預期資料庫 |
 | JWT | `SUPABASE_JWT_ISSUER`、`SUPABASE_PROJECT_REF`、`SUPABASE_JWKS_URL` | production 使用 JWKS、issuer 與固定 audience `authenticated`；不要在文件記錄 token／secret |
 | Supabase Admin | `SUPABASE_SERVICE_ROLE_KEY`、`SUPABASE_ADMIN_API_TIMEOUT` | user、role bootstrap 與管理 API；缺少時 identity admin endpoints 可能回 503 |
