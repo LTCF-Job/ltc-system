@@ -69,6 +69,14 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    // Cloud Run（及其前面的 Google Front End）逾時是由平台直接回 504，不會經過我們的
+    // 錯誤 envelope，也不是 axios 端的 ECONNABORTED；跟下面「完全沒有回應」的斷線情境
+    // 分開判斷，否則使用者會被誤導成「連不上網路」，但實際上是伺服器處理時間過長。
+    if (status === 504) {
+      ElMessage.error(TIMEOUT_ERROR_MESSAGE)
+      return Promise.reject(error)
+    }
+
     // 完全沒有回應代表請求沒走到後端，這與「後端回報錯誤」是兩種不同的處置，
     // 混成同一句通用訊息會讓使用者以為是系統壞掉而不是自己斷線。
     if (!error.response) {
