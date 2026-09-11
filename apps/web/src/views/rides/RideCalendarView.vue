@@ -97,29 +97,6 @@
           </template>
         </el-table-column>
 
-        <el-table-column
-          prop="tripPattern"
-          label="趟數"
-          width="76"
-          fixed="left"
-          align="center"
-        >
-          <template #default="{ row }">
-            <el-tag
-              v-if="getTripPatternDisplay(row) === '自訂'"
-              size="small"
-              type="info"
-              effect="plain"
-              class="custom-trip-tag"
-            >
-              自訂
-            </el-tag>
-            <span v-else class="trip-count-text">
-              {{ getTripPatternDisplay(row) }}
-            </span>
-          </template>
-        </el-table-column>
-
         <!-- 當月動態日期欄位 (1 ~ 31 日) -->
         <el-table-column
           v-for="day in daysInMonth"
@@ -248,7 +225,6 @@ import { getRideCalendarMatrix } from '@/api/rides'
 import { listHolidays } from '@/api/holidays'
 import { formatDateTime, currentLocalMonth } from '@/utils/formatters'
 import { useRocMonth } from '@/composables/useRocMonth'
-import { getTripPatternDisplay as formatTripPatternDisplay } from '@/lib/rideCalendarDisplay'
 import type { RideCalendarMatrixDTO, CaseRideCalendarRowDTO, RideRecordDTO } from '@/types/api'
 
 type CalendarRow = Omit<Partial<CaseRideCalendarRowDTO>, 'tripPattern'> & {
@@ -330,11 +306,6 @@ function getCell(row: CalendarRow, day: number) {
   return row.days?.[dayKey]
 }
 
-// 計算個案在月曆表格「趟數」欄位應顯示的文字
-function getTripPatternDisplay(row: CalendarRow): string {
-  return formatTripPatternDisplay(row)
-}
-
 // 計算該個案在指定日期的搭乘槽位列表（依該日預期趟數與實際紀錄動態展開）
 function getDaySlots(row: CalendarRow, day: number) {
   const cell = getCell(row, day)
@@ -405,16 +376,6 @@ onMounted(() => {
 
 .inline-value {
   color: var(--app-text-regular);
-}
-
-.custom-trip-tag {
-  font-weight: 500;
-  border-radius: 4px;
-}
-
-.trip-count-text {
-  color: var(--app-text-regular);
-  font-size: 13px;
 }
 
 .filter-card, .legend-card, .matrix-card {
