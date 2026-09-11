@@ -107,9 +107,12 @@ func TestSiteHandler_Delete_CallsStore(t *testing.T) {
 	assert.Equal(t, id, store.deletedID, "Delete must actually call the store, not just return success")
 }
 
-func TestSiteHandler_Delete_PropagatesStoreError(t *testing.T) {
+// TestSiteHandler_Delete_UnclassifiedStoreError_Returns500 確認未被辨識的底層錯誤（如資料庫
+// 連線失敗）不會被誤判為使用者輸入錯誤：只有 app.ErrSiteInUse／app.ErrSiteNotFound 才會被分流成
+// 409／404，其餘一律視為系統錯誤回 500，避免把「系統壞了」講成「你填錯了」。
+func TestSiteHandler_Delete_UnclassifiedStoreError_Returns500(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	store := &fakeSiteStore{deleteErr: errors.New("foreign key violation")}
+	store := &fakeSiteStore{deleteErr: errors.New("connection reset by peer")}
 	h := newTestSiteHandler(store)
 	id := uuid.New()
 
@@ -120,7 +123,57 @@ func TestSiteHandler_Delete_PropagatesStoreError(t *testing.T) {
 
 	h.Delete(c)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// TestSiteHandler_Delete_SiteInUse_Returns409 確認仍被個案等資料參照（外鍵違反）的據點刪除
+// 會回 409 RESOURCE_IN_USE 並附上可讀原因，而不是通用的 400 驗證失敗。
+func TestSiteHandler_Delete_SiteInUse_Returns409(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &fakeSiteStore{deleteErr: app.ErrSiteInUse}
+	h := newTestSiteHandler(store)
+	id := uuid.New()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/sites/"+id.String(), nil)
+	c.Params = gin.Params{{Key: "id", Value: id.String()}}
+
+	h.Delete(c)
+
+	require.Equal(t, http.StatusConflict, w.Code)
+
+	var resp struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+			Details []struct {
+				Field string `json:"field"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "RESOURCE_IN_USE", resp.Error.Code)
+	assert.NotContains(t, resp.Error.Message, "id", "訊息不應殘留內部欄位代稱")
+	assert.Empty(t, resp.Error.Details, "不應再帶 Field: id 這種會被前端顯示成【id】的 detail")
+}
+
+// TestSiteHandler_Delete_SiteNotFound_Returns404 確認查無此據點回 404，而不是被籠統地
+// 當成使用者輸入或系統錯誤。
+func TestSiteHandler_Delete_SiteNotFound_Returns404(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &fakeSiteStore{deleteErr: app.ErrSiteNotFound}
+	h := newTestSiteHandler(store)
+	id := uuid.New()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/sites/"+id.String(), nil)
+	c.Params = gin.Params{{Key: "id", Value: id.String()}}
+
+	h.Delete(c)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 // TestSiteHandler_Create_ResponseShape 鎖定回應的 JSON 欄位契約。

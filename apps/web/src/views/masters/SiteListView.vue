@@ -255,7 +255,8 @@ async function handleToggleStatus(row: SiteDTO, newActive: boolean) {
 
 const rules = {
   name: [{ required: true, message: '請輸入據點名稱', trigger: 'blur' }],
-  region: [{ required: true, message: '請輸入區域', trigger: 'blur' }]
+  region: [{ required: true, message: '請輸入區域', trigger: 'blur' }],
+  address: [{ required: true, message: '請輸入據點地址', trigger: 'blur' }]
 }
 
 const {

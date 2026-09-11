@@ -65,7 +65,7 @@ func (h *SiteHandler) Create(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidStatus) {
-			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "狀態設定不正確，僅接受「啟用」或「停用」", nil)
 			return
 		}
 		if errors.Is(err, app.ErrSiteNameRequired) {
@@ -122,7 +122,7 @@ func (h *SiteHandler) Update(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidStatus) {
-			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "狀態設定不正確，僅接受「啟用」或「停用」", nil)
 			return
 		}
 		if errors.Is(err, app.ErrSiteNotFound) {
@@ -168,9 +168,15 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 		IPAddress: c.ClientIP(),
 		UserAgent: c.Request.UserAgent(),
 	}); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-			{Field: "id", Reason: "該據點仍有相關資料參照，無法刪除"},
-		})
+		if errors.Is(err, app.ErrSiteNotFound) {
+			respondNotFound(c, "查無此據點")
+			return
+		}
+		if errors.Is(err, app.ErrSiteInUse) {
+			httpx.RespondError(c, http.StatusConflict, httpx.CodeResourceInUse, "該據點仍有相關資料參照，請先解除關聯後再刪除", nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 

@@ -442,6 +442,7 @@ async function handleQuickToggleActive(row: VehicleDTO, newActive: boolean) {
       hasPurchaseContract: !!row.hasPurchaseContract,
       hasPlateRegistration: !!row.hasPlateRegistration,
       hasTransferRegistration: !!row.hasTransferRegistration,
+      remarks: row.remarks || '',
       status: newStatus
     })
     row.status = newStatus

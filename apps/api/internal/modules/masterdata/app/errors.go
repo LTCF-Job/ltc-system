@@ -25,6 +25,13 @@ var (
 	ErrDuplicateSiteName = errors.New("site name already exists in region")
 	// ErrSiteNotFound 代表查無據點資料。
 	ErrSiteNotFound = errors.New("site not found")
+	// ErrSiteInUse 代表刪除據點時仍有其他資料（如個案排班）參照該據點，資料庫外鍵限制擋下。
+	ErrSiteInUse = errors.New("site is still referenced by other records")
+
+	// ErrAssignmentReferenceInvalid 代表指派時指定的司機或車輛不存在（外鍵違反）。
+	ErrAssignmentReferenceInvalid = errors.New("assigned driver or vehicle does not exist")
+	// ErrAssignmentOverlap 代表司機的指派期間與既有指派重疊（違反不重疊限制）。
+	ErrAssignmentOverlap = errors.New("driver assignment overlaps with an existing assignment")
 
 	// ErrDuplicateVehiclePlateNo 代表車號已存在。
 	ErrDuplicateVehiclePlateNo = errors.New("vehicle plate number already exists")

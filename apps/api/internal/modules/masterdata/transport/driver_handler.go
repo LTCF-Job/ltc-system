@@ -152,7 +152,7 @@ func (h *DriverHandler) Update(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, app.ErrInvalidStatus) {
-			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "狀態設定不正確，僅接受「啟用」或「停用」", nil)
 			return
 		}
 		if errors.Is(err, app.ErrInvalidDriverLicenseClass) {
@@ -231,6 +231,14 @@ func (h *DriverHandler) AssignVehicle(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidAssignmentRange) {
 			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "司機指派資料無效", nil)
+			return
+		}
+		if errors.Is(err, app.ErrAssignmentReferenceInvalid) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "指派的車輛不存在，請重新選擇", nil)
+			return
+		}
+		if errors.Is(err, app.ErrAssignmentOverlap) {
+			httpx.RespondError(c, http.StatusConflict, httpx.CodeAssignmentOverlap, "該司機同一時段已有其他車輛指派，請調整後再試", nil)
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)

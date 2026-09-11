@@ -61,7 +61,7 @@ func (h *VehicleHandler) Create(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidStatus) {
-			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "狀態設定不正確，僅接受「啟用」或「停用」", nil)
 			return
 		}
 		if errors.Is(err, app.ErrDuplicateVehiclePlateNo) {
@@ -105,7 +105,7 @@ func (h *VehicleHandler) Update(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidStatus) {
-			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "狀態設定不正確，僅接受「啟用」或「停用」", nil)
 			return
 		}
 		if errors.Is(err, app.ErrDuplicateVehiclePlateNo) {
@@ -120,7 +120,12 @@ func (h *VehicleHandler) Update(c *gin.Context) {
 			})
 			return
 		}
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
+		if errors.Is(err, app.ErrVehicleNotFound) {
+			respondNotFound(c, "查無此車輛")
+			return
+		}
+		// 其餘錯誤（如資料庫故障）並非使用者輸入問題，不應回 400 驗證失敗掩蓋真正原因。
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
@@ -153,6 +158,14 @@ func (h *VehicleHandler) SetDrivers(c *gin.Context) {
 		IPAddress: c.ClientIP(),
 		UserAgent: c.Request.UserAgent(),
 	}); err != nil {
+		if errors.Is(err, app.ErrAssignmentReferenceInvalid) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "指派的司機不存在，請重新選擇", nil)
+			return
+		}
+		if errors.Is(err, app.ErrAssignmentOverlap) {
+			httpx.RespondError(c, http.StatusConflict, httpx.CodeAssignmentOverlap, "該司機同一時段已有其他車輛指派，請調整後再試", nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
@@ -179,6 +192,10 @@ func (h *VehicleHandler) Delete(c *gin.Context) {
 	}); err != nil {
 		if errors.Is(err, app.ErrVehicleInUse) {
 			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
+			return
+		}
+		if errors.Is(err, app.ErrVehicleNotFound) {
+			respondNotFound(c, "查無此車輛")
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
