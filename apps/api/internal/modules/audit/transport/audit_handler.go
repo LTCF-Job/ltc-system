@@ -40,7 +40,7 @@ func (h *AuditHandler) List(c *gin.Context) {
 	if actorIDStr := c.Query("actorId"); actorIDStr != "" {
 		id, err := uuid.Parse(actorIDStr)
 		if err != nil {
-			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "actorId 必須為有效 UUID", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "操作者篩選條件格式不正確", nil)
 			return
 		}
 		filter.ActorID = &id
@@ -49,7 +49,7 @@ func (h *AuditHandler) List(c *gin.Context) {
 	if startStr := c.Query("startDate"); startStr != "" {
 		t, err := rocdate.ParseDate(startStr)
 		if err != nil {
-			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "startDate 必須為有效日期", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "起始日期格式不正確", nil)
 			return
 		}
 		filter.StartDate = &t
@@ -58,7 +58,7 @@ func (h *AuditHandler) List(c *gin.Context) {
 	if endStr := c.Query("endDate"); endStr != "" {
 		t, err := rocdate.ParseDate(endStr)
 		if err != nil {
-			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "endDate 必須為有效日期", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "結束日期格式不正確", nil)
 			return
 		}
 		endDay := t.AddDate(0, 0, 1) // 包含該日全天

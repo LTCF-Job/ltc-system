@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -252,6 +253,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			if !hasError && s.duplicates != nil {
 				dup, err := s.duplicates.FindDuplicate(ctx, duplicateLookupNationalID, name)
 				if err != nil {
+					slog.Error("case import duplicate lookup failed", "row_index", actualRowIndex, "error", err)
 					message := "重複個案查詢失敗，請稍後重試"
 					rowRes.ErrorMessage = appendMessage(rowRes.ErrorMessage, message)
 					errorsList = append(errorsList, CaseImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "重複個案", Message: message})
@@ -272,6 +274,7 @@ func (s *ImportService) processRawTables(ctx context.Context, tables [][][]strin
 			if !hasError {
 				caregiverID, _, caregiverWarning, err := s.resolveCaregiver(ctx, careContactName, careContactRole)
 				if err != nil {
+					slog.Error("case import caregiver lookup failed", "row_index", actualRowIndex, "error", err)
 					message := "照護人員查詢失敗，請稍後重試"
 					rowRes.ErrorMessage = appendMessage(rowRes.ErrorMessage, message)
 					errorsList = append(errorsList, CaseImportErrorItem{RowID: rowID, RowIndex: actualRowIndex, CaseName: name, Field: "照護人員", Message: message})
