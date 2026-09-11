@@ -11,4 +11,7 @@ var (
 	ErrCaregiverTypeInvalid = errors.New("caregiver type must be case_manager or specialist")
 	// ErrCaregiverStatusInvalid 代表照護人員狀態不在 active／inactive 允許值內。
 	ErrCaregiverStatusInvalid = errors.New("caregiver status must be active or inactive")
+	// ErrCaregiverInUse 代表照護人員仍被個案關聯（cases.caregiver_id 為 ON DELETE
+	// RESTRICT），無法刪除。
+	ErrCaregiverInUse = errors.New("caregiver is still referenced by cases")
 )

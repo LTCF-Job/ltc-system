@@ -2,9 +2,12 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/caregiver/app"
 )
@@ -59,7 +62,9 @@ func (r *CaregiverRepository) List(ctx context.Context, q, status string, pendin
 		  AND ($3 = false OR NOT c.is_pending)
 		  AND ($4 = '' OR c.status = $4)
 	`
-	_ = r.db.QueryRow(ctx, countQuery, q, pending, excludePending, status).Scan(&total)
+	if err := r.db.QueryRow(ctx, countQuery, q, pending, excludePending, status).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count caregivers: %w", err)
+	}
 
 	return list, total, nil
 }
@@ -71,6 +76,9 @@ func (r *CaregiverRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.C
 	err := r.db.QueryRow(ctx, query, id).
 		Scan(&row.ID, &row.SiteName, &row.Name, &row.Type, &row.Contact, &row.Notes, &row.Status, &row.CreatedAt, &row.UpdatedAt)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, app.ErrCaregiverNotFound
+		}
 		return nil, err
 	}
 	c := row.toApp()
@@ -127,10 +135,18 @@ func (r *CaregiverRepository) Update(ctx context.Context, c *app.Caregiver) erro
 		Scan(&c.UpdatedAt)
 }
 
-// Delete 刪除照護人員。
+// Delete 刪除照護人員。cases.caregiver_id 為 ON DELETE RESTRICT，仍被個案關聯時
+// 資料庫會回傳外鍵違反（23503），轉換為 app.ErrCaregiverInUse 供上層映射為 409。
 func (r *CaregiverRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM caregivers WHERE id = $1`, id)
-	return err
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return app.ErrCaregiverInUse
+		}
+		return err
+	}
+	return nil
 }
 
 // nullableString 將空字串轉為 nil，避免選填欄位寫入空字串取代真正的 NULL。
