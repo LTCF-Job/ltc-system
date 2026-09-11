@@ -970,7 +970,7 @@ async function retryRow(row: BatchFileRow) {
 }
 
 function rowErrorMessage(error: unknown): string {
-  const response = (error as { response?: { data?: { error?: ApiError } } })?.response
+  const response = (error as { response?: { status?: number; data?: { error?: ApiError } } })?.response
   const detail = response?.data?.error
   if (detail?.details?.length) {
     return detail.details
@@ -978,6 +978,10 @@ function rowErrorMessage(error: unknown): string {
       .join('；')
   }
   if (detail) return resolveApiErrorMessage(detail, '匯入失敗，請確認檔案內容')
+
+  // 平台層逾時（如 Cloud Run／Google Front End）會直接回 504，屬於「有回應但不是我們的
+  // 錯誤 envelope」，要跟下面真正沒拿到回應的斷線情境分開，否則會誤告使用者去檢查網路。
+  if (response?.status === 504) return TIMEOUT_ERROR_MESSAGE
 
   // 走到這裡代表請求沒拿到後端回應。原始 error.message 是 axios 或瀏覽器的技術字串
   // （如 "Network Error"、"timeout of 30000ms exceeded"），不能直接顯示給使用者。
