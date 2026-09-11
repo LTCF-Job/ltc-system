@@ -5,7 +5,7 @@
         <div class="upload-stack">
           <PageHeader
             title="批次上傳接送匯報"
-            description="選擇多個 .xlsx 檔案，系統會依檔名自動比對車輛車次、依內容自動判斷涵蓋月份，解析完成後自動匯入。有系統推薦個案的欄位會自動套用，完全找不到對應個案的欄位會留在「待維護資料」頁籤，稍後逐一連結既有個案或建立新個案。"
+            description="選擇多個 .xlsx 檔案，系統會依檔名自動比對車輛車次、依內容自動判斷涵蓋月份；確認無誤後按「開始上傳」才會正式匯入。有系統推薦個案的欄位會自動套用，完全找不到對應個案的欄位會留在「待維護資料」頁籤，稍後逐一連結既有個案或建立新個案。"
           />
 
           <el-upload
@@ -61,7 +61,12 @@
           <el-empty v-if="!rows.length" description="尚未選擇任何檔案" />
 
           <section v-else class="file-panel">
-            <div class="file-panel-head">已選擇 {{ rows.length }} 個檔案</div>
+            <div class="file-panel-head">
+              <span>已選擇 {{ rows.length }} 個檔案</span>
+              <el-button type="primary" size="small" :loading="running" :disabled="!canImport" @click="runImport">
+                開始上傳
+              </el-button>
+            </div>
 
             <el-table v-table-auto-width :data="rows" row-key="key" border class="file-table" style="width: 100%">
               <el-table-column label="檔案名稱" min-width="240" class-name="file-name-col">
@@ -517,7 +522,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { UploadFilled, Document } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type TableInstance, type UploadFile } from 'element-plus'
 import { useRouter } from 'vue-router'
@@ -689,12 +694,6 @@ const pendingRows = computed(() => rows.value.filter((r) => r.vehicleId && r.sta
 const canImport = computed(
   () => canEditDriverReports.value && !running.value && analyzePending.value === 0 && pendingRows.value.length > 0
 )
-
-// 沒有送出按鈕：整批解析完就自動匯入。等 analyzePending 歸零才觸發，讓一次拖入的多個檔案併成一批。
-// 涵蓋月份已有資料時不再攔截確認：逐列比對本來就不覆蓋，值不同的會進待維護等使用者裁決。
-watch(canImport, (ready) => {
-  if (ready) void runImport()
-})
 
 function stripExtension(name: string): string {
   return name.replace(/\.[^./\\]+$/, '')
@@ -1209,9 +1208,13 @@ async function handleTabChange(name: string | number) {
   }
 }
 
-// 上傳完成後若有欄位進入待維護，詢問是否直接切過去處理，比照個案管理匯入完成後的提示模式
+// 上傳完成後若有欄位進入待維護，詢問是否直接切過去處理，比照個案管理匯入完成後的提示模式；
+// 沒有任何待維護資料時不需要再多問一次，直接跳出完成提示即可。
 async function handleUploadSuccess(result: { pendingColumns: number }) {
-  if (result.pendingColumns === 0 || !canViewMappings.value) return
+  if (result.pendingColumns === 0 || !canViewMappings.value) {
+    ElMessage.success('上傳完成')
+    return
+  }
   await fetchSubmissionReview()
   try {
     await ElMessageBox.confirm(
@@ -1621,6 +1624,10 @@ onMounted(() => {
 }
 
 .file-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
   padding: var(--app-space-3) var(--app-space-4);
   font-size: var(--app-font-sm);
   font-weight: 600;

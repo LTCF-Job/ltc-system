@@ -159,7 +159,7 @@ merge.MergeRideSources（同車取最新、跨車 OR）
      指的是缺欄位仍照樣出檔，不是零結果也回成功——靜默成功只會讓使用者看到「已產生 0 份」配一張
      空表格，分不出是月份選錯、個案在待維護，還是根本沒有已上車的搭乘紀錄。
    - `ExcelRenderer.RenderGovClaim` 產出每個個案的工作簿位元組；壓縮檔模式再由 `ZipArchiver.BuildZip` 打包。
-   - 單一交易寫入 `export_lines`（申報列快照）、`export_job_files`（逐案檔案中繼資料）與 `export_jobs` 狀態；原始 XLSX 同步寫入 private Supabase Storage 的 `exports/{jobId}/{fileName}`，資料庫只保存 object path、checksum 與大小。
+   - 單一交易寫入 `export_lines`（申報列快照）、`export_job_files`（逐案檔案中繼資料）與 `export_jobs` 狀態；原始 XLSX 同步寫入 private Supabase Storage 的 `exports/{jobId}/{caseId}{ext}`，資料庫只保存 object path、checksum 與大小。storage key 刻意不用含中文個案姓名的 `fileName`——Supabase Storage 物件鍵僅接受 ASCII，用中文檔名會被拒絕（400 InvalidKey）；使用者看到的檔名仍是 `export_job_files.file_name`。
 4. 下載時優先從 private object storage 讀取匯出成功當下的完整 XLSX，API 驗證權限後才代為轉送，禁止前端取得 service-role key。舊資料若沒有 object path，才由 `export_lines.raw_payload` 快照重繪；快照的第 1 欄與第 7 欄（個案／服務人員身分證）一律留空，只存 `driverId`，重繪時才由密文解密補回，明文身分證不落資料庫。
 5. `GET /exports/:id/files/:caseId/download` 取單一個案的 `.xlsx`；`GET /exports/:id/download` 只服務壓縮檔模式的工作。歷史紀錄頁不提供下載，只能用 `GET /exports/:id` 查看該次匯出包含哪些個案。
 
@@ -172,7 +172,7 @@ GET/POST /exports/precheck ──未通過──► 前端列出 issue，回去�
    ▼
 POST /exports（同步產檔）
    │  QueryGovClaimSources → BuildClaimRow → SortClaimRows → RenderGovClaim（→ BuildZip）
-   │  Upload private exports/{jobId}/{fileName}
+   │  Upload private exports/{jobId}/{caseId}{ext}
    │  單一交易寫入 export_lines + export_job_files + export_jobs
    ▼
 逐案下載 GET /exports/:id/files/:caseId/download（讀 private object；舊資料才由快照重繪）

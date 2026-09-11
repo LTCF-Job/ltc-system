@@ -171,7 +171,7 @@ Console →「Cloud Run」→「服務」→ 點進 `ltc-api` →「編輯並部
   - `NOTIFICATION_EMAIL_ENABLED=false`（要外送通知才改成 `true`）
   - `NOTIFY_FROM=noreply@你的正式網域`（只有 email flag 為 `true` 時必填）
 - 「密鑰」區塊「參照密鑰」，把 `DATABASE_URL`／`ENCRYPTION_KEY`／`HMAC_KEY`／`SUPABASE_SERVICE_ROLE_KEY` 四個密鑰各自掛成同名環境變數（版本選「最新」）；有建立 `RESEND_API_KEY` 才一併掛上。
-- Supabase Dashboard → Storage 建立 `ltc-exports` bucket，Access 必須選 **Private**；API 會以 `exports/{jobId}/{fileName}` 保存歷史申報檔，前端不直接拿 Storage 金鑰。
+- Supabase Dashboard → Storage 建立 `ltc-exports` bucket，Access 必須選 **Private**；API 會以 `exports/{jobId}/{caseId}{ext}` 保存歷史申報檔（storage key 用 ASCII，避免中文個案姓名觸發 Supabase Storage 的 InvalidKey），前端不直接拿 Storage 金鑰。
 - 按「部署」。
 
 再到「Cloud Run」→「工作」→ 點進 `ltc-api-migrate` →「編輯」，一樣在「變數與密鑰」頁籤：

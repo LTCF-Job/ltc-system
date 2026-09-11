@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path"
 	"time"
 
 	"github.com/google/uuid"
@@ -103,7 +104,7 @@ func (r *ExportJobRepository) CompleteJob(ctx context.Context, jobID uuid.UUID, 
 		`, jobID, line.LineNo, line.CaseID, line.NationalIDMasked, line.ServiceDateROC, string(payload))
 	}
 	for seq, file := range files {
-		storagePath := exportStoragePath(jobID, file.FileName)
+		storagePath := exportStoragePath(jobID, file.CaseID, path.Ext(file.FileName))
 		fileContent := any(file.Bytes)
 		if r.storage != nil {
 			if err := r.storage.Put(ctx, storagePath, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.Bytes); err != nil {
@@ -356,6 +357,10 @@ func (r *ExportJobRepository) listJobFiles(ctx context.Context, jobID uuid.UUID)
 
 var errNoDatabase = errors.New("database connection is not configured")
 
-func exportStoragePath(jobID uuid.UUID, fileName string) string {
-	return fmt.Sprintf("exports/%s/%s", jobID, fileName)
+// exportStoragePath 以 job/case UUID 組出 storage key，刻意不使用含中文個案姓名的
+// fileName——Supabase Storage 的物件鍵僅接受 ASCII，中文姓名的檔名會被拒絕，回傳
+// 400 InvalidKey。使用者看到的檔名仍是 export_job_files.file_name，只有實際存放路徑改用
+// ASCII 安全的 UUID。
+func exportStoragePath(jobID, caseID uuid.UUID, ext string) string {
+	return fmt.Sprintf("exports/%s/%s%s", jobID, caseID, ext)
 }
