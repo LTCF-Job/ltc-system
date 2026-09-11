@@ -20,6 +20,26 @@ type fakeResolver struct {
 	lastQueried string
 }
 
+type fakeVersionedResolver struct {
+	*fakeResolver
+	version          string
+	versionCallCount int
+}
+
+func (f *fakeVersionedResolver) ResolveVersioned(ctx context.Context, roleKey string) (map[string]ModulePermission, string, error) {
+	f.callCount++
+	f.lastQueried = roleKey
+	if f.err != nil {
+		return nil, "", f.err
+	}
+	return f.perms[roleKey], f.version, nil
+}
+
+func (f *fakeVersionedResolver) ResolveVersion(ctx context.Context, roleKey string) (string, error) {
+	f.versionCallCount++
+	return f.version, nil
+}
+
 func (f *fakeResolver) Resolve(ctx context.Context, roleKey string) (map[string]ModulePermission, error) {
 	f.callCount++
 	f.lastQueried = roleKey
@@ -35,6 +55,25 @@ type fakeCustomResolver struct {
 	perms     map[uuid.UUID]map[string]ModulePermission
 	err       error
 	callCount int
+}
+
+type fakeVersionedCustomResolver struct {
+	*fakeCustomResolver
+	version          string
+	versionCallCount int
+}
+
+func (f *fakeVersionedCustomResolver) ResolveVersioned(ctx context.Context, actorID uuid.UUID) (map[string]ModulePermission, string, error) {
+	f.callCount++
+	if f.err != nil {
+		return nil, "", f.err
+	}
+	return f.perms[actorID], f.version, nil
+}
+
+func (f *fakeVersionedCustomResolver) ResolveVersion(ctx context.Context, actorID uuid.UUID) (string, error) {
+	f.versionCallCount++
+	return f.version, nil
 }
 
 func (f *fakeCustomResolver) Resolve(ctx context.Context, actorID uuid.UUID) (map[string]ModulePermission, error) {
@@ -231,6 +270,44 @@ func TestCachedPermissionResolver_RefetchesAfterTTL(t *testing.T) {
 	assert.Equal(t, 1, resolver.callCount, "快取過期後應該回源重新查詢一次")
 }
 
+func TestCachedPermissionResolver_VersionedSourceDoesNotReloadMatrixOnCacheHit(t *testing.T) {
+	resolver := &fakeVersionedResolver{
+		fakeResolver: &fakeResolver{perms: map[string]map[string]ModulePermission{
+			"admin": {"masters_cases": {View: true, Edit: true, Delete: true}},
+		}},
+		version: "v1",
+	}
+	cached := NewCachedPermissionResolver(resolver)
+
+	_, err := cached.Resolve(context.Background(), "admin")
+	require.NoError(t, err)
+	_, err = cached.Resolve(context.Background(), "admin")
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, resolver.callCount, "versioned source 在版本未變更時不應重新載入完整矩陣")
+	assert.Equal(t, 1, resolver.versionCallCount, "cache hit 只應查詢輕量版本")
+}
+
+func TestCachedPermissionResolver_VersionChangeReloadsMatrix(t *testing.T) {
+	resolver := &fakeVersionedResolver{
+		fakeResolver: &fakeResolver{perms: map[string]map[string]ModulePermission{
+			"admin": {"masters_cases": {View: true, Edit: true, Delete: true}},
+		}},
+		version: "v1",
+	}
+	cached := NewCachedPermissionResolver(resolver)
+
+	_, err := cached.Resolve(context.Background(), "admin")
+	require.NoError(t, err)
+	resolver.version = "v2"
+	resolver.perms["admin"] = map[string]ModulePermission{"masters_cases": {View: true, Edit: false, Delete: false}}
+
+	got, err := cached.Resolve(context.Background(), "admin")
+	require.NoError(t, err)
+	assert.False(t, got["masters_cases"].Edit)
+	assert.Equal(t, 2, resolver.callCount, "版本變更後應重新載入權限矩陣")
+}
+
 func TestCachedCustomPermissionResolver_CachesWithinTTL(t *testing.T) {
 	actorID := uuid.New()
 	resolver := &fakeCustomResolver{perms: map[uuid.UUID]map[string]ModulePermission{
@@ -261,4 +338,44 @@ func TestCachedCustomPermissionResolver_RefetchesAfterTTL(t *testing.T) {
 	_, err := cached.Resolve(context.Background(), actorID)
 	require.NoError(t, err)
 	assert.Equal(t, 1, resolver.callCount, "快取過期後應該回源重新查詢一次")
+}
+
+func TestCachedCustomPermissionResolver_VersionedSourceDoesNotReloadMatrixOnCacheHit(t *testing.T) {
+	actorID := uuid.New()
+	resolver := &fakeVersionedCustomResolver{
+		fakeCustomResolver: &fakeCustomResolver{perms: map[uuid.UUID]map[string]ModulePermission{
+			actorID: {"masters_cases": {View: true, Edit: true, Delete: true}},
+		}},
+		version: "v1",
+	}
+	cached := NewCachedCustomPermissionResolver(resolver)
+
+	_, err := cached.Resolve(context.Background(), actorID)
+	require.NoError(t, err)
+	_, err = cached.Resolve(context.Background(), actorID)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, resolver.callCount, "versioned custom source 在版本未變更時不應重新載入完整覆蓋")
+	assert.Equal(t, 1, resolver.versionCallCount, "custom cache hit 只應查詢輕量版本")
+}
+
+func TestCachedCustomPermissionResolver_VersionChangeReloadsMatrix(t *testing.T) {
+	actorID := uuid.New()
+	resolver := &fakeVersionedCustomResolver{
+		fakeCustomResolver: &fakeCustomResolver{perms: map[uuid.UUID]map[string]ModulePermission{
+			actorID: {"masters_cases": {View: true, Edit: true, Delete: false}},
+		}},
+		version: "v1",
+	}
+	cached := NewCachedCustomPermissionResolver(resolver)
+
+	_, err := cached.Resolve(context.Background(), actorID)
+	require.NoError(t, err)
+	resolver.version = "v2"
+	resolver.perms[actorID] = map[string]ModulePermission{"masters_cases": {View: true, Edit: false, Delete: false}}
+
+	got, err := cached.Resolve(context.Background(), actorID)
+	require.NoError(t, err)
+	assert.False(t, got["masters_cases"].Edit)
+	assert.Equal(t, 2, resolver.callCount, "版本變更後應重新載入個人權限覆蓋")
 }

@@ -49,12 +49,6 @@ covers: ["apps/api/internal/modules/casemgmt/transport/case_handler.go", "apps/a
   "siteId": "uuid | null",
   "siteName": "string",
   "siteNameRaw": "string | null",
-  "outboundVehicleId": "uuid | null",
-  "outboundVehicle": "string",
-  "outboundVehicleNameRaw": "string | null",
-  "inboundVehicleId": "uuid | null",
-  "inboundVehicle": "string",
-  "inboundVehicleNameRaw": "string | null",
   "homeAddress": "string | null",
   "ltcLevel": "string | null",
   "serviceCategory": 0,
@@ -80,9 +74,10 @@ covers: ["apps/api/internal/modules/casemgmt/transport/case_handler.go", "apps/a
 
 ## Invariants and gotchas
 
-- 「待維護」的判定條件是以下任一成立：`site_id` 為 null 但 `site_name_raw` 有值、去程車輛同理、回程車輛同理、`birth_date_raw` 有值、`national_id_invalid` 為 true。前端「待維護」分頁的問題標籤與補齊對話框都是直接依這五個欄位推導，沒有另一個彙總欄位。
-- `siteNameRaw`／`outboundVehicleNameRaw`／`inboundVehicleNameRaw` 是匯入當下抓到、但比對不到主檔的原始名稱。**這三個欄位既是待維護的判定依據，也是前端唯一能顯示「差什麼」的資料來源**——曾經 SQL 的 `WHERE` 有用它們過濾、`SELECT` 卻沒選出來，導致待維護清單抓得到人、問題欄與補齊對話框卻整片空白。改動 `case_repo.go` 的查詢時，`List`／`ListAll`／`GetByID` 三支共用同一組欄位順序，要一起改。
-- `PUT /api/v1/cases/:id/transport-preference` 是完整替換：同一列尚未處理的其他原始名稱要原樣回送，否則會被清成 NULL，該列會無聲離開待維護清單且匯入時的名稱再也找不回來。
+- 「待維護」的判定條件是以下任一成立：`site_id` 為 null 但 `site_name_raw` 有值、`caregiver_id` 為 null 但 `care_contact_name` 有值、`birth_date_raw` 有值、`national_id_invalid` 為 true。前端「待維護」分頁的問題標籤與補齊對話框都是直接依這幾個欄位推導，沒有另一個彙總欄位。
+- `siteNameRaw` 是匯入當下抓到、但比對不到主檔的原始名稱。**這個欄位既是待維護的判定依據，也是前端唯一能顯示「差什麼」的資料來源**——曾經 SQL 的 `WHERE` 有用它過濾、`SELECT` 卻沒選出來，導致待維護清單抓得到人、問題欄與補齊對話框卻整片空白。改動 `case_repo.go` 的查詢時，`List`／`ListAll`／`GetByID` 三支共用同一組欄位順序，要一起改。
+- 個案不再關聯去/回程車輛：`case_transport_preferences` 表與 `PUT /api/v1/cases/:id/transport-preference` 端點已於 migration `000055` 一併移除。
+- 主檔（據點、照護人員、司機、個案）新增或改名時，若能唯一比對到本頁列出的待維護資料，系統會自動關聯並清除 `is_pending`，見 `docs/decisions/pending-data-visibility.md` §4。
 
 ## Unverified
 

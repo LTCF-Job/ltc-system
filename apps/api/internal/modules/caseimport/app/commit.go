@@ -13,6 +13,13 @@ import (
 
 var ErrCaseImportAlreadyCommitted = errors.New("case import row already committed")
 
+// caseRegistrarDuplicateNationalIDText 比對 CaseRegistrar.CreateCase 回傳的底層錯誤文字，
+// 用以辨識「身分證字號已存在」這個情境。CaseRegistrar 是跨模組邊界（見 ports.go），
+// caseimport 不得直接 import casemgmt 取得其 ErrDuplicateNationalID sentinel 做 errors.Is
+// 比對（違反 layering-rules.md 的模組邊界），只能靠錯誤文字判斷；文字需與
+// casemgmt/app/case_service.go 的 ErrDuplicateNationalID 保持一致。
+const caseRegistrarDuplicateNationalIDText = "national id already exists"
+
 // stringPointer 將空字串轉為 nil，供選填欄位寫入時使用。
 func stringPointer(value string) *string {
 	if value == "" {
@@ -185,6 +192,9 @@ func (s *ImportService) CommitCases(ctx context.Context, preview *CaseImportPrev
 				result.AlreadyImportedCount++
 				item := caseImportFailureRow(row, "此檔案的此列已完成匯入，略過重試")
 				recordSkipped(item)
+			} else if strings.Contains(txErr.Error(), caseRegistrarDuplicateNationalIDText) {
+				slog.Error("case import row transaction failed: duplicate national id", "row_index", row.RowIndex, "error", txErr)
+				recordFailed(caseImportFailureRow(row, "身分證字號與本檔其他列重複"))
 			} else {
 				slog.Error("case import row transaction failed", "row_index", row.RowIndex, "error", txErr)
 				recordFailed(caseImportFailureRow(row, "資料列匯入失敗，請檢查資料或稍後重試"))

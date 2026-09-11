@@ -126,9 +126,15 @@ type CreateScheduleRequest struct {
 	EffectiveTo        *optionalDate                  `json:"effectiveTo"`
 	Weekdays           []int16                        `json:"weekdays" binding:"required"`
 	TripPattern        int16                          `json:"tripPattern" binding:"required"`
-	UnitPrice          float64                        `json:"unitPrice" binding:"required"`
-	DistanceKM         float64                        `json:"distanceKm" binding:"required"`
-	ServiceDurationMin int16                          `json:"serviceDurationMin" binding:"required"`
+	// UnitPrice／DistanceKM／ServiceDurationMin 故意不用 binding:"required"：三者的業務下限
+	// 都高於 0（單價/距離須 >0，時長須落在 1-240），由 validateScheduleRequest 統一把關並給出
+	// 具體原因（如「單價必須大於 0，請重新輸入」）。若在這裡用 required，數值型別的零值會被
+	// validator 當成「未填」直接擋在 binding 階段，回應變成不具體的「為必填項目」，蓋掉後面
+	// 更明確的業務訊息；gte=0 只負責擋掉不可能通過業務規則的負數，讓 0 或省略都能一致地
+	// 由 validateScheduleRequest 給出正確原因。
+	UnitPrice          float64                        `json:"unitPrice" binding:"gte=0"`
+	DistanceKM         float64                        `json:"distanceKm" binding:"gte=0"`
+	ServiceDurationMin int16                          `json:"serviceDurationMin" binding:"gte=0"`
 	ServiceCode        string                         `json:"serviceCode" binding:"required"`
 	Note               *string                        `json:"note"`
 	Legs               []CreateScheduleLegItemRequest `json:"legs" binding:"required"`
@@ -148,9 +154,9 @@ type SaveScheduleRequest struct {
 	EffectiveTo        *optionalDate                  `json:"effectiveTo"`
 	Weekdays           []int16                        `json:"weekdays" binding:"required"`
 	TripPattern        int16                          `json:"tripPattern" binding:"required"`
-	UnitPrice          float64                        `json:"unitPrice" binding:"required"`
-	DistanceKM         float64                        `json:"distanceKm" binding:"required"`
-	ServiceDurationMin int16                          `json:"serviceDurationMin" binding:"required"`
+	UnitPrice          float64                        `json:"unitPrice" binding:"gte=0"`
+	DistanceKM         float64                        `json:"distanceKm" binding:"gte=0"`
+	ServiceDurationMin int16                          `json:"serviceDurationMin" binding:"gte=0"`
 	ServiceCode        string                         `json:"serviceCode" binding:"required"`
 	Note               *string                        `json:"note"`
 	Legs               []CreateScheduleLegItemRequest `json:"legs" binding:"required"`
@@ -205,139 +211,115 @@ func (r CreateScheduleRequest) ToService() app.CreateScheduleRequest {
 
 // CaseResponse 代表回傳給前端的個案主檔資料。身分證密文與 HMAC 索引不對外輸出。
 type CaseResponse struct {
-	ID                     uuid.UUID  `json:"id"`
-	Name                   string     `json:"name"`
-	NameNormalized         string     `json:"nameNormalized"`
-	NationalID             string     `json:"nationalId"`
-	NationalIDInvalid      bool       `json:"nationalIdInvalid"`
-	HouseholdType          *string    `json:"householdType"`
-	Gender                 *string    `json:"gender"`
-	BirthDate              *time.Time `json:"birthDate"`
-	BirthDateRaw           *string    `json:"birthDateRaw"`
-	CareContactRole        *string    `json:"careContactRole"`
-	CareContactName        *string    `json:"careContactName"`
-	RegisteredAddress      *string    `json:"registeredAddress"`
-	SiteID                 *uuid.UUID `json:"siteId"`
-	SiteName               string     `json:"siteName"`
-	SiteNameRaw            *string    `json:"siteNameRaw"`
-	CaregiverID            *uuid.UUID `json:"caregiverId"`
-	CaregiverName          string     `json:"caregiverName"`
-	OutboundVehicleID      *uuid.UUID `json:"outboundVehicleId"`
-	OutboundVehicle        string     `json:"outboundVehicle"`
-	OutboundVehicleNameRaw *string    `json:"outboundVehicleNameRaw"`
-	InboundVehicleID       *uuid.UUID `json:"inboundVehicleId"`
-	InboundVehicle         string     `json:"inboundVehicle"`
-	InboundVehicleNameRaw  *string    `json:"inboundVehicleNameRaw"`
-	HomeAddress            *string    `json:"homeAddress"`
-	LTCLevel               *string    `json:"ltcLevel"`
-	ServiceCategory        *int       `json:"serviceCategory"`
-	ServiceUsageType       *int       `json:"serviceUsageType"`
-	ClaimEndDate           *time.Time `json:"claimEndDate"`
-	Status                 string     `json:"status"`
-	Remarks                *string    `json:"remarks"`
-	CreatedAt              time.Time  `json:"createdAt"`
-	UpdatedAt              time.Time  `json:"updatedAt"`
+	ID                uuid.UUID  `json:"id"`
+	Name              string     `json:"name"`
+	NameNormalized    string     `json:"nameNormalized"`
+	NationalID        string     `json:"nationalId"`
+	NationalIDInvalid bool       `json:"nationalIdInvalid"`
+	HouseholdType     *string    `json:"householdType"`
+	Gender            *string    `json:"gender"`
+	BirthDate         *time.Time `json:"birthDate"`
+	BirthDateRaw      *string    `json:"birthDateRaw"`
+	CareContactRole   *string    `json:"careContactRole"`
+	CareContactName   *string    `json:"careContactName"`
+	RegisteredAddress *string    `json:"registeredAddress"`
+	SiteID            *uuid.UUID `json:"siteId"`
+	SiteName          string     `json:"siteName"`
+	SiteNameRaw       *string    `json:"siteNameRaw"`
+	CaregiverID       *uuid.UUID `json:"caregiverId"`
+	CaregiverName     string     `json:"caregiverName"`
+	HomeAddress       *string    `json:"homeAddress"`
+	LTCLevel          *string    `json:"ltcLevel"`
+	ServiceCategory   *int       `json:"serviceCategory"`
+	ServiceUsageType  *int       `json:"serviceUsageType"`
+	ClaimEndDate      *time.Time `json:"claimEndDate"`
+	Status            string     `json:"status"`
+	Remarks           *string    `json:"remarks"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
 }
 
 func newCaseResponse(c app.Case) CaseResponse {
 	return CaseResponse{
-		ID:                     c.ID,
-		Name:                   c.Name,
-		NameNormalized:         c.NameNormalized,
-		NationalID:             c.NationalID,
-		NationalIDInvalid:      c.NationalIDInvalid,
-		HouseholdType:          c.HouseholdType,
-		Gender:                 c.Gender,
-		BirthDate:              c.BirthDate,
-		BirthDateRaw:           c.BirthDateRaw,
-		CareContactRole:        c.CareContactRole,
-		CareContactName:        c.CareContactName,
-		RegisteredAddress:      c.RegisteredAddress,
-		SiteID:                 c.SiteID,
-		SiteName:               c.SiteName,
-		SiteNameRaw:            c.SiteNameRaw,
-		CaregiverID:            c.CaregiverID,
-		CaregiverName:          c.CaregiverName,
-		OutboundVehicleID:      c.OutboundVehicleID,
-		OutboundVehicle:        c.OutboundVehicle,
-		OutboundVehicleNameRaw: c.OutboundVehicleNameRaw,
-		InboundVehicleID:       c.InboundVehicleID,
-		InboundVehicle:         c.InboundVehicle,
-		InboundVehicleNameRaw:  c.InboundVehicleNameRaw,
-		HomeAddress:            c.HomeAddress,
-		LTCLevel:               c.LTCLevel,
-		ServiceCategory:        c.ServiceCategory,
-		ServiceUsageType:       c.ServiceUsageType,
-		ClaimEndDate:           c.ClaimEndDate,
-		Status:                 c.Status,
-		Remarks:                c.Remarks,
-		CreatedAt:              c.CreatedAt,
-		UpdatedAt:              c.UpdatedAt,
+		ID:                c.ID,
+		Name:              c.Name,
+		NameNormalized:    c.NameNormalized,
+		NationalID:        c.NationalID,
+		NationalIDInvalid: c.NationalIDInvalid,
+		HouseholdType:     c.HouseholdType,
+		Gender:            c.Gender,
+		BirthDate:         c.BirthDate,
+		BirthDateRaw:      c.BirthDateRaw,
+		CareContactRole:   c.CareContactRole,
+		CareContactName:   c.CareContactName,
+		RegisteredAddress: c.RegisteredAddress,
+		SiteID:            c.SiteID,
+		SiteName:          c.SiteName,
+		SiteNameRaw:       c.SiteNameRaw,
+		CaregiverID:       c.CaregiverID,
+		CaregiverName:     c.CaregiverName,
+		HomeAddress:       c.HomeAddress,
+		LTCLevel:          c.LTCLevel,
+		ServiceCategory:   c.ServiceCategory,
+		ServiceUsageType:  c.ServiceUsageType,
+		ClaimEndDate:      c.ClaimEndDate,
+		Status:            c.Status,
+		Remarks:           c.Remarks,
+		CreatedAt:         c.CreatedAt,
+		UpdatedAt:         c.UpdatedAt,
 	}
 }
 
 // DuplicateCandidateResponse 代表回傳給前端的待裁決疑似重複個案暫存列。
 type DuplicateCandidateResponse struct {
-	ID                     uuid.UUID  `json:"id"`
-	RowIndex               int        `json:"rowIndex"`
-	SheetName              string     `json:"sheetName"`
-	Name                   string     `json:"name"`
-	NationalID             string     `json:"nationalId"`
-	NationalIDInvalid      bool       `json:"nationalIdInvalid"`
-	HouseholdType          *string    `json:"householdType"`
-	Gender                 *string    `json:"gender"`
-	BirthDate              *time.Time `json:"birthDate"`
-	BirthDateRaw           *string    `json:"birthDateRaw"`
-	CareContactRole        *string    `json:"careContactRole"`
-	CareContactName        *string    `json:"careContactName"`
-	RegisteredAddress      *string    `json:"registeredAddress"`
-	HomeAddress            *string    `json:"homeAddress"`
-	SiteID                 *uuid.UUID `json:"siteId"`
-	SiteName               string     `json:"siteName"`
-	SiteNameRaw            *string    `json:"siteNameRaw"`
-	OutboundVehicleID      *uuid.UUID `json:"outboundVehicleId"`
-	OutboundVehicle        string     `json:"outboundVehicle"`
-	OutboundVehicleNameRaw *string    `json:"outboundVehicleNameRaw"`
-	InboundVehicleID       *uuid.UUID `json:"inboundVehicleId"`
-	InboundVehicle         string     `json:"inboundVehicle"`
-	InboundVehicleNameRaw  *string    `json:"inboundVehicleNameRaw"`
-	Remarks                *string    `json:"remarks"`
-	DuplicateCaseID        uuid.UUID  `json:"duplicateCaseId"`
-	DuplicateCaseName      string     `json:"duplicateCaseName"`
-	Status                 string     `json:"status"`
-	CreatedAt              time.Time  `json:"createdAt"`
+	ID                uuid.UUID  `json:"id"`
+	RowIndex          int        `json:"rowIndex"`
+	SheetName         string     `json:"sheetName"`
+	Name              string     `json:"name"`
+	NationalID        string     `json:"nationalId"`
+	NationalIDInvalid bool       `json:"nationalIdInvalid"`
+	HouseholdType     *string    `json:"householdType"`
+	Gender            *string    `json:"gender"`
+	BirthDate         *time.Time `json:"birthDate"`
+	BirthDateRaw      *string    `json:"birthDateRaw"`
+	CareContactRole   *string    `json:"careContactRole"`
+	CareContactName   *string    `json:"careContactName"`
+	RegisteredAddress *string    `json:"registeredAddress"`
+	HomeAddress       *string    `json:"homeAddress"`
+	SiteID            *uuid.UUID `json:"siteId"`
+	SiteName          string     `json:"siteName"`
+	SiteNameRaw       *string    `json:"siteNameRaw"`
+	Remarks           *string    `json:"remarks"`
+	DuplicateCaseID   uuid.UUID  `json:"duplicateCaseId"`
+	DuplicateCaseName string     `json:"duplicateCaseName"`
+	Status            string     `json:"status"`
+	CreatedAt         time.Time  `json:"createdAt"`
 }
 
 func newDuplicateCandidateResponse(c app.DuplicateCandidate) DuplicateCandidateResponse {
 	return DuplicateCandidateResponse{
-		ID:                     c.ID,
-		RowIndex:               c.RowIndex,
-		SheetName:              c.SheetName,
-		Name:                   c.Name,
-		NationalID:             c.NationalID,
-		NationalIDInvalid:      c.NationalIDInvalid,
-		HouseholdType:          c.HouseholdType,
-		Gender:                 c.Gender,
-		BirthDate:              c.BirthDate,
-		BirthDateRaw:           c.BirthDateRaw,
-		CareContactRole:        c.CareContactRole,
-		CareContactName:        c.CareContactName,
-		RegisteredAddress:      c.RegisteredAddress,
-		HomeAddress:            c.HomeAddress,
-		SiteID:                 c.SiteID,
-		SiteName:               c.SiteName,
-		SiteNameRaw:            c.SiteNameRaw,
-		OutboundVehicleID:      c.OutboundVehicleID,
-		OutboundVehicle:        c.OutboundVehicle,
-		OutboundVehicleNameRaw: c.OutboundVehicleNameRaw,
-		InboundVehicleID:       c.InboundVehicleID,
-		InboundVehicle:         c.InboundVehicle,
-		InboundVehicleNameRaw:  c.InboundVehicleNameRaw,
-		Remarks:                c.Remarks,
-		DuplicateCaseID:        c.DuplicateCaseID,
-		DuplicateCaseName:      c.DuplicateCaseName,
-		Status:                 c.Status,
-		CreatedAt:              c.CreatedAt,
+		ID:                c.ID,
+		RowIndex:          c.RowIndex,
+		SheetName:         c.SheetName,
+		Name:              c.Name,
+		NationalID:        c.NationalID,
+		NationalIDInvalid: c.NationalIDInvalid,
+		HouseholdType:     c.HouseholdType,
+		Gender:            c.Gender,
+		BirthDate:         c.BirthDate,
+		BirthDateRaw:      c.BirthDateRaw,
+		CareContactRole:   c.CareContactRole,
+		CareContactName:   c.CareContactName,
+		RegisteredAddress: c.RegisteredAddress,
+		HomeAddress:       c.HomeAddress,
+		SiteID:            c.SiteID,
+		SiteName:          c.SiteName,
+		SiteNameRaw:       c.SiteNameRaw,
+		Remarks:           c.Remarks,
+		DuplicateCaseID:   c.DuplicateCaseID,
+		DuplicateCaseName: c.DuplicateCaseName,
+		Status:            c.Status,
+		CreatedAt:         c.CreatedAt,
 	}
 }
 

@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -157,6 +158,14 @@ func (h *IdentityHandler) ChangeSelfPassword(c *gin.Context) {
 	email := auth.GetActorEmail(c)
 
 	if err := h.svc.ChangeSelfPassword(c.Request.Context(), actorID, email, req.OldPassword, req.NewPassword, auth.GetActorRole(c)); err != nil {
+		// ErrInvalidCredentials 在這條「使用者自行修改密碼」路徑代表舊密碼輸入錯誤，屬於可由使用者
+		// 修正的輸入問題；respondIdentityError 對此錯誤的預設映射是 401 UNAUTHENTICATED，會觸發前端
+		// 全域登出流程，因此在這裡攔截後改回 422 + 專屬訊息，不落到共用映射。該共用映射仍保留給其他
+		// （目前沒有，但未來可能出現的）代表真正 JWT 驗證失敗的呼叫端使用。
+		if errors.Is(err, app.ErrInvalidCredentials) {
+			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "目前密碼不正確", nil)
+			return
+		}
 		respondIdentityError(c, err)
 		return
 	}

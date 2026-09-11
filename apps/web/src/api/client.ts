@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import router from '@/router'
 import type { ApiError } from '@/types/api'
 import { resolveApiErrorMessage, NETWORK_ERROR_MESSAGE, TIMEOUT_ERROR_MESSAGE } from './errorCodes'
-export { createPaginationMeta, unwrapData, unwrapPaged } from './envelope'
+export { createPaginationMeta, unwrapData, unwrapDataWithMeta, unwrapPaged, type PendingRelinkedMeta } from './envelope'
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -54,18 +54,32 @@ apiClient.interceptors.response.use(
 
     if (status === 401) {
       const wasAuthenticated = authStore.isAuthenticated
+      const alreadyOnLoginPage = router.currentRoute.value.path === '/login'
       await authStore.logout()
-      if (router.currentRoute.value.path !== '/login') {
+      if (!alreadyOnLoginPage) {
         router.push('/login')
-        if (wasAuthenticated) {
-          ElMessage.error('登入憑證已過期，請重新登入')
-        }
+      }
+      // 導頁本身仍只在不在登入頁時才觸發，避免無意義的重複跳轉；但訊息不再綁定「有沒有跳轉」，
+      // 後端若給出具體原因（例如帳號已停用），無論是否已在登入頁都要讓使用者看到，
+      // 否則登入頁上的 401（如登入後才發現帳號被停用）會完全無提示。
+      if (apiError?.message) {
+        ElMessage.error(apiError.message)
+      } else if (!alreadyOnLoginPage && wasAuthenticated) {
+        ElMessage.error('登入憑證已過期，請重新登入')
       }
       return Promise.reject(error)
     }
 
     if (status === 403) {
       ElMessage.warning(resolveApiErrorMessage(apiError, '權限不足，無法執行此操作'))
+      return Promise.reject(error)
+    }
+
+    // Cloud Run（及其前面的 Google Front End）逾時是由平台直接回 504，不會經過我們的
+    // 錯誤 envelope，也不是 axios 端的 ECONNABORTED；跟下面「完全沒有回應」的斷線情境
+    // 分開判斷，否則使用者會被誤導成「連不上網路」，但實際上是伺服器處理時間過長。
+    if (status === 504) {
+      ElMessage.error(TIMEOUT_ERROR_MESSAGE)
       return Promise.reject(error)
     }
 
@@ -82,7 +96,10 @@ apiClient.interceptors.response.use(
     // 具體原因；缺漏時才退回錯誤碼字典。
     const message = resolveApiErrorMessage(apiError)
 
-    // 常用欄位代碼轉繁體中文標籤，讓錯誤清單明確告知使用者有問題的欄位
+    // 常用欄位代碼轉繁體中文標籤，讓錯誤清單明確告知使用者有問題的欄位。
+    // 後端 httpx.ExtractValidationDetails／commonFieldLabels 已把常見欄位的 reason
+    // 寫成完整中文描述（例如「單價為必填項目」），這裡只是後備字典；若不加判斷會疊出
+    // 「【單價】單價為必填項目」這種重複，或在 reason 本身已描述清楚時錯置前綴。
     const FIELD_LABELS: Record<string, string> = {
       plateNo: '車號',
       siteId: '所屬據點',
@@ -114,7 +131,11 @@ apiClient.interceptors.response.use(
         type: 'error',
         message: apiError.details
           .map((d) => {
-            const label = d.field ? FIELD_LABELS[d.field] || d.field : ''
+            // reason 已含中文字元時，代表後端已經給出完整中文描述（含欄位語意），
+            // 不再疊加前綴避免重複或錯置；只有 reason 明顯以英文欄名開頭
+            // （沒有中文描述）時才用後備字典補上標籤。
+            const hasChineseReason = /[一-鿿]/.test(d.reason)
+            const label = !hasChineseReason && d.field ? FIELD_LABELS[d.field] || d.field : ''
             return `${label ? `【${label}】` : ''}${d.reason}`
           })
           .concat(traceSuffix ? [traceSuffix] : [])

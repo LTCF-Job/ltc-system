@@ -27,10 +27,16 @@ type PermissionResolver interface {
 	Resolve(ctx context.Context, roleKey string) (map[string]ModulePermission, error)
 }
 
-// VersionedPermissionResolver 讓快取在跨執行個體部署時以共享資料來源的版本判斷
-// 權限是否仍可沿用；版本通常來自 roles.updated_at 或其他單調遞增的共享版本欄位。
+// VersionedPermissionResolver 在需要完整回源時回傳權限矩陣與共享版本；版本通常來自
+// roles.updated_at 或其他單調遞增的共享版本欄位。
 type VersionedPermissionResolver interface {
 	ResolveVersioned(ctx context.Context, roleKey string) (map[string]ModulePermission, string, error)
+}
+
+// PermissionVersionResolver 提供比完整權限矩陣更輕量的版本查詢，讓 cache hit 仍能確認
+// 跨 replica 的權限是否變更，而不必每次重新載入 JSON 權限資料。
+type PermissionVersionResolver interface {
+	ResolveVersion(ctx context.Context, roleKey string) (string, error)
 }
 
 // CustomPermissionResolver 依使用者 ID 解析其個人層級的模組權限覆蓋；沒有設定覆蓋時
@@ -39,14 +45,19 @@ type CustomPermissionResolver interface {
 	Resolve(ctx context.Context, actorID uuid.UUID) (map[string]ModulePermission, error)
 }
 
-// VersionedCustomPermissionResolver 以共享資料來源版本標記個人權限覆蓋，讓快取不依賴單一 replica 的 TTL。
+// VersionedCustomPermissionResolver 在需要完整回源時回傳個人權限覆蓋與共享版本。
 type VersionedCustomPermissionResolver interface {
 	ResolveVersioned(ctx context.Context, actorID uuid.UUID) (map[string]ModulePermission, string, error)
 }
 
-// permissionCacheTTL 讓「角色身分管理」頁改權限後，API 授權在這個時間內就會反映新設定，
-// 不需要使用者重新登入換發 JWT；同時避免每個受保護請求都直接查一次 roles 表。個人層級的
-// customPermissions 也採同一 TTL，取捨見 docs/decisions/custom-permission-admin-api-enforcement.md。
+// CustomPermissionVersionResolver 提供個人權限覆蓋的輕量版本查詢，避免 cache hit 時重新
+// 載入完整的使用者安全狀態投影。
+type CustomPermissionVersionResolver interface {
+	ResolveVersion(ctx context.Context, actorID uuid.UUID) (string, error)
+}
+
+// permissionCacheTTL 是沒有輕量版本來源時的 fallback 上限；正式的 role／custom permission
+// source 都提供版本查詢，cache hit 會先比對版本，再決定是否重載完整權限矩陣。
 const permissionCacheTTL = 30 * time.Second
 const permissionCacheMaxEntries = 1024
 
@@ -68,28 +79,33 @@ func NewCachedPermissionResolver(source PermissionResolver) *CachedPermissionRes
 	return &CachedPermissionResolver{source: source, cache: make(map[string]permissionCacheEntry)}
 }
 
-// Resolve 命中未過期快取就直接回傳，否則回源查詢並刷新快取。
+// Resolve 命中未過期快取時先查輕量版本；版本相同直接回傳，版本變更或 cache miss 才完整回源。
 func (c *CachedPermissionResolver) Resolve(ctx context.Context, roleKey string) (map[string]ModulePermission, error) {
+	now := time.Now()
+	c.mu.RLock()
+	entry, cached := c.cache[roleKey]
+	c.mu.RUnlock()
+	if cached && now.Before(entry.expires) {
+		if versionSource, ok := c.source.(PermissionVersionResolver); ok {
+			version, err := versionSource.ResolveVersion(ctx, roleKey)
+			if err != nil {
+				return nil, err
+			}
+			if version == entry.version {
+				return entry.perms, nil
+			}
+		} else {
+			return entry.perms, nil
+		}
+	}
+
 	if source, ok := c.source.(VersionedPermissionResolver); ok {
 		perms, version, err := source.ResolveVersioned(ctx, roleKey)
 		if err != nil {
 			return nil, err
 		}
-		c.mu.RLock()
-		entry, cached := c.cache[roleKey]
-		c.mu.RUnlock()
-		if cached && entry.version == version && time.Now().Before(entry.expires) {
-			return entry.perms, nil
-		}
 		c.store(roleKey, perms, version)
 		return perms, nil
-	}
-
-	c.mu.RLock()
-	entry, ok := c.cache[roleKey]
-	c.mu.RUnlock()
-	if ok && time.Now().Before(entry.expires) {
-		return entry.perms, nil
 	}
 
 	perms, err := c.source.Resolve(ctx, roleKey)
@@ -146,28 +162,33 @@ func NewCachedCustomPermissionResolver(source CustomPermissionResolver) *CachedC
 	return &CachedCustomPermissionResolver{source: source, cache: make(map[uuid.UUID]permissionCacheEntry)}
 }
 
-// Resolve 命中未過期快取就直接回傳，否則回源查詢並刷新快取。
+// Resolve 命中未過期快取時先查輕量版本；版本相同直接回傳，版本變更或 cache miss 才完整回源。
 func (c *CachedCustomPermissionResolver) Resolve(ctx context.Context, actorID uuid.UUID) (map[string]ModulePermission, error) {
+	now := time.Now()
+	c.mu.RLock()
+	entry, cached := c.cache[actorID]
+	c.mu.RUnlock()
+	if cached && now.Before(entry.expires) {
+		if versionSource, ok := c.source.(CustomPermissionVersionResolver); ok {
+			version, err := versionSource.ResolveVersion(ctx, actorID)
+			if err != nil {
+				return nil, err
+			}
+			if version == entry.version {
+				return entry.perms, nil
+			}
+		} else {
+			return entry.perms, nil
+		}
+	}
+
 	if source, ok := c.source.(VersionedCustomPermissionResolver); ok {
 		perms, version, err := source.ResolveVersioned(ctx, actorID)
 		if err != nil {
 			return nil, err
 		}
-		c.mu.RLock()
-		entry, cached := c.cache[actorID]
-		c.mu.RUnlock()
-		if cached && entry.version == version && time.Now().Before(entry.expires) {
-			return entry.perms, nil
-		}
 		c.store(actorID, perms, version)
 		return perms, nil
-	}
-
-	c.mu.RLock()
-	entry, ok := c.cache[actorID]
-	c.mu.RUnlock()
-	if ok && time.Now().Before(entry.expires) {
-		return entry.perms, nil
 	}
 
 	perms, err := c.source.Resolve(ctx, actorID)
@@ -252,6 +273,46 @@ func RequirePermission(resolver PermissionResolver, customResolver CustomPermiss
 			return
 		}
 		c.Next()
+	}
+}
+
+// ModuleAction 是 RequireAnyPermission 的一個 (module, action) 檢查條件。
+type ModuleAction struct {
+	Module string
+	Action string
+}
+
+// RequireAnyPermission 與 RequirePermission 同一套解析邏輯，任一 (module, action)
+// 通過即放行，用於一個端點同時服務多個主檔模組的情境（例如待維護重新比對）。
+func RequireAnyPermission(resolver PermissionResolver, customResolver CustomPermissionResolver, checks ...ModuleAction) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		roleVal, exists := c.Get(ContextKeyActorRole)
+		if !exists {
+			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "未登入或無法識別角色", nil)
+			return
+		}
+		roleKey, _ := roleVal.(string)
+
+		effective, err := ResolveEffectivePermissions(c.Request.Context(), resolver, customResolver, roleKey, GetActorID(c))
+		if err != nil {
+			slog.Error("permission_resolution_failed",
+				slog.String("request_id", httpx.RequestID(c)),
+				slog.String("path", c.Request.URL.Path),
+				slog.String("role_key", roleKey),
+				slog.String("error_type", fmt.Sprintf("%T", err)),
+				slog.String("error_message", err.Error()),
+			)
+			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "無法解析權限", nil)
+			return
+		}
+
+		for _, check := range checks {
+			if hasAction(effective[check.Module], check.Action) {
+				c.Next()
+				return
+			}
+		}
+		httpx.RespondError(c, http.StatusForbidden, httpx.CodeForbidden, "權限不足，拒絕存取", nil)
 	}
 }
 

@@ -1,7 +1,7 @@
 <template>
   <div class="driver-report-import-view">
     <el-tabs v-model="activeTab" type="border-card" class="import-tabs" @tab-change="handleTabChange">
-      <el-tab-pane label="批次上傳" name="upload">
+      <el-tab-pane v-if="canViewDriverReports" label="批次上傳" name="upload">
         <div class="upload-stack">
           <PageHeader
             title="批次上傳接送匯報"
@@ -32,6 +32,14 @@
             show-icon
             :closable="false"
             title="車輛與匯報表資料載入失敗，請重新整理頁面再試"
+          />
+
+          <el-alert
+            v-else-if="!canViewVehicles"
+            type="warning"
+            show-icon
+            :closable="false"
+            title="目前帳號沒有車輛檢視權限，無法進行批次上傳"
           />
 
           <el-alert v-else-if="hasNoVehicles" type="warning" show-icon :closable="false" title="尚未建立任何車輛">
@@ -154,28 +162,49 @@
         </div>
       </el-tab-pane>
 
-      <el-tab-pane name="pending">
+      <el-tab-pane v-if="canViewMappings || canViewAttendance" name="pending">
         <template #label>
           <span>待維護資料{{ pendingTabCount ? `（${pendingTabCount}）` : '' }}</span>
         </template>
 
-        <PageHeader
-          title="待維護資料"
-          description="以下每一列是一筆匯報日期的提交紀錄，展開可看到這一列有哪些欄位比對不到個案、駕駛人是否比對不到司機主檔；可連結既有資料或建立新資料。個案與司機綁定完成後系統都會立即用當初上傳的資料補寫搭乘紀錄，不需要重新上傳檔案。"
-        />
+        <template v-if="canViewMappings">
+          <PageHeader
+            title="待維護資料"
+            description="以下每一列是一筆匯報日期的提交紀錄，展開可看到這一列有哪些欄位比對不到個案、駕駛人是否比對不到司機主檔；可連結既有資料或建立新資料。個案與司機綁定完成後系統都會立即用當初上傳的資料補寫搭乘紀錄，不需要重新上傳檔案。"
+          >
+            <template #actions>
+              <el-button :loading="relinkPendingSaving" @click="handleRelinkPending">重新比對</el-button>
+            </template>
+          </PageHeader>
 
-        <el-empty v-if="!reviewLoading && submissionReviews.length === 0" description="目前沒有待處理的匯報列" />
+          <el-alert
+            v-if="reviewLoadError"
+            type="error"
+            show-icon
+            :closable="false"
+            title="待維護資料載入失敗，請重試"
+          >
+            <template #default>
+              <el-button type="danger" size="small" plain @click="fetchSubmissionReview">重新載入</el-button>
+            </template>
+          </el-alert>
 
-        <el-table
-          ref="submissionReviewTableRef"
-          v-else
-          :data="submissionReviews"
-          v-loading="reviewLoading"
-          row-key="submissionId"
-          max-height="600"
-          border
-          @expand-change="handleSubmissionReviewExpandChange"
-        >
+          <el-empty
+            v-else-if="!reviewLoading && submissionReviews.length === 0"
+            description="目前沒有待處理的匯報列"
+          />
+
+          <el-table
+            v-else
+            ref="submissionReviewTableRef"
+            :data="submissionReviews"
+            v-loading="reviewLoading"
+            row-key="submissionId"
+            max-height="600"
+            border
+            @expand-change="handleSubmissionReviewExpandChange"
+          >
+
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="review-detail">
@@ -189,20 +218,34 @@
                     </span>
                   </div>
                   <div class="target-binding-box">
-                    <el-select v-model="issue.editCaseId" placeholder="搜尋個案" filterable clearable style="width: 170px">
+                    <el-select
+                      v-model="issue.editCaseId"
+                      placeholder="搜尋個案"
+                      filterable
+                      clearable
+                      :disabled="!canViewCases || !canEditMappings"
+                      style="width: 170px"
+                    >
                       <el-option v-for="c in cases" :key="c.id" :label="c.name" :value="c.id" />
                     </el-select>
-                    <el-select v-model="issue.editLegSeq" placeholder="趟次" style="width: 150px">
+                    <el-select v-model="issue.editLegSeq" placeholder="趟次" :disabled="!canEditMappings" style="width: 150px">
                       <el-option v-for="leg in LEG_SEQ_OPTIONS" :key="leg.value" :value="leg.value" :label="leg.label" />
                     </el-select>
                     <TableRowActions>
-                      <el-button link type="primary" size="small" :disabled="!issue.editCaseId" @click="handleBindCase(issue)">
+                      <el-button
+                        v-if="canEditMappings && canViewCases"
+                        link
+                        type="primary"
+                        size="small"
+                        :disabled="!issue.editCaseId"
+                        @click="handleBindCase(issue)"
+                      >
                         確認綁定
                       </el-button>
-                      <el-button link type="primary" size="small" @click="openQuickCreateCase(issue)">
+                      <el-button v-if="canEditMappings && canEditCases" link type="primary" size="small" @click="openQuickCreateCase(issue)">
                         新增個案並綁定
                       </el-button>
-                      <el-button link type="danger" size="small" @click="handleIgnoreCase(issue)">
+                      <el-button v-if="canEditMappings" link type="danger" size="small" @click="handleIgnoreCase(issue)">
                         忽略此筆
                       </el-button>
                     </TableRowActions>
@@ -215,17 +258,31 @@
                     <span class="raw-name">{{ row.driverIssue.driverNameRaw }}</span>
                   </div>
                   <div class="target-binding-box">
-                    <el-select v-model="row.editDriverId" placeholder="搜尋司機" filterable clearable style="width: 170px">
+                    <el-select
+                      v-model="row.editDriverId"
+                      placeholder="搜尋司機"
+                      filterable
+                      clearable
+                      :disabled="!canViewDrivers || !canEditMappings"
+                      style="width: 170px"
+                    >
                       <el-option v-for="d in drivers" :key="d.id" :label="d.name" :value="d.id" />
                     </el-select>
                     <TableRowActions>
-                      <el-button link type="primary" size="small" :disabled="!row.editDriverId" @click="handleBindDriver(row as SubmissionReviewRow)">
+                      <el-button
+                        v-if="canEditMappings && canViewDrivers"
+                        link
+                        type="primary"
+                        size="small"
+                        :disabled="!row.editDriverId"
+                        @click="handleBindDriver(row as SubmissionReviewRow)"
+                      >
                         確認綁定
                       </el-button>
-                      <el-button link type="primary" size="small" @click="openQuickCreateDriver(row as SubmissionReviewRow)">
+                      <el-button v-if="canEditMappings && canEditDrivers" link type="primary" size="small" @click="openQuickCreateDriver(row as SubmissionReviewRow)">
                         新增司機並綁定
                       </el-button>
-                      <el-button link type="danger" size="small" @click="handleIgnoreSubmission(row as SubmissionReviewRow)">
+                      <el-button v-if="canEditMappings" link type="danger" size="small" @click="handleIgnoreSubmission(row as SubmissionReviewRow)">
                         忽略此筆
                       </el-button>
                     </TableRowActions>
@@ -245,41 +302,19 @@
                   </div>
                   <div class="target-binding-box">
                     <TableRowActions>
-                      <el-button link type="primary" size="small" @click="handleResolveRowConflict(conflict, true)">
+                      <el-button v-if="canEditMappings" link type="primary" size="small" @click="handleResolveRowConflict(conflict, true)">
                         採用新資料
                       </el-button>
-                      <el-button link size="small" @click="handleResolveRowConflict(conflict, false)">
+                      <el-button v-if="canEditMappings" link size="small" @click="handleResolveRowConflict(conflict, false)">
                         保留原資料
                       </el-button>
-                      <el-button link type="danger" size="small" @click="handleIgnoreRowConflict(conflict)">
+                      <el-button v-if="canEditMappings" link type="danger" size="small" @click="handleIgnoreRowConflict(conflict)">
                         忽略此筆
                       </el-button>
                     </TableRowActions>
                   </div>
                 </div>
 
-                <div v-for="conflict in row.rowConflicts" :key="conflict.id" class="review-issue-row">
-                  <div class="review-issue-desc">
-                    <el-tag size="small" type="danger">與既有資料衝突</el-tag>
-                    <span class="raw-name">{{ conflict.caseName }}（第 {{ conflict.legSeq }} 趟）</span>
-                    <span class="text-secondary small">
-                      既有：{{ conflict.previousReported === 'boarded' ? '有坐' : '沒坐' }}
-                      / {{ conflict.previousDriverName || '無司機' }}
-                      　新上傳：{{ conflict.newReported === 'boarded' ? '有坐' : '沒坐' }}
-                      / {{ conflict.newDriverName || '無司機' }}
-                    </span>
-                  </div>
-                  <div class="target-binding-box">
-                    <TableRowActions>
-                      <el-button link type="primary" size="small" @click="handleResolveRowConflict(conflict, true)">
-                        採用新資料
-                      </el-button>
-                      <el-button link size="small" @click="handleResolveRowConflict(conflict, false)">
-                        保留原資料
-                      </el-button>
-                    </TableRowActions>
-                  </div>
-                </div>
               </div>
             </template>
           </el-table-column>
@@ -300,20 +335,34 @@
               <el-tag type="warning">{{ issueCount(row as SubmissionReviewRow) }} 個問題待處理</el-tag>
             </template>
           </el-table-column>
-        </el-table>
+          </el-table>
+        </template>
 
         <PageHeader
+          v-if="canViewAttendance"
           title="出勤待維護"
           description="以下每一列是匯報比對到的司機，當天已有跟系統匯入判斷不同的人工出勤登記；系統不會自動覆蓋人工判斷，請選擇要保留原本的人工登記，還是改採這次匯入判斷的出勤結果。"
           class="attendance-conflict-header"
         />
 
+        <el-alert
+          v-if="attendanceConflictLoadError"
+          type="error"
+          show-icon
+          :closable="false"
+          title="出勤待維護載入失敗，請重試"
+        >
+          <template #default>
+            <el-button type="danger" size="small" plain @click="fetchAttendanceConflicts">重新載入</el-button>
+          </template>
+        </el-alert>
+
         <el-empty
-          v-if="!attendanceConflictLoading && attendanceConflicts.length === 0"
+          v-if="canViewAttendance && !attendanceConflictLoadError && !attendanceConflictLoading && attendanceConflicts.length === 0"
           description="目前沒有待處理的出勤衝突"
         />
 
-        <el-table v-else :data="attendanceConflicts" v-loading="attendanceConflictLoading" row-key="id" border>
+        <el-table v-if="canViewAttendance" :data="attendanceConflicts" v-loading="attendanceConflictLoading" row-key="id" border>
           <el-table-column label="司機" prop="driverName" width="140" />
           <el-table-column label="日期" prop="recordDate" width="120" />
           <el-table-column label="人工登記狀態" width="140" align="center">
@@ -329,24 +378,33 @@
           <el-table-column label="操作" min-width="220">
             <template #default="{ row }">
               <TableRowActions>
-                <el-button link type="primary" size="small" @click="handleResolveAttendanceConflict(row as AttendanceConflictDTO, 'keep_manual')">
+                <el-button v-if="canEditAttendance" link type="primary" size="small" @click="handleResolveAttendanceConflict(row as AttendanceConflictDTO, 'keep_manual')">
                   保留人工登記
                 </el-button>
-                <el-button link type="warning" size="small" @click="handleResolveAttendanceConflict(row as AttendanceConflictDTO, 'use_import')">
+                <el-button v-if="canEditAttendance" link type="warning" size="small" @click="handleResolveAttendanceConflict(row as AttendanceConflictDTO, 'use_import')">
                   改採匯入結果
                 </el-button>
-                <el-button link type="danger" size="small" @click="handleIgnoreAttendanceConflict(row as AttendanceConflictDTO)">
+                <el-button v-if="canDeleteAttendance" link type="danger" size="small" @click="handleIgnoreAttendanceConflict(row as AttendanceConflictDTO)">
                   忽略此筆
                 </el-button>
               </TableRowActions>
             </template>
           </el-table-column>
         </el-table>
+
+        <el-alert
+          v-else
+          type="info"
+          show-icon
+          :closable="false"
+          title="目前帳號沒有出勤檢視權限，已略過出勤待維護資料"
+        />
       </el-tab-pane>
     </el-tabs>
 
     <!-- 新增個案並綁定：跟個案清單頁的「新增個案基本資料」共用同一個元件與 API -->
     <CaseCreateDialog
+      v-if="canEditCases && canEditMappings"
       v-model="quickCreateCaseVisible"
       :prefill-name="quickCreateCaseTarget?.cleanedName"
       @created="handleCaseCreatedFromPending"
@@ -354,6 +412,7 @@
 
     <!-- 新增司機並綁定：跟司機管理頁的「新增司機」共用同一個元件與 API -->
     <DriverCreateDialog
+      v-if="canEditDrivers && canEditMappings"
       v-model="quickCreateDriverVisible"
       :prefill-name="quickCreateDriverTarget?.driverIssue?.driverNameRaw"
       @created="handleDriverCreatedFromPending"
@@ -462,6 +521,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { UploadFilled, Document } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type TableInstance, type UploadFile } from 'element-plus'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import {
   createDriverReportForm,
   commitImportDriverReport,
@@ -477,7 +537,7 @@ import {
   ignoreRowConflict
 } from '@/api/driverReports'
 import { listAttendanceConflicts, resolveAttendanceConflict, ignoreAttendanceConflict } from '@/api/attendance'
-import { listAllCases } from '@/api/cases'
+import { listAllCases, relinkPendingData } from '@/api/cases'
 import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import PageHeader from '@/components/PageHeader.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
@@ -510,12 +570,41 @@ type SubmissionReviewRow = Omit<SubmissionReviewDTO, 'caseIssues'> & {
 }
 
 const router = useRouter()
-const activeTab = ref<'upload' | 'pending'>('upload')
+const authStore = useAuthStore()
+const canViewDriverReports = computed(() => authStore.hasPermission('driver_reports', 'view'))
+const canEditDriverReports = computed(() => authStore.hasPermission('driver_reports', 'edit'))
+const canViewMappings = computed(() => authStore.hasPermission('driver_report_mappings', 'view'))
+const canEditMappings = computed(() => authStore.hasPermission('driver_report_mappings', 'edit'))
+const canViewVehicles = computed(() => authStore.hasPermission('masters_vehicles', 'view'))
+const canViewCases = computed(() => authStore.hasPermission('masters_cases', 'view'))
+const canEditCases = computed(() => authStore.hasPermission('masters_cases', 'edit'))
+const canViewDrivers = computed(() => authStore.hasPermission('masters_drivers', 'view'))
+const canEditDrivers = computed(() => authStore.hasPermission('masters_drivers', 'edit'))
+const canViewAttendance = computed(() => authStore.hasPermission('attendance_fuel', 'view'))
+const canEditAttendance = computed(() => authStore.hasPermission('attendance_fuel', 'edit'))
+const canDeleteAttendance = computed(() => authStore.hasPermission('attendance_fuel', 'delete'))
+const activeTab = ref<'upload' | 'pending'>(canViewDriverReports.value ? 'upload' : 'pending')
 
 // ---- 批次上傳 ----
 
 type RowStatus = 'needsVehicle' | 'queued' | 'analyzing' | 'processing' | 'done' | 'failed'
-type RowIssue = { level: 'error' | 'warning'; message: string }
+// rowIndex／key 是去重用的識別鍵，不參與畫面顯示：message 在預覽階段與正式寫入階段
+// 走不同的格式化（前綴不同），同一列同一個原因的文字會不一樣，只比對 message 字串
+// 會讓同一個問題在清單裡重複出現兩次（見 dedupeIssues）。
+type RowIssue = { level: 'error' | 'warning'; message: string; rowIndex: number; key: string }
+
+// dedupeIssues 以「列號＋去重鍵＋層級」判斷是否為同一問題，而非直接比對格式化後的
+// message 字串——預覽階段（formatPreviewIssue）與正式寫入階段（skippedRows）對同一
+// 列同一原因會產生不同前綴的顯示文字，用完整字串比對會讓同一個問題重複列出兩次。
+function dedupeIssues(issues: RowIssue[]): RowIssue[] {
+  return issues.filter(
+    (issue, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.level === issue.level && candidate.rowIndex === issue.rowIndex && candidate.key === issue.key
+      ) === index
+  )
+}
 
 const IMPORT_FIELD_LABELS: Record<string, string> = {
   file: '檔案',
@@ -539,6 +628,9 @@ interface BatchFileRow {
   conflictCount: number
   backfilledCount: number
   pendingColumnCount: number
+  // failedRowCount 是後端 status:"partial" 時附帶的 failedRows——格式正確卻在寫入
+  // 資料庫時失敗、已略過的列數；即使整批仍標記為完成，也要讓使用者看到這個數字。
+  failedRowCount: number
   message: string
   issues: RowIssue[]
 }
@@ -570,24 +662,32 @@ const ctaLabel = computed(() => {
   if (contextLoadFailed.value) return '車輛資料載入失敗'
   if (contextLoading.value) return '正在載入車輛資料…'
   if (running.value) return '正在匯入…'
+  if (!canViewVehicles.value) return '沒有車輛檢視權限'
+  if (!canEditDriverReports.value) return '沒有匯入編輯權限'
   if (vehicles.value.length === 0) return '尚未建立車輛'
   return '選擇 .xlsx 檔案'
 })
 // 拖曳區在資料載完前停用，避免車輛清單還是空的時就跑自動比對而誤判成「待選車輛」
 const dropDisabled = computed(
-  () => running.value || contextLoading.value || contextLoadFailed.value || vehicles.value.length === 0
+  () =>
+    running.value ||
+    contextLoading.value ||
+    contextLoadFailed.value ||
+    !canViewVehicles.value ||
+    !canEditDriverReports.value ||
+    vehicles.value.length === 0
 )
 // 資料真的載入成功、只是車輛清單為空時，要跟「還在載入」「載入失敗」分開提示，
 // 否則使用者只會看到一塊選不出任何選項的下拉選單、不知道該去哪裡處理
 const hasNoVehicles = computed(
-  () => !contextLoading.value && !contextLoadFailed.value && vehicles.value.length === 0
+  () => canViewVehicles.value && !contextLoading.value && !contextLoadFailed.value && vehicles.value.length === 0
 )
 
 const formByVehicle = computed(() => new Map(forms.value.map((f) => [f.vehicleId, f.id])))
 // 已解析完成、還沒匯入的檔案。已匯入或失敗的列不再納入，否則自動匯入會反覆重跑同一批
 const pendingRows = computed(() => rows.value.filter((r) => r.vehicleId && r.status === 'queued'))
 const canImport = computed(
-  () => !running.value && analyzePending.value === 0 && pendingRows.value.length > 0
+  () => canEditDriverReports.value && !running.value && analyzePending.value === 0 && pendingRows.value.length > 0
 )
 
 // 沒有送出按鈕：整批解析完就自動匯入。等 analyzePending 歸零才觸發，讓一次拖入的多個檔案併成一批。
@@ -635,6 +735,7 @@ function onFileChange(file: UploadFile) {
     conflictCount: 0,
     backfilledCount: 0,
     pendingColumnCount: 0,
+    failedRowCount: 0,
     message: '',
     issues: []
   }
@@ -727,7 +828,7 @@ function commitOnce(
 }
 
 function canRetryRow(row: BatchFileRow): boolean {
-  return !running.value && row.status === 'failed'
+  return canEditDriverReports.value && !running.value && row.status === 'failed'
 }
 
 function monthStatusLabel(status: RowStatus): string {
@@ -744,7 +845,8 @@ function rowResultCounts(row: BatchFileRow) {
     reaffirmed: row.reaffirmedCount,
     conflicts: row.conflictCount,
     backfilled: row.backfilledCount,
-    pendingColumns: row.pendingColumnCount
+    pendingColumns: row.pendingColumnCount,
+    failed: row.failedRowCount
   }
 }
 
@@ -765,8 +867,18 @@ function monthStatusType(status: RowStatus): 'success' | 'warning' | 'danger' | 
 
 function collectPreviewIssues(preview: Pick<DriverReportPreviewDTO, 'errors' | 'warnings'>): RowIssue[] {
   return [
-    ...preview.errors.map((item) => ({ level: 'error' as const, message: formatPreviewIssue(item) })),
-    ...preview.warnings.map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) }))
+    ...preview.errors.map((item) => ({
+      level: 'error' as const,
+      message: formatPreviewIssue(item),
+      rowIndex: item.rowIndex,
+      key: item.message
+    })),
+    ...preview.warnings.map((item) => ({
+      level: 'warning' as const,
+      message: formatPreviewIssue(item),
+      rowIndex: item.rowIndex,
+      key: item.message
+    }))
   ]
 }
 
@@ -880,23 +992,35 @@ async function processRow(row: BatchFileRow) {
     row.reaffirmedCount += result.reaffirmedRows
     row.conflictCount += result.pendingConflictRows
     row.backfilledCount += result.backfilledRows
+    row.failedRowCount += result.failedRows
     row.months = result.coveredMonths
     row.issues.push(
       ...result.skippedRows.flatMap((item) =>
         item.reasons.map((reason) => ({
           level: 'error' as const,
-          message: `第 ${item.rowIndex} 列${item.reportDate ? `（${item.reportDate}）` : ''}：${reason}`
+          message: `第 ${item.rowIndex} 列${item.reportDate ? `（${item.reportDate}）` : ''}：${reason}`,
+          rowIndex: item.rowIndex,
+          key: reason
         }))
       ),
-      ...(result.warnings ?? []).map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) })),
+      ...(result.warnings ?? []).map((item) => ({
+        level: 'warning' as const,
+        message: formatPreviewIssue(item),
+        rowIndex: item.rowIndex,
+        key: item.message
+      })),
       ...(result.pendingConflictRows > 0
-        ? [{ level: 'warning' as const, message: `${result.pendingConflictRows} 筆與既有資料不同，已進入待維護等待選擇` }]
+        ? [
+            {
+              level: 'warning' as const,
+              message: `${result.pendingConflictRows} 筆與既有資料不同，已進入待維護等待選擇`,
+              rowIndex: 0,
+              key: 'pendingConflictRows'
+            }
+          ]
         : [])
     )
-    row.issues = row.issues.filter(
-      (issue, index, all) =>
-        all.findIndex((candidate) => candidate.level === issue.level && candidate.message === issue.message) === index
-    )
+    row.issues = dedupeIssues(row.issues)
     row.status = 'done'
     row.pendingColumnCount = Object.values(decisions).filter((d) => d.mappingStatus === 'pending').length
   } catch (error) {
@@ -917,7 +1041,7 @@ async function retryRow(row: BatchFileRow) {
 }
 
 function rowErrorMessage(error: unknown): string {
-  const response = (error as { response?: { data?: { error?: ApiError } } })?.response
+  const response = (error as { response?: { status?: number; data?: { error?: ApiError } } })?.response
   const detail = response?.data?.error
   if (detail?.details?.length) {
     return detail.details
@@ -925,6 +1049,10 @@ function rowErrorMessage(error: unknown): string {
       .join('；')
   }
   if (detail) return resolveApiErrorMessage(detail, '匯入失敗，請確認檔案內容')
+
+  // 平台層逾時（如 Cloud Run／Google Front End）會直接回 504，屬於「有回應但不是我們的
+  // 錯誤 envelope」，要跟下面真正沒拿到回應的斷線情境分開，否則會誤告使用者去檢查網路。
+  if (response?.status === 504) return TIMEOUT_ERROR_MESSAGE
 
   // 走到這裡代表請求沒拿到後端回應。原始 error.message 是 axios 或瀏覽器的技術字串
   // （如 "Network Error"、"timeout of 30000ms exceeded"），不能直接顯示給使用者。
@@ -979,9 +1107,10 @@ function refreshImportSummary(): { succeeded: number; failed: number; importedDa
 // 分頁端點在 0 筆結果時回傳 data: null，一律預設空陣列，避免後續 detectVehicle 等處
 // 的 .filter／.map 對 null 直接丟出未捕捉例外。
 async function loadUploadContext() {
+  if (!canViewDriverReports.value) return
   try {
     const [vehiclePage, formList] = await Promise.all([
-      listAllVehicles({ status: 'active' }),
+      canViewVehicles.value ? listAllVehicles({ status: 'active' }) : Promise.resolve([]),
       listDriverReportForms()
     ])
     vehicles.value = vehiclePage ?? []
@@ -994,6 +1123,7 @@ async function loadUploadContext() {
 }
 
 async function loadCases() {
+  if (!canViewCases.value) return
   try {
     cases.value = await listAllCases()
   } catch {
@@ -1007,6 +1137,7 @@ const cases = ref<CaseDTO[]>([])
 const drivers = ref<DriverDTO[]>([])
 const submissionReviews = ref<SubmissionReviewRow[]>([])
 const reviewLoading = ref(false)
+const reviewLoadError = ref(false)
 
 // el-table 的展開狀態綁在資料列的物件參考上；每次連結/略過都會整批重打
 // fetchSubmissionReview 換新陣列，若不自己記住已展開的 submissionId 並在資料回來後
@@ -1040,6 +1171,7 @@ const quickCreateDriverTarget = ref<SubmissionReviewRow | null>(null)
 
 const attendanceConflicts = ref<AttendanceConflictDTO[]>([])
 const attendanceConflictLoading = ref(false)
+const attendanceConflictLoadError = ref(false)
 
 const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
   work: '出勤 (O)',
@@ -1061,6 +1193,7 @@ function issueCount(row: SubmissionReviewRow): number {
 const pendingTabCount = computed(() => submissionReviews.value.length + attendanceConflicts.value.length)
 
 async function loadDrivers() {
+  if (!canViewDrivers.value) return
   try {
     drivers.value = await listAllDrivers({ status: 'active' })
   } catch {
@@ -1071,14 +1204,14 @@ async function loadDrivers() {
 // 切換至待維護頁籤時主動重新整理清單，確保顯示最新待處理項目
 async function handleTabChange(name: string | number) {
   if (name === 'pending') {
-    await fetchSubmissionReview()
-    await fetchAttendanceConflicts()
+    if (canViewMappings.value) await fetchSubmissionReview()
+    if (canViewAttendance.value) await fetchAttendanceConflicts()
   }
 }
 
 // 上傳完成後若有欄位進入待維護，詢問是否直接切過去處理，比照個案管理匯入完成後的提示模式
 async function handleUploadSuccess(result: { pendingColumns: number }) {
-  if (result.pendingColumns === 0) return
+  if (result.pendingColumns === 0 || !canViewMappings.value) return
   await fetchSubmissionReview()
   try {
     await ElMessageBox.confirm(
@@ -1093,7 +1226,9 @@ async function handleUploadSuccess(result: { pendingColumns: number }) {
 }
 
 async function fetchSubmissionReview() {
+  if (!canViewMappings.value) return
   reviewLoading.value = true
+  reviewLoadError.value = false
   try {
     const reviews = await listSubmissionReview()
     submissionReviews.value = reviews.map((r) => ({
@@ -1103,9 +1238,32 @@ async function fetchSubmissionReview() {
     }))
     await restoreSubmissionReviewExpansion()
   } catch {
-    // 全域攔截器負責顯示 API 錯誤。
+    // 全域攔截器已顯示 API 錯誤 toast；這裡另外記錄載入失敗狀態，避免畫面把
+    // 「查詢失敗」跟「真的沒有待處理資料」顯示成同一個空狀態，讓使用者誤以為
+    // 沒有待維護項目。
+    reviewLoadError.value = true
   } finally {
     reviewLoading.value = false
+  }
+}
+
+const relinkPendingSaving = ref(false)
+
+async function handleRelinkPending() {
+  relinkPendingSaving.value = true
+  try {
+    const result = await relinkPendingData()
+    const total = result.sites + result.caregivers + result.drivers + result.caseColumns
+    if (total > 0) {
+      ElMessage.success(`已自動關聯 ${total} 筆待維護資料`)
+      await fetchSubmissionReview()
+    } else {
+      ElMessage.info('目前沒有可自動關聯的待維護資料')
+    }
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  } finally {
+    relinkPendingSaving.value = false
   }
 }
 
@@ -1185,11 +1343,15 @@ async function handleIgnoreAttendanceConflict(row: AttendanceConflictDTO) {
 }
 
 async function fetchAttendanceConflicts() {
+  if (!canViewAttendance.value) return
   attendanceConflictLoading.value = true
+  attendanceConflictLoadError.value = false
   try {
     attendanceConflicts.value = await listAttendanceConflicts()
   } catch {
-    // 全域攔截器負責顯示 API 錯誤。
+    // 同上：另外記錄載入失敗狀態，不讓查詢失敗跟「真的沒有出勤衝突」共用同一個
+    // 空狀態畫面。
+    attendanceConflictLoadError.value = true
   } finally {
     attendanceConflictLoading.value = false
   }
@@ -1322,9 +1484,15 @@ async function handleDriverCreatedFromPending(created: DriverDTO) {
 }
 
 onMounted(() => {
-  void loadCases()
-  void loadDrivers()
-  void loadUploadContext()
+  if (canViewDriverReports.value) {
+    void loadUploadContext()
+  } else if (canViewMappings.value) {
+    activeTab.value = 'pending'
+    void fetchSubmissionReview()
+  }
+  if (canViewAttendance.value) void fetchAttendanceConflicts()
+  if (canViewCases.value) void loadCases()
+  if (canViewDrivers.value) void loadDrivers()
 })
 </script>
 

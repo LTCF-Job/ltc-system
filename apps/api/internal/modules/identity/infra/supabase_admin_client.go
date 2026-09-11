@@ -66,9 +66,10 @@ func (c *SupabaseAdminClient) do(ctx context.Context, method, path string, body 
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// 第三方 response body 可能含 email、request detail 或其他個資，不進入 error
-		// chain，避免被 API log 或 audit snapshot 長期保存。
-		return fmt.Errorf("supabase admin request returned HTTP %d", resp.StatusCode)
+		// 第三方 response body 可能含 email、request detail 或其他個資，不把 body 內容
+		// 併入回傳的 error 文字，只用來判斷情境分類（sentinel），避免被 API log 或
+		// audit snapshot 長期保存原始內容。
+		return classifySupabaseAdminError(resp.StatusCode, respBody)
 	}
 
 	if out != nil && len(respBody) > 0 {
@@ -77,6 +78,36 @@ func (c *SupabaseAdminClient) do(ctx context.Context, method, path string, body 
 		}
 	}
 	return nil
+}
+
+// supabaseAdminErrorBody 反映 Supabase GoTrue Admin API 錯誤回應常見的欄位形狀；不同版本
+// 可能用 error_code、code 或 msg／message 其中之一，因此逐一嘗試辨識。
+type supabaseAdminErrorBody struct {
+	ErrorCode string `json:"error_code"`
+	Code      string `json:"code"`
+	Msg       string `json:"msg"`
+	Message   string `json:"message"`
+}
+
+// classifySupabaseAdminError 把 Supabase Auth Admin API 的非 2xx 回應分類成呼叫端可辨識的
+// sentinel 錯誤；辨識不出來的情況一律退回無法歸類的通用錯誤，由 handler 對應到 500。
+func classifySupabaseAdminError(statusCode int, body []byte) error {
+	if statusCode == http.StatusNotFound {
+		return fmt.Errorf("%w: supabase admin request returned HTTP 404", app.ErrUserNotFound)
+	}
+
+	var parsed supabaseAdminErrorBody
+	_ = json.Unmarshal(body, &parsed)
+	reason := strings.ToLower(parsed.ErrorCode + " " + parsed.Code + " " + parsed.Msg + " " + parsed.Message)
+
+	switch {
+	case strings.Contains(reason, "email_exists"), strings.Contains(reason, "already registered"), strings.Contains(reason, "already exists"):
+		return fmt.Errorf("%w: supabase admin request returned HTTP %d", app.ErrEmailAlreadyExists, statusCode)
+	case strings.Contains(reason, "weak_password"), strings.Contains(reason, "password") && strings.Contains(reason, "weak"):
+		return fmt.Errorf("%w: supabase admin request returned HTTP %d", app.ErrWeakPassword, statusCode)
+	default:
+		return fmt.Errorf("supabase admin request returned HTTP %d", statusCode)
+	}
 }
 
 // supabaseUserResponse 反映 Supabase Auth Admin API 的使用者 JSON 形狀。

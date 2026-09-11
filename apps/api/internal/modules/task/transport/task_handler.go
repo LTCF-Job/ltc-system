@@ -31,18 +31,32 @@ func (h *TaskHandler) CheckMissingReports(c *gin.Context) {
 		return
 	}
 
-	missingList, err := h.svc.CheckMissingReports(c.Request.Context(), targetDate)
+	result, err := h.svc.CheckMissingReports(c.Request.Context(), targetDate)
 	if err != nil {
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
+	missingCount := len(result.Items)
+	var message string
+	switch {
+	case missingCount == 0:
+		message = "已執行未回報檢核，目前沒有未回報項目。"
+	case !result.NotificationAttempted:
+		message = fmt.Sprintf("已執行未回報檢核，累計 %d 筆項目；尚未設定通知收件人，未寄送催報通知。", missingCount)
+	case result.NotificationSent:
+		message = fmt.Sprintf("已成功執行未回報檢核，累計 %d 筆項目並記錄催報通知日誌。", missingCount)
+	default:
+		message = fmt.Sprintf("已執行未回報檢核，累計 %d 筆項目，但催報通知寄送失敗，請確認通知服務設定。", missingCount)
+	}
+
 	httpx.RespondSuccess(c, http.StatusOK, gin.H{
-		"date":           dateStr,
-		"triggeredCount": len(missingList),
-		"missingCount":   len(missingList),
-		"items":          missingList,
-		"message":        fmt.Sprintf("已成功執行未回報檢核，累計 %d 筆項目並記錄催報通知日誌。", len(missingList)),
+		"date":             dateStr,
+		"triggeredCount":   missingCount,
+		"missingCount":     missingCount,
+		"items":            result.Items,
+		"notificationSent": result.NotificationSent,
+		"message":          message,
 	}, nil)
 }
 
@@ -78,7 +92,7 @@ func (h *TaskHandler) MonthEndReminder(c *gin.Context) {
 
 	summary, err := h.svc.MonthEndReminder(c.Request.Context(), year, month)
 	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "執行月底提醒任務失敗", nil)
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 

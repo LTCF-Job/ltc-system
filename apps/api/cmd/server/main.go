@@ -143,13 +143,11 @@ func main() {
 	)
 	importSvc.SetIdempotencyStore(caseRepo)
 	var emailSender notifyapp.EmailSender
-	if cfg.ResendAPIKey != "" {
+	if cfg.NotificationEmailEnabled {
 		emailSender = notifyinfra.NewResendEmailSender(cfg.ResendAPIKey, cfg.NotifyFrom, &http.Client{Timeout: 10 * time.Second})
 	} else {
-		// 未設定寄信 provider 時通知仍寫入資料庫，只是不對外送出；production 留一筆警告，避免誤以為信已寄達
-		if cfg.AppEnv == "production" {
-			slog.Warn("RESEND_API_KEY is not set, notification emails are only logged and never delivered")
-		}
+		// feature flag 關閉時即使環境裡殘留 provider key，也固定只記錄不外送，避免設定漂移造成意外寄信。
+		slog.Warn("notification emails are disabled; notification messages are only logged and never delivered")
 		emailSender = &notifyapp.LogEmailSender{}
 	}
 	notificationSvc := notifyapp.NewNotificationService(
@@ -224,26 +222,27 @@ func main() {
 
 	// 初始化 Handlers
 	h := handlers{
-		kase:         casetransport.NewCaseHandler(caseSvc),
-		caseImport:   importtransport.NewImportHandler(importSvc),
-		site:         mastertransport.NewSiteHandler(siteSvc),
-		vehicle:      mastertransport.NewVehicleHandler(vehicleSvc),
-		driver:       mastertransport.NewDriverHandler(driverSvc),
-		ride:         ridetransport.NewRideHandler(rideSvc),
-		export:       reporttransport.NewExportHandler(precheckSvc, govClaimSvc, regionClaimSvc, siteTripSummarySvc, claimCaseRepo),
-		notification: notifytransport.NewNotificationHandler(notificationSvc),
-		holiday:      holidaytransport.NewHolidayHandler(holidaySvc),
-		report:       reporttransport.NewReportHandler(reportSvc),
-		audit:        audittransport.NewAuditHandler(auditSvc),
-		task:         tasktransport.NewTaskHandler(taskSvc),
-		maintenance:  opstransport.NewMaintenanceHandler(maintenanceSvc),
-		attendance:   opstransport.NewAttendanceHandler(attendanceSvc),
-		fuel:         opstransport.NewFuelHandler(fuelSvc),
-		dashboard:    reporttransport.NewDashboardHandler(dashboardSvc),
-		driverReport: drtransport.NewDriverReportHandler(driverReportSvc),
-		caregiver:    caregivertransport.NewCaregiverHandler(caregiverSvc),
-		role:         identitytransport.NewRoleHandler(roleSvc),
-		identity:     identitytransport.NewIdentityHandler(userSvc),
+		kase:          casetransport.NewCaseHandler(caseSvc, casePendingRelinker{svc: driverReportSvc}),
+		caseImport:    importtransport.NewImportHandler(importSvc),
+		site:          mastertransport.NewSiteHandler(siteSvc, sitePendingRelinker{svc: caseSvc}),
+		vehicle:       mastertransport.NewVehicleHandler(vehicleSvc),
+		driver:        mastertransport.NewDriverHandler(driverSvc, driverPendingRelinker{svc: driverReportSvc}),
+		ride:          ridetransport.NewRideHandler(rideSvc),
+		export:        reporttransport.NewExportHandler(precheckSvc, govClaimSvc, regionClaimSvc, siteTripSummarySvc, claimCaseRepo),
+		notification:  notifytransport.NewNotificationHandler(notificationSvc),
+		holiday:       holidaytransport.NewHolidayHandler(holidaySvc),
+		report:        reporttransport.NewReportHandler(reportSvc),
+		audit:         audittransport.NewAuditHandler(auditSvc),
+		task:          tasktransport.NewTaskHandler(taskSvc),
+		maintenance:   opstransport.NewMaintenanceHandler(maintenanceSvc),
+		attendance:    opstransport.NewAttendanceHandler(attendanceSvc),
+		fuel:          opstransport.NewFuelHandler(fuelSvc),
+		dashboard:     reporttransport.NewDashboardHandler(dashboardSvc),
+		driverReport:  drtransport.NewDriverReportHandler(driverReportSvc),
+		caregiver:     caregivertransport.NewCaregiverHandler(caregiverSvc, caregiverPendingRelinker{svc: caseSvc}),
+		role:          identitytransport.NewRoleHandler(roleSvc),
+		identity:      identitytransport.NewIdentityHandler(userSvc),
+		pendingRelink: newPendingRelinkHandler(caseSvc, driverReportSvc),
 	}
 
 	r := newRouter(cfg, pool, h, permResolver, customPermResolver, userState)

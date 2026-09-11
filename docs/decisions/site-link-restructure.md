@@ -66,9 +66,9 @@ covers:
 - **不可逆**：`case_schedules.site_id` 原本允許「同一個案不同排班掛不同據點」的資料模型，
   drop 後這種歷史差異無法還原；同理，車輛與照護人員原本的據點 FK 關聯也回不去，往後只能重新
   手動輸入。
-- 待維護判定新增 `cases.site_pending`，與既有 `profile_pending`、`link_pending`（現在只剩
-  去／回程車輛兩個條件）一起被 `case_pending_status` view 用 `OR` 合併，詳見
-  [pending-data-visibility.md](pending-data-visibility.md) 與
+- 待維護判定新增 `cases.site_pending`，與既有 `profile_pending`、`caregiver_pending`
+  一起被 `case_pending_status` view 用 `OR` 合併（`link_pending` 已隨 `case_transport_preferences`
+  整張表於 migration `000055` 移除），詳見 [pending-data-visibility.md](pending-data-visibility.md) 與
   `docs/tech/system-logic-specification.md` 準則四。
 - 舊版 Excel 檔案若表頭仍是「單位」，匯入時該欄不會被辨識，需要使用者重新下載範本或手動把表頭
   改成「據點」。

@@ -1,7 +1,9 @@
 package transport
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -11,14 +13,42 @@ import (
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
+// PendingRelinker 讓據點或司機新增、改名後，重新比對名稱相符的待維護資料；
+// 未接線時傳 nil，Create／Update 會略過重新比對。
+type PendingRelinker interface {
+	RelinkByName(ctx context.Context, name string, actorID uuid.UUID, actorRole, ip, ua string) (int, error)
+}
+
 // SiteHandler 處理據點相關請求。
 type SiteHandler struct {
-	svc *app.SiteService
+	svc      *app.SiteService
+	relinker PendingRelinker
 }
 
 // NewSiteHandler 建立 SiteHandler 實例。
-func NewSiteHandler(svc *app.SiteService) *SiteHandler {
-	return &SiteHandler{svc: svc}
+func NewSiteHandler(svc *app.SiteService, relinkers ...PendingRelinker) *SiteHandler {
+	h := &SiteHandler{svc: svc}
+	if len(relinkers) > 0 {
+		h.relinker = relinkers[0]
+	}
+	return h
+}
+
+// relinkPendingMeta 呼叫 relinker 重新比對待維護資料；筆數為 0 時回傳 nil，
+// 讓 RespondSuccess 的 meta 維持既有形狀，不多長一個恆為 0 的欄位。
+func (h *SiteHandler) relinkPendingMeta(c *gin.Context, name string) any {
+	if h.relinker == nil || name == "" {
+		return nil
+	}
+	n, err := h.relinker.RelinkByName(c.Request.Context(), name, auth.GetActorID(c), auth.GetActorRole(c), c.ClientIP(), c.Request.UserAgent())
+	if err != nil {
+		slog.Error("pending_relink_failed", slog.String("name", name), slog.Any("error", err))
+		return nil
+	}
+	if n == 0 {
+		return nil
+	}
+	return gin.H{"pendingRelinked": n}
 }
 
 // List 查詢據點清單。
@@ -65,7 +95,7 @@ func (h *SiteHandler) Create(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidStatus) {
-			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "狀態設定不正確，僅接受「啟用」或「停用」", nil)
 			return
 		}
 		if errors.Is(err, app.ErrSiteNameRequired) {
@@ -90,7 +120,8 @@ func (h *SiteHandler) Create(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, newSiteResponse(*site), nil)
+	meta := h.relinkPendingMeta(c, site.Name)
+	httpx.RespondSuccess(c, http.StatusCreated, newSiteResponse(*site), meta)
 }
 
 // Update 更新據點。
@@ -122,7 +153,7 @@ func (h *SiteHandler) Update(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidStatus) {
-			httpx.RespondError(c, http.StatusUnprocessableEntity, httpx.CodeValidationFailed, "status 必須為 active 或 inactive", nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "狀態設定不正確，僅接受「啟用」或「停用」", nil)
 			return
 		}
 		if errors.Is(err, app.ErrSiteNotFound) {
@@ -151,7 +182,8 @@ func (h *SiteHandler) Update(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, newSiteResponse(*site), nil)
+	meta := h.relinkPendingMeta(c, site.Name)
+	httpx.RespondSuccess(c, http.StatusOK, newSiteResponse(*site), meta)
 }
 
 // Delete 刪除據點。
@@ -168,9 +200,15 @@ func (h *SiteHandler) Delete(c *gin.Context) {
 		IPAddress: c.ClientIP(),
 		UserAgent: c.Request.UserAgent(),
 	}); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-			{Field: "id", Reason: "該據點仍有相關資料參照，無法刪除"},
-		})
+		if errors.Is(err, app.ErrSiteNotFound) {
+			respondNotFound(c, "查無此據點")
+			return
+		}
+		if errors.Is(err, app.ErrSiteInUse) {
+			httpx.RespondError(c, http.StatusConflict, httpx.CodeResourceInUse, "該據點仍有相關資料參照，請先解除關聯後再刪除", nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 

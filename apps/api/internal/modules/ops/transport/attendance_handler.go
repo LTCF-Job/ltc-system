@@ -38,7 +38,7 @@ func (h *AttendanceHandler) GetMonthAttendance(c *gin.Context) {
 	report, err := h.attendanceSvc.GetMonthAttendance(c.Request.Context(), periodYm, driverID, c.Query("q"))
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidAttendanceMonth) {
-			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "月份格式錯誤，請使用 RRR-MM", nil)
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
@@ -133,6 +133,14 @@ func (h *AttendanceHandler) Upsert(c *gin.Context) {
 	actorRole := auth.GetActorRole(c)
 	item, err := h.attendanceSvc.Upsert(c.Request.Context(), req.DriverID, recDate, req.Status, req.Note, &actorID, &actorRole, auditContext(c))
 	if err != nil {
+		if errors.Is(err, app.ErrAttendanceDriverNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無此司機，請確認司機資料是否已被刪除", nil)
+			return
+		}
+		if errors.Is(err, app.ErrInvalidAttendanceStatus) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "出勤狀態不正確，請重新選擇", nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}

@@ -22,6 +22,12 @@ const router = createRouter({
           meta: { title: '總覽儀表板', module: 'dashboard' }
         },
         {
+          path: '403',
+          name: 'Forbidden',
+          component: () => import('@/views/errors/ForbiddenView.vue'),
+          meta: { title: '沒有存取權限' }
+        },
+        {
           path: 'cases',
           name: 'CaseList',
           component: () => import('@/views/cases/CaseListView.vue'),
@@ -71,7 +77,13 @@ const router = createRouter({
           path: 'driver-reports/import',
           name: 'DriverReportImport',
           component: () => import('@/views/driverReports/DriverReportImportView.vue'),
-          meta: { title: '批次上傳', module: 'driver_reports' }
+          meta: {
+            title: '批次上傳',
+            anyPermissions: [
+              { module: 'driver_reports', action: 'view' },
+              { module: 'driver_report_mappings', action: 'view' }
+            ]
+          }
         },
         {
           path: 'driver-reports/batch-import',

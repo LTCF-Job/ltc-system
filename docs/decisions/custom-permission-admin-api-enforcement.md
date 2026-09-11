@@ -22,7 +22,7 @@ covers:
 ## Decision
 
 1. 新增 `auth.CustomPermissionResolver` 與 `auth.VersionedCustomPermissionResolver` 介面，查詢鍵從角色 key 換成使用者 ID。
-2. `auth.CachedCustomPermissionResolver` 以共享 `permission_version` 驗證快取版本；本地快取只保存結果，不決定撤權何時生效。
+2. `auth.CachedCustomPermissionResolver` 在未過期的 process-local cache 命中時先查詢輕量共享 `permission_version`；版本相同直接回傳結果，只有 cache miss／過期或版本變更才回源載入完整覆蓋。這保留跨 replica 的版本失效語意，同時避免每個 request 重新反序列化整份投影；同一 replica 仍可透過 `InvalidateUser` 立即失效。
 3. `cmd/server/permission_adapter.go` 的 `userSecurityStateResolver` 先查 PostgreSQL `auth_user_security_states`。只有尚未同步的舊帳號才回源 Supabase 一次；讀取或同步失敗會回報錯誤，不會把未知狀態當成有權限。
 4. `RequirePermission(resolver, customResolver, module, action)` 先查角色矩陣，再以個人覆蓋整個模組物件；前端透過 `GET /api/v1/auth/me` 取得同一份 effective permissions。
 5. `main.go` 將 `UserSecurityStateRepository` 接到 versioned resolver，`UserService` 的 create／update／permission mutation 同步更新安全狀態投影；投影寫入失敗只記錄，不讓已完成的外部 mutation 被回報成可重試失敗。
@@ -39,7 +39,7 @@ covers:
 
 ## Consequences
 
-- 角色矩陣與個人覆蓋都透過共享資料來源版本判斷快取是否仍有效；更新投影會遞增 `permission_version`，撤權不依賴單一 replica 的本地 TTL。
+- 角色矩陣與個人覆蓋在 cache hit 時都以輕量共享版本判斷是否仍有效；版本未變更時不重載完整資料，版本變更時立即回源更新。同一 replica 的 mutation 仍會呼叫 invalidator 立即清除快取；`permission_version` 由投影保存作為跨 replica 的一致性依據。
 - PostgreSQL 投影與 Supabase identity 採雙寫。Supabase mutation 成功後若投影寫入失敗，API 不要求使用者重送；伺服器會記錄錯誤，後續可用同步／reconciliation 補齊。
 - 首次同步舊帳號仍可能需要一次 Supabase Admin API；完成投影後，一般受保護 API 只讀 PostgreSQL。
 - `RequirePermission` 簽章變動（新增 `customResolver` 參數）是這個檔案內部的介面變更，唯一呼叫端 `routes.go` 已同步更新；沒有對外 HTTP 契約，不影響前端。

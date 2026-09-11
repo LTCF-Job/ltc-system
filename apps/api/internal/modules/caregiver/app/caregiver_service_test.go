@@ -12,8 +12,10 @@ import (
 
 // fakeCaregiverStore is a deterministic in-memory CaregiverStore test double.
 type fakeCaregiverStore struct {
-	byID    map[uuid.UUID]*Caregiver
-	listErr error
+	byID      map[uuid.UUID]*Caregiver
+	listErr   error
+	deleteErr error
+	createErr error
 }
 
 func newFakeCaregiverStore() *fakeCaregiverStore {
@@ -48,6 +50,9 @@ func (f *fakeCaregiverStore) GetByID(ctx context.Context, id uuid.UUID) (*Caregi
 }
 
 func (f *fakeCaregiverStore) Create(ctx context.Context, c *Caregiver) error {
+	if f.createErr != nil {
+		return f.createErr
+	}
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
 	}
@@ -66,6 +71,9 @@ func (f *fakeCaregiverStore) Update(ctx context.Context, c *Caregiver) error {
 }
 
 func (f *fakeCaregiverStore) Delete(ctx context.Context, id uuid.UUID) error {
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
 	delete(f.byID, id)
 	return nil
 }
@@ -148,4 +156,42 @@ func TestCaregiverService_Update_SetsSiteName(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "新據點", updated.SiteName)
+}
+
+// auditRepo 未設定（nil）時，Delete 仍必須先確認資源存在；否則刪除不存在的 ID
+// 會直接呼叫 store.Delete 並被當成成功的 204，使用者拿不到 404。
+func TestCaregiverService_Delete_ReturnsNotFound_WhenMissing_EvenWithoutAuditRepo(t *testing.T) {
+	store := newFakeCaregiverStore()
+	svc := NewCaregiverService(store, nil, nil)
+
+	err := svc.Delete(context.Background(), uuid.New())
+
+	assert.ErrorIs(t, err, ErrCaregiverNotFound)
+}
+
+func TestCaregiverService_Delete_Succeeds_WithoutAuditRepo(t *testing.T) {
+	store := newFakeCaregiverStore()
+	existing := Caregiver{ID: uuid.New(), Name: "王大明", Type: CaregiverTypeCaseManager}
+	require.NoError(t, store.Create(context.Background(), &existing))
+	svc := NewCaregiverService(store, nil, nil)
+
+	err := svc.Delete(context.Background(), existing.ID)
+
+	require.NoError(t, err)
+	_, ok := store.byID[existing.ID]
+	assert.False(t, ok)
+}
+
+// 仍被個案關聯時，repo 層會回傳 ErrCaregiverInUse；service 層需原樣往上拋，
+// 由 transport 層映射為 409，而不是吞掉或包裝成其他錯誤。
+func TestCaregiverService_Delete_PropagatesInUseError(t *testing.T) {
+	store := newFakeCaregiverStore()
+	existing := Caregiver{ID: uuid.New(), Name: "王大明", Type: CaregiverTypeCaseManager}
+	require.NoError(t, store.Create(context.Background(), &existing))
+	store.deleteErr = ErrCaregiverInUse
+	svc := NewCaregiverService(store, nil, nil)
+
+	err := svc.Delete(context.Background(), existing.ID)
+
+	assert.ErrorIs(t, err, ErrCaregiverInUse)
 }

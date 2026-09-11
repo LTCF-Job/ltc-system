@@ -173,7 +173,7 @@ func (r *FuelRepository) Update(ctx context.Context, item *app.FuelLog) error {
 		return fmt.Errorf("failed to update fuel log: %w", err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("fuel log not found")
+		return app.ErrFuelLogNotFound
 	}
 	return nil
 }
@@ -190,7 +190,7 @@ func (r *FuelRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("failed to delete fuel log: %w", err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("fuel log not found")
+		return app.ErrFuelLogNotFound
 	}
 	return nil
 }

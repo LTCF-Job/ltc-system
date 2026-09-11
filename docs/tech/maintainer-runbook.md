@@ -70,13 +70,13 @@ API 預設 listen address 依 `PORT`／config 設定，常見本機位址是 `ht
 
 | 類別 | 主要設定 | 用途與注意事項 |
 | --- | --- | --- |
-| API runtime | `APP_ENV`、`PORT`、`ALLOWED_ORIGINS`、`LOG_LEVEL` | `local` 允許開發降級；production 應 fail closed |
+| API runtime | `APP_ENV`、`PORT`、`ALLOWED_ORIGINS`、`TRUSTED_PROXIES`、`LOG_LEVEL` | `local` 允許開發降級；production 應 fail closed，`TRUSTED_PROXIES` 留空時不信任 `X-Forwarded-For`，有固定 ingress 時才信任實際 proxy |
 | Database | `DATABASE_URL`、`DB_MAX_OPEN_CONNS`、`DB_MAX_IDLE_CONNS` | PostgreSQL／Supabase DB pool；migration 與 server 應指向預期資料庫 |
 | JWT | `SUPABASE_JWT_ISSUER`、`SUPABASE_PROJECT_REF`、`SUPABASE_JWKS_URL` | production 使用 JWKS、issuer 與固定 audience `authenticated`；不要在文件記錄 token／secret |
 | Supabase Admin | `SUPABASE_SERVICE_ROLE_KEY`、`SUPABASE_ADMIN_API_TIMEOUT` | user、role bootstrap 與管理 API；缺少時 identity admin endpoints 可能回 503 |
 | Bootstrap | `DEFAULT_ADMIN_EMAIL`、`DEFAULT_ADMIN_PASSWORD` | 兩者和 Admin 設定都具備時才會嘗試 idempotent default admin bootstrap；只在 secret manager／本機安全環境提供 |
 | Frontend | `VITE_API_BASE_URL`、Supabase public URL／anon key 等 Vite 設定 | build 時注入；不要將 service role key 放入 `VITE_*` |
-| External | `RESEND_API_KEY`、`NOTIFY_FROM`、holiday provider 設定 | `RESEND_API_KEY` 選填，未設定時（含正式環境）notification service 使用 simulated sender |
+| External | `NOTIFICATION_EMAIL_ENABLED`、`RESEND_API_KEY`、`NOTIFY_FROM`、holiday provider 設定 | `NOTIFICATION_EMAIL_ENABLED=false` 時 notification service 使用 simulated sender；只有 flag 為 `true` 且 provider 設定完整才會外送 |
 
 設定名稱與目前程式碼不一致時，以 `apps/api/internal/platform/config/config.go` 和 `apps/web` 的 runtime config 為準；不要沿用歷史文件中的 `GOOGLE_SA_JSON`、`/healthz` 或其他已移除名稱。
 
@@ -116,14 +116,14 @@ API 預設 listen address 依 `PORT`／config 設定，常見本機位址是 `ht
 
     Invoke-WebRequest http://localhost:8080/api/health | Select-Object StatusCode, Content
 
-`/api/health` 回傳的 HTTP status 目前可能在 database ping 失敗時仍是 200，因此必須同時查看 response body 的 `database` 狀態與 server log；HTTP 200 不等於資料庫或外部整合健康。歷史文件中的 `/api/v1/healthz` 不是現行 route。
+`/api/health` 只回傳不含環境、資料庫細節或時間戳的狀態 envelope：依賴正常時 HTTP 200、`{"status":"ok"}`；database ping 失敗時 HTTP 503、`{"status":"not_ready"}`。歷史文件中的 `/api/v1/healthz` 不是現行 route。
 
 ## 常見故障排查
 
 ### API 能啟動但查詢失敗
 
 1. 確認 `DATABASE_URL` 指向正確資料庫。
-2. 呼叫 `/api/health` 並查看 `database` 欄位。
+2. 呼叫 `/api/health` 並以 HTTP status 判斷 readiness；需要資料庫診斷細節時查看 server log，外部 health response 不會暴露環境或連線資訊。
 3. 查看 API log 是否有 connection、migration、foreign key 或 permission error。
 4. 確認 migration 已完成且 seed 沒有引用舊欄位。
 5. local offline mode 只能用來看啟動／部分 UI 行為；不能用來宣稱 CRUD、transaction 或報表 query 已驗證。
@@ -148,7 +148,7 @@ identity management 需要 Supabase Admin API 與 service role 設定。缺少�
 
 ### Notification 看起來成功但收不到信
 
-`RESEND_API_KEY` 未設定時 server composition root 會掛上 `LogEmailSender`，通知寫進資料庫但不外送，log 只有 simulated email；正式環境走到這條路徑會另外留下一筆 `RESEND_API_KEY is not set` 警告。目前正式環境就是這個狀態。設定了 `RESEND_API_KEY` 也不等於信已寄達，仍需 provider delivery log 與實際收件驗證才能宣稱寄信可用。
+`NOTIFICATION_EMAIL_ENABLED=false` 時 server composition root 會掛上 `LogEmailSender`，通知寫進資料庫但不外送，即使環境裡殘留 `RESEND_API_KEY` 也不會寄信；設為 `true` 時才會使用 Resend，且仍需 provider delivery log 與實際收件驗證才能宣稱寄信可用。
 
 ### 前端表格資料與 backend 不一致
 
@@ -177,7 +177,7 @@ identity management 需要 Supabase Admin API 與 service role 設定。缺少�
 - **API started in offline local mode**：process 可用但 DB-backed endpoints 可能 panic、回空資料或失敗；將其標示為未驗證。
 - **JWT valid but permission stale**：可能是 app metadata、DB custom permissions 或 process-local cache 不一致；重新取得 token 並檢查 DB／server instance。
 - **Mock／demo path hides production defect**：回到真實 API、資料庫與 Supabase Auth boundary 分別驗證。
-- **Health 200 with dependency failure**：讀 body 與 log，不只依 HTTP status。
+- **Health 503 with dependency failure**：先確認資料庫連線與 migration 狀態；`/api/health` 只提供狀態，細節看 server log。
 
 ## Unverified
 

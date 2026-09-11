@@ -34,9 +34,8 @@ func (r *CaseDuplicateStagingRepository) Insert(ctx context.Context, cand app.Du
 			household_type, gender, birth_date, birth_date_raw, national_id_invalid,
 			care_contact_role, care_contact_name, registered_address, home_address,
 			service_category, service_usage_type,
-			site_id, site_name_raw, caregiver_id, outbound_vehicle_id, outbound_vehicle_name_raw,
-			inbound_vehicle_id, inbound_vehicle_name_raw, remarks, duplicate_case_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+			site_id, site_name_raw, caregiver_id, remarks, duplicate_case_id
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
 		ON CONFLICT (file_hash, row_key) DO NOTHING
 		RETURNING id
 	`,
@@ -45,8 +44,7 @@ func (r *CaseDuplicateStagingRepository) Insert(ctx context.Context, cand app.Du
 		cand.HouseholdType, cand.Gender, cand.BirthDate, cand.BirthDateRaw, cand.NationalIDInvalid,
 		cand.CareContactRole, cand.CareContactName, cand.RegisteredAddress, cand.HomeAddress,
 		cand.ServiceCategory, cand.ServiceUsageType,
-		cand.SiteID, cand.SiteNameRaw, cand.CaregiverID, cand.OutboundVehicleID, cand.OutboundVehicleNameRaw,
-		cand.InboundVehicleID, cand.InboundVehicleNameRaw, cand.Remarks, cand.DuplicateCaseID,
+		cand.SiteID, cand.SiteNameRaw, cand.CaregiverID, cand.Remarks, cand.DuplicateCaseID,
 	).Scan(&id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -65,8 +63,6 @@ const duplicateStagingSelectColumns = `
 	d.service_category, d.service_usage_type,
 	d.site_id, COALESCE(st.name, ''), d.site_name_raw,
 	d.caregiver_id, COALESCE(cg.name, ''),
-	d.outbound_vehicle_id, COALESCE(vo.display_name, ''), d.outbound_vehicle_name_raw,
-	d.inbound_vehicle_id, COALESCE(vi.display_name, ''), d.inbound_vehicle_name_raw,
 	d.remarks, d.duplicate_case_id, dc.name, d.status, d.resulting_case_id, d.resolved_at, d.resolved_by, d.created_at
 `
 
@@ -75,8 +71,6 @@ const duplicateStagingFrom = `
 	JOIN cases dc ON dc.id = d.duplicate_case_id
 	LEFT JOIN sites st ON st.id = d.site_id
 	LEFT JOIN caregivers cg ON cg.id = d.caregiver_id
-	LEFT JOIN vehicles vo ON vo.id = d.outbound_vehicle_id AND vo.deleted_at IS NULL
-	LEFT JOIN vehicles vi ON vi.id = d.inbound_vehicle_id AND vi.deleted_at IS NULL
 `
 
 func scanDuplicateCandidate(row pgx.Row) (*app.DuplicateCandidate, error) {
@@ -89,8 +83,6 @@ func scanDuplicateCandidate(row pgx.Row) (*app.DuplicateCandidate, error) {
 		&c.ServiceCategory, &c.ServiceUsageType,
 		&c.SiteID, &c.SiteName, &c.SiteNameRaw,
 		&c.CaregiverID, &c.CaregiverName,
-		&c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
-		&c.InboundVehicleID, &c.InboundVehicle, &c.InboundVehicleNameRaw,
 		&c.Remarks, &c.DuplicateCaseID, &c.DuplicateCaseName, &c.Status, &c.ResultingCaseID, &c.ResolvedAt, &c.ResolvedBy, &c.CreatedAt,
 	)
 	if err != nil {

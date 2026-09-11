@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type holidayProviderStub struct{}
@@ -29,6 +31,28 @@ func TestHolidayService_ImportTaiwanGovHolidays(t *testing.T) {
 	count, err := svc.ImportTaiwanGovHolidays(ctx, 2026, uuid.New(), "admin")
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, count, 6)
+}
+
+func TestHolidayService_ImportTaiwanGovHolidays_RejectsYearOutOfRange(t *testing.T) {
+	svc := NewHolidaySyncService(discardHolidayStore{}, nil, holidayProviderStub{})
+
+	_, err := svc.ImportTaiwanGovHolidays(context.Background(), 1999, uuid.New(), "admin")
+
+	assert.ErrorIs(t, err, ErrInvalidHolidayYear, "年份超出範圍應以獨立 sentinel error 回傳，與外部服務失敗區分")
+}
+
+type failingHolidayProvider struct{}
+
+func (failingHolidayProvider) Fetch(context.Context, int) ([]HolidayRecord, error) {
+	return nil, errors.New("connection reset by peer")
+}
+
+func TestHolidayService_ImportTaiwanGovHolidays_WrapsProviderFailure(t *testing.T) {
+	svc := NewHolidaySyncService(discardHolidayStore{}, nil, failingHolidayProvider{})
+
+	_, err := svc.ImportTaiwanGovHolidays(context.Background(), 2026, uuid.New(), "admin")
+
+	assert.ErrorIs(t, err, ErrGovHolidayFetchFailed, "外部行事曆來源失敗應以獨立 sentinel error 回傳，供 handler 映射 503")
 }
 
 // discardHolidayStore 接受任何寫入且回傳空清單，供不驗證持久化的 use case 測試使用。
@@ -64,7 +88,10 @@ func (f *fakeHolidayStore) Upsert(_ context.Context, h *Holiday) error {
 	return nil
 }
 func (f *fakeHolidayStore) BatchUpsert(context.Context, []Holiday) error { return nil }
-func (f *fakeHolidayStore) Delete(context.Context, time.Time) error     { return nil }
+func (f *fakeHolidayStore) Delete(_ context.Context, date time.Time) error {
+	delete(f.byDate, date.Format("2006-01-02"))
+	return nil
+}
 func (f *fakeHolidayStore) GetByDate(_ context.Context, date time.Time) (*Holiday, error) {
 	return f.byDate[date.Format("2006-01-02")], nil
 }
@@ -88,6 +115,28 @@ func TestHolidayService_UpsertHoliday_RejectsDateConflict(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHolidayDateConflict)
 	// 原本那筆不能被覆蓋掉。
 	assert.Equal(t, "測試假日A", store.byDate[date.Format("2006-01-02")].Name)
+}
+
+func TestHolidayService_DeleteHoliday_RejectsNonexistentDate(t *testing.T) {
+	store := newFakeHolidayStore()
+	svc := NewHolidayService(store, nil)
+
+	err := svc.DeleteHoliday(context.Background(), time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC), uuid.New(), "admin")
+
+	assert.ErrorIs(t, err, ErrHolidayNotFound, "刪除不存在的假日不應被當成成功，需回傳 ErrHolidayNotFound 供 handler 映射 404")
+}
+
+func TestHolidayService_DeleteHoliday_DeletesExistingDate(t *testing.T) {
+	store := newFakeHolidayStore()
+	svc := NewHolidayService(store, nil)
+	date := time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC)
+	_, err := svc.UpsertHoliday(context.Background(), UpsertHolidayInput{HolidayDate: date, Name: "國慶日", IsDayOff: true}, uuid.New(), "admin")
+	require.NoError(t, err)
+
+	err = svc.DeleteHoliday(context.Background(), date, uuid.New(), "admin")
+
+	assert.NoError(t, err)
+	assert.Nil(t, store.byDate[date.Format("2006-01-02")])
 }
 
 func TestHolidayService_UpsertHoliday_AllowsNewDate(t *testing.T) {

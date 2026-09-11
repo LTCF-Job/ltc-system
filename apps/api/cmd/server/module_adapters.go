@@ -278,9 +278,7 @@ func (a caseDuplicateStager) StageDuplicateRow(ctx context.Context, fileHash, ro
 		ServiceUsageType: intPointerOrNil(in.ServiceUsageType),
 		Remarks:          in.Remarks,
 		SiteID:           in.SiteID, SiteNameRaw: in.SiteNameRaw,
-		CaregiverID:       in.CaregiverID,
-		OutboundVehicleID: in.OutboundVehicleID, OutboundVehicleNameRaw: in.OutboundVehicleNameRaw,
-		InboundVehicleID: in.InboundVehicleID, InboundVehicleNameRaw: in.InboundVehicleNameRaw,
+		CaregiverID:     in.CaregiverID,
 		DuplicateCaseID: in.DuplicateCaseID,
 	})
 }
@@ -332,6 +330,18 @@ func (a driverReportDriverResolver) GetByNameNormalized(ctx context.Context, nam
 		return nil, nil
 	}
 	return &drapp.DriverRef{ID: d.ID, Name: d.Name}, nil
+}
+
+func (a driverReportDriverResolver) ListByNameNormalized(ctx context.Context, nameNorm string) ([]drapp.DriverRef, error) {
+	list, err := a.repo.ListByNameNormalized(ctx, nameNorm)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]drapp.DriverRef, 0, len(list))
+	for _, d := range list {
+		out = append(out, drapp.DriverRef{ID: d.ID, Name: d.Name})
+	}
+	return out, nil
 }
 
 // driverReportAttendanceRegistrar 讓 driverreport 比對到司機時，同步該司機當天的出勤登記。
@@ -507,4 +517,36 @@ func (a caseDuplicateFinder) FindDuplicate(ctx context.Context, nationalID, name
 		return nil, err
 	}
 	return &importapp.DuplicateRef{CaseID: found.ID, CaseName: found.Name}, nil
+}
+
+// sitePendingRelinker 讓據點主檔新增或改名時，重新比對名稱相符的待維護個案。
+type sitePendingRelinker struct{ svc *caseapp.CaseService }
+
+func (a sitePendingRelinker) RelinkByName(ctx context.Context, name string, actorID uuid.UUID, actorRole, ip, ua string) (int, error) {
+	return a.svc.RelinkSiteByName(ctx, name, actorID, actorRole, ip, ua)
+}
+
+// caregiverPendingRelinker 讓照護人員主檔新增或改名時，重新比對名稱相符的待維護個案。
+type caregiverPendingRelinker struct{ svc *caseapp.CaseService }
+
+func (a caregiverPendingRelinker) RelinkByName(ctx context.Context, name string, actorID uuid.UUID, actorRole, ip, ua string) (int, error) {
+	return a.svc.RelinkCaregiverByName(ctx, name, actorID, actorRole, ip, ua)
+}
+
+// driverPendingRelinker 讓司機主檔新增或改名時，重新比對名稱相符的待維護匯報回報。
+// 底層 AutoBindDriver／BindPendingDriver 不寫稽核，actor 參數僅為與其他三個 relinker
+// 共用同一個介面，此處不使用。
+type driverPendingRelinker struct{ svc *drapp.DriverReportService }
+
+func (a driverPendingRelinker) RelinkByName(ctx context.Context, name string, _ uuid.UUID, _, _, _ string) (int, error) {
+	return a.svc.AutoBindDriver(ctx, name)
+}
+
+// casePendingRelinker 讓個案主檔新增或改名時，重新比對名稱相符的待維護匯報表單欄位。
+// 底層 AutoBindColumnsForCase 不寫稽核，actor 參數僅為與其他三個 relinker 共用同一個
+// 介面，此處不使用。
+type casePendingRelinker struct{ svc *drapp.DriverReportService }
+
+func (a casePendingRelinker) RelinkByName(ctx context.Context, name string, _ uuid.UUID, _, _, _ string) (int, error) {
+	return a.svc.AutoBindColumnsForCase(ctx, name)
 }

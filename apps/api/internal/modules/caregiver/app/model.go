@@ -102,11 +102,15 @@ type CaregiverImportSkippedRow struct {
 	RawValues map[string]string `json:"rawValues"`
 }
 
-// CaregiverImportCommitResult 回傳正式匯入成功與略過的列。Warnings 承載已建立但
-// 仍待人工補齊姓名／類型的提示。
+// CaregiverImportCommitResult 回傳正式匯入成功、略過與失敗的列。SkippedRows 是使用者
+// 主動選擇不匯入的列（如未勾選的重複人員），FailedRows 是實際寫入資料庫失敗的列——
+// 兩者原因不同，分開回傳讓前端能分別呈現「略過」與「失敗」筆數，不再混在一起讓失敗
+// 誤以為是使用者自己選擇跳過。Warnings 承載已建立但仍待人工補齊姓名／類型的提示。
 type CaregiverImportCommitResult struct {
 	ImportedCount int                          `json:"importedCount"`
 	SkippedRows   []CaregiverImportSkippedRow  `json:"skippedRows"`
+	FailedCount   int                          `json:"failedCount"`
+	FailedRows    []CaregiverImportSkippedRow  `json:"failedRows,omitempty"`
 	Warnings      []CaregiverImportWarningItem `json:"warnings,omitempty"`
 }
 

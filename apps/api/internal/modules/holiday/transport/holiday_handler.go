@@ -111,7 +111,15 @@ func (h *HolidayHandler) Import(c *gin.Context) {
 
 	count, err := h.svc.ImportTaiwanGovHolidays(c.Request.Context(), req.Year, actorID, actorRole)
 	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "匯入官方假日失敗", nil)
+		if errors.Is(err, app.ErrInvalidHolidayYear) {
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "年份必須介於 2000 至 2100 之間", nil)
+			return
+		}
+		if errors.Is(err, app.ErrGovHolidayFetchFailed) {
+			httpx.RespondErrorCode(c, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, err, nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
@@ -131,7 +139,11 @@ func (h *HolidayHandler) Delete(c *gin.Context) {
 	actorRole := auth.GetActorRole(c)
 
 	if err := h.svc.DeleteHoliday(c.Request.Context(), date, actorID, actorRole); err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "刪除假日失敗", nil)
+		if errors.Is(err, app.ErrHolidayNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無此日期的假日設定，可能已被其他人刪除", nil)
+			return
+		}
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 

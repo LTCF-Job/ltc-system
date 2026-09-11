@@ -18,12 +18,18 @@ type CaseStore interface {
 	CreateSchedule(ctx context.Context, s *CaseSchedule) error
 	GetActiveScheduleForCaseOnDate(ctx context.Context, caseID uuid.UUID, serviceDate time.Time) (*CaseSchedule, error)
 	GetActiveSchedulesForMonth(ctx context.Context, year, month int) ([]ActiveCaseScheduleInfo, error)
-	// UpsertTransportPreference 以 PUT 完整替換個案的去回程車輛偏好。nil 的 ID
-	// 代表清除欄位；raw name 僅在沒有對應 ID 時保留來源名稱供人工關聯。據點已改由
-	// 個案本身持有（見 Update），不在此處理。
-	UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error
 	SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error)
 	CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error
+	// RelinkSiteByName 依名稱重新比對待維護個案的據點，唯一命中才寫入並回傳受影響的個案 ID。
+	RelinkSiteByName(ctx context.Context, name string) ([]uuid.UUID, error)
+	// RelinkCaregiverByName 依名稱重新比對待維護個案的照護人員，規則與匯入時的
+	// resolveCaregiver 一致，唯一命中才寫入並回傳受影響的個案 ID。
+	RelinkCaregiverByName(ctx context.Context, name string) ([]uuid.UUID, error)
+	// ListPendingSiteNames 列出目前待維護個案中相異的據點原始名稱，供「重新比對」按鈕使用。
+	ListPendingSiteNames(ctx context.Context) ([]string, error)
+	// ListPendingCaregiverNames 列出目前待維護個案中相異的照護人員原始姓名，供
+	// 「重新比對」按鈕使用。
+	ListPendingCaregiverNames(ctx context.Context) ([]string, error)
 }
 
 // DuplicateStagingStore 定義疑似重複個案暫存列的讀寫邊界；裁決前不落地到 cases 表。
@@ -41,14 +47,6 @@ type DuplicateStagingStore interface {
 // AuditWriter 定義個案異動留痕的寫入邊界。
 type AuditWriter interface {
 	Write(ctx context.Context, e AuditEntry) error
-}
-
-// AuditContext 是交通偏好等跨層呼叫所需的操作者與來源資訊。
-type AuditContext struct {
-	ActorID   uuid.UUID
-	ActorRole string
-	IPAddress string
-	UserAgent string
 }
 
 // TransactionRunner 封裝需要跨多筆資料異動的交易邊界。

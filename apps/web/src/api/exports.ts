@@ -26,12 +26,18 @@ export async function precheckExport(params: {
 export async function createRegionExportJobs(
   data: RegionExportRequest
 ): Promise<RegionExportResultDTO> {
-  const res = await apiClient.post('/exports/by-region', data)
+  // 後端會逐月產檔並上傳 object storage，時間可能超過全域 30 秒 timeout；
+  // 在非同步工作架構完成前，這個同步端點必須由 client 等待完整回應。
+  const res = await apiClient.post('/exports/by-region', data, { timeout: 0 })
   return unwrapData<RegionExportResultDTO>(res)
 }
 
 export async function createExportJob(data: CreateExportJobRequest): Promise<ExportJobDTO> {
-  const res = await apiClient.post('/exports', data)
+  // 逐案匯出同步產生每一份工作簿，個案數一多處理時間就可能超過預設的 30 秒
+  // axios timeout；比照 createRegionExportJobs 對應的後端路由也解除逾時限制
+  // （routes.go 的 extendedImportDeadlineMiddleware），改用 timeout: 0 交給
+  // 使用者自行等待，不讓長時間匯出被前端提前判定逾時。
+  const res = await apiClient.post('/exports', data, { timeout: 0 })
   return unwrapData<ExportJobDTO>(res)
 }
 

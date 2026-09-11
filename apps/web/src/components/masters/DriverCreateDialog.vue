@@ -100,6 +100,7 @@ import { createDriver, listAllVehicles } from '@/api/masters'
 import { DRIVER_LICENSE_CLASS_LABELS } from '@/types/domain'
 import type { CreateDriverRequest, DriverDTO, VehicleDTO } from '@/types/api'
 import { nationalIdRules } from '@/utils/driverForm'
+import { notifyPendingRelinked } from '@/utils/pendingRelink'
 
 // 跟司機管理頁「新增司機」共用同一份欄位與 API，避免兩邊各自維護造成落差；
 // 編輯流程不在本元件範圍，維持在司機管理頁自行處理。
@@ -180,8 +181,9 @@ async function handleConfirm() {
         ...form,
         vehicleId: form.vehicleId || undefined
       }
-      const created = await createDriver(payload)
+      const { data: created, meta } = await createDriver(payload)
       ElMessage.success(`司機「${created.name}」建立成功`)
+      notifyPendingRelinked(meta)
       emit('update:modelValue', false)
       emit('created', created)
     } finally {

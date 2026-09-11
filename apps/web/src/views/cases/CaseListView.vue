@@ -177,11 +177,28 @@
     </DataTablePage>
     </el-tab-pane>
 
-    <!-- 待維護：據點/去回程車輛比對不到主檔、生日或身分證字號格式錯誤、疑似重複個案，
+    <!-- 待維護：據點/照護人員比對不到主檔、生日或身分證字號格式錯誤、疑似重複個案，
          合併成一列一實體＋彙總問題欄的呈現方式（版面比照照護人員管理待維護頁籤） -->
     <el-tab-pane label="待維護" name="unresolved">
       <div v-loading="unresolvedLoading" class="pending-panel">
-        <el-empty v-if="!unresolvedLoading && pendingRows.length === 0" description="目前沒有待維護的個案" />
+        <div class="pending-toolbar">
+          <el-button :loading="relinkPendingSaving" @click="handleRelinkPending">重新比對</el-button>
+        </div>
+        <el-alert
+          v-if="pendingLoadError"
+          type="error"
+          :closable="false"
+          show-icon
+          role="alert"
+          class="pending-load-error"
+        >
+          <template #title>待維護清單載入失敗</template>
+          <div class="pending-load-error-actions">
+            <span>請重新載入後再試一次。</span>
+            <el-button type="danger" plain size="small" :loading="unresolvedLoading" @click="fetchPendingData">重新載入</el-button>
+          </div>
+        </el-alert>
+        <el-empty v-else-if="!unresolvedLoading && pendingRows.length === 0" description="目前沒有待維護的個案" />
         <el-table v-else v-table-auto-width :data="pendingRows" border stripe row-key="key" style="width: 100%">
           <el-table-column prop="name" label="姓名" min-width="90" class-name="unresolved-name-col" />
           <el-table-column label="問題" min-width="260" class-name="unresolved-issue-col">
@@ -219,13 +236,13 @@
     </el-tab-pane>
     </el-tabs>
 
-    <!-- 待維護個案編輯彈窗：只顯示該列實際缺漏的欄位（據點/照護人員/車輛關聯、生日、身分證字號） -->
+    <!-- 待維護個案編輯彈窗：只顯示該列實際缺漏的欄位（據點/照護人員關聯、生日、身分證字號） -->
     <el-dialog v-model="pendingEditVisible" title="補齊個案資料" width="min(600px, calc(100vw - 32px))">
       <template v-if="pendingEditTarget">
         <p class="pending-edit-hint">
           匯入「{{ pendingEditTarget.name }}」時，以下欄位無法對應到既有主檔或格式不正確。補齊並儲存後，這筆個案就會離開待維護清單。
         </p>
-        <el-form label-width="110px">
+        <el-form ref="pendingEditFormRef" :model="pendingEditForm" :rules="pendingEditRules" label-width="110px">
           <el-form-item v-if="pendingEditTarget.siteNameRaw" label="據點">
             <div class="pending-edit-field">
               <span class="pending-edit-raw">原始名稱：{{ pendingEditTarget.siteNameRaw }}</span>
@@ -233,7 +250,7 @@
                 <el-select v-model="pendingEditForm.siteId" filterable placeholder="選擇既有據點" class="pending-edit-input">
                   <el-option v-for="site in availableSites" :key="site.id" :value="site.id" :label="site.name" />
                 </el-select>
-                <el-button link type="primary" size="small" @click="openQuickCreate('site', pendingEditTarget)">新增據點</el-button>
+                <el-button link type="primary" size="small" @click="openQuickCreate(pendingEditTarget)">新增據點</el-button>
               </div>
             </div>
           </el-form-item>
@@ -254,28 +271,6 @@
               </div>
             </div>
           </el-form-item>
-          <el-form-item v-if="pendingEditTarget.outboundVehicleNameRaw" label="去程車輛">
-            <div class="pending-edit-field">
-              <span class="pending-edit-raw">原始名稱：{{ pendingEditTarget.outboundVehicleNameRaw }}</span>
-              <div class="pending-edit-control">
-                <el-select v-model="pendingEditForm.outboundVehicleId" filterable placeholder="選擇既有車輛" class="pending-edit-input">
-                  <el-option v-for="vehicle in availableVehicles" :key="vehicle.id" :value="vehicle.id" :label="vehicle.displayName" />
-                </el-select>
-                <el-button link type="primary" size="small" @click="openQuickCreate('vehicle', pendingEditTarget, 'outboundVehicle')">新增車輛</el-button>
-              </div>
-            </div>
-          </el-form-item>
-          <el-form-item v-if="pendingEditTarget.inboundVehicleNameRaw" label="回程車輛">
-            <div class="pending-edit-field">
-              <span class="pending-edit-raw">原始名稱：{{ pendingEditTarget.inboundVehicleNameRaw }}</span>
-              <div class="pending-edit-control">
-                <el-select v-model="pendingEditForm.inboundVehicleId" filterable placeholder="選擇既有車輛" class="pending-edit-input">
-                  <el-option v-for="vehicle in availableVehicles" :key="vehicle.id" :value="vehicle.id" :label="vehicle.displayName" />
-                </el-select>
-                <el-button link type="primary" size="small" @click="openQuickCreate('vehicle', pendingEditTarget, 'inboundVehicle')">新增車輛</el-button>
-              </div>
-            </div>
-          </el-form-item>
           <el-form-item v-if="pendingEditTarget.birthDateRaw" label="生日">
             <div class="pending-edit-field">
               <span class="pending-edit-raw">原始字串：{{ pendingEditTarget.birthDateRaw }}</span>
@@ -284,7 +279,7 @@
               </div>
             </div>
           </el-form-item>
-          <el-form-item v-if="pendingEditTarget.nationalIdInvalid" label="身分證字號">
+          <el-form-item v-if="pendingEditTarget.nationalIdInvalid" label="身分證字號" prop="nationalId">
             <div class="pending-edit-field">
               <div class="pending-edit-control">
                 <el-input v-model="pendingEditForm.nationalId" placeholder="請重新輸入完整身分證字號" class="pending-edit-input" />
@@ -312,8 +307,6 @@
         </el-descriptions-item>
         <el-descriptions-item label="疑似重複之既有個案">{{ duplicateResolveTarget.duplicateCaseName }}</el-descriptions-item>
         <el-descriptions-item label="據點">{{ duplicateResolveTarget.siteNameRaw || duplicateResolveTarget.siteName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="去程車輛">{{ duplicateResolveTarget.outboundVehicleNameRaw || duplicateResolveTarget.outboundVehicle || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="回程車輛">{{ duplicateResolveTarget.inboundVehicleNameRaw || duplicateResolveTarget.inboundVehicle || '-' }}</el-descriptions-item>
         <el-descriptions-item label="備註">{{ duplicateResolveTarget.remarks || '-' }}</el-descriptions-item>
       </el-descriptions>
       <el-checkbox v-model="duplicateMergeRemarks" style="margin-top: 12px" label="若視為既有個案，一併把備註併入既有個案" />
@@ -330,10 +323,9 @@
       </template>
     </el-dialog>
 
-    <!-- 新增據點/車輛快速建立彈窗 -->
-    <el-dialog v-model="quickCreateVisible" :title="quickCreateKind === 'site' ? '新增據點' : '新增車輛'" width="min(480px, calc(100vw - 32px))">
+    <!-- 新增據點快速建立彈窗 -->
+    <el-dialog v-model="quickCreateVisible" title="新增據點" width="min(480px, calc(100vw - 32px))">
       <el-form
-        v-if="quickCreateKind === 'site'"
         ref="quickCreateSiteFormRef"
         :model="quickCreateSiteForm"
         :rules="quickCreateSiteRules"
@@ -353,16 +345,7 @@
             <el-option v-for="option in caseRegionOptions" :key="option" :label="option" :value="option" />
           </el-select>
         </el-form-item>
-        <el-form-item label="地址"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
-      </el-form>
-      <el-form
-        v-else
-        ref="quickCreateVehicleFormRef"
-        :model="quickCreateVehicleForm"
-        :rules="vehicleFormRules"
-        label-width="150px"
-      >
-        <VehicleFormFields :form="quickCreateVehicleForm" />
+        <el-form-item label="地址" prop="address"><el-input v-model="quickCreateSiteForm.address" /></el-form-item>
       </el-form>
       <template #footer>
         <DialogFooter
@@ -434,7 +417,6 @@ import TableRowActions from '@/components/TableRowActions.vue'
 import ImportPreviewDialog from '@/components/ImportPreviewDialog.vue'
 import DialogFooter from '@/components/DialogFooter.vue'
 import CaseSelectDialog from '@/components/CaseSelectDialog.vue'
-import VehicleFormFields from '@/components/VehicleFormFields.vue'
 import CaseCreateDialog from '@/components/cases/CaseCreateDialog.vue'
 import {
   listCases,
@@ -445,19 +427,20 @@ import {
   exportCaseProfileWorkbook,
   dryRunImportCases,
   commitImportCases,
-  updateCaseTransportPreference,
   listCaseDuplicateCandidates,
   resolveCaseDuplicateCandidate,
-  discardCaseDuplicateCandidate
+  discardCaseDuplicateCandidate,
+  relinkPendingData
 } from '@/api/cases'
-import { listAllSites, listAllVehicles, listSites, listVehicles, createSite, createVehicle } from '@/api/masters'
+import { listAllSites, createSite } from '@/api/masters'
 import { listAllCaregivers } from '@/api/caregivers'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
 import { formatDate } from '@/utils/formatters'
 import { isValidNationalID } from '@/utils/nationalId'
-import { emptyVehicleForm, vehicleFormRules } from '@/utils/vehicleForm'
+import { notifyPendingRelinked } from '@/utils/pendingRelink'
+import { nationalIdRules } from '@/utils/driverForm'
 import {
   CASE_STATUS_LABELS,
   CAREGIVER_TYPE_LABELS,
@@ -470,10 +453,7 @@ import type {
   CaregiverDTO,
   CaseDTO,
   CaseDuplicateCandidateDTO,
-  CreateVehicleRequest,
-  SiteDTO,
-  UpdateCaseTransportPreferenceRequest,
-  VehicleDTO
+  SiteDTO
 } from '@/types/api'
 
 // 匯入預覽的生日僅供人工核對，改用民國年顯示；後端仍以西元 ISO 日期解析與儲存
@@ -646,7 +626,7 @@ async function handleCommitImport(file: File) {
   return commitImportCases(file)
 }
 
-// 匯入完成後，若有列進入待維護（據點/車輛待關聯、生日/身分證字號待補正、疑似重複個案
+// 匯入完成後，若有列進入待維護（據點/照護人員待關聯、生日/身分證字號待補正、疑似重複個案
 // 待裁決），導引使用者前往「待維護」頁籤處理；無論點選哪個按鈕都視為使用者已確認匯入
 // 結果，一併關閉匯入視窗
 function handleImportSuccess() {
@@ -660,7 +640,7 @@ function handleImportSuccess() {
       activeTab.value = 'unresolved'
       unresolvedLoaded = true
       fetchPendingData()
-      loadSitesAndVehicles()
+      loadSitesAndCaregivers()
     })
     .catch(() => {})
     .finally(() => {
@@ -679,13 +659,13 @@ function handleCaseCreated() {
   executeFetch()
 }
 
-// 待維護頁籤：A/B 類（據點/車輛待關聯、生日/身分證字號待補正）與 C 類（疑似重複個案待裁決）
+// 待維護頁籤：A/B 類（據點/照護人員待關聯、生日/身分證字號待補正）與 C 類（疑似重複個案待裁決）
 // 分別來自不同 API，合併成一列一實體＋彙總問題欄呈現（比照照護人員管理待維護頁籤）。
 const unresolvedLoading = ref(false)
+const pendingLoadError = ref(false)
 const unresolvedCases = ref<CaseDTO[]>([])
 const duplicateCandidates = ref<CaseDuplicateCandidateDTO[]>([])
 const availableSites = ref<SiteDTO[]>([])
-const availableVehicles = ref<VehicleDTO[]>([])
 const availableCaregivers = ref<CaregiverDTO[]>([])
 
 interface PendingCaseRow extends CaseDTO {
@@ -707,8 +687,6 @@ function caseIssues(row: CaseDTO): string[] {
   if (row.siteNameRaw) issues.push('據點待關聯')
   // 匯入時填了照護人員姓名但比對不到主檔：後端的 caregiver_pending 就是這個條件。
   if (!row.caregiverId && row.careContactName) issues.push('照護人員待關聯')
-  if (row.outboundVehicleNameRaw) issues.push('去程車輛待關聯')
-  if (row.inboundVehicleNameRaw) issues.push('回程車輛待關聯')
   if (row.birthDateRaw) issues.push('生日待補正')
   if (row.nationalIdInvalid) issues.push('身分證字號待補打')
   return issues
@@ -734,67 +712,65 @@ async function fetchDuplicateCandidates() {
 
 async function fetchPendingData() {
   unresolvedLoading.value = true
+  pendingLoadError.value = false
   try {
     await Promise.all([fetchUnresolvedCases(), fetchDuplicateCandidates()])
   } catch {
-    // 全域攔截器負責顯示 API 錯誤。
+    // 全域攔截器負責顯示 API 錯誤；另外標記載入失敗，避免清單空白時被誤讀成
+    // 「目前沒有待維護的個案」這種合法空狀態。
+    pendingLoadError.value = true
   } finally {
     unresolvedLoading.value = false
   }
 }
 
-async function loadSitesAndVehicles() {
-  const [sitesRes, vehiclesRes, caregiversRes] = await Promise.all([
+const relinkPendingSaving = ref(false)
+
+async function handleRelinkPending() {
+  relinkPendingSaving.value = true
+  try {
+    const result = await relinkPendingData()
+    const total = result.sites + result.caregivers + result.drivers + result.caseColumns
+    if (total > 0) {
+      ElMessage.success(`已自動關聯 ${total} 筆待維護資料`)
+      await fetchPendingData()
+    } else {
+      ElMessage.info('目前沒有可自動關聯的待維護資料')
+    }
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  } finally {
+    relinkPendingSaving.value = false
+  }
+}
+
+async function loadSitesAndCaregivers() {
+  const [sitesRes, caregiversRes] = await Promise.all([
     listAllSites({ status: 'active' }),
-    listAllVehicles({ status: 'active' }),
     listAllCaregivers({ status: 'active' })
   ])
   availableSites.value = sitesRes
-  availableVehicles.value = vehiclesRes
   availableCaregivers.value = caregiversRes
 }
 
-type UnresolvedSlot = 'site' | 'outboundVehicle' | 'inboundVehicle'
+type UnresolvedSlot = 'site'
 
-const SLOT_ID_FIELD: Record<'outboundVehicle' | 'inboundVehicle', 'outboundVehicleId' | 'inboundVehicleId'> = {
-  outboundVehicle: 'outboundVehicleId',
-  inboundVehicle: 'inboundVehicleId'
-}
-const SLOT_RAW_FIELD: Record<'outboundVehicle' | 'inboundVehicle', 'outboundVehicleNameRaw' | 'inboundVehicleNameRaw'> = {
-  outboundVehicle: 'outboundVehicleNameRaw',
-  inboundVehicle: 'inboundVehicleNameRaw'
-}
-
-// 據點改走個案主檔（PATCH /cases/:id）；去回程車輛仍是交通偏好的完整替換，
-// 保留同一列中尚未處理的既有關聯與原始名稱。
-async function handleLinkSlot(row: CaseDTO, slot: UnresolvedSlot, entityId: string) {
-  if (!entityId) return
+// 據點改走個案主檔（PATCH /cases/:id）。回傳是否成功，讓呼叫端（例如快速新增據點後
+// 接著關聯）可以判斷關聯是否真的完成，不能只看建立資源本身有沒有成功。
+async function handleLinkSlot(row: CaseDTO, slot: UnresolvedSlot, entityId: string): Promise<boolean> {
+  if (!entityId) return false
   try {
-    if (slot === 'site') {
-      await updateCase(row.id, { siteId: entityId })
-      row.siteId = entityId
-      row.siteNameRaw = undefined
-    } else {
-      // 這支 API 是完整替換：另一欄還沒關聯的原始名稱要原樣回送，否則會被清成 NULL，
-      // 該列就無聲離開待維護清單，匯入時填的名稱也再也找不回來
-      const payload: UpdateCaseTransportPreferenceRequest = {
-        outboundVehicleId: row.outboundVehicleId || null,
-        inboundVehicleId: row.inboundVehicleId || null,
-        outboundVehicleNameRaw: row.outboundVehicleNameRaw || '',
-        inboundVehicleNameRaw: row.inboundVehicleNameRaw || ''
-      }
-      payload[SLOT_ID_FIELD[slot]] = entityId
-      payload[SLOT_RAW_FIELD[slot]] = ''
-      await updateCaseTransportPreference(row.id, payload)
-      ;(row as any)[SLOT_ID_FIELD[slot]] = entityId
-      ;(row as any)[SLOT_RAW_FIELD[slot]] = undefined
-    }
-    if (!row.siteNameRaw && !row.outboundVehicleNameRaw && !row.inboundVehicleNameRaw) {
+    await updateCase(row.id, { siteId: entityId })
+    row.siteId = entityId
+    row.siteNameRaw = undefined
+    if (!row.siteNameRaw) {
       unresolvedCases.value = unresolvedCases.value.filter((c) => c.id !== row.id)
     }
     ElMessage.success(`個案「${row.name}」已完成關聯`)
+    return true
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
+    return false
   }
 }
 
@@ -806,76 +782,107 @@ const pendingEditSaving = ref(false)
 const pendingEditForm = reactive<{
   siteId: string
   caregiverId: string
-  outboundVehicleId: string
-  inboundVehicleId: string
   birthDate: string
   nationalId: string
-}>({ siteId: '', caregiverId: '', outboundVehicleId: '', inboundVehicleId: '', birthDate: '', nationalId: '' })
+}>({ siteId: '', caregiverId: '', birthDate: '', nationalId: '' })
+const pendingEditFormRef = ref<FormInstance>()
+// 身分證字號待補正欄位套用與司機共用的格式規則（含檢查碼），不必等後端 400 才知道格式錯誤；
+// 選填而非必填，因為只有使用者實際輸入時才會送出這個欄位。
+const pendingEditRules = { nationalId: nationalIdRules(false) }
 
 function openPendingCaseEdit(row: PendingCaseRow) {
   // pendingRows 是 computed 展開出來的副本，改副本不會反映到清單上；一律取回原始列物件
   pendingEditTarget.value = unresolvedCases.value.find((c) => c.id === row.id) ?? row
   pendingEditForm.siteId = ''
   pendingEditForm.caregiverId = ''
-  pendingEditForm.outboundVehicleId = ''
-  pendingEditForm.inboundVehicleId = ''
   pendingEditForm.birthDate = ''
   pendingEditForm.nationalId = ''
   pendingEditVisible.value = true
 }
 
+// 逐欄位 PATCH：每個欄位各自 try/catch 而非共用一個，這樣中途某欄失敗不會讓前面
+// 已經成功送出的欄位變成「沒有回饋」；結束後彙整成功/失敗欄位清單告知使用者，
+// 且完全沒有填寫任何欄位時直接擋下，不再顯示假的成功訊息。
 async function handlePendingEditSubmit() {
   const row = pendingEditTarget.value
   if (!row) return
+
+  const hasAnyInput =
+    !!pendingEditForm.siteId ||
+    !!pendingEditForm.caregiverId ||
+    !!pendingEditForm.birthDate ||
+    !!pendingEditForm.nationalId
+  if (!hasAnyInput) {
+    ElMessage.warning('請至少填寫一項要補正的欄位後再送出')
+    return
+  }
+
   pendingEditSaving.value = true
-  try {
-    // 據點改走個案主檔更新；去回程車輛沒有挑任何關聯就不要送出：這支 API 是完整替換，
-    // 空送一次會把另一欄尚未處理的原始名稱一併清成 NULL。有挑的那欄才清掉自己的原始名稱。
-    if (pendingEditForm.siteId) {
+  const succeededFields: string[] = []
+  const failedFields: string[] = []
+
+  if (pendingEditForm.siteId) {
+    try {
       await updateCase(row.id, { siteId: pendingEditForm.siteId })
       row.siteId = pendingEditForm.siteId
       row.siteNameRaw = undefined
+      succeededFields.push('據點')
+    } catch {
+      failedFields.push('據點')
     }
-    if (pendingEditForm.caregiverId) {
+  }
+  if (pendingEditForm.caregiverId) {
+    try {
       await updateCase(row.id, { caregiverId: pendingEditForm.caregiverId })
       row.caregiverId = pendingEditForm.caregiverId
       row.caregiverName = availableCaregivers.value.find((c) => c.id === pendingEditForm.caregiverId)?.name
+      succeededFields.push('照護人員')
+    } catch {
+      failedFields.push('照護人員')
     }
-    if (pendingEditForm.outboundVehicleId || pendingEditForm.inboundVehicleId) {
-      const payload: UpdateCaseTransportPreferenceRequest = {
-        outboundVehicleId: pendingEditForm.outboundVehicleId || row.outboundVehicleId || null,
-        inboundVehicleId: pendingEditForm.inboundVehicleId || row.inboundVehicleId || null,
-        outboundVehicleNameRaw: pendingEditForm.outboundVehicleId ? '' : row.outboundVehicleNameRaw || '',
-        inboundVehicleNameRaw: pendingEditForm.inboundVehicleId ? '' : row.inboundVehicleNameRaw || ''
-      }
-      await updateCaseTransportPreference(row.id, payload)
-      if (pendingEditForm.outboundVehicleId) {
-        row.outboundVehicleId = pendingEditForm.outboundVehicleId
-        row.outboundVehicleNameRaw = undefined
-      }
-      if (pendingEditForm.inboundVehicleId) {
-        row.inboundVehicleId = pendingEditForm.inboundVehicleId
-        row.inboundVehicleNameRaw = undefined
-      }
-    }
-    if (row.birthDateRaw && pendingEditForm.birthDate) {
+  }
+  if (row.birthDateRaw && pendingEditForm.birthDate) {
+    try {
       await updateCase(row.id, { birthDate: pendingEditForm.birthDate })
       row.birthDateRaw = undefined
+      succeededFields.push('生日')
+    } catch {
+      failedFields.push('生日')
     }
-    if (row.nationalIdInvalid && pendingEditForm.nationalId) {
-      await updateCase(row.id, { nationalId: pendingEditForm.nationalId })
-      row.nationalIdInvalid = false
+  }
+  if (row.nationalIdInvalid && pendingEditForm.nationalId) {
+    const formatOk = await pendingEditFormRef.value?.validateField('nationalId').catch(() => false)
+    if (!formatOk) {
+      failedFields.push('身分證字號（格式不正確）')
+    } else {
+      try {
+        await updateCase(row.id, { nationalId: pendingEditForm.nationalId })
+        row.nationalIdInvalid = false
+        succeededFields.push('身分證字號')
+      } catch {
+        failedFields.push('身分證字號')
+      }
     }
-    const caregiverPending = !row.caregiverId && !!row.careContactName
-    if (!row.siteNameRaw && !caregiverPending && !row.outboundVehicleNameRaw && !row.inboundVehicleNameRaw && !row.birthDateRaw && !row.nationalIdInvalid) {
-      unresolvedCases.value = unresolvedCases.value.filter((c) => c.id !== row.id)
-    }
+  }
+
+  const caregiverPending = !row.caregiverId && !!row.careContactName
+  if (!row.siteNameRaw && !caregiverPending && !row.birthDateRaw && !row.nationalIdInvalid) {
+    unresolvedCases.value = unresolvedCases.value.filter((c) => c.id !== row.id)
+  }
+
+  pendingEditSaving.value = false
+
+  if (failedFields.length === 0) {
     ElMessage.success(`個案「${row.name}」資料已更新`)
     pendingEditVisible.value = false
-  } catch {
-    // 全域攔截器負責顯示 API 錯誤（含身分證字號格式錯誤 400、與既有個案衝突 409）。
-  } finally {
-    pendingEditSaving.value = false
+    return
+  }
+  // 個別 API 錯誤（含身分證字號格式錯誤 400、與既有個案衝突 409）已由全域攔截器顯示；
+  // 這裡另外彙整成功/失敗欄位，讓使用者知道哪些要重新處理，視窗保留開啟方便重試。
+  if (succeededFields.length > 0) {
+    ElMessage.warning(`個案「${row.name}」部分欄位更新失敗（${failedFields.join('、')}），已成功：${succeededFields.join('、')}，請重新確認後再試一次`)
+  } else {
+    ElMessage.error(`個案「${row.name}」欄位更新失敗（${failedFields.join('、')}），請確認後再試一次`)
   }
 }
 
@@ -919,36 +926,28 @@ async function handleDuplicateResolve(decision: 'confirmed_new' | 'merged_existi
   }
 }
 
-// 新增據點/車輛快速建立彈窗
+// 新增據點快速建立彈窗
 const quickCreateVisible = ref(false)
-const quickCreateKind = ref<'site' | 'vehicle'>('site')
 const quickCreateSaving = ref(false)
 const quickCreateTargetCase = ref<CaseDTO | null>(null)
-const quickCreateSlot = ref<UnresolvedSlot>('site')
 const quickCreateSiteForm = reactive({ name: '', region: '', address: '' })
 const quickCreateSiteFormRef = ref<FormInstance>()
-// 與據點主檔（SiteListView）同一組必填條件：這條捷徑同樣不能建出沒有區域的據點，
-// 否則該據點的個案會從區域篩選中整批消失。
+// 與據點主檔（SiteListView）同一組必填條件：這條捷徑同樣不能建出沒有區域或地址的
+// 據點，否則該據點的個案會從區域篩選中整批消失，或在後端 ErrSiteAddressRequired
+// 檢查下建立失敗卻沒有對應的前端提示。
 const quickCreateSiteRules = {
   name: [{ required: true, message: '請輸入據點名稱', trigger: 'blur' }],
-  region: [{ required: true, message: '請輸入區域', trigger: 'change' }]
+  region: [{ required: true, message: '請輸入區域', trigger: 'change' }],
+  address: [{ required: true, message: '請輸入地址', trigger: 'blur' }]
 }
-const quickCreateVehicleForm = reactive<CreateVehicleRequest>(emptyVehicleForm())
-const quickCreateVehicleFormRef = ref<FormInstance>()
 
-// 據點/車輛名稱預先帶入匯入時的原始名稱，使用者只需確認其餘欄位即可送出，不必重打一次名稱
-function openQuickCreate(kind: 'site' | 'vehicle', row: CaseDTO, slot: UnresolvedSlot = 'site') {
-  quickCreateKind.value = kind
+// 據點名稱預先帶入匯入時的原始名稱，使用者只需確認其餘欄位即可送出，不必重打一次名稱
+function openQuickCreate(row: CaseDTO) {
   quickCreateTargetCase.value = row
-  quickCreateSlot.value = kind === 'site' ? 'site' : slot
-  quickCreateSiteForm.name = kind === 'site' ? row.siteNameRaw || '' : ''
+  quickCreateSiteForm.name = row.siteNameRaw || ''
   quickCreateSiteForm.region = ''
   quickCreateSiteForm.address = ''
-  Object.assign(quickCreateVehicleForm, emptyVehicleForm(), {
-    displayName: kind === 'vehicle' ? row[SLOT_RAW_FIELD[slot as 'outboundVehicle' | 'inboundVehicle']] || '' : ''
-  })
   quickCreateSiteFormRef.value?.clearValidate()
-  quickCreateVehicleFormRef.value?.clearValidate()
   quickCreateVisible.value = true
 }
 
@@ -956,18 +955,18 @@ async function handleQuickCreateAndLink() {
   if (!quickCreateTargetCase.value) return
   quickCreateSaving.value = true
   try {
-    if (quickCreateKind.value === 'site') {
-      if (!(await quickCreateSiteFormRef.value?.validate().catch(() => false))) return
-      const site = await createSite(quickCreateSiteForm)
-      availableSites.value.push(site)
-      // 新據點可能帶進尚未出現過的區域，篩選選項要一併補上
-      refreshCaseRegionOptions()
-      await handleLinkSlot(quickCreateTargetCase.value, 'site', site.id)
-    } else {
-      if (!(await quickCreateVehicleFormRef.value?.validate().catch(() => false))) return
-      const vehicle = await createVehicle({ ...quickCreateVehicleForm })
-      availableVehicles.value.push(vehicle)
-      await handleLinkSlot(quickCreateTargetCase.value, quickCreateSlot.value, vehicle.id)
+    if (!(await quickCreateSiteFormRef.value?.validate().catch(() => false))) return
+    const { data: site, meta } = await createSite(quickCreateSiteForm)
+    availableSites.value.push(site)
+    notifyPendingRelinked(meta)
+    // 新據點可能帶進尚未出現過的區域，篩選選項要一併補上
+    refreshCaseRegionOptions()
+    const linked = await handleLinkSlot(quickCreateTargetCase.value, 'site', site.id)
+    if (!linked) {
+      // 據點已建立成功，只是關聯個案失敗；不能直接關窗蓋掉這個落差，
+      // 使用者需要知道還要手動關聯一次。
+      ElMessage.warning(`據點「${site.name}」已建立，但尚未關聯至個案「${quickCreateTargetCase.value.name}」，請手動關聯`)
+      return
     }
     quickCreateVisible.value = false
   } catch {
@@ -982,7 +981,7 @@ let unresolvedLoaded = false
 async function handleTabChange(name: string | number) {
   if (name === 'unresolved' && !unresolvedLoaded) {
     unresolvedLoaded = true
-    await Promise.all([fetchPendingData(), loadSitesAndVehicles()])
+    await Promise.all([fetchPendingData(), loadSitesAndCaregivers()])
   }
 }
 
@@ -1008,11 +1007,24 @@ refreshCaseRegionOptions()
   overflow-x: auto;
 }
 
+.pending-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--app-space-3);
+}
+
 /* table-layout="auto" 底下 el-table 本體內建 width: 100%，即使拿掉 inline style
    仍會撐滿容器；要顯式蓋成 max-content 才會縮到「各欄寬度加總」，視窗夠寬時
    不再需要橫向卷軸（見 ltc-dashboard-visual-language skill 表格欄位一節）。 */
 .pending-panel :deep(.el-table) {
   width: max-content;
+}
+
+.pending-load-error-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2, 12px);
+  flex-wrap: wrap;
 }
 
 .pending-edit-hint {

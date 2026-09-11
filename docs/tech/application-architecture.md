@@ -55,7 +55,7 @@ Bounded context 是一組一致的業務語意與模型邊界，不等於單一�
 
 | Context／目標模組 | 所有權與主要模型 | 現有來源 |
 |---|---|---|
-| 個案管理 `casemgmt` | Case、Schedule；個案資料、排班規則、交通偏好、個案待維護、個案匯入 | casemgmt＋caseimport；calendar 核心 |
+| 個案管理 `casemgmt` | Case、Schedule；個案資料、排班規則、個案待維護、個案匯入 | casemgmt＋caseimport；calendar 核心 |
 | 運輸資源 `masterdata` | Site、Driver、Vehicle、Assignment；各自為獨立聚合 | masterdata |
 | 照護人員 `caregiver` | Caregiver 生命週期與其匯入 | caregiver |
 | 接送匯報 `driverreport` | ReportForm、ColumnMapping、Submission；欄位對應、原始匯報、匯入作業 | driverreport |

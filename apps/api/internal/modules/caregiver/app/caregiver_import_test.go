@@ -176,6 +176,27 @@ func TestParseCaregivers_RejectsNonExcelUpload(t *testing.T) {
 	_, err := svc.ParseCaregivers(context.Background(), bytes.NewReader([]byte("據點,姓名,類型,聯絡方式,備註\n竹南日照據點,王大明,個管,,")), "upload.csv")
 
 	assert.Error(t, err, "僅支援 .xlsx 匯入，CSV 上傳應回傳錯誤")
+	assert.ErrorIs(t, err, ErrUnsupportedFileType, "非 .xlsx 副檔名應歸類為檔案格式不支援，而非通用驗證錯誤")
+}
+
+func TestParseCaregivers_RejectsCorruptedXlsxAsUnreadable(t *testing.T) {
+	svc := NewCaregiverService(newFakeCaregiverStore(), testExcelReader{}, nil)
+
+	_, err := svc.ParseCaregivers(context.Background(), bytes.NewReader([]byte("not a real xlsx file")), "upload.xlsx")
+
+	assert.ErrorIs(t, err, ErrFileUnreadable, "副檔名為 .xlsx 但內容非有效 Excel 格式應歸類為檔案損毀")
+}
+
+// 找不到表頭時（如整份檔案是空白活頁簿或套用了錯誤範本）應明確回報「範本不符」，
+// 不能靜默回傳 totalRows:0 卻仍視為成功。
+func TestParseCaregivers_ReportsTemplateMismatchWhenHeaderMissing(t *testing.T) {
+	svc := NewCaregiverService(newFakeCaregiverStore(), testExcelReader{}, nil)
+
+	_, err := svc.ParseCaregivers(context.Background(), xlsxReader(t, []string{"不相干欄位"},
+		[]string{"某值"},
+	), "upload.xlsx")
+
+	assert.ErrorIs(t, err, ErrTemplateMismatch)
 }
 
 func TestParseCaregivers_FlagsDuplicateByName(t *testing.T) {
@@ -290,4 +311,27 @@ func TestCommitCaregivers_ImportsRowsAndReportsWarningsByField(t *testing.T) {
 		}
 	}
 	assert.True(t, sawSiteName)
+}
+
+// 寫入資料庫失敗（如 DB 故障）與使用者主動略過的重複列原因不同，必須分開回傳到
+// FailedRows／FailedCount，不能混在 SkippedRows 裡讓使用者誤以為是自己選擇跳過。
+func TestCommitCaregivers_ReportsWriteFailuresSeparatelyFromSkippedRows(t *testing.T) {
+	store := newFakeCaregiverStore()
+	store.createErr = assert.AnError
+	svc := NewCaregiverService(store, nil, nil)
+
+	preview := &CaregiverImportPreviewResult{
+		Rows: []CaregiverImportRowResult{
+			{RowIndex: 2, Name: "王大明", Type: CaregiverTypeCaseManager},
+		},
+	}
+
+	result, err := svc.CommitCaregivers(context.Background(), preview, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.ImportedCount)
+	assert.Empty(t, result.SkippedRows, "寫入失敗不應算進 SkippedRows")
+	assert.Equal(t, 1, result.FailedCount)
+	require.Len(t, result.FailedRows, 1)
+	assert.Equal(t, 2, result.FailedRows[0].RowIndex)
 }

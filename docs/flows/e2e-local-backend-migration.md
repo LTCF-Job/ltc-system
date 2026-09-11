@@ -13,7 +13,7 @@ MSW 已在本輪移除（`apps/web/src/mocks/` 整目錄、`demoMode.ts` 相關�
 
 > 更新：demo 資料平面（`apps/api/internal/modules/demo/`、`POST /demo/reset`、`ltc-api-demo` Cloud Run 服務與 `e2e-demo` CI job）已整套移除，系統現在只有 local／production 兩個環境。下方仍提到 demo 的段落是移除前的調查紀錄，供理解歷史脈絡，不能再依賴這些機制。
 >
-> 再更新（2026-09-07）：唯一還在用真實 API 的 `apps/web/tests/e2e-live/`（`demo-data-plane.spec.ts`、`validation-failure-paths.spec.ts`）與依賴它的 CI job `web-critical-smoke`（`.github/workflows/ci.yml`）已一併刪除——這兩支測試打的就是已經不存在的 Demo API，留著只是打不通的死程式碼。`apps/api/seed/demo/` 種子檔與 `httpx.CodeDemoResetFailed` 錯誤碼也一併移除。下方仍提到 `tests/e2e-live/`／`e2e-demo` job／`apps/api/seed/demo/` 的段落同樣是移除前的調查紀錄，現在都已不存在，不能再依賴。
+> 再更新（2026-09-11）：目前保留的 `apps/web/tests/e2e-live/demo-data-plane.spec.ts` 已改為測試現行 API 的 `/auth/me` 與公開 `/api/health`，並由 `.github/workflows/ci.yml` 的 `test:e2e:live` job 執行；缺少 `LIVE_*` secrets 時整份 skip。這支 live API-level 測試不等同本機完整 UI E2E，下面關於 `tests/e2e/` 的重建工作仍是待辦。
 
 ## 為什麼還沒做完
 
@@ -21,7 +21,7 @@ MSW 已在本輪移除（`apps/web/src/mocks/` 整目錄、`demoMode.ts` 相關�
 
 ## 已確認的現況
 
-- **CI 目前只跑 `go test` / `type-check` / `build`**：原本 `apps/web/tests/e2e-live/` 與依賴它的 CI job `web-critical-smoke` 已於 2026-09-07 一併刪除（打的是已移除的 Demo API），CI 上已經沒有任何 Playwright job。
+- **CI 目前跑 `go test` / `type-check` / `build`，並在有 secrets 時跑 live API-level Playwright**：`apps/web/tests/e2e-live/` 透過 `npm run test:e2e:live` 驗證現行 `/auth/me` 與 `/api/health`；缺少 secrets 時會明確 skip。完整本機 UI E2E 仍未接上真實 API。
 - **`tests/e2e/` 從未在 CI 跑過**，只是本機手動的回歸網，所以拆 MSW不會讓 CI 變紅，但本機失去了唯一的 UI 回歸覆蓋。
 - **三層依賴，MSW 拿掉後全部要處理**：
   1. `playwright.config.ts` / `playwright.config.local.ts` 把 `VITE_SUPABASE_URL` 指向 `http://mock.supabase.local`，靠 MSW 的 `handlers/supabaseAuth.ts` 攔截 `/auth/v1/token` 回傳假 session——這個攔截機制已經不存在。
@@ -46,5 +46,5 @@ MSW 已在本輪移除（`apps/web/src/mocks/` 整目錄、`demoMode.ts` 相關�
 - `npm run test:e2e`（本機、非 CI）能在乾淨環境從頭跑到尾，不依賴任何已刪除的 MSW 機制。
 - 斷言不再有寫死的假資料具體內容（姓名、筆數等），改為測試自建資料或明確定義的種子基準。
 - 至少一支 spec 涵蓋權限矩陣行為（不同角色看到不同畫面／操作被擋）。
-- `tests/e2e-live/` 與其 CI job 已刪除，不需要再考慮相容性。
+- `tests/e2e-live/` 的 live API-level job 已接回 CI；若要擴充為完整本機 UI E2E，仍須先完成本文件其餘資料庫啟動、seed 與測試隔離工作。
 - 若受限於環境無法起本機 DB/Postgres 驗證到底，至少要誠實記錄卡在哪裡，不要宣稱測試通過但實際沒跑過。

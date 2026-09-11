@@ -24,40 +24,18 @@
         stripe
         row-key="id"
         style="width: 100%"
-        :expand-row-keys="expandedIds"
-        @expand-change="onExpandChange"
       >
-        <el-table-column type="expand">
+        <el-table-column label="車輛" min-width="180" class-name="vehicle-col">
           <template #default="{ row }">
-            <div class="months-detail">
-              <template v-if="monthsByForm.get(row.id)?.length">
-                <div
-                  v-for="m in monthsByForm.get(row.id)"
-                  :key="m.yearMonth"
-                  class="month-item month-item--clickable"
-                  @click="openMonthDetail(row as DriverReportFormDTO, m.yearMonth)"
-                >
-                  <span class="month-label">{{ m.yearMonth }}</span>
-                  <span class="month-count">{{ m.submissionCount }} 天</span>
-                  <span class="text-secondary">最後匯入 {{ formatDateTime(m.lastImportedAt, '—') }}</span>
-                </div>
-              </template>
-              <p v-else class="text-secondary">這台車尚未有任何月份的匯入紀錄。</p>
-            </div>
+            {{ row.vehicleName }}<span v-if="vehiclePlate(row.vehicleId)" class="vehicle-plate font-mono">({{ vehiclePlate(row.vehicleId) }})</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="車輛" min-width="140" class-name="vehicle-col">
+        <el-table-column label="已有資料月份（近 3 個月）" min-width="380" class-name="months-col">
           <template #default="{ row }">
-            {{ row.vehicleName }}
-          </template>
-        </el-table-column>
-
-        <el-table-column label="已有資料月份" min-width="260" class-name="months-col">
-          <template #default="{ row }">
-            <div v-if="monthsByForm.get(row.id)?.length" class="month-tags">
+            <div v-if="recentMonths(row.id).length" class="month-tags">
               <el-tag
-                v-for="m in monthsByForm.get(row.id)"
+                v-for="m in recentMonths(row.id)"
                 :key="m.yearMonth"
                 size="small"
                 class="month-tag--clickable"
@@ -66,13 +44,35 @@
                 {{ m.yearMonth }}（{{ m.submissionCount }}天）
               </el-tag>
             </div>
-            <span v-else class="text-muted">尚未匯入</span>
+            <span v-else class="text-muted">近 3 個月尚無匯入紀錄</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="本月已匯入" width="110" align="center" class-name="report-nowrap-col">
+          <template #default="{ row }">
+            <StatusTag :status="currentMonthImported(row.id) ? 'imported' : 'pending'" preset="monthImportStatus" />
           </template>
         </el-table-column>
 
         <el-table-column label="最後匯入時間" min-width="170" align="center" class-name="report-nowrap-col import-time-col">
           <template #default="{ row }">
             {{ formatDateTime(row.lastImportedAt, '尚未匯入') }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="100" align="center" fixed="right" class-name="report-nowrap-col">
+          <template #default="{ row }">
+            <TableRowActions>
+              <el-button
+                link
+                type="info"
+                size="small"
+                :disabled="!monthsByForm.get(row.id)?.length"
+                @click="openLatestDetail(row as DriverReportFormDTO)"
+              >
+                查看明細
+              </el-button>
+            </TableRowActions>
           </template>
         </el-table-column>
 
@@ -86,52 +86,110 @@
       </template>
     </DataTablePage>
 
-    <!-- 單一月份匯入資料鑽取彈窗：逐日回報明細與逐個案搭乘紀錄兩個頁籤 -->
+    <!-- 單一月份匯入資料鑽取彈窗：左右主從版面，左側清單挑選日期／個案，右側顯示細節，
+         取代先前的全螢幕大表格，視窗貼合內容尺寸、點遮罩或 Esc 即可關閉回主頁 -->
     <el-dialog
       v-model="monthDialogVisible"
       :title="monthDialogTitle"
-      width="min(920px, calc(100vw - 32px))"
+      width="min(920px, 92vw)"
       destroy-on-close
+      class="month-detail-dialog"
     >
+      <div class="month-detail-summary">
+        <span class="summary-item">
+          <span class="summary-value">{{ monthSubmissions.length }}</span> 天回報明細
+        </span>
+        <span class="summary-divider" />
+        <span class="summary-item">
+          <span class="summary-value">{{ monthRideEntries.length }}</span> 筆搭乘紀錄
+        </span>
+      </div>
+
       <el-tabs v-model="monthDialogTab">
         <el-tab-pane label="逐日回報明細" name="submissions">
-          <div v-loading="monthDetailLoading" class="month-detail-scroll-body">
+          <div v-loading="monthDetailLoading" class="detail-split">
             <el-empty v-if="!monthDetailLoading && !monthSubmissions.length" description="這個月沒有逐日回報資料" />
-            <el-table v-else v-table-auto-width :data="monthSubmissions" border stripe style="width: 100%">
-              <el-table-column label="服務日期" prop="serviceDate" min-width="120" align="center" class-name="report-nowrap-col report-date-col" />
-              <el-table-column label="駕駛人（原始）" prop="driverNameRaw" min-width="140" class-name="report-nowrap-col report-raw-driver-col" />
-              <el-table-column label="備註" prop="remark" min-width="140" show-overflow-tooltip class-name="report-remark-col" />
-              <el-table-column label="原始欄位內容" min-width="280" class-name="report-answers-col">
-                <template #default="{ row }">
-                  <div class="answers-list">
-                    <span v-for="(value, header) in row.answers" :key="header" class="answer-item">
-                      {{ header }}：{{ value }}
-                    </span>
+            <template v-else>
+              <div class="split-list">
+                <div
+                  v-for="s in monthSubmissions"
+                  :key="s.serviceDate"
+                  class="split-list-row"
+                  :class="{ active: s.serviceDate === activeServiceDate }"
+                  @click="activeServiceDate = s.serviceDate"
+                >
+                  <span>{{ s.serviceDate }}</span>
+                  <span class="split-list-badge">{{ Object.keys(s.answers || {}).length }}</span>
+                </div>
+              </div>
+              <div class="split-detail">
+                <template v-if="activeSubmission">
+                  <div class="detail-head">
+                    <strong>{{ activeSubmission.serviceDate }}</strong>
+                    <span class="text-secondary">駕駛：{{ activeSubmission.driverNameRaw }}</span>
+                  </div>
+                  <p v-if="activeSubmission.remark" class="detail-remark">{{ activeSubmission.remark }}</p>
+                  <div class="answers-detail">
+                    <template v-if="Object.keys(activeSubmission.answers || {}).length">
+                      <div v-for="group in groupAnswersByCase(activeSubmission.answers)" :key="group.key" class="answer-group">
+                        <div v-for="item in group.items" :key="item.header" class="answer-row">
+                          <span class="answer-key">{{ item.header }}</span>
+                          <span class="answer-value">{{ item.value || '—' }}</span>
+                        </div>
+                      </div>
+                    </template>
+                    <p v-else class="text-secondary">這天沒有原始欄位資料。</p>
                   </div>
                 </template>
-              </el-table-column>
-            </el-table>
+              </div>
+            </template>
           </div>
         </el-tab-pane>
 
         <el-tab-pane label="逐個案搭乘紀錄" name="rideEntries">
-          <div v-loading="monthDetailLoading" class="month-detail-scroll-body">
+          <div v-loading="monthDetailLoading" class="detail-split">
             <el-empty v-if="!monthDetailLoading && !monthRideEntries.length" description="這個月沒有個案搭乘紀錄" />
-            <el-table v-else v-table-auto-width :data="monthRideEntries" border stripe style="width: 100%">
-              <el-table-column label="個案" prop="caseName" min-width="120" class-name="report-nowrap-col report-case-col" />
-              <el-table-column label="趟次" min-width="130" align="center" class-name="report-nowrap-col report-leg-col">
-                <template #default="{ row }">
-                  {{ legLabel(row.legSeq) }}
+            <template v-else>
+              <div class="split-list">
+                <div
+                  v-for="g in caseGroups"
+                  :key="g.caseId"
+                  class="split-list-row"
+                  :class="{ active: g.caseId === activeCaseId }"
+                  @click="activeCaseId = g.caseId"
+                >
+                  <span>{{ g.caseName }}</span>
+                  <span class="split-list-badge">{{ g.entries.length }}</span>
+                </div>
+              </div>
+              <div class="split-detail">
+                <template v-if="activeCaseGroup">
+                  <div class="detail-head"><strong>{{ activeCaseGroup.caseName }}</strong></div>
+                  <table class="dense-table">
+                    <thead>
+                      <tr>
+                        <th>服務日期</th>
+                        <th>趟次</th>
+                        <th>回報結果</th>
+                        <th>駕駛人</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(e, i) in activeCaseGroup.entries" :key="i">
+                        <td>{{ e.serviceDate }}</td>
+                        <td>{{ legLabel(e.legSeq) }}</td>
+                        <td>
+                          <el-tag size="small" :type="e.reported === 'boarded' ? 'success' : 'info'" disable-transitions>
+                            {{ e.reported === 'boarded' ? '有搭乘' : '未搭乘' }}
+                          </el-tag>
+                        </td>
+                        <td>{{ e.driverName }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </template>
-              </el-table-column>
-              <el-table-column label="服務日期" prop="serviceDate" min-width="120" align="center" class-name="report-nowrap-col report-date-col" />
-              <el-table-column label="回報結果" min-width="100" align="center" class-name="report-nowrap-col report-result-col">
-                <template #default="{ row }">
-                  {{ row.reported === 'boarded' ? '有搭乘' : '未搭乘' }}
-                </template>
-              </el-table-column>
-              <el-table-column label="駕駛人" prop="driverName" min-width="120" class-name="report-nowrap-col report-driver-col" />
-            </el-table>
+              </div>
+            </template>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -143,11 +201,14 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
+import StatusTag from '@/components/StatusTag.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import {
   listDriverReportForms,
   listDriverReportImportedMonths,
   getDriverReportMonthDetail
 } from '@/api/driverReports'
+import { listAllVehicles } from '@/api/masters'
 import { formatDateTime } from '@/utils/formatters'
 import { LEG_SEQ_OPTIONS } from './legOptions'
 import type {
@@ -159,11 +220,15 @@ import type {
 
 const forms = ref<DriverReportFormDTO[]>([])
 const importedMonths = ref<DriverReportImportedMonthDTO[]>([])
+const plateByVehicleId = ref<Map<string, string>>(new Map())
 const searchQuery = ref('')
 const loading = ref(false)
-const expandedIds = ref<string[]>([])
 
-// 依 formId 分組並依月份新到舊排序，供展開列與月份標籤欄共用
+function vehiclePlate(vehicleId: string): string | undefined {
+  return plateByVehicleId.value.get(vehicleId)
+}
+
+// 依 formId 分組並依月份新到舊排序，供「已有資料月份」標籤欄與查看明細動作共用
 const monthsByForm = computed(() => {
   const grouped = new Map<string, DriverReportImportedMonthDTO[]>()
   for (const m of importedMonths.value) {
@@ -174,6 +239,26 @@ const monthsByForm = computed(() => {
   for (const list of grouped.values()) list.sort((a, b) => b.yearMonth.localeCompare(a.yearMonth))
   return grouped
 })
+
+// 已依新到舊排序，取前 3 筆即為最近 3 個月，避免標籤欄逐台車列出所有歷史月份造成折行
+function recentMonths(formId: string): DriverReportImportedMonthDTO[] {
+  return monthsByForm.value.get(formId)?.slice(0, 3) ?? []
+}
+
+const currentYearMonth = (() => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+})()
+
+function currentMonthImported(formId: string): boolean {
+  return monthsByForm.value.get(formId)?.some((m) => m.yearMonth === currentYearMonth) ?? false
+}
+
+function openLatestDetail(form: DriverReportFormDTO) {
+  const latest = monthsByForm.value.get(form.id)?.[0]
+  if (!latest) return
+  openMonthDetail(form, latest.yearMonth)
+}
 
 async function fetchForms() {
   loading.value = true
@@ -189,14 +274,15 @@ async function fetchForms() {
   }
 }
 
+// 車牌不隨查詢條件變動，獨立載入一次即可，避免每次查詢／重設都重打車輛清單 API
+async function loadVehiclePlates() {
+  const vehicles = await listAllVehicles()
+  plateByVehicleId.value = new Map(vehicles.map((v) => [v.id, v.plateNo]))
+}
+
 function handleReset() {
   searchQuery.value = ''
   fetchForms()
-}
-
-function onExpandChange(_row: unknown, expanded: unknown) {
-  if (!Array.isArray(expanded)) return
-  expandedIds.value = (expanded as DriverReportFormDTO[]).map((f) => f.id)
 }
 
 // 月份鑽取彈窗：點某台車某個月份的標籤後，載入該月完整匯入資料
@@ -207,8 +293,88 @@ const monthDetailLoading = ref(false)
 const monthSubmissions = ref<DriverReportMonthSubmissionDTO[]>([])
 const monthRideEntries = ref<DriverReportMonthRideEntryDTO[]>([])
 
+// 逐個案搭乘紀錄：左右主從版面，左側依個案姓名分組清單，右側顯示所選個案的所有搭乘紀錄
+interface CaseGroup {
+  caseId: string
+  caseName: string
+  entries: DriverReportMonthRideEntryDTO[]
+}
+
+function buildCaseGroups(entries: DriverReportMonthRideEntryDTO[]): CaseGroup[] {
+  const groups = new Map<string, CaseGroup>()
+  for (const e of entries) {
+    let g = groups.get(e.caseId)
+    if (!g) {
+      g = { caseId: e.caseId, caseName: e.caseName, entries: [] }
+      groups.set(e.caseId, g)
+    }
+    g.entries.push(e)
+  }
+  const result = Array.from(groups.values())
+  for (const g of result) {
+    g.entries.sort((a, b) => (a.serviceDate < b.serviceDate ? -1 : a.serviceDate > b.serviceDate ? 1 : a.legSeq - b.legSeq))
+  }
+  result.sort((a, b) => a.caseName.localeCompare(b.caseName, 'zh-Hant'))
+  return result
+}
+
+const caseGroups = computed(() => buildCaseGroups(monthRideEntries.value))
+const activeCaseId = ref('')
+const activeCaseGroup = computed(() => caseGroups.value.find((g) => g.caseId === activeCaseId.value))
+
+const activeServiceDate = ref('')
+const activeSubmission = computed(() => monthSubmissions.value.find((s) => s.serviceDate === activeServiceDate.value))
+
 function legLabel(legSeq: number): string {
   return LEG_SEQ_OPTIONS.find((opt) => opt.value === legSeq)?.label ?? `第 ${legSeq} 趟`
+}
+
+interface AnswerItem {
+  header: string
+  value: string
+  directionOrder: number
+}
+
+interface AnswerGroup {
+  key: string
+  seq: number
+  name: string
+  items: AnswerItem[]
+}
+
+// 原始欄位標題格式為「<序號>.<個案姓名>...[去程/回程]」；序號僅代表原始表單的欄位順序，
+// 並非個案專屬（不同個案可能共用同一個序號），故實際分組須以「個案姓名」為準，
+// 讓同一個個案的去程／回程資料顯示在一起，再依序號排序整體呈現順序。
+function parseHeaderMeta(header: string): { seq: number; name: string; directionOrder: number } {
+  const seqMatch = header.match(/^\s*(\d+)[.、．\s]+/)
+  const seq = seqMatch ? Number(seqMatch[1]) : Number.MAX_SAFE_INTEGER
+  const withoutSeq = header.replace(/^\s*\d+[.、．\s]+/, '')
+  const directionMatch = withoutSeq.match(/\[(去程|回程)\]\s*$/)
+  const directionOrder = directionMatch ? (directionMatch[1] === '去程' ? 0 : 1) : 2
+  const name = withoutSeq.replace(/\[(去程|回程)\]\s*$/, '').trim()
+  return { seq, name, directionOrder }
+}
+
+function groupAnswersByCase(answers: Record<string, string>): AnswerGroup[] {
+  const groups = new Map<string, AnswerGroup>()
+  for (const [header, value] of Object.entries(answers || {})) {
+    const { seq, name, directionOrder } = parseHeaderMeta(header)
+    const key = name || `_ungrouped_${header}`
+    let group = groups.get(key)
+    if (!group) {
+      group = { key, seq, name, items: [] }
+      groups.set(key, group)
+    } else if (seq < group.seq) {
+      group.seq = seq
+    }
+    group.items.push({ header, value, directionOrder })
+  }
+  const result = Array.from(groups.values())
+  for (const group of result) {
+    group.items.sort((a, b) => a.directionOrder - b.directionOrder)
+  }
+  result.sort((a, b) => a.seq - b.seq || a.name.localeCompare(b.name, 'zh-Hant'))
+  return result
 }
 
 async function openMonthDetail(form: DriverReportFormDTO, yearMonth: string) {
@@ -222,6 +388,8 @@ async function openMonthDetail(form: DriverReportFormDTO, yearMonth: string) {
     const detail = await getDriverReportMonthDetail(form.id, yearMonth)
     monthSubmissions.value = detail.submissions
     monthRideEntries.value = detail.rideEntries
+    activeServiceDate.value = detail.submissions[0]?.serviceDate ?? ''
+    activeCaseId.value = buildCaseGroups(detail.rideEntries)[0]?.caseId ?? ''
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
     monthDialogVisible.value = false
@@ -230,7 +398,10 @@ async function openMonthDetail(form: DriverReportFormDTO, yearMonth: string) {
   }
 }
 
-onMounted(fetchForms)
+onMounted(() => {
+  fetchForms()
+  loadVehiclePlates()
+})
 </script>
 
 <style scoped>
@@ -251,74 +422,37 @@ onMounted(fetchForms)
 
 :deep(.vehicle-col .cell) {
   white-space: nowrap;
-  min-width: 140px;
+  min-width: 180px;
+}
+
+.vehicle-plate {
+  margin-left: 6px;
+  color: #606266;
+  font-size: var(--app-font-md);
+}
+
+/* 本頁列表字體放大一階：表頭用一般字級（原本是大寫微標籤字級），內文用大字級 */
+:deep(.el-table th.el-table__cell) {
+  font-size: var(--app-font-md);
+}
+
+:deep(.el-table td.el-table__cell) {
+  font-size: var(--app-font-lg);
 }
 
 :deep(.months-col .cell) {
-  min-width: 260px;
+  min-width: 380px;
+  overflow: visible;
 }
 
 :deep(.import-time-col .cell) {
   min-width: 170px;
 }
 
-:deep(.report-date-col .cell) {
-  min-width: 120px;
-}
-
-:deep(.report-raw-driver-col .cell) {
-  min-width: 140px;
-}
-
-:deep(.report-remark-col .cell) {
-  min-width: 140px;
-}
-
-:deep(.report-answers-col .cell) {
-  min-width: 280px;
-}
-
-:deep(.report-case-col .cell) {
-  min-width: 120px;
-}
-
-:deep(.report-leg-col .cell) {
-  min-width: 130px;
-}
-
-:deep(.report-result-col .cell) {
-  min-width: 100px;
-}
-
-:deep(.report-driver-col .cell) {
-  min-width: 120px;
-}
-
 .month-tags {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
-}
-
-.months-detail {
-  padding: 8px 24px 12px;
-}
-
-.month-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-  font-size: 13px;
-}
-
-.month-label {
-  font-weight: 500;
-  min-width: 70px;
-}
-
-.month-count {
-  color: var(--app-status-success-fg);
 }
 
 .empty-state {
@@ -330,29 +464,145 @@ onMounted(fetchForms)
   cursor: pointer;
 }
 
-.month-item--clickable {
-  cursor: pointer;
-  border-radius: 4px;
+.month-detail-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 4px 14px;
+  font-size: 13px;
+  color: var(--app-text-secondary);
 }
 
-.month-item--clickable:hover {
-  background: var(--app-bg-muted, #f8fafc);
+.summary-item .summary-value {
+  font-weight: 600;
+  color: var(--app-text-primary, #1f2933);
+  font-size: 15px;
 }
 
-/* 鑽取彈窗內的表格捲動區，避免長清單撐開整個對話框 */
-.month-detail-scroll-body {
-  max-height: 420px;
+.summary-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--app-border-color, #e2e8f0);
+}
+
+/* 月份鑽取彈窗左右主從版面：左側依日期／個案分組的清單，右側顯示所選項目的細節，
+   取代先前的全螢幕大表格，避免捲動距離過長，也不用切換頁籤才能比對不同天/不同個案 */
+.detail-split {
+  display: flex;
+  gap: 12px;
+  height: 60vh;
+}
+
+.split-list {
+  width: 220px;
+  flex-shrink: 0;
+  border: 1px solid var(--app-border-color, #e2e8f0);
+  border-radius: var(--app-radius-xs, 8px);
   overflow-y: auto;
 }
 
-.answers-list {
+.split-list-row {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--app-border-light, #f0f2f4);
+}
+
+.split-list-row:hover {
+  background: var(--app-bg-muted, #f8fafc);
+}
+
+.split-list-row.active {
+  background: var(--app-status-info-bg, #ddf8fb);
+  color: var(--app-status-info-fg, #00788a);
+  font-weight: 600;
+}
+
+.split-list-badge {
+  color: var(--app-text-secondary);
   font-size: 12px;
 }
 
-.answer-item {
+.split-list-row.active .split-list-badge {
+  color: inherit;
+}
+
+.split-detail {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  border: 1px solid var(--app-border-color, #e2e8f0);
+  border-radius: var(--app-radius-xs, 8px);
+  padding: 14px 18px;
+}
+
+.detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.detail-remark {
+  color: var(--app-status-warning-fg);
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+
+.dense-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dense-table th,
+.dense-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--app-border-light, #f0f2f4);
+}
+
+.dense-table th {
   color: var(--app-text-secondary);
+  font-weight: 500;
+}
+
+/* 逐日回報明細右側細節面板：原始欄位以鍵值對呈現，取代擠在單一儲存格內的長列表。
+   每個 .answer-group 對應同一個個案（依序號分組），整組作為一個網格項目，
+   確保去程／回程不會被欄位換行拆散到不同區塊。 */
+.answers-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 20px;
+  align-items: start;
+}
+
+.answer-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--app-bg-muted, #f8fafc);
+}
+
+.answer-row {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.answer-key {
+  flex-shrink: 0;
+  color: var(--app-text-secondary);
+}
+
+.answer-value {
+  color: var(--app-text-primary, #1f2933);
+  word-break: break-all;
 }
 </style>

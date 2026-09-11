@@ -32,6 +32,8 @@ var (
 	ErrDuplicateCandidateNotFound = errors.New("duplicate candidate not found")
 	ErrDuplicateCandidateResolved = errors.New("duplicate candidate already resolved")
 	ErrInvalidDuplicateDecision   = errors.New("invalid duplicate candidate decision")
+	ErrScheduleOverlap            = errors.New("schedule effective period overlaps an existing schedule")
+	ErrScheduleInvalidReference   = errors.New("schedule references a case or vehicle that does not exist")
 )
 
 // CaseService 封裝個案、據點、車輛、司機與排班之業務邏輯。
@@ -255,8 +257,6 @@ type caseAuditSnapshot struct {
 	Status            string     `json:"status"`
 	SiteID            *uuid.UUID `json:"siteId,omitempty"`
 	CaregiverID       *uuid.UUID `json:"caregiverId,omitempty"`
-	OutboundVehicleID *uuid.UUID `json:"outboundVehicleId,omitempty"`
-	InboundVehicleID  *uuid.UUID `json:"inboundVehicleId,omitempty"`
 	NationalIDInvalid bool       `json:"nationalIdInvalid,omitempty"`
 }
 
@@ -276,8 +276,6 @@ func newCaseAuditSnapshot(c *Case) caseAuditSnapshot {
 		Status:            c.Status,
 		SiteID:            c.SiteID,
 		CaregiverID:       c.CaregiverID,
-		OutboundVehicleID: c.OutboundVehicleID,
-		InboundVehicleID:  c.InboundVehicleID,
 		NationalIDInvalid: c.NationalIDInvalid,
 	}
 }
@@ -429,53 +427,98 @@ func (s *CaseService) Delete(ctx context.Context, id, actorID uuid.UUID, actorRo
 	return deleteFn(ctx)
 }
 
-// UpdateCaseTransportPreference 更新個案的交通偏好（去回程車輛），回傳更新後的個案主檔。
-// PUT 採完整替換語意：nil 的 ID 代表清除欄位，raw name 僅用於保留待人工關聯的來源名稱。
-// 據點已改由個案本身持有，請透過 UpdateCase 設定 SiteID。
-func (s *CaseService) UpdateCaseTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string, auditContexts ...AuditContext) (*Case, error) {
-	var before *Case
-	if s.auditRepo != nil {
-		var err error
-		before, err = s.caseRepo.GetByID(ctx, caseID)
-		if err != nil {
-			return nil, err
-		}
-		if before == nil {
-			return nil, ErrCaseNotFound
-		}
-	}
-	if err := s.caseRepo.UpsertTransportPreference(ctx, caseID, outboundVehicleID, inboundVehicleID, outboundVehicleNameRaw, inboundVehicleNameRaw); err != nil {
-		return nil, err
-	}
-	after, err := s.caseRepo.GetByID(ctx, caseID)
+// RelinkSiteByName 讓據點新增或改名時，重新比對名稱相符的待維護個案；只有唯一命中才
+// 自動關聯，回傳實際關聯的筆數。
+func (s *CaseService) RelinkSiteByName(ctx context.Context, name string, actorID uuid.UUID, actorRole, ip, ua string) (int, error) {
+	return s.relinkByName(ctx, "auto_relink_site", actorID, actorRole, ip, ua, func(txCtx context.Context) ([]uuid.UUID, error) {
+		return s.caseRepo.RelinkSiteByName(txCtx, name)
+	}, map[string]any{"siteNameRaw": name})
+}
+
+// RelinkCaregiverByName 讓照護人員新增或改名時，重新比對名稱相符的待維護個案；只有
+// 唯一命中才自動關聯，回傳實際關聯的筆數。
+func (s *CaseService) RelinkCaregiverByName(ctx context.Context, name string, actorID uuid.UUID, actorRole, ip, ua string) (int, error) {
+	return s.relinkByName(ctx, "auto_relink_caregiver", actorID, actorRole, ip, ua, func(txCtx context.Context) ([]uuid.UUID, error) {
+		return s.caseRepo.RelinkCaregiverByName(txCtx, name)
+	}, map[string]any{"careContactName": name})
+}
+
+// RelinkAllPendingSites 供待維護頁「重新比對」按鈕使用。
+func (s *CaseService) RelinkAllPendingSites(ctx context.Context, actorID uuid.UUID, actorRole, ip, ua string) (int, error) {
+	names, err := s.caseRepo.ListPendingSiteNames(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	if after == nil {
-		return nil, ErrCaseNotFound
+	total := 0
+	for _, name := range names {
+		n, err := s.RelinkSiteByName(ctx, name, actorID, actorRole, ip, ua)
+		if err != nil {
+			slog.Error("relink_all_pending_sites_failed", slog.String("name", name), slog.Any("error", err))
+			continue
+		}
+		total += n
 	}
-	if s.auditRepo != nil {
-		entry := AuditEntry{
-			Action:     "update_transport_preference",
-			EntityType: "cases",
-			BeforeData: newCaseAuditSnapshot(before),
-			AfterData:  newCaseAuditSnapshot(after),
-		}
-		if len(auditContexts) > 0 {
-			actor := auditContexts[0]
-			entityIDStr := caseID.String()
-			entry.ActorID = &actor.ActorID
-			entry.ActorRole = &actor.ActorRole
-			entry.EntityID = &entityIDStr
-			entry.IPAddress = &actor.IPAddress
-			entry.UserAgent = &actor.UserAgent
-		}
-		if err := s.auditRepo.Write(ctx, entry); err != nil {
-			// 交通偏好已完成更新；事後稽核故障不可讓用戶端誤以為可安全重試。
-			slog.Error("case_audit_write_failed", slog.String("action", "update_transport_preference"), slog.String("case_id", caseID.String()), slog.Any("error", err))
-		}
+	return total, nil
+}
+
+// RelinkAllPendingCaregivers 供待維護頁「重新比對」按鈕使用。
+func (s *CaseService) RelinkAllPendingCaregivers(ctx context.Context, actorID uuid.UUID, actorRole, ip, ua string) (int, error) {
+	names, err := s.caseRepo.ListPendingCaregiverNames(ctx)
+	if err != nil {
+		return 0, err
 	}
-	return s.attachPlainNationalID(after), nil
+	total := 0
+	for _, name := range names {
+		n, err := s.RelinkCaregiverByName(ctx, name, actorID, actorRole, ip, ua)
+		if err != nil {
+			slog.Error("relink_all_pending_caregivers_failed", slog.String("name", name), slog.Any("error", err))
+			continue
+		}
+		total += n
+	}
+	return total, nil
+}
+
+// relinkByName 是 RelinkSiteByName／RelinkCaregiverByName 共用的比對＋稽核外殼。
+func (s *CaseService) relinkByName(ctx context.Context, action string, actorID uuid.UUID, actorRole, ip, ua string, relink func(context.Context) ([]uuid.UUID, error), afterData map[string]any) (int, error) {
+	var ids []uuid.UUID
+	fn := func(txCtx context.Context) error {
+		relinked, err := relink(txCtx)
+		if err != nil {
+			return err
+		}
+		ids = relinked
+		if s.auditRepo == nil {
+			return nil
+		}
+		for _, id := range ids {
+			entityIDStr := id.String()
+			// 稽核與資料寫入同一交易；稽核失敗回滾，避免關聯已生效卻沒留下紀錄。
+			if err := s.auditRepo.Write(txCtx, AuditEntry{
+				ActorID:    &actorID,
+				ActorRole:  &actorRole,
+				Action:     action,
+				EntityType: "cases",
+				EntityID:   &entityIDStr,
+				AfterData:  afterData,
+				IPAddress:  &ip,
+				UserAgent:  &ua,
+			}); err != nil {
+				return fmt.Errorf("failed to write auto-relink audit: %w", err)
+			}
+		}
+		return nil
+	}
+	var err error
+	if s.txRunner != nil {
+		err = s.txRunner.WithTx(ctx, fn)
+	} else {
+		err = fn(ctx)
+	}
+	if err != nil {
+		return 0, err
+	}
+	return len(ids), nil
 }
 
 // FindPossibleDuplicate 依身分證字號（非空時）或正規化姓名比對既有個案，供批次匯入
@@ -507,31 +550,27 @@ func (s *CaseService) FindPossibleDuplicate(ctx context.Context, nationalID, nam
 // StageDuplicateCandidateInput 代表批次匯入單列疑似重複個案之暫存輸入；NationalID
 // 為明文，僅在本次呼叫內傳遞，寫入前立即加密，不落地、不回傳、不記錄。
 type StageDuplicateCandidateInput struct {
-	FileHash               string
-	RowKey                 string
-	RowIndex               int
-	SheetName              string
-	Name                   string
-	NationalID             string
-	HouseholdType          *string
-	Gender                 *string
-	BirthDate              *time.Time
-	BirthDateRaw           *string
-	CareContactRole        *string
-	CareContactName        *string
-	RegisteredAddress      *string
-	HomeAddress            *string
-	ServiceCategory        *int
-	ServiceUsageType       *int
-	SiteID                 *uuid.UUID
-	SiteNameRaw            string
-	CaregiverID            *uuid.UUID
-	OutboundVehicleID      *uuid.UUID
-	OutboundVehicleNameRaw string
-	InboundVehicleID       *uuid.UUID
-	InboundVehicleNameRaw  string
-	Remarks                *string
-	DuplicateCaseID        uuid.UUID
+	FileHash          string
+	RowKey            string
+	RowIndex          int
+	SheetName         string
+	Name              string
+	NationalID        string
+	HouseholdType     *string
+	Gender            *string
+	BirthDate         *time.Time
+	BirthDateRaw      *string
+	CareContactRole   *string
+	CareContactName   *string
+	RegisteredAddress *string
+	HomeAddress       *string
+	ServiceCategory   *int
+	ServiceUsageType  *int
+	SiteID            *uuid.UUID
+	SiteNameRaw       string
+	CaregiverID       *uuid.UUID
+	Remarks           *string
+	DuplicateCaseID   uuid.UUID
 }
 
 func emptyToNil(v string) *string {
@@ -571,35 +610,31 @@ func (s *CaseService) StageDuplicateCandidate(ctx context.Context, in StageDupli
 	}
 
 	cand := DuplicateCandidate{
-		FileHash:               in.FileHash,
-		RowKey:                 in.RowKey,
-		RowIndex:               in.RowIndex,
-		SheetName:              in.SheetName,
-		Name:                   name,
-		NameNormalized:         namenorm.Normalize(name),
-		NationalIDCipher:       cipherText,
-		NationalIDHMAC:         hmacIdx,
-		NationalIDMasked:       maskedID,
-		NationalIDInvalid:      nationalIDInvalid,
-		HouseholdType:          in.HouseholdType,
-		Gender:                 in.Gender,
-		BirthDate:              birthDate,
-		BirthDateRaw:           birthDateRaw,
-		CareContactRole:        in.CareContactRole,
-		CareContactName:        in.CareContactName,
-		RegisteredAddress:      in.RegisteredAddress,
-		HomeAddress:            in.HomeAddress,
-		ServiceCategory:        in.ServiceCategory,
-		ServiceUsageType:       in.ServiceUsageType,
-		SiteID:                 in.SiteID,
-		SiteNameRaw:            emptyToNil(in.SiteNameRaw),
-		CaregiverID:            in.CaregiverID,
-		OutboundVehicleID:      in.OutboundVehicleID,
-		OutboundVehicleNameRaw: emptyToNil(in.OutboundVehicleNameRaw),
-		InboundVehicleID:       in.InboundVehicleID,
-		InboundVehicleNameRaw:  emptyToNil(in.InboundVehicleNameRaw),
-		Remarks:                in.Remarks,
-		DuplicateCaseID:        in.DuplicateCaseID,
+		FileHash:          in.FileHash,
+		RowKey:            in.RowKey,
+		RowIndex:          in.RowIndex,
+		SheetName:         in.SheetName,
+		Name:              name,
+		NameNormalized:    namenorm.Normalize(name),
+		NationalIDCipher:  cipherText,
+		NationalIDHMAC:    hmacIdx,
+		NationalIDMasked:  maskedID,
+		NationalIDInvalid: nationalIDInvalid,
+		HouseholdType:     in.HouseholdType,
+		Gender:            in.Gender,
+		BirthDate:         birthDate,
+		BirthDateRaw:      birthDateRaw,
+		CareContactRole:   in.CareContactRole,
+		CareContactName:   in.CareContactName,
+		RegisteredAddress: in.RegisteredAddress,
+		HomeAddress:       in.HomeAddress,
+		ServiceCategory:   in.ServiceCategory,
+		ServiceUsageType:  in.ServiceUsageType,
+		SiteID:            in.SiteID,
+		SiteNameRaw:       emptyToNil(in.SiteNameRaw),
+		CaregiverID:       in.CaregiverID,
+		Remarks:           in.Remarks,
+		DuplicateCaseID:   in.DuplicateCaseID,
 	}
 
 	return s.stagingRepo.Insert(ctx, cand)
@@ -723,8 +758,8 @@ func (s *CaseService) DiscardDuplicateCandidate(ctx context.Context, id, actorID
 
 // newDuplicateCandidateAuditSnapshot 只取足以追溯來源列的非個資欄位；暫存列的身分證密文、
 // HMAC、遮罩值與地址一律不寫入稽核。
-func newDuplicateCandidateAuditSnapshot(cand *DuplicateCandidate) map[string]interface{} {
-	return map[string]interface{}{
+func newDuplicateCandidateAuditSnapshot(cand *DuplicateCandidate) map[string]any {
+	return map[string]any{
 		"id":              cand.ID.String(),
 		"name":            cand.Name,
 		"rowIndex":        cand.RowIndex,
@@ -762,10 +797,6 @@ func (s *CaseService) resolveDuplicateAsNewCase(ctx context.Context, cand *Dupli
 	}
 	if err := s.caseRepo.Create(ctx, &entity); err != nil {
 		return nil, fmt.Errorf("failed to create case from duplicate candidate: %w", err)
-	}
-	if err := s.caseRepo.UpsertTransportPreference(ctx, entity.ID, cand.OutboundVehicleID, cand.InboundVehicleID,
-		derefOrEmpty(cand.OutboundVehicleNameRaw), derefOrEmpty(cand.InboundVehicleNameRaw)); err != nil {
-		return nil, fmt.Errorf("failed to set transport preference for confirmed duplicate: %w", err)
 	}
 
 	if s.auditRepo != nil {
@@ -831,20 +862,6 @@ func (s *CaseService) mergeDuplicateIntoExisting(ctx context.Context, targetCase
 
 	if err := s.caseRepo.Update(ctx, entity); err != nil {
 		return nil, err
-	}
-	if entity.OutboundVehicleID == nil && cand.OutboundVehicleID != nil || entity.InboundVehicleID == nil && cand.InboundVehicleID != nil {
-		outboundID := entity.OutboundVehicleID
-		if outboundID == nil {
-			outboundID = cand.OutboundVehicleID
-		}
-		inboundID := entity.InboundVehicleID
-		if inboundID == nil {
-			inboundID = cand.InboundVehicleID
-		}
-		if err := s.caseRepo.UpsertTransportPreference(ctx, entity.ID, outboundID, inboundID,
-			derefOrEmpty(cand.OutboundVehicleNameRaw), derefOrEmpty(cand.InboundVehicleNameRaw)); err != nil {
-			return nil, fmt.Errorf("failed to backfill transport preference on merge: %w", err)
-		}
 	}
 
 	after, err := s.caseRepo.GetByID(ctx, entity.ID)

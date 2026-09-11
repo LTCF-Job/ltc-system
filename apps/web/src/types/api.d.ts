@@ -202,12 +202,6 @@ export interface CaseDTO {
   siteNameRaw?: string;
   caregiverId?: string;
   caregiverName?: string;
-  outboundVehicleId?: string;
-  outboundVehicle?: string;
-  outboundVehicleNameRaw?: string;
-  inboundVehicleId?: string;
-  inboundVehicle?: string;
-  inboundVehicleNameRaw?: string;
   createdAt: string;
   updatedAt: string;
   activeSchedule?: CaseScheduleDTO;
@@ -232,17 +226,6 @@ export interface CreateCaseRequest {
   careContactName?: string;
   registeredAddress?: string;
   remarks?: string;
-}
-
-// 兩欄位皆選填：未帶入的欄位維持既有關聯不變，僅更新有帶值的那一項
-// PUT 為完整替換語意：未帶上的 *NameRaw 會被後端清成 NULL。呼叫端必須把該欄
-// 尚未完成關聯的匯入原始名稱一併回送，只有真的關聯成功的那一欄才送空字串。
-// 據點已改由個案本身持有，請改用 UpdateCaseRequest 的 siteId。
-export interface UpdateCaseTransportPreferenceRequest {
-  outboundVehicleId: string | null;
-  inboundVehicleId: string | null;
-  outboundVehicleNameRaw?: string;
-  inboundVehicleNameRaw?: string;
 }
 
 export interface UpdateCaseRequest extends Partial<CreateCaseRequest> {}
@@ -548,7 +531,9 @@ export interface DriverReportColumnDecision {
 }
 
 export interface DriverReportCommitResultDTO {
-  status: "pending" | "succeeded";
+  // partial 代表整份交易雖然成功，但仍有 failedRows > 0 的列在真正寫入資料庫時失敗
+  // （已略過，非預期會發生）；不可把 status !== "succeeded" 一律當成失敗處理。
+  status: "pending" | "succeeded" | "partial";
   importedRows: number;
   rideRecordRows: number;
   // reaffirmedRows 是值與既有資料相同的重複回報；pendingConflictRows 是與既有資料不同、
@@ -557,6 +542,9 @@ export interface DriverReportCommitResultDTO {
   reaffirmedRows: number;
   pendingConflictRows: number;
   backfilledRows: number;
+  // failedRows 只計格式與內容都正確、卻在真正寫入資料庫時失敗的列數；與 skippedRows
+  // （格式或內容問題而略過的列）分開計算，兩者都要顯示才不會讓使用者誤以為全數成功。
+  failedRows: number;
   mappedColumns: number;
   coveredMonths: string[];
   skippedRows: Array<{
@@ -958,12 +946,6 @@ export interface CaseDuplicateCandidateDTO {
   siteId?: string;
   siteName?: string;
   siteNameRaw?: string;
-  outboundVehicleId?: string;
-  outboundVehicle?: string;
-  outboundVehicleNameRaw?: string;
-  inboundVehicleId?: string;
-  inboundVehicle?: string;
-  inboundVehicleNameRaw?: string;
   remarks?: string;
   duplicateCaseId: string;
   duplicateCaseName: string;
@@ -981,6 +963,15 @@ export interface ResolveDuplicateCandidateRequest {
 export interface CaregiverImportCommitResult {
   importedCount: number;
   skippedRows: Array<{
+    rowId?: string;
+    rowIndex: number;
+    name: string;
+    reasons: string[];
+  }>;
+  // failedCount／failedRows 只計格式與內容都正確、卻在真正寫入資料庫時失敗的列數，
+  // 與 skippedRows（格式或內容問題而略過的列）分開計算。
+  failedCount: number;
+  failedRows: Array<{
     rowId?: string;
     rowIndex: number;
     name: string;

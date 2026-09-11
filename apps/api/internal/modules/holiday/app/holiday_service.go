@@ -13,6 +13,16 @@ import (
 // ErrHolidayDateConflict 代表手動新增假日時，該日期已存在其他假日設定。
 var ErrHolidayDateConflict = errors.New("holiday date already has a setting")
 
+// ErrInvalidHolidayYear 代表匯入政府行事曆時傳入的年份超出合理範圍。
+var ErrInvalidHolidayYear = errors.New("invalid holiday year")
+
+// ErrGovHolidayFetchFailed 代表向政府行事曆來源取得資料失敗（服務暫時無法使用或回傳異常資料），
+// 不是使用者輸入錯誤。
+var ErrGovHolidayFetchFailed = errors.New("failed to fetch government holiday calendar")
+
+// ErrHolidayNotFound 代表查無指定日期的假日設定；刪除不存在的假日時回傳，供 handler 映射 404。
+var ErrHolidayNotFound = errors.New("holiday not found")
+
 // Holiday 代表一個國定假日或停駛日。
 type Holiday struct {
 	HolidayDate time.Time
@@ -149,19 +159,19 @@ func (s *HolidayService) UpsertHoliday(ctx context.Context, in UpsertHolidayInpu
 // ImportTaiwanGovHolidays 取得並冪等儲存指定年度的政府行事曆。
 func (s *HolidayService) ImportTaiwanGovHolidays(ctx context.Context, year int, actorID uuid.UUID, actorRole string) (int, error) {
 	if year < 2000 || year > 2100 {
-		return 0, fmt.Errorf("invalid holiday year %d", year)
+		return 0, fmt.Errorf("%w: %d", ErrInvalidHolidayYear, year)
 	}
 	if s.provider == nil {
 		return 0, fmt.Errorf("government holiday provider is not configured")
 	}
 	records, err := s.provider.Fetch(ctx, year)
 	if err != nil {
-		return 0, fmt.Errorf("fetch government holidays for %d: %w", year, err)
+		return 0, fmt.Errorf("%w: fetch government holidays for %d: %v", ErrGovHolidayFetchFailed, year, err)
 	}
 	holidays := make([]Holiday, 0, len(records))
 	for _, rec := range records {
 		if rec.HolidayDate.Year() != year {
-			return 0, fmt.Errorf("government holiday date %s is outside year %d", rec.HolidayDate.Format("2006-01-02"), year)
+			return 0, fmt.Errorf("%w: date %s is outside year %d", ErrGovHolidayFetchFailed, rec.HolidayDate.Format("2006-01-02"), year)
 		}
 		holidays = append(holidays, Holiday{
 			HolidayDate: rec.HolidayDate,
@@ -182,16 +192,19 @@ func (s *HolidayService) ImportTaiwanGovHolidays(ctx context.Context, year int, 
 	return len(holidays), nil
 }
 
+// DeleteHoliday 刪除指定日期之假日設定；該日期查無任何假日設定時回傳 ErrHolidayNotFound，
+// 不讓刪除不存在的資料被誤判為成功。
 func (s *HolidayService) DeleteHoliday(ctx context.Context, date time.Time, actorID uuid.UUID, actorRole string) error {
 	var before *Holiday
-	if s.auditRepo != nil {
-		if reader, ok := s.repo.(HolidayReader); ok {
-			var err error
-			before, err = reader.GetByDate(ctx, date)
-			if err != nil {
-				return err
-			}
+	if reader, ok := s.repo.(HolidayReader); ok {
+		existing, err := reader.GetByDate(ctx, date)
+		if err != nil {
+			return err
 		}
+		if existing == nil {
+			return ErrHolidayNotFound
+		}
+		before = existing
 	}
 	if err := s.repo.Delete(ctx, date); err != nil {
 		return err

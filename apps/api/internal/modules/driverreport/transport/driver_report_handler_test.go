@@ -23,14 +23,16 @@ import (
 // stubService 只實作 handler 用到的方法；範本產生刻意走真正的 infra renderer，
 // 讓這支測試涵蓋「渲染 → handler → HTTP 回應主體」的整條位元組路徑。
 type stubService struct {
-	commitCalledWith []app.ColumnDecision
-	parseYearMonth   string
-	commitYearMonth  string
-	parseErr         error
-	importedMonths   []app.ImportedMonth
-	columns          []app.ColumnMapping
-	monthDetail      *app.MonthDetail
-	monthDetailErr   error
+	commitCalledWith   []app.ColumnDecision
+	parseYearMonth     string
+	commitYearMonth    string
+	parseErr           error
+	importedMonths     []app.ImportedMonth
+	columns            []app.ColumnMapping
+	monthDetail        *app.MonthDetail
+	monthDetailErr     error
+	deleteFormErr      error
+	resolveConflictErr error
 }
 
 func (s *stubService) ListForms(context.Context) ([]app.ReportForm, error) { return nil, nil }
@@ -43,7 +45,7 @@ func (s *stubService) GetMonthDetail(context.Context, uuid.UUID, string) (*app.M
 func (s *stubService) CreateForm(context.Context, string, string) (*app.ReportForm, error) {
 	return nil, nil
 }
-func (s *stubService) DeleteForm(context.Context, string) error { return nil }
+func (s *stubService) DeleteForm(context.Context, string) error { return s.deleteFormErr }
 func (s *stubService) ListColumns(_ context.Context, formID, mappingStatus string) ([]app.ColumnMapping, error) {
 	var matched []app.ColumnMapping
 	for _, c := range s.columns {
@@ -56,8 +58,8 @@ func (s *stubService) ListColumns(_ context.Context, formID, mappingStatus strin
 func (s *stubService) UpdateColumnMapping(context.Context, string, string, *string, *int16) (int, error) {
 	return 0, nil
 }
-func (s *stubService) BatchMapping(context.Context, []app.ColumnMappingUpdate) (int, error) {
-	return 0, nil
+func (s *stubService) BatchMapping(context.Context, []app.ColumnMappingUpdate) (*app.BatchMappingResult, error) {
+	return &app.BatchMappingResult{}, nil
 }
 func (s *stubService) MatchPendingColumnsByName(context.Context, string) ([]app.ColumnMapping, error) {
 	return nil, nil
@@ -69,7 +71,7 @@ func (s *stubService) BindPendingDriver(context.Context, string, string) (int, e
 	return 0, nil
 }
 func (s *stubService) ResolveRowConflict(context.Context, string, bool, app.Actor) error {
-	return nil
+	return s.resolveConflictErr
 }
 func (s *stubService) IgnoreColumn(context.Context, string, app.Actor) error {
 	return nil
@@ -109,6 +111,7 @@ func newTestRouter(svc *stubService) *gin.Engine {
 	r.GET("/api/v1/driver-reports/:id/months/:yearMonth", h.GetMonthDetail)
 	r.DELETE("/api/v1/driver-reports/:id", h.DeleteForm)
 	r.POST("/api/v1/driver-reports/:id/import", h.ImportExcel)
+	r.POST("/api/v1/driver-report-conflicts/:id/resolve", h.ResolveRowConflict)
 	return r
 }
 
@@ -385,4 +388,81 @@ func TestListColumns_FilterByStatusWithoutFormID(t *testing.T) {
 	assert.Equal(t, "pending", body.Data[0].MappingStatus)
 	assert.Nil(t, body.Data[0].CaseID)
 	assert.Nil(t, body.Data[0].CaseName)
+}
+
+func TestImportExcel_RejectsNonXlsxExtension(t *testing.T) {
+	r := newTestRouter(&stubService{})
+	formID := uuid.New().String()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", "report.csv")
+	require.NoError(t, err)
+	_, _ = part.Write([]byte("dummy"))
+	require.NoError(t, writer.Close())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/driver-reports/"+formID+"/import", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	var resp struct {
+		Error struct {
+			Code    string `json:"code"`
+			Details []struct {
+				Field  string `json:"field"`
+				Reason string `json:"reason"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	// 副檔名非 .xlsx 應歸類到「檔案格式不支援」，而非跟欄位驗證共用 VALIDATION_FAILED。
+	assert.Equal(t, "UNSUPPORTED_FILE_TYPE", resp.Error.Code)
+	require.Len(t, resp.Error.Details, 1)
+	assert.Equal(t, "僅支援 .xlsx 匯入格式", resp.Error.Details[0].Reason)
+}
+
+func TestDeleteForm_ReturnsNotFoundWhenFormMissing(t *testing.T) {
+	svc := &stubService{deleteFormErr: app.ErrFormNotFound}
+	r := newTestRouter(svc)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/v1/driver-reports/"+uuid.New().String(), nil))
+
+	// 刪除不存在（或 ID 格式錯誤，service 層同樣回傳 ErrFormNotFound）的表單要回
+	// 404，不能落到 500 讓使用者以為是系統故障。
+	require.Equal(t, http.StatusNotFound, w.Code)
+	var resp struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "NOT_FOUND", resp.Error.Code)
+}
+
+func TestResolveRowConflict_AlreadyResolvedReturnsConflictStatus(t *testing.T) {
+	svc := &stubService{resolveConflictErr: app.ErrRowConflictAlreadyResolved}
+	r := newTestRouter(svc)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/driver-report-conflicts/"+uuid.New().String()+"/resolve",
+		bytes.NewBufferString(`{"useNew":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	// 已被他人裁決過的衝突要回 409，訊息要說清楚「已由其他人處理」，不能跟其他未
+	// 預期錯誤共用 500「更新欄位對應設定失敗」。
+	require.Equal(t, http.StatusConflict, w.Code)
+	var resp struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "RESOURCE_IN_USE", resp.Error.Code)
+	assert.Contains(t, resp.Error.Message, "已由其他人處理")
 }

@@ -1,8 +1,10 @@
 package transport
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,18 +17,45 @@ import (
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
+// PendingRelinker 讓個案新增或改名後，重新比對名稱相符的待維護司機匯報欄位；
+// 未接線時傳 nil，Create／Update 會略過重新比對。
+type PendingRelinker interface {
+	RelinkByName(ctx context.Context, name string, actorID uuid.UUID, actorRole, ip, ua string) (int, error)
+}
+
 // CaseHandler 處理個案相關之 HTTP 請求。
 type CaseHandler struct {
 	masterService *app.CaseService
+	relinker      PendingRelinker
 }
 
 // NewCaseHandler 建立 CaseHandler 實例。
 func NewCaseHandler(
 	masterService *app.CaseService,
+	relinkers ...PendingRelinker,
 ) *CaseHandler {
-	return &CaseHandler{
-		masterService: masterService,
+	h := &CaseHandler{masterService: masterService}
+	if len(relinkers) > 0 {
+		h.relinker = relinkers[0]
 	}
+	return h
+}
+
+// relinkPendingMeta 呼叫 relinker 重新比對待維護資料；筆數為 0 時回傳 nil，
+// 讓 RespondSuccess 的 meta 維持既有形狀，不多長一個恆為 0 的欄位。
+func (h *CaseHandler) relinkPendingMeta(c *gin.Context, name string) any {
+	if h.relinker == nil || name == "" {
+		return nil
+	}
+	n, err := h.relinker.RelinkByName(c.Request.Context(), name, auth.GetActorID(c), auth.GetActorRole(c), c.ClientIP(), c.Request.UserAgent())
+	if err != nil {
+		slog.Error("pending_relink_failed", slog.String("name", name), slog.Any("error", err))
+		return nil
+	}
+	if n == 0 {
+		return nil
+	}
+	return gin.H{"pendingRelinked": n}
 }
 
 // List 查詢個案清單（回傳遮罩身分證）。
@@ -79,11 +108,37 @@ func (h *CaseHandler) Create(c *gin.Context) {
 		c.Request.Context(), req.ToService(), actorID, actorRole, c.ClientIP(), c.Request.UserAgent(),
 	)
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		respondCreateCaseError(c, err)
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, newCaseResponse(*entity), nil)
+	meta := h.relinkPendingMeta(c, entity.Name)
+	httpx.RespondSuccess(c, http.StatusCreated, newCaseResponse(*entity), meta)
+}
+
+// respondCreateCaseError 依 CreateCase 已知的 sentinel 錯誤分流具體中文原因，姓名必填／
+// 身分證格式錯誤回 400，身分證重複回 409；其餘未預期的加密或資料庫錯誤一律回 500，
+// 不再讓所有失敗都退回同一句通用驗證訊息。
+func respondCreateCaseError(c *gin.Context, err error) {
+	if errors.Is(err, app.ErrCaseNameRequired) {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+			{Field: "name", Reason: "請輸入個案姓名"},
+		})
+		return
+	}
+	if errors.Is(err, app.ErrInvalidNationalIDFormat) {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+			{Field: "nationalId", Reason: "身分證字號格式錯誤"},
+		})
+		return
+	}
+	if errors.Is(err, app.ErrDuplicateNationalID) {
+		httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+			{Field: "nationalId", Reason: "此身分證字號已存在於其他個案"},
+		})
+		return
+	}
+	httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 }
 
 // Delete 軟刪除個案並收斂其生效中排班。
@@ -119,11 +174,63 @@ func (h *CaseHandler) CreateSchedule(c *gin.Context) {
 
 	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req.ToService())
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		respondScheduleError(c, err)
 		return
 	}
 
 	httpx.RespondSuccess(c, http.StatusCreated, newCaseScheduleResponse(*sched), nil)
+}
+
+// scheduleErrorReason 讓已知的排班驗證 sentinel 錯誤對應到欄位與可讀中文原因。
+type scheduleErrorReason struct {
+	err    error
+	field  string
+	reason string
+}
+
+// scheduleErrorReasons 列出 CreateCaseSchedule／SaveSchedule 會回傳的已知輸入錯誤，
+// 逐一寫死中文說明，避免全部退回「輸入資料不符合規則」這種看不出原因的通用句。
+var scheduleErrorReasons = []scheduleErrorReason{
+	{app.ErrInvalidTripPattern, "tripPattern", "趟次數與時段筆數不一致，請確認出車趟數與時段設定"},
+	{app.ErrLegTimesNotOrdered, "legs", "各時段出發時間須依序由早到晚遞增，請確認時間順序"},
+	{app.ErrInvalidScheduleWeekday, "weekdays", "星期設定不正確，請選擇 1 到 7 之間且不重複的星期"},
+	{app.ErrInvalidScheduleLegSeq, "legSeq", "時段序號設定不正確，請確認序號未重複且未超出趟次數"},
+	{app.ErrInvalidScheduleDirection, "direction", "時段方向設定不正確，請選擇去程或回程"},
+	{app.ErrInvalidScheduleTime, "departTime", "出發時間格式不正確，請使用 HH:MM 格式（例如 08:30）"},
+	{app.ErrInvalidSchedulePrice, "unitPrice", "單價必須大於 0，請重新輸入"},
+	{app.ErrInvalidScheduleDistance, "distanceKm", "距離必須大於 0，請重新輸入"},
+	{app.ErrInvalidScheduleDuration, "serviceDurationMin", "服務時長必須介於 1 至 240 分鐘，請重新輸入"},
+	{app.ErrInvalidScheduleDateRange, "effectiveTo", "結束日期不可早於生效日期，請確認日期區間"},
+}
+
+// respondScheduleError 依錯誤種類分流：個案不存在回 404；已知的輸入驗證錯誤回 400 並附上
+// 具體中文原因；時段生效期間重疊（no_overlapping_case_schedule）回 409，避免跟一般驗證錯誤
+// 混淆；外鍵失效（選到不存在的車輛/個案）回 400 並說明原因；其餘未預期的資料庫或系統錯誤
+// 一律回 500，不再讓期間重疊、FK 失效、DB 故障全部偽裝成使用者輸入錯誤。
+func respondScheduleError(c *gin.Context, err error) {
+	if errors.Is(err, app.ErrCaseNotFound) {
+		httpx.RespondErrorCode(c, http.StatusNotFound, httpx.CodeNotFound, err, nil)
+		return
+	}
+	for _, sr := range scheduleErrorReasons {
+		if errors.Is(err, sr.err) {
+			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Field: sr.field, Reason: sr.reason},
+			})
+			return
+		}
+	}
+	if errors.Is(err, app.ErrScheduleOverlap) {
+		httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeAssignmentOverlap, err, nil)
+		return
+	}
+	if errors.Is(err, app.ErrScheduleInvalidReference) {
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+			{Reason: "所選擇的車輛或個案資料不存在，請重新整理後再選擇"},
+		})
+		return
+	}
+	httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 }
 
 // ExportProfileWorkbook 下載與個案彙整表相同格式的主檔資料；caseIds 為逗號分隔的個案 ID，省略則匯出全部個案。
@@ -251,7 +358,11 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
+	var meta any
+	if req.Name != nil {
+		meta = h.relinkPendingMeta(c, entity.Name)
+	}
+	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), meta)
 }
 
 // ListDuplicateCandidates 列出所有待裁決的疑似重複個案。
@@ -286,7 +397,7 @@ func (h *CaseHandler) ResolveDuplicateCandidate(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, app.ErrInvalidDuplicateDecision) {
 			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
-				{Field: "decision", Reason: "decision 必須為 confirmed_new 或 merged_existing"},
+				{Field: "decision", Reason: "請選擇處理方式：新增為新個案，或合併至既有個案"},
 			})
 			return
 		}
@@ -295,7 +406,9 @@ func (h *CaseHandler) ResolveDuplicateCandidate(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, app.ErrDuplicateCandidateResolved) {
-			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, nil)
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Reason: "此筆已被其他人裁決"},
+			})
 			return
 		}
 		if errors.Is(err, app.ErrDuplicateNationalID) {
@@ -329,7 +442,9 @@ func (h *CaseHandler) DiscardDuplicateCandidate(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, app.ErrDuplicateCandidateResolved) {
-			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, nil)
+			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeValidationFailed, err, []httpx.ErrorDetail{
+				{Reason: "此筆已被其他人裁決"},
+			})
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
@@ -337,44 +452,6 @@ func (h *CaseHandler) DiscardDuplicateCandidate(c *gin.Context) {
 	}
 
 	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
-}
-
-// UpdateTransportPreference 更新個案的交通偏好（去回程車輛）。據點請改用 PATCH /cases/:id。
-func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的個案 ID", nil)
-		return
-	}
-
-	var req struct {
-		OutboundVehicleID      *uuid.UUID `json:"outboundVehicleId"`
-		InboundVehicleID       *uuid.UUID `json:"inboundVehicleId"`
-		OutboundVehicleNameRaw string     `json:"outboundVehicleNameRaw"`
-		InboundVehicleNameRaw  string     `json:"inboundVehicleNameRaw"`
-	}
-	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
-		return
-	}
-
-	entity, err := h.masterService.UpdateCaseTransportPreference(
-		c.Request.Context(), id, req.OutboundVehicleID, req.InboundVehicleID,
-		req.OutboundVehicleNameRaw, req.InboundVehicleNameRaw,
-		app.AuditContext{
-			ActorID:   auth.GetActorID(c),
-			ActorRole: auth.GetActorRole(c),
-			IPAddress: c.ClientIP(),
-			UserAgent: c.Request.UserAgent(),
-		},
-	)
-	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "更新交通偏好失敗", nil)
-		return
-	}
-
-	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
 }
 
 // GetSchedule 取得個案現行排班。
@@ -416,7 +493,7 @@ func (h *CaseHandler) SaveSchedule(c *gin.Context) {
 
 	sched, err := h.masterService.CreateCaseSchedule(c.Request.Context(), req.ToService(caseID))
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		respondScheduleError(c, err)
 		return
 	}
 

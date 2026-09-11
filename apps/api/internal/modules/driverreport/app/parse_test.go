@@ -90,6 +90,13 @@ func (s stubDrivers) GetByNameNormalized(_ context.Context, nameNorm string) (*D
 	return nil, nil
 }
 
+func (s stubDrivers) ListByNameNormalized(_ context.Context, nameNorm string) ([]DriverRef, error) {
+	if d, ok := s.known[nameNorm]; ok {
+		return []DriverRef{d}, nil
+	}
+	return nil, nil
+}
+
 func newTestService(table [][]string, existing []ColumnMapping) *DriverReportService {
 	vehicleID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 	return NewDriverReportService(
@@ -391,4 +398,23 @@ func TestParseYearMonth(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExactAutoBind(t *testing.T) {
+	pending := []ColumnMapping{
+		{ID: "exact-outbound", Kind: "ride", CleanedName: "陳大華", ColumnHeader: "陳大華[去程]"},
+		{ID: "exact-inbound", Kind: "ride", CleanedName: "陳大華", ColumnHeader: "陳大華[回程]"},
+		{ID: "no-direction", Kind: "ride", CleanedName: "陳大華", ColumnHeader: "陳大華"},
+		{ID: "approx", Kind: "ride", CleanedName: "陳大化", ColumnHeader: "陳大化[去程]"},
+		{ID: "meta", Kind: "meta", CleanedName: "陳大華", ColumnHeader: "駕駛人"},
+	}
+
+	got := exactAutoBind(pending, "陳大華")
+
+	var ids []string
+	for _, c := range got {
+		ids = append(ids, c.ID)
+	}
+	assert.ElementsMatch(t, []string{"exact-outbound", "exact-inbound"}, ids,
+		"只有清理後姓名完全一致且方向明確的欄位才自動綁定")
 }

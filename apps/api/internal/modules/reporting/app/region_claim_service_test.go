@@ -2,7 +2,9 @@ package app_test
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -105,6 +107,47 @@ func TestRegionClaimService_CreateRegionClaimJobs(t *testing.T) {
 
 		assert.ErrorIs(t, err, app.ErrNoExportData)
 		assert.Empty(t, reader.scopes, "個案都解析不到就不該再去查申報來源")
+	})
+
+	t.Run("所有月份都因未裁決混車衝突被擋下時回 ErrPrecheckBlocked", func(t *testing.T) {
+		// 「有資料但被擋」跟「沒有資料」是兩回事：全部月份都卡在混車衝突未裁決時，
+		// 應提示使用者去裁決，而不是誤導成條件下沒有可申報資料。
+		reader := &monthScopedSourceReader{byMonth: map[string][]app.GovClaimSource{
+			"2026-05": {newRegionSource(t, caseID, 1)},
+			"2026-06": {newRegionSource(t, caseID, 2)},
+		}}
+		store := &fakeExportStore{jobID: uuid.New()}
+		precheck := stubPrecheckRepo{conflicts: []app.UnresolvedConflict{
+			{RideID: uuid.New(), CaseName: "蔡曾切", ServiceDate: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)},
+		}}
+		claims := newService(reader, store, &recordingRenderer{}, &recordingArchiver{}, precheck)
+		svc := app.NewRegionClaimService(fakeClaimCaseResolver{cases: scopedCases}, claims)
+
+		_, err := svc.CreateRegionClaimJobs(context.Background(), app.RegionClaimInput{
+			Regions:   []string{"新竹"},
+			PeriodYMs: []string{"11505", "11506"},
+		})
+
+		assert.ErrorIs(t, err, app.ErrPrecheckBlocked)
+	})
+
+	t.Run("所有月份都因內部錯誤失敗時不偽裝成沒有資料", func(t *testing.T) {
+		reader := &monthScopedSourceReader{byMonth: map[string][]app.GovClaimSource{
+			"2026-05": {newRegionSource(t, caseID, 1)},
+			"2026-06": {newRegionSource(t, caseID, 2)},
+		}}
+		store := &fakeExportStore{jobID: uuid.New(), createFail: errors.New("db connection lost")}
+		claims := newService(reader, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{})
+		svc := app.NewRegionClaimService(fakeClaimCaseResolver{cases: scopedCases}, claims)
+
+		_, err := svc.CreateRegionClaimJobs(context.Background(), app.RegionClaimInput{
+			Regions:   []string{"新竹"},
+			PeriodYMs: []string{"11505", "11506"},
+		})
+
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, app.ErrNoExportData, "含有內部錯誤時不該說成查無資料")
+		assert.NotErrorIs(t, err, app.ErrPrecheckBlocked)
 	})
 
 	t.Run("未指定區域或月份時拒絕執行", func(t *testing.T) {

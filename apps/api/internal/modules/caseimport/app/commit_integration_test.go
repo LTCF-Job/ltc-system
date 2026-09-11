@@ -85,7 +85,6 @@ func TestCommitCases_TransactionRollback(t *testing.T) {
 		cleanupCtx := context.Background()
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM schedule_legs WHERE schedule_id IN (SELECT id FROM case_schedules WHERE case_id IN (SELECT id FROM cases WHERE site_id = $1))`, site.ID)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM case_schedules WHERE case_id IN (SELECT id FROM cases WHERE site_id = $1)`, site.ID)
-		_, _ = pool.Exec(cleanupCtx, `DELETE FROM case_transport_preferences WHERE case_id IN (SELECT id FROM cases WHERE site_id = $1)`, site.ID)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM audit_log WHERE entity_type = 'cases' AND entity_id IN (SELECT id::text FROM cases WHERE site_id = $1)`, site.ID)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM cases WHERE site_id = $1`, site.ID)
 		_, _ = pool.Exec(cleanupCtx, `DELETE FROM sites WHERE id = $1`, site.ID)

@@ -190,7 +190,9 @@ export const vTableAutoWidth: Directive = {
         } else if (rows.length === 0) {
           finalWidth = Math.max(headerWidth + buffer, declaredMinWidth, 60)
         } else {
-          finalWidth = Math.max(contentNeeded, 60)
+          // 即使量測到內容寬度，仍須以作者宣告的 min-width 為底線，
+          // 避免多元件並排（如多個標籤）只量到其中一個導致欄位被壓縮、內容被裁切
+          finalWidth = Math.max(contentNeeded, declaredMinWidth, 60)
         }
 
         optimalWidths.push(finalWidth)

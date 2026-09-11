@@ -236,6 +236,55 @@ const LEGACY_REGION_LABELS: Record<string, string> = {
 }
 import { DocumentCopy } from '@element-plus/icons-vue'
 
+// 補齊 @/types/domain 的 AUDIT_FIELD_LABELS／AUDIT_FIELD_SECTIONS 尚未收錄、但本頁
+// 實際會遇到的稽核快照欄位（例如個案主檔異動快照 caseAuditSnapshot 用到的欄位），
+// 避免落到「原始 key 當標籤」的後備邏輯；比照上方 LEGACY_REGION_LABELS 的做法，
+// 只在此頁面本地補充，不改動共用字典（該檔不在本次任務擁有範圍內）。
+const LOCAL_AUDIT_FIELD_LABELS: Record<string, string> = {
+  nameMasked: '姓名（去識別）',
+  name_masked: '姓名（去識別）',
+  householdType: '戶別',
+  household_type: '戶別',
+  gender: '性別',
+  birthDate: '出生日期',
+  birth_date: '出生日期',
+  caregiverId: '照護人員',
+  caregiver_id: '照護人員',
+  outboundVehicleId: '去程車輛',
+  outbound_vehicle_id: '去程車輛',
+  inboundVehicleId: '回程車輛',
+  inbound_vehicle_id: '回程車輛',
+  nationalIdInvalid: '身分證字號待補正',
+  national_id_invalid: '身分證字號待補正'
+}
+
+const LOCAL_AUDIT_FIELD_SECTIONS: Record<string, string> = {
+  nameMasked: '個資識別',
+  name_masked: '個資識別',
+  householdType: '基本資料',
+  household_type: '基本資料',
+  gender: '基本資料',
+  birthDate: '基本資料',
+  birth_date: '基本資料',
+  caregiverId: '個案識別',
+  caregiver_id: '個案識別',
+  outboundVehicleId: '營運與指派',
+  outbound_vehicle_id: '營運與指派',
+  inboundVehicleId: '營運與指派',
+  inbound_vehicle_id: '營運與指派',
+  nationalIdInvalid: '個資識別',
+  national_id_invalid: '個資識別'
+}
+
+// 個資加密欄位（密文／HMAC）：即使未來有任何來源把這類欄位夾帶進稽核快照，
+// 本頁一律遮罩不顯示原始值，作為既有已知的 casemgmt Case DTO 序列化外洩問題
+// （見專案記憶 casemgmt-case-dto-leak）之外的第二道防線。
+const SENSITIVE_AUDIT_FIELD_PATTERN = /cipher|hmac|nationalIdCipher|national_id_cipher/i
+
+function isSensitiveAuditField(key: string): boolean {
+  return SENSITIVE_AUDIT_FIELD_PATTERN.test(key)
+}
+
 const auditList = ref<AuditLogDTO[]>([])
 const loading = ref(false)
 const total = ref(0)
@@ -440,6 +489,7 @@ function getEntityDisplayName(row?: AuditLogDTO | null): string {
 
 // 格式化欄位數值為繁體中文親切文字
 function formatFieldValue(val: any, key?: string): string {
+  if (key && isSensitiveAuditField(key)) return '（已遮罩）'
   if (val === undefined || val === null) return '（無）'
 
   // 布林值處理
@@ -509,10 +559,12 @@ function formatFieldValue(val: any, key?: string): string {
     }
 
     // 一般物件結構化為「欄位: 數值」
-    const pairs = Object.entries(val).map(([subKey, subVal]) => {
-      const subLabel = AUDIT_FIELD_LABELS[subKey] || subKey
-      return `${subLabel}: ${formatFieldValue(subVal, subKey)}`
-    })
+    const pairs = Object.entries(val)
+      .filter(([subKey]) => !isSensitiveAuditField(subKey))
+      .map(([subKey, subVal]) => {
+        const subLabel = AUDIT_FIELD_LABELS[subKey] || LOCAL_AUDIT_FIELD_LABELS[subKey] || subKey
+        return `${subLabel}: ${formatFieldValue(subVal, subKey)}`
+      })
     return pairs.length > 0 ? pairs.join('；') : '（無詳細內容）'
   }
 
@@ -563,8 +615,12 @@ const computedDiffList = computed<DiffRowItem[]>(() => {
       tagType = 'warning'
     }
 
-    const section = AUDIT_FIELD_SECTIONS[k] || '基本資料'
-    const label = AUDIT_FIELD_LABELS[k] || k
+    // 密文／HMAC 等加密欄位一律遮罩排除，不進入異動對照表（見上方
+    // isSensitiveAuditField 說明）。
+    if (isSensitiveAuditField(k)) continue
+
+    const section = AUDIT_FIELD_SECTIONS[k] || LOCAL_AUDIT_FIELD_SECTIONS[k] || '基本資料'
+    const label = AUDIT_FIELD_LABELS[k] || LOCAL_AUDIT_FIELD_LABELS[k] || k
 
     results.push({
       key: k,

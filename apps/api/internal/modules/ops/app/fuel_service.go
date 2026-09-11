@@ -10,6 +10,9 @@ import (
 
 var ErrInvalidFuelPagination = errors.New("fuel pagination must be positive")
 
+// ErrFuelLogNotFound 代表查無指定的油資紀錄；更新或刪除不存在的紀錄時回傳，供 handler 映射 404。
+var ErrFuelLogNotFound = errors.New("fuel log not found")
+
 // FuelService 提供車輛油資登記與管理服務。
 type FuelService struct {
 	fuelRepo  FuelStore

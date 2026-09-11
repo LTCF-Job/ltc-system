@@ -33,6 +33,11 @@ const (
 	CodeImportTemplateMismatch = "IMPORT_TEMPLATE_MISMATCH"
 
 	CodeRouteNotFound = "ROUTE_NOT_FOUND"
+
+	// 樂觀鎖與衝突裁決類錯誤，讓「資料被別人改過」與「衝突被別人處理過」
+	// 不再借用語意不符的 RESOURCE_IN_USE（該碼固定訊息是「無法刪除」）。
+	CodeStaleWrite              = "STALE_WRITE"
+	CodeConflictAlreadyResolved = "CONFLICT_ALREADY_RESOLVED"
 )
 
 // codeMessages 為每個錯誤碼提供固定、非技術性的預設訊息，是前端顯示文字的單一事實來源。
@@ -59,6 +64,9 @@ var codeMessages = map[string]string{
 	CodeImportTemplateMismatch: "檔案欄位與匯入範本不符，請下載標準範本重新填寫",
 
 	CodeRouteNotFound: "找不到此功能的服務位址，請重新整理頁面或聯繫系統管理員",
+
+	CodeStaleWrite:              "資料已被其他人更新，請重新整理後再試",
+	CodeConflictAlreadyResolved: "此衝突已由其他人處理，請重新整理",
 }
 
 // MessageForCode 回傳錯誤碼的預設非技術性訊息；查無對應碼時退回內部系統錯誤訊息。
@@ -138,18 +146,34 @@ func RespondError(c *gin.Context, httpStatus int, code string, message string, d
 	})
 }
 
+// logAPIError 僅於伺服器端記錄底層錯誤日誌，避免將系統細節洩漏給前端。
+// RespondErrorCode 與 RespondErrorCodeWithReason 共用同一份記錄邏輯，確保兩者的
+// 伺服器端可觀測性一致，差別只在於回給前端的 message 來源。
+func logAPIError(c *gin.Context, code string, err error) {
+	if err == nil {
+		return
+	}
+	slog.Error("api_error",
+		slog.String("code", code),
+		slog.String("request_id", RequestID(c)),
+		slog.String("path", c.Request.URL.Path),
+		slog.String("method", c.Request.Method),
+		slog.String("error_type", fmt.Sprintf("%T", err)),
+		slog.String("error_message", err.Error()),
+	)
+}
+
 // RespondErrorCode 依錯誤碼查表回傳非技術性錯誤訊息。
 func RespondErrorCode(c *gin.Context, httpStatus int, code string, err error, details []ErrorDetail) {
-	// 僅於伺服器端記錄底層錯誤日誌，避免將系統細節洩漏給前端
-	if err != nil {
-		slog.Error("api_error",
-			slog.String("code", code),
-			slog.String("request_id", RequestID(c)),
-			slog.String("path", c.Request.URL.Path),
-			slog.String("method", c.Request.Method),
-			slog.String("error_type", fmt.Sprintf("%T", err)),
-			slog.String("error_message", err.Error()),
-		)
-	}
+	logAPIError(c, code, err)
 	RespondError(c, httpStatus, code, MessageForCode(code), details)
+}
+
+// RespondErrorCodeWithReason 與 RespondErrorCode 的伺服器端記錄行為完全相同，
+// 差別在於回給前端的 message 改用呼叫端寫死的具體中文 reason（例如「目前密碼不正確」），
+// 而不是錯誤碼的通用預設訊息，讓已經知道確切原因的呼叫端不必每次都退回通用句。
+// reason 為空字串時退回 MessageForCode(code)，維持與 RespondError 一致的空字串語意。
+func RespondErrorCodeWithReason(c *gin.Context, httpStatus int, code string, err error, reason string, details []ErrorDetail) {
+	logAPIError(c, code, err)
+	RespondError(c, httpStatus, code, reason, details)
 }

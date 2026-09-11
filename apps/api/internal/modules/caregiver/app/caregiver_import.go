@@ -11,24 +11,37 @@ import (
 	"ltc-system/apps/api/internal/domain/namenorm"
 )
 
+// 匯入前置階段的已知失敗原因，讓 transport 層可用 errors.Is 分流成對應的錯誤碼
+// （UNSUPPORTED_FILE_TYPE／FILE_UNREADABLE／IMPORT_TEMPLATE_MISMATCH），
+// 不再全部退回通用的 VALIDATION_FAILED。
+var (
+	ErrUnsupportedFileType = errors.New("caregiver import: unsupported file type")
+	ErrFileUnreadable      = errors.New("caregiver import: file unreadable")
+	ErrTemplateMismatch    = errors.New("caregiver import: template header mismatch")
+)
+
 // ParseCaregivers 僅支援解析 .xlsx 檔案，對齊「類型／單位／姓名／聯絡方式／備註」欄位格式。
 func (s *CaregiverService) ParseCaregivers(ctx context.Context, r io.Reader, fileName string) (*CaregiverImportPreviewResult, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file data: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrFileUnreadable, err)
 	}
 
-	// 檢查是否為 Excel ZIP 格式 (Magic Number: PK\x03\x04)
+	if !strings.HasSuffix(strings.ToLower(fileName), ".xlsx") {
+		return nil, ErrUnsupportedFileType
+	}
+	// 檢查是否為 Excel ZIP 格式 (Magic Number: PK\x03\x04)；副檔名是 .xlsx 但內容
+	// 不是有效的 Excel 格式視為檔案損毀，而非「格式不支援」。
 	isExcel := len(data) >= 4 && data[0] == 0x50 && data[1] == 0x4B && data[2] == 0x03 && data[3] == 0x04
-	if !isExcel || !strings.HasSuffix(strings.ToLower(fileName), ".xlsx") {
-		return nil, errors.New("僅支援 .xlsx 匯入格式")
+	if !isExcel {
+		return nil, fmt.Errorf("%w: 檔案內容不是有效的 Excel 格式", ErrFileUnreadable)
 	}
 	if s.reader == nil {
 		return nil, errors.New("caregiver import: spreadsheet reader not configured")
 	}
 	tables, sheetNames, err := s.reader.ReadTables(data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFileUnreadable, err)
 	}
 	return s.processRawTables(ctx, tables, sheetNames)
 }
@@ -90,6 +103,7 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 
 	totalRows := 0
 	validRows := 0
+	headerFound := false
 
 	for tableIdx, rows := range tables {
 		sheetName := "Sheet"
@@ -100,6 +114,7 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 		if !ok {
 			continue
 		}
+		headerFound = true
 
 		getVal := func(row []string, field string) string {
 			if idx, ok := colMap[field]; ok && idx < len(row) {
@@ -175,6 +190,12 @@ func (s *CaregiverService) processRawTables(ctx context.Context, tables [][][]st
 		_ = sheetNames
 	}
 
+	// 每個工作表都找不到表頭時直接視為「範本不符」，不能靜默回傳 totalRows:0
+	// 卻仍是 200 成功，讓使用者誤以為檔案是空的。
+	if !headerFound {
+		return nil, fmt.Errorf("%w: 找不到「姓名」欄，請確認是否使用照護人員批次匯入範本", ErrTemplateMismatch)
+	}
+
 	warningRows := 0
 	for _, row := range results {
 		if row.WarningMessage != "" {
@@ -244,7 +265,8 @@ func (s *CaregiverService) CommitCaregivers(ctx context.Context, preview *Caregi
 
 		if err := s.store.Create(ctx, &c); err != nil {
 			slog.Error("caregiver import row failed", "row_index", row.RowIndex, "error", err)
-			result.SkippedRows = append(result.SkippedRows, CaregiverImportSkippedRow{
+			result.FailedCount++
+			result.FailedRows = append(result.FailedRows, CaregiverImportSkippedRow{
 				RowID: row.RowID, RowIndex: row.RowIndex, Name: row.Name, Reasons: []string{"資料列匯入失敗，請檢查資料或稍後重試"}, RawValues: row.RawValues,
 			})
 			continue

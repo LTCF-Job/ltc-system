@@ -17,7 +17,7 @@
         >
           <template #default>
             <div class="template-action">
-              <span>依照範本格式填寫個案姓名、身分證字號等必填欄位，戶別與據點請填寫中文名稱，系統會自動比對現有主檔資料。</span>
+              <span>{{ instructionText }}</span>
               <el-button
                 type="primary"
                 plain
@@ -195,12 +195,21 @@ interface ImportCommitResult {
   warnings?: Array<{ rowIndex: number; caseName?: string; field?: string; message: string }>
 }
 
-const props = defineProps<{
-  title: string
-  onDryRun: (file: File) => Promise<DryRunImportResultDTO>
-  onCommit: (file: File, includeDuplicateRows: string[]) => Promise<ImportCommitResult>
-  onDownloadTemplate?: () => Promise<void> | void
-}>()
+const props = withDefaults(
+  defineProps<{
+    title: string
+    onDryRun: (file: File) => Promise<DryRunImportResultDTO>
+    onCommit: (file: File, includeDuplicateRows: string[]) => Promise<ImportCommitResult>
+    onDownloadTemplate?: () => Promise<void> | void
+    // 範本下載提示區塊的說明文字：不同實體（個案／照護人員）的必填欄位不同，
+    // 呼叫端未傳入時沿用原本的個案匯入文案，維持既有呼叫端行為不變。
+    instructionText?: string
+  }>(),
+  {
+    instructionText:
+      '依照範本格式填寫個案姓名、身分證字號等必填欄位，戶別與據點請填寫中文名稱，系統會自動比對現有主檔資料。',
+  }
+)
 
 const emit = defineEmits<{
   (e: 'success'): void

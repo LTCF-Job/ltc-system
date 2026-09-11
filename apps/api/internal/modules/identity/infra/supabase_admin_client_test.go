@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"ltc-system/apps/api/internal/modules/identity/app"
@@ -74,6 +75,49 @@ func TestSupabaseAdminClient_NonSuccessStatusReturnsError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "supabase admin request returned HTTP 401", err.Error())
 	assert.NotContains(t, err.Error(), "invalid api key")
+}
+
+func TestSupabaseAdminClient_CreateUser_EmailAlreadyExists_MapsToErrEmailAlreadyExists(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"error_code":"email_exists","msg":"A user with this email address has already been registered"}`))
+	}))
+	defer srv.Close()
+
+	client := NewSupabaseAdminClient(srv.URL, "key", nil)
+	_, err := client.CreateUser(t.Context(), app.CreateAuthUserInput{Email: "dup@example.com", Password: "test12345"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, app.ErrEmailAlreadyExists)
+	assert.NotContains(t, err.Error(), "dup@example.com", "第三方 response body 不得併入回傳的 error 文字")
+}
+
+func TestSupabaseAdminClient_CreateUser_WeakPassword_MapsToErrWeakPassword(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"error_code":"weak_password","msg":"Password should be at least 6 characters"}`))
+	}))
+	defer srv.Close()
+
+	client := NewSupabaseAdminClient(srv.URL, "key", nil)
+	_, err := client.CreateUser(t.Context(), app.CreateAuthUserInput{Email: "new@example.com", Password: "123"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, app.ErrWeakPassword)
+}
+
+func TestSupabaseAdminClient_GetUser_NotFound_MapsToErrUserNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"msg":"User not found"}`))
+	}))
+	defer srv.Close()
+
+	client := NewSupabaseAdminClient(srv.URL, "key", nil)
+	_, err := client.GetUser(t.Context(), uuid.New())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, app.ErrUserNotFound)
 }
 
 func TestSupabaseAdminClient_VerifyPassword_UsesGrantTypePasswordEndpoint(t *testing.T) {

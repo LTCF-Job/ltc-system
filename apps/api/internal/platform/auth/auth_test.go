@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -134,6 +135,66 @@ func TestAuthMiddleware_AcceptsValidSignedToken(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.False(t, c.IsAborted())
 	assert.Equal(t, "staff", c.GetString(ContextKeyActorRole))
+	assert.Equal(t, actorID, GetActorID(c))
+}
+
+// fakeUserStateResolver 讓測試能直接指定 Validate 要回傳哪個 UserState，不必真的接資料庫。
+type fakeUserStateResolver struct {
+	state UserState
+	err   error
+}
+
+func (f fakeUserStateResolver) Validate(ctx context.Context, actorID uuid.UUID, role string) (UserState, error) {
+	return f.state, f.err
+}
+
+// TestAuthMiddleware_DisabledAccount_Returns401WithDisabledMessage 確認帳號真的被停用時，
+// 訊息仍是「使用者帳號已停用」——這是修正前後都要維持的既有行為。
+func TestAuthMiddleware_DisabledAccount_Returns401WithDisabledMessage(t *testing.T) {
+	srv, key := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
+	signed := signTestToken(t, key, "test-kid", uuid.New().String(), "staff")
+
+	w, c := performAuthRequest(t, MiddlewareWithUserState(cfg, fakeUserStateResolver{state: UserStateDisabled}), "Bearer "+signed)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.True(t, c.IsAborted())
+	assert.Contains(t, w.Body.String(), "使用者帳號已停用")
+}
+
+// TestAuthMiddleware_RoleMismatch_Returns401WithoutDisabledWording 確認角色不一致（管理員
+// 剛改過角色、JWT 尚未過期）時，訊息不能出現「停用」字樣，避免誤導使用者以為帳號出問題。
+func TestAuthMiddleware_RoleMismatch_Returns401WithoutDisabledWording(t *testing.T) {
+	srv, key := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
+	signed := signTestToken(t, key, "test-kid", uuid.New().String(), "staff")
+
+	w, c := performAuthRequest(t, MiddlewareWithUserState(cfg, fakeUserStateResolver{state: UserStateRoleMismatch}), "Bearer "+signed)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.True(t, c.IsAborted())
+	assert.NotContains(t, w.Body.String(), "停用")
+	assert.Contains(t, w.Body.String(), "請重新登入")
+}
+
+// TestAuthMiddleware_ActiveMatchingRole_PassesThrough 確認帳號啟用且角色一致時仍會放行，
+// 不受本次新增的三態判斷影響既有的成功路徑。
+func TestAuthMiddleware_ActiveMatchingRole_PassesThrough(t *testing.T) {
+	srv, key := newTestJWKSServer(t)
+	defer srv.Close()
+
+	cfg := &config.Config{AppEnv: "production", SupabaseJWKSURL: srv.URL, SupabaseJWTIssuer: testIssuer}
+	actorID := uuid.New()
+	signed := signTestToken(t, key, "test-kid", actorID.String(), "staff")
+
+	w, c := performAuthRequest(t, MiddlewareWithUserState(cfg, fakeUserStateResolver{state: UserStateActive}), "Bearer "+signed)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, c.IsAborted())
 	assert.Equal(t, actorID, GetActorID(c))
 }
 

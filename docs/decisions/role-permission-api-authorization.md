@@ -49,7 +49,7 @@ covers:
 ## Consequences
 
 - 個人層級的 `custom_permissions` 覆蓋（「使用者管理」頁對單一使用者的自訂權限）後續已在 [custom-permission-admin-api-enforcement.md](custom-permission-admin-api-enforcement.md) 補上——與角色矩陣一樣由共享 PostgreSQL 投影提供版本，避免每支 API 依賴 Supabase Admin API。
-- 新增自訂角色、或修改既有角色的模組矩陣，授權快取會先以共享資料來源版本確認是否仍有效；更新在資料庫可見後不依賴單一 replica 的 30 秒 TTL 才生效。若資料庫本身使用非同步複寫，仍受複寫延遲影響。
+- 新增自訂角色、或修改既有角色的模組矩陣，授權 cache 命中時先查詢 `roles.updated_at` 輕量版本；版本未變更則沿用 process-local 結果，變更則重新載入矩陣。這保留跨 replica 的版本失效語意，同一 replica 的 mutation 仍會立即清除本機快取；若資料庫本身使用非同步複寫，仍受複寫延遲影響。
 - `roles.base_role` 欄位在這次改動後不再被任何執行路徑讀取（僅 migration 000018 一次性回填時用過），保留欄位本身供未來「哪些角色屬於高信任層級」之類的判斷使用，但目前是死資料，之後若徹底不需要可以另開 migration 移除。
 - `auth.RequireRoles` 在 2026-09 修訂後確認無任何呼叫點，函式本身已刪除；`cmd/server/routes_module_keys_test.go` 的 AST 掃描持續守住「不得再出現」這件事，之後若要重新引入需先修改該測試。
 - 這個檔案一旦再被改動（尤其是 `permission.go` 的快取 TTL、或 routes.go 新增／調整模組路由）就會被標記 stale，需要重新核對模組 key 與動作軸的對映是否還成立。

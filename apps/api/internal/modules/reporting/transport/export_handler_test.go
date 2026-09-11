@@ -377,6 +377,29 @@ func TestExportHandler_DownloadBatchRejectsMissingJobIDs(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestExportHandler_PrecheckByRegionWithoutCasesReportsNoExportData(t *testing.T) {
+	// 該區域底下查無個案時，caseIds 不能維持空陣列——SQL 語意上空陣列等同「不限個案」，
+	// 會變成對全機構跑檢核、顯示一堆跟選定區域無關的混車衝突。
+	gin.SetMode(gin.TestMode)
+	h := newExportHandlerWith(
+		app.NewPrecheckService(stubPrecheckRepo{
+			conflicts: []app.UnresolvedConflict{{RideID: uuid.New(), CaseName: "與此區域無關的個案", ServiceDate: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)}},
+		}),
+		newTestGovClaimService(t, newMemoryExportStore()),
+		stubClaimCaseResolver{cases: nil},
+		stubSiteTripReader{},
+	)
+
+	w := performPrecheckRequest(h, http.MethodPost, map[string]interface{}{
+		"periodYm": "11507",
+		"regions":  []string{"不存在的區域"},
+	})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	assert.Contains(t, w.Body.String(), "NO_EXPORT_DATA")
+	assert.NotContains(t, w.Body.String(), "與此區域無關的個案", "空範圍不該去跑全機構檢核")
+}
+
 func TestExportHandler_PrecheckAcceptsMultipleMonths(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h, _ := newTestExportHandler(t, app.GovClaimModeDirect)

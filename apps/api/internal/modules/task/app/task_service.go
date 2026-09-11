@@ -142,8 +142,20 @@ func (s *TaskService) listMissingReports(ctx context.Context, year, month int, o
 	return missingList, nil
 }
 
-// CheckMissingReports 比對特定日期應搭乘日曆與實際搭乘紀錄，偵測未回報趟次並觸發告警通知。
-func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.Time) ([]MissingRideItem, error) {
+// MissingReportCheckResult 代表未回報檢核結果，包含通知是否成功送出。檢核本身（比對搭乘日曆與
+// 實際紀錄）與催報通知寄送是兩件獨立的事：通知寄送失敗不代表檢核失敗，已算出的未回報清單仍應
+// 完整回傳，不能因為通知這個 best-effort 動作出錯就把整批檢核結果一起丟掉。
+type MissingReportCheckResult struct {
+	Items []MissingRideItem
+	// NotificationAttempted 代表本次是否嘗試過寄送催報通知（有未回報項目且已設定通知服務）。
+	NotificationAttempted bool
+	// NotificationSent 只有在 NotificationAttempted 為 true 時才有意義，代表通知是否成功送出。
+	NotificationSent bool
+}
+
+// CheckMissingReports 比對特定日期應搭乘日曆與實際搭乘紀錄，偵測未回報趟次並嘗試觸發告警通知；
+// 通知寄送失敗會降級為 warning 記錄於伺服器端 log，不會讓已算出的未回報清單跟著遺失。
+func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.Time) (*MissingReportCheckResult, error) {
 	year := targetDate.Year()
 	month := int(targetDate.Month())
 	dateStr := targetDate.Format("2006-01-02")
@@ -153,18 +165,23 @@ func (s *TaskService) CheckMissingReports(ctx context.Context, targetDate time.T
 		return nil, err
 	}
 
+	result := &MissingReportCheckResult{Items: missingList}
+
 	// 存在未回報趟次時主動發送通報
 	if len(missingList) > 0 && s.notificationSvc != nil {
+		result.NotificationAttempted = true
 		subject := fmt.Sprintf("【長照接送未回報告警】%s 共有 %d 筆趟次尚未回報", dateStr, len(missingList))
 		body := fmt.Sprintf("日期：%s\n未回報趟數：%d 筆\n請相關人員至系統「異常集中處理」或「未回報清單」確認司機填報狀況。", dateStr, len(missingList))
-		err := s.sendDeduplicatedNotification(ctx, "missing_report", subject, body, "missing_report:"+dateStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to send missing report notification: %w", err)
+		if err := s.sendDeduplicatedNotification(ctx, "missing_report", subject, body, "missing_report:"+dateStr); err != nil {
+			slog.Error("failed to send missing report notification", slog.String("date", dateStr), slog.Int("missing_count", len(missingList)), slog.Any("error", err))
+			result.NotificationSent = false
+		} else {
+			result.NotificationSent = true
+			slog.Info("Missing report notification triggered", slog.String("date", dateStr), slog.Int("missing_count", len(missingList)))
 		}
-		slog.Info("Missing report notification triggered", slog.String("date", dateStr), slog.Int("missing_count", len(missingList)))
 	}
 
-	return missingList, nil
+	return result, nil
 }
 
 // ListMissingReports 只查詢指定日期的未回報資料，不觸發通知或其他副作用。

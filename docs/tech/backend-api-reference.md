@@ -7,6 +7,8 @@ covers: ["apps/api/cmd/server/routes.go"]
 
 Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/health`（不驗證）跟 `/api/v1/ingest/google-form`（走 `X-Ingest-Token`）。實作對應各能力模組的 `internal/modules/<capability>/transport/*.go`。路由表以 `apps/api/cmd/server/routes.go` 為唯一事實來源，改路由記得同步更新這份文件。
 
+公開 `/api/health` 只回傳 `{"status":"ok"}`（database 不可用時為 HTTP 503 與 `{"status":"not_ready"}`），不再提供環境、資料庫連線細節或時間戳；外部 consumer 不應依賴已移除的診斷欄位。需要內部 readiness 詳情時使用 `/api/readyz`。
+
 下表「角色」欄列的是**目前系統五個內建角色（viewer/dispatcher/staff/driver/admin）實際能通過的結果**，不是授權機制本身：所有 API 路由都透過 `auth.RequirePermission(module, action)` 查角色的模組權限矩陣（`roles.permissions`，可在「角色身分管理」頁調整，自訂角色的實際存取範圍以矩陣為準，不受下表侷限）。機制細節見 [role-permission-api-authorization.md](../decisions/role-permission-api-authorization.md)。
 
 架構背景見 [backend-framework.md](backend-framework.md)，每支端點背後的業務流程見 [backend-flows.md](backend-flows.md)。
@@ -28,7 +30,6 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/cases/import` | staff, admin | 批次匯入個案 Excel；疑似重複個案不建立個案，改建立為待裁決暫存列。「個管or照專」旁的姓名會比對 `caregivers` 主檔寫入 `caregiver_id`，比不到則落入待維護 |
 | POST | `/masters/import` | staff, admin | 同上，走另一條相容路徑（歷史因素，實際都打 `caseH.ImportExcel`） |
 | GET | `/cases/export?caseIds=` | viewer, staff, admin | 匯出個案彙整表；`caseIds` 為逗號分隔的個案 ID，省略則匯出全部個案。「個管or照專」與其右方姓名取自關聯的照護人員主檔 |
-| PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定（去/回程車輛，完整替換語意：`outboundVehicleId`／`inboundVehicleId` 與對應的 `outboundVehicleNameRaw`／`inboundVehicleNameRaw` 未帶上即視為清空，尚未完成關聯的匯入原始名稱必須原樣回送）。**據點不在此端點設定**，個案的據點改由 `PATCH /cases/:id` 的 `siteId` 更新 |
 | GET | `/cases/import/duplicates` | viewer, staff, admin | 列出待裁決的疑似重複個案暫存列 |
 | POST | `/cases/import/duplicates/:id/reveal` | staff, admin | 解密單筆暫存列身分證字號供裁決比對（會寫 audit log 的 `reveal_pii`） |
 | POST | `/cases/import/duplicates/:id/resolve` | staff, admin | 裁決疑似重複個案（`confirmed_new` 建立新個案／`merged_existing` 合併進既有個案） |

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -32,31 +33,39 @@ import (
 
 // handlers 收集所有要註冊到路由的 delivery adapter。
 type handlers struct {
-	kase         *casetransport.CaseHandler
-	caseImport   *importtransport.ImportHandler
-	site         *mastertransport.SiteHandler
-	vehicle      *mastertransport.VehicleHandler
-	driver       *mastertransport.DriverHandler
-	ride         *ridetransport.RideHandler
-	export       *reporttransport.ExportHandler
-	notification *notifytransport.NotificationHandler
-	holiday      *holidaytransport.HolidayHandler
-	report       *reporttransport.ReportHandler
-	audit        *audittransport.AuditHandler
-	task         *tasktransport.TaskHandler
-	maintenance  *opstransport.MaintenanceHandler
-	attendance   *opstransport.AttendanceHandler
-	fuel         *opstransport.FuelHandler
-	dashboard    *reporttransport.DashboardHandler
-	driverReport *drtransport.DriverReportHandler
-	caregiver    *caregivertransport.CaregiverHandler
-	role         *identitytransport.RoleHandler
-	identity     *identitytransport.IdentityHandler
+	kase          *casetransport.CaseHandler
+	caseImport    *importtransport.ImportHandler
+	site          *mastertransport.SiteHandler
+	vehicle       *mastertransport.VehicleHandler
+	driver        *mastertransport.DriverHandler
+	ride          *ridetransport.RideHandler
+	export        *reporttransport.ExportHandler
+	notification  *notifytransport.NotificationHandler
+	holiday       *holidaytransport.HolidayHandler
+	report        *reporttransport.ReportHandler
+	audit         *audittransport.AuditHandler
+	task          *tasktransport.TaskHandler
+	maintenance   *opstransport.MaintenanceHandler
+	attendance    *opstransport.AttendanceHandler
+	fuel          *opstransport.FuelHandler
+	dashboard     *reporttransport.DashboardHandler
+	driverReport  *drtransport.DriverReportHandler
+	caregiver     *caregivertransport.CaregiverHandler
+	role          *identitytransport.RoleHandler
+	identity      *identitytransport.IdentityHandler
+	pendingRelink *pendingRelinkHandler
 }
 
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
 func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.PermissionResolver, customPerm auth.CustomPermissionResolver, userState auth.UserStateResolver) *gin.Engine {
 	r := gin.New()
+	trustedProxies, err := config.ParseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		panic(fmt.Sprintf("invalid TRUSTED_PROXIES: %v", err))
+	}
+	if err := r.SetTrustedProxies(trustedProxies); err != nil {
+		panic(fmt.Sprintf("failed to configure trusted proxies: %v", err))
+	}
 	// 識別碼要先於其他 middleware 產生，panic 與 404 的錯誤回應才帶得到它。
 	r.Use(httpx.RequestIDMiddleware())
 	r.Use(recoveryMiddleware())
@@ -89,20 +98,14 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		c.JSON(http.StatusOK, gin.H{"status": "ready", "database": "connected"})
 	})
 
-	// 保留既有 /api/health，相容舊監控；其 HTTP 狀態同步反映 readiness。
+	// 保留既有 /api/health 路徑；response 刻意只保留穩定 status 欄位，外部監控應以
+	// HTTP status 與 status 判斷。需要 database 詳情時使用內部 readiness endpoint。
 	r.GET("/api/health", func(c *gin.Context) {
-		dbStatus := "connected"
-		httpStatus := http.StatusOK
 		if pool == nil || pool.Ping(c.Request.Context()) != nil {
-			dbStatus = "disconnected"
-			httpStatus = http.StatusServiceUnavailable
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
+			return
 		}
-		c.JSON(httpStatus, gin.H{
-			"status":   "ok",
-			"env":      cfg.AppEnv,
-			"database": dbStatus,
-			"time":     time.Now().UTC().Format(time.RFC3339),
-		})
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	// 需要 JWT 認證之 API 群組
@@ -123,7 +126,6 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.GET("/cases/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "view"), h.kase.Get)
 		apiV1.PATCH("/cases/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.Update)
 		apiV1.DELETE("/cases/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "delete"), h.kase.Delete)
-		apiV1.PUT("/cases/:id/transport-preference", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.UpdateTransportPreference)
 		apiV1.GET("/cases/:id/schedule", auth.RequirePermission(perm, customPerm, "masters_cases", "view"), h.kase.GetSchedule)
 		apiV1.PUT("/cases/:id/schedule", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.SaveSchedule)
 		apiV1.POST("/cases/schedules", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.CreateSchedule)
@@ -175,6 +177,12 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.DELETE("/driver-reports/submissions/:id", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.IgnoreSubmission)
 		apiV1.DELETE("/driver-reports/:id", auth.RequirePermission(perm, customPerm, "driver_reports", "delete"), h.driverReport.DeleteForm)
 		apiV1.GET("/driver-reports/:id/template", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.DownloadTemplate)
+
+		// 待維護資料手動重新比對：站內主檔新增或改名時已自動觸發，這裡供處理舊資料或補救單次失敗。
+		apiV1.POST("/pending-data/relink", auth.RequireAnyPermission(perm, customPerm,
+			auth.ModuleAction{Module: "masters_cases", Action: "edit"},
+			auth.ModuleAction{Module: "driver_report_mappings", Action: "edit"},
+		), h.pendingRelink.Relink)
 		apiV1.POST("/driver-reports/:id/import", extendedImportDeadlineMiddleware(), auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.ImportExcel)
 
 		// 6. 搭乘月曆、搭乘紀錄更正、異常搭乘與未回報清單
@@ -190,7 +198,9 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.GET("/exports/precheck", auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.Precheck)
 		apiV1.POST("/exports/precheck", auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.Precheck)
 		apiV1.GET("/exports", auth.RequirePermission(perm, customPerm, "exports", "view"), h.export.List)
-		apiV1.POST("/exports", auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.Create)
+		// 逐案匯出同步產生每一份工作簿，個案數一多同樣可能超過全域 WriteTimeout，
+		// 比照下方依區域批次匯出解除這個請求的逾時。
+		apiV1.POST("/exports", extendedImportDeadlineMiddleware(), auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.Create)
 		// 依區域批次匯出一次可能產出數十至數百份檔案並逐一上傳 object storage，
 		// 會超過全域 WriteTimeout，比照匯報表匯入解除這個請求的逾時。
 		apiV1.POST("/exports/by-region", extendedImportDeadlineMiddleware(), auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.CreateByRegion)

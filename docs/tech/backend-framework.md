@@ -47,7 +47,7 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 | module | 範圍 |
 |---|---|
 | `masterdata` | 據點、車輛、司機、區域主檔 |
-| `casemgmt` | 個案主檔、排班設定、交通偏好、個案彙整表匯出 |
+| `casemgmt` | 個案主檔、排班設定、個案彙整表匯出 |
 | `caseimport` | 個案批次 `.xlsx` 解析、預覽與匯入 |
 | `ride` | 搭乘紀錄合併與人工更正、搭乘月曆、衝突裁決；接送匯報的展開與解析屬 `driverreport`，`ride` 透過其 port 消費 |
 | `driverreport` | 車輛匯報表登錄、`.xlsx` 匯入、解析與欄位對應 |
@@ -119,5 +119,5 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 
 - 必填：`APP_ENV`（僅接受 `local` 或 `production`）、`DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`（兩把 32 bytes base64 金鑰，且不可相同）。
 - `APP_ENV=production` 時額外必填：`SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`。
-- 選填：`PORT`、`DB_MAX_CONNS`、`DB_MIN_CONNS`、`DB_MAX_CONN_LIFETIME`、`DB_MAX_CONN_IDLE_TIME`、`SUPABASE_PROJECT_REF`、`STORAGE_BUCKET`、`STORAGE_SIGNED_URL_TTL`、`GOOGLE_SA_JSON`、`SENTRY_DSN`、`LOG_LEVEL`。
-- `RESEND_API_KEY` 為選填，設定後才改用 Resend API 寄信，此時 `NOTIFY_FROM` 必填；未設定時（含 `APP_ENV=production`）一律使用 `LogEmailSender`，通知只寫入資料庫與 log。
+- 選填：`PORT`、`DB_MAX_CONNS`、`DB_MIN_CONNS`、`DB_MAX_CONN_LIFETIME`、`DB_MAX_CONN_IDLE_TIME`、`SUPABASE_PROJECT_REF`、`TRUSTED_PROXIES`、`STORAGE_BUCKET`、`STORAGE_SIGNED_URL_TTL`、`GOOGLE_SA_JSON`、`SENTRY_DSN`、`LOG_LEVEL`。`APP_ENV=production` 且 `TRUSTED_PROXIES` 留空時由 router 使用 no-proxy 模式，不採信 `X-Forwarded-For`；local 未設定時則使用本機 loopback 預設值。
+- `NOTIFICATION_EMAIL_ENABLED` 明確控制寄信；`false` 時一律使用 `LogEmailSender`，即使 `RESEND_API_KEY` 存在也只寫入資料庫與 log。設為 `true` 時 `RESEND_API_KEY` 與 `NOTIFY_FROM` 都必填。

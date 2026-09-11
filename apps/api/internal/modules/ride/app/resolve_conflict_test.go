@@ -145,7 +145,9 @@ func TestRideService_ListIssues_ImportError(t *testing.T) {
 	assert.Equal(t, int64(1), total)
 	require.Len(t, items, 1)
 	assert.Equal(t, "林彥衡", items[0].CaseName)
-	assert.Contains(t, items[0].Description, "unparsed_value")
+	assert.Contains(t, items[0].Description, "1.吳桂 [去程]")
+	assert.Contains(t, items[0].Description, "半坐")
+	assert.NotContains(t, items[0].Description, "unparsed_value")
 }
 
 func TestRideService_ListIssues_Unreported(t *testing.T) {

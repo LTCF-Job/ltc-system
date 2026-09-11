@@ -160,11 +160,22 @@ func (r *SiteRepository) Update(ctx context.Context, s *app.Site) error {
 	return nil
 }
 
-// Delete 刪除據點。若該據點仍被個案排班參照，資料庫外鍵限制會回傳錯誤。
+// Delete 刪除據點。若該據點仍被個案排班參照，資料庫外鍵限制會回傳 app.ErrSiteInUse；
+// 查無此據點回傳 app.ErrSiteNotFound，讓 transport 層能分流成正確的 HTTP 狀態碼。
 func (r *SiteRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	if r.db == nil {
 		return fmt.Errorf("database not connected")
 	}
-	_, err := r.db.Exec(ctx, `DELETE FROM sites WHERE id = $1`, id)
-	return err
+	tag, err := r.db.Exec(ctx, `DELETE FROM sites WHERE id = $1`, id)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return app.ErrSiteInUse
+		}
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return app.ErrSiteNotFound
+	}
+	return nil
 }

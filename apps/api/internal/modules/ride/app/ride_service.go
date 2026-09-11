@@ -836,12 +836,12 @@ func (s *RideService) ManualReportRide(
 	actorRole, ip, ua string,
 ) (*RideRecord, error) {
 	if req.EffectiveStatus != "boarded" && req.EffectiveStatus != "absent" {
-		return nil, fmt.Errorf("無效的搭乘狀態：%s", req.EffectiveStatus)
+		return nil, fmt.Errorf("%w：%s", ErrInvalidManualReportStatus, req.EffectiveStatus)
 	}
 
 	serviceDate, err := rocdate.ParseDate(req.ServiceDate)
 	if err != nil {
-		return nil, fmt.Errorf("無效的服務日期格式：%s", req.ServiceDate)
+		return nil, fmt.Errorf("%w：%s", ErrInvalidManualReportServiceDate, req.ServiceDate)
 	}
 
 	// 人工補登只能落在有效排班已定義的趟次；即使請求自行指定車輛，也不能
@@ -1129,5 +1129,29 @@ func describeAnomalyFlags(flags []string) string {
 	if len(flags) == 0 {
 		return "匯入資料異常"
 	}
-	return strings.Join(flags, "；")
+	descriptions := make([]string, 0, len(flags))
+	for _, flag := range flags {
+		descriptions = append(descriptions, describeAnomalyFlag(flag))
+	}
+	return strings.Join(descriptions, "；")
+}
+
+// describeAnomalyFlag 把 detectSubmissionAnomalies 記錄的機器旗標（如
+// unmapped_column:3.王小明[去程]、unparsed_value:3.王小明[回程]:?）轉成使用者看得懂的
+// 中文描述，避免內部欄位識別碼格式與原始輸入值直接外洩到畫面上。
+func describeAnomalyFlag(flag string) string {
+	switch {
+	case strings.HasPrefix(flag, "unmapped_column:"):
+		header := strings.TrimPrefix(flag, "unmapped_column:")
+		return fmt.Sprintf("欄位『%s』尚未對應個案", header)
+	case strings.HasPrefix(flag, "unparsed_value:"):
+		rest := strings.TrimPrefix(flag, "unparsed_value:")
+		parts := strings.SplitN(rest, ":", 2)
+		if len(parts) == 2 {
+			return fmt.Sprintf("欄位『%s』的內容「%s」無法辨識", parts[0], parts[1])
+		}
+		return fmt.Sprintf("欄位『%s』的內容無法辨識", parts[0])
+	default:
+		return "匯入資料異常"
+	}
 }

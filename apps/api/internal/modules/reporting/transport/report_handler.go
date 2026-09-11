@@ -25,7 +25,7 @@ func NewReportHandler(reportSvc *app.ReportService) *ReportHandler {
 
 // GetTripSummary 查詢車輛趟數表。
 func (h *ReportHandler) GetTripSummary(c *gin.Context) {
-	periodYm := c.DefaultQuery("periodYm", "115-07")
+	periodYm := c.DefaultQuery("periodYm", currentPeriodYmDash())
 	if !validatePeriod(c, periodYm) {
 		return
 	}
@@ -41,12 +41,12 @@ func (h *ReportHandler) GetTripSummary(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, report)
+	httpx.RespondSuccess(c, http.StatusOK, report, nil)
 }
 
 // ExportTripSummaryExcel 匯出車輛趟數表 Excel 檔案。
 func (h *ReportHandler) ExportTripSummaryExcel(c *gin.Context) {
-	periodYm := c.DefaultQuery("periodYm", "115-07")
+	periodYm := c.DefaultQuery("periodYm", currentPeriodYmDash())
 	if !validatePeriod(c, periodYm) {
 		return
 	}
@@ -88,7 +88,7 @@ func (h *ReportHandler) GetHsinchuSchedule(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": report})
+	httpx.RespondSuccess(c, http.StatusOK, report, nil)
 }
 
 // ExportHsinchuScheduleExcel 匯出新竹接送時刻表 Excel 檔案。
@@ -117,6 +117,13 @@ func (h *ReportHandler) ExportHsinchuScheduleExcel(c *gin.Context) {
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", excelBytes)
 }
 
+// currentPeriodYmDash 以系統目前日期推導 "RRR-MM" 格式的申報月份，
+// 取代先前寫死的過期月份字串（原本固定回傳 "115-07"，與實際月份脫節）。
+func currentPeriodYmDash() string {
+	today := clock.Today()
+	return rocdate.FormatROCYearMonth(today.Year(), int(today.Month()))
+}
+
 func parseAsOfDate(c *gin.Context) (time.Time, bool) {
 	raw := c.Query("asOfDate")
 	if raw == "" {
@@ -124,7 +131,7 @@ func parseAsOfDate(c *gin.Context) (time.Time, bool) {
 	}
 	date, err := rocdate.ParseDate(raw)
 	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "asOfDate 必須為有效日期", nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "查詢日期格式不正確，請重新輸入", nil)
 		return time.Time{}, false
 	}
 	return date, true
@@ -138,6 +145,13 @@ func validatePeriod(c *gin.Context, period string) bool {
 	return true
 }
 
+// uuidQueryParamLabels 讓 UUID 格式錯誤訊息以中文欄位語意呈現，
+// 不直接外洩內部查詢參數名稱（如 vehicleId）與「UUID」這類技術術語。
+var uuidQueryParamLabels = map[string]string{
+	"vehicleId": "車輛",
+	"siteId":    "據點",
+}
+
 func parseOptionalUUID(c *gin.Context, key string) (*uuid.UUID, bool) {
 	raw := c.Query(key)
 	if raw == "" {
@@ -145,7 +159,11 @@ func parseOptionalUUID(c *gin.Context, key string) (*uuid.UUID, bool) {
 	}
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, key+" 必須為有效 UUID", nil)
+		label := uuidQueryParamLabels[key]
+		if label == "" {
+			label = "查詢條件"
+		}
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, label+"格式不正確，請重新選擇", nil)
 		return nil, false
 	}
 	return &id, true

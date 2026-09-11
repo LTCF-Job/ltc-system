@@ -1,4 +1,4 @@
-import { apiClient, createPaginationMeta, unwrapData, unwrapPaged } from './client'
+import { apiClient, createPaginationMeta, unwrapData, unwrapDataWithMeta, unwrapPaged, type PendingRelinkedMeta } from './client'
 import type {
   Paged,
   SiteDTO,
@@ -48,14 +48,14 @@ export async function listAllSites(params?: Omit<NonNullable<Parameters<typeof l
   return collectAllPages((page, pageSize) => listSites({ ...params, page, pageSize }))
 }
 
-export async function createSite(data: CreateSiteRequest): Promise<SiteDTO> {
+export async function createSite(data: CreateSiteRequest): Promise<{ data: SiteDTO; meta?: PendingRelinkedMeta }> {
   const res = await apiClient.post('/sites', data)
-  return unwrapData<SiteDTO>(res)
+  return unwrapDataWithMeta<SiteDTO>(res)
 }
 
-export async function updateSite(id: string, data: UpdateSiteRequest): Promise<SiteDTO> {
+export async function updateSite(id: string, data: UpdateSiteRequest): Promise<{ data: SiteDTO; meta?: PendingRelinkedMeta }> {
   const res = await apiClient.patch(`/sites/${id}`, data)
-  return unwrapData<SiteDTO>(res)
+  return unwrapDataWithMeta<SiteDTO>(res)
 }
 
 export async function deleteSite(id: string): Promise<void> {
@@ -110,9 +110,9 @@ export async function listAllDrivers(params?: Omit<NonNullable<Parameters<typeof
   return collectAllPages((page, pageSize) => listDrivers({ ...params, page, pageSize }))
 }
 
-export async function createDriver(data: CreateDriverRequest): Promise<DriverDTO> {
+export async function createDriver(data: CreateDriverRequest): Promise<{ data: DriverDTO; meta?: PendingRelinkedMeta }> {
   const res = await apiClient.post('/drivers', data)
-  return unwrapData<DriverDTO>(res)
+  return unwrapDataWithMeta<DriverDTO>(res)
 }
 
 export async function updateDriver(id: string, data: UpdateDriverRequest): Promise<DriverDTO> {

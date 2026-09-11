@@ -74,8 +74,22 @@
       </div>
     </div>
 
+    <!-- 查詢失敗狀態：與「真的沒有排班資料」的空狀態分開呈現，避免使用者誤判。 -->
+    <el-alert
+      v-if="loadError"
+      type="error"
+      title="查詢失敗，無法取得新竹接送時刻表資料"
+      show-icon
+      :closable="false"
+      class="load-error-alert no-print"
+    >
+      <template #default>
+        <el-button size="small" type="primary" @click="fetchSchedule">重新查詢</el-button>
+      </template>
+    </el-alert>
+
     <!-- 去程時段表格 -->
-    <el-card shadow="never" class="schedule-card">
+    <el-card v-if="!loadError" shadow="never" class="schedule-card">
       <template #header>
         <div class="section-badge bg-outbound">
           <el-icon><Right /></el-icon>
@@ -128,7 +142,7 @@
     </el-card>
 
     <!-- 回程時段表格 -->
-    <el-card shadow="never" class="schedule-card mt-4">
+    <el-card v-if="!loadError" shadow="never" class="schedule-card mt-4">
       <template #header>
         <div class="section-badge bg-inbound">
           <el-icon><Back /></el-icon>
@@ -199,6 +213,7 @@ import { downloadBlob } from '@/utils/download'
 const loading = ref(false)
 const exporting = ref(false)
 const scheduleData = ref<HsinchuScheduleReportDTO | null>(null)
+const loadError = ref(false)
 
 const sites = ref<SiteDTO[]>([])
 const vehicles = ref<VehicleDTO[]>([])
@@ -222,6 +237,9 @@ async function fetchFilterOptions() {
 
 async function fetchSchedule() {
   loading.value = true
+  loadError.value = false
+  // 查詢開始就清空舊資料，避免切換篩選條件後查詢失敗時畫面殘留上一次的結果。
+  scheduleData.value = null
   try {
     scheduleData.value = await getHsinchuSchedule({
       siteId: selectedSiteId.value,
@@ -229,7 +247,9 @@ async function fetchSchedule() {
       q: searchQuery.value || undefined
     })
   } catch {
-    // 全域攔截器負責顯示 API 錯誤。
+    // 全域攔截器負責顯示 API 錯誤 toast；畫面另外呈現載入失敗狀態並提供重試，
+    // 避免跟「無排班資料」的空狀態長得一樣。
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -331,6 +351,10 @@ onMounted(async () => {
 
 .print-header {
   display: none;
+}
+
+.load-error-alert {
+  width: 100%;
 }
 
 

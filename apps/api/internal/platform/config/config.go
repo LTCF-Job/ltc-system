@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -32,10 +34,12 @@ type Config struct {
 	SupabaseJWTIssuer           string        `envconfig:"SUPABASE_JWT_ISSUER"`
 	SupabaseProjectRef          string        `envconfig:"SUPABASE_PROJECT_REF"`
 	AllowedOrigins              string        `envconfig:"ALLOWED_ORIGINS"`
+	TrustedProxies              string        `envconfig:"TRUSTED_PROXIES"`
 	StorageBucket               string        `envconfig:"STORAGE_BUCKET" default:"ltc-exports"`
 	StorageSignedURLTTL         time.Duration `envconfig:"STORAGE_SIGNED_URL_TTL" default:"24h"`
 	ResendAPIKey                string        `envconfig:"RESEND_API_KEY"`
 	NotifyFrom                  string        `envconfig:"NOTIFY_FROM"`
+	NotificationEmailEnabled    bool          `envconfig:"NOTIFICATION_EMAIL_ENABLED" default:"false"`
 	SentryDSN                   string        `envconfig:"SENTRY_DSN"`
 	LogLevel                    string        `envconfig:"LOG_LEVEL" default:"info"`
 	GovernmentHolidayAPITimeout time.Duration `envconfig:"GOVERNMENT_HOLIDAY_API_TIMEOUT" default:"10s"`
@@ -48,6 +52,38 @@ type Config struct {
 	// 解析後的金鑰 bytes
 	EncryptionKey []byte `ignored:"true"`
 	HMACKey       []byte `ignored:"true"`
+}
+
+// ParseTrustedProxies 解析逗號分隔的 proxy IP／CIDR，拒絕模糊或空白項目。
+// 空字串回傳 nil，讓未經固定 ingress proxy 的環境停用 proxy 信任。
+func ParseTrustedProxies(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	proxies := make([]string, 0, len(parts))
+	for _, part := range parts {
+		proxy := strings.TrimSpace(part)
+		if proxy == "" {
+			return nil, errors.New("TRUSTED_PROXIES contains an empty entry")
+		}
+		if ip := net.ParseIP(proxy); ip != nil {
+			if ip.IsUnspecified() {
+				return nil, fmt.Errorf("TRUSTED_PROXIES must not contain an unspecified address %q", proxy)
+			}
+		} else {
+			_, network, err := net.ParseCIDR(proxy)
+			if err != nil {
+				return nil, fmt.Errorf("TRUSTED_PROXIES contains invalid IP or CIDR %q", proxy)
+			}
+			if ones, _ := network.Mask.Size(); ones == 0 {
+				return nil, fmt.Errorf("TRUSTED_PROXIES must not contain a catch-all network %q", proxy)
+			}
+		}
+		proxies = append(proxies, proxy)
+	}
+	return proxies, nil
 }
 
 // LoadFromEnv 從系統環境變數載入並驗證設定值。
@@ -75,10 +111,24 @@ func LoadFromEnv() (*Config, error) {
 		return nil, errors.New("ALLOWED_ORIGINS is required when APP_ENV=production")
 	}
 
-	// RESEND_API_KEY 未設定時通知改由 LogEmailSender 承接，只寫入資料庫與 log、不對外寄信，
-	// 因此不再是 production 的啟動條件；一旦設了 key 就會真的送出郵件，寄件位址不能缺。
-	if cfg.ResendAPIKey != "" && cfg.NotifyFrom == "" {
-		return nil, errors.New("NOTIFY_FROM is required when RESEND_API_KEY is set")
+	// ClientIP 只有在明確列出 ingress proxy 後才能讀取 X-Forwarded-For；空值會由
+	// router 傳入 nil，明確停用 proxy 信任，避免讓稽核 IP 可被偽造。local 未設定時
+	// 只信任本機 loopback。
+	if cfg.AppEnv == "local" && strings.TrimSpace(cfg.TrustedProxies) == "" {
+		cfg.TrustedProxies = "127.0.0.1,::1"
+	}
+	if _, err := ParseTrustedProxies(cfg.TrustedProxies); err != nil {
+		return nil, err
+	}
+	// 寄信是明確的 feature flag：未開啟時即使誤留 RESEND_API_KEY 也不能偷偷外送；
+	// 開啟時兩個 provider 設定必須同時存在，避免通知看似成功但沒有可送出的寄件設定。
+	if cfg.NotificationEmailEnabled {
+		if cfg.ResendAPIKey == "" {
+			return nil, errors.New("RESEND_API_KEY is required when NOTIFICATION_EMAIL_ENABLED=true")
+		}
+		if cfg.NotifyFrom == "" {
+			return nil, errors.New("NOTIFY_FROM is required when NOTIFICATION_EMAIL_ENABLED=true")
+		}
 	}
 
 	encKey, err := base64.StdEncoding.DecodeString(cfg.EncryptionKeyB64)

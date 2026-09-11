@@ -68,7 +68,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
-import type { TableInstance } from 'element-plus'
+import { ElMessage, type TableInstance } from 'element-plus'
 import DialogFooter from '@/components/DialogFooter.vue'
 import { listAllCases } from '@/api/cases'
 import { listAllSites } from '@/api/masters'
@@ -179,7 +179,12 @@ function handleClearSelection() {
 }
 
 function handleConfirm() {
-  if (selectedRows.value.length === 0) return
+  // 確認按鈕已用 confirm-disabled 擋下未勾選時的點擊，這裡仍保留提示：直接呼叫或鍵盤
+  // 觸發時使用者才不會完全沒有反應、以為畫面卡住。
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('請至少選擇一筆個案')
+    return
+  }
   emit('confirm', [...selectedRows.value])
 }
 </script>

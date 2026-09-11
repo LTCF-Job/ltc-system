@@ -145,10 +145,40 @@ jobs:
       - name: Apply all migrations
         run: go run ./cmd/migrate up
 
-      - name: Roll back and re-apply latest migration
+      - name: Verify irreversible security migration stays applied
+        shell: bash
         run: |
-          go run ./cmd/migrate down
+          set -euo pipefail
+
+          expected_latest_version=$(PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ltc_system -Atqc "SELECT COALESCE(MAX(version), -1) FROM schema_migrations;")
+          if (( expected_latest_version < 54 )); then
+            echo "migration 000054 was not applied; latest tracked version is ${expected_latest_version}" >&2
+            exit 1
+          fi
+
+          # The runner rolls back only the latest tracked migration. Walk newer
+          # migrations back first so this assertion actually exercises 000054.
+          current_latest_version=$expected_latest_version
+          while (( current_latest_version > 54 )); do
+            go run ./cmd/migrate down
+            current_latest_version=$(PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ltc_system -Atqc "SELECT MAX(version) FROM schema_migrations;")
+          done
+
+          if down_output=$(go run ./cmd/migrate down 2>&1); then
+            echo "expected the irreversible security migration rollback to be refused"
+            exit 1
+          else
+            echo "$down_output"
+          fi
+          grep -F "migration 000054 is irreversible security hardening; rollback is refused" <<< "$down_output"
+          tracked_version=$(PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ltc_system -Atc "SELECT count(*) FROM schema_migrations WHERE version = 54;")
+          test "$tracked_version" = "1"
           go run ./cmd/migrate up
+          reapplied_latest_version=$(PGPASSWORD=postgrespassword psql -h localhost -U postgres -d ltc_system -Atqc "SELECT MAX(version) FROM schema_migrations;")
+          test "$reapplied_latest_version" = "$expected_latest_version"
+
+      - name: Verify public table lockdown integration
+        run: go test -tags=integration ./cmd/migrate -run TestPublicTableLockdown -v
 
       - name: Run PostgreSQL integration tests
         run: go test -tags=integration ./internal/modules/caseimport/app ./internal/modules/driverreport/infra -run 'TestCommitCases_TransactionRollback|TestDriverReportRepository_LockSerializesSameFormMonth' -v
@@ -196,6 +226,12 @@ jobs:
     defaults:
       run:
         working-directory: apps/web
+    env:
+      LIVE_SUPABASE_URL: ${{ secrets.LIVE_SUPABASE_URL }}
+      LIVE_SUPABASE_ANON_KEY: ${{ secrets.LIVE_SUPABASE_ANON_KEY }}
+      LIVE_API_BASE_URL: ${{ secrets.LIVE_API_BASE_URL }}
+      LIVE_TEST_EMAIL: ${{ secrets.LIVE_TEST_EMAIL }}
+      LIVE_TEST_PASSWORD: ${{ secrets.LIVE_TEST_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -221,6 +257,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Live API-level E2E (when secrets are configured)
+        run: npm run test:e2e:live
 
   secret-scan:
     name: Secret scan

@@ -22,7 +22,9 @@ export const API_ERROR_MESSAGES: Record<string, string> = {
   FILE_TOO_LARGE: '檔案超過大小上限，請分批匯入',
   FILE_UNREADABLE: '檔案無法讀取，可能已損毀或非有效的 Excel 檔',
   IMPORT_TEMPLATE_MISMATCH: '檔案欄位與匯入範本不符，請下載標準範本重新填寫',
-  ROUTE_NOT_FOUND: '找不到此功能的服務位址，請重新整理頁面或聯繫系統管理員'
+  ROUTE_NOT_FOUND: '找不到此功能的服務位址，請重新整理頁面或聯繫系統管理員',
+  STALE_WRITE: '資料已被其他人更新，請重新整理後再試',
+  CONFLICT_ALREADY_RESOLVED: '此衝突已由其他人處理，請重新整理'
 }
 
 // 連線層錯誤沒有後端回應可查，前端自行分辨並給出對應處置，避免與伺服器錯誤混為一談。

@@ -49,7 +49,19 @@
       </template>
 
       <template #table>
-        <el-table :data="users" border stripe style="width: 100%">
+        <el-alert
+          v-if="usersLoadError"
+          type="error"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 12px"
+        >
+          <template #title>使用者清單載入失敗，請稍後重試</template>
+          <el-button size="small" type="danger" plain style="margin-top: 8px" @click="fetchUsers">
+            重新載入
+          </el-button>
+        </el-alert>
+        <el-table v-else :data="users" border stripe style="width: 100%">
           <el-table-column prop="displayName" label="使用者姓名" min-width="170" class-name="user-name-col">
             <template #default="{ row }">
               <div class="user-name-cell">
@@ -355,11 +367,23 @@ const selectedUser = ref<UserDTO | null>(null)
 const tempPermissions = ref<SystemPermissions>({})
 const savingPerms = ref(false)
 
+// roleList 由後端 listRoles() 載入，涵蓋既有角色的中文名稱；@/types/domain 的
+// ROLE_LABELS 目前只收錄 admin／viewer 兩筆，載入完成前或角色已被停用等情境
+// 仍可能落到「原始英文 role key」的後備顯示，因此本頁補上內建角色的中文對照，
+// 只在本地使用，不改動共用字典（該檔不在本次任務擁有範圍內）。
+const LOCAL_ROLE_LABELS: Record<string, string> = {
+  admin: '系統管理員',
+  dispatcher: '調度員',
+  driver: '司機',
+  staff: '行政人員',
+  viewer: '檢視人員'
+}
+
 function getRoleDisplayName(roleKey?: string): string {
   if (!roleKey) return '未知角色'
   const role = roleList.value.find((r) => r.key === roleKey)
   if (role) return role.name
-  return (ROLE_LABELS as any)[roleKey] || roleKey
+  return (ROLE_LABELS as any)[roleKey] || LOCAL_ROLE_LABELS[roleKey] || roleKey
 }
 
 const rolesLoadError = ref(false)
@@ -374,8 +398,11 @@ async function fetchRoles() {
   }
 }
 
+const usersLoadError = ref(false)
+
 async function fetchUsers() {
   loading.value = true
+  usersLoadError.value = false
   try {
     const result = await listUsers({
       q: queryKeyword.value || undefined,
@@ -385,6 +412,10 @@ async function fetchUsers() {
     })
     users.value = result.data
     total.value = result.meta.total
+  } catch {
+    usersLoadError.value = true
+    users.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }

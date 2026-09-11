@@ -1,6 +1,18 @@
 <template>
   <div class="ride-issues-view">
     <PageHeader title="異常集中處理" />
+    <el-alert
+      v-if="optionsLoadError"
+      type="error"
+      show-icon
+      :closable="false"
+      title="車輛與司機主檔載入失敗，混車衝突裁決功能可能無法使用完整選項"
+      style="margin-bottom: 12px"
+    >
+      <template #default>
+        <el-button size="small" @click="loadOptions">重試</el-button>
+      </template>
+    </el-alert>
     <!-- 篩選列 -->
     <el-card shadow="never" class="filter-card mb-3" style="margin-bottom: 12px;">
       <el-row :gutter="16" align="middle">
@@ -174,10 +186,15 @@
         <el-descriptions-item label="服務日期">{{ selectedError.serviceDate }}</el-descriptions-item>
         <el-descriptions-item label="回報文字/欄位">{{ selectedError.caseName }}</el-descriptions-item>
         <el-descriptions-item label="錯誤訊息">{{ selectedError.description }}</el-descriptions-item>
-        <el-descriptions-item label="原始 Payload">
-          <pre class="raw-payload">{{ selectedError.rawPayload || '（無原始 Payload 紀錄）' }}</pre>
-        </el-descriptions-item>
       </el-descriptions>
+
+      <!-- 原始 Payload 屬技術除錯資訊（含匯入原始資料），一般使用者不需要看到，
+           收合在「技術資訊」底下且預設不展開，僅供需要進一步排查問題時查閱。 -->
+      <el-collapse v-if="selectedError?.rawPayload" class="raw-payload-collapse">
+        <el-collapse-item title="技術資訊（原始 Payload）" name="rawPayload">
+          <pre class="raw-payload">{{ selectedError.rawPayload }}</pre>
+        </el-collapse-item>
+      </el-collapse>
 
       <template #footer>
         <el-button @click="errorDetailVisible = false">關閉</el-button>
@@ -206,6 +223,7 @@ const issueList = ref<IssueRideDTO[]>([])
 
 const allVehicles = ref<VehicleDTO[]>([])
 const allDrivers = ref<DriverDTO[]>([])
+const optionsLoadError = ref(false)
 
 const resolveDialogVisible = ref(false)
 const selectedIssue = ref<IssueRideDTO | null>(null)
@@ -279,14 +297,27 @@ async function handleResolveSubmit() {
   }
 }
 
-onMounted(async () => {
-  const [vRes, dRes] = await Promise.all([
+async function loadOptions() {
+  optionsLoadError.value = false
+  const results = await Promise.allSettled([
     listAllVehicles({ status: 'active' }),
     listAllDrivers({ status: 'active' })
   ])
-  allVehicles.value = vRes
-  allDrivers.value = dRes
+  if (results[0].status === 'fulfilled') {
+    allVehicles.value = results[0].value
+  } else {
+    optionsLoadError.value = true
+  }
+  if (results[1].status === 'fulfilled') {
+    allDrivers.value = results[1].value
+  } else {
+    optionsLoadError.value = true
+  }
+}
 
+onMounted(() => {
+  // 車輛／司機選項載入失敗不應阻擋異常清單本身的查詢，兩者互不依賴。
+  loadOptions()
   fetchIssues()
 })
 </script>
@@ -341,6 +372,10 @@ onMounted(async () => {
 :deep(.service-date-col .cell) { min-width: 110px; white-space: nowrap; }
 :deep(.leg-seq-col .cell) { min-width: 80px; white-space: nowrap; }
 :deep(.conflict-desc-col .cell) { min-width: 260px; }
+
+.raw-payload-collapse {
+  margin-top: 12px;
+}
 
 .raw-payload {
   margin: 0;

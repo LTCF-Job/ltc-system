@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 )
@@ -83,6 +84,14 @@ func (s *RegionClaimService) CreateRegionClaimJobs(ctx context.Context, input Re
 		CaseCount: len(caseIDs),
 	}
 
+	// 分別追蹤失敗原因的分類，讓「整批都失敗」的情況能依實際原因回應，
+	// 而不是一律說成「沒有可申報的資料」：混車衝突未裁決該說清楚要先去裁決，
+	// 內部錯誤（DB 故障等）更不該偽裝成「查無資料」讓使用者誤以為條件選錯。
+	var (
+		hasPrecheckBlocked bool
+		firstInternalErr   error
+	)
+
 	for _, month := range months {
 		result.PeriodYMs = append(result.PeriodYMs, month.PeriodYM)
 
@@ -101,7 +110,24 @@ func (s *RegionClaimService) CreateRegionClaimJobs(ctx context.Context, input Re
 		})
 		if err != nil {
 			// 單月失敗不中斷其餘月份：使用者要的是先拿到報得出來的月份。
-			// 失敗原因已由 CreateGovClaimJob 寫進 export_jobs.error_message。
+			// 失敗原因已由 CreateGovClaimJob 寫進 export_jobs.error_message，
+			// 但此處先前完全沒有伺服器端 log，出問題時只能從資料庫欄位回推，
+			// 補上 slog 讓維運能直接從 log 找到失敗月份與原因。
+			slog.Error("region_claim_month_failed",
+				slog.String("period_ym", month.PeriodYM),
+				slog.Any("regions", input.Regions),
+				slog.String("error", err.Error()),
+			)
+			switch {
+			case errors.Is(err, ErrPrecheckBlocked):
+				hasPrecheckBlocked = true
+			case errors.Is(err, ErrNoExportData):
+				// 真的沒有資料，不影響整批分類判斷。
+			default:
+				if firstInternalErr == nil {
+					firstInternalErr = err
+				}
+			}
 			result.Months = append(result.Months, RegionClaimMonthResult{
 				PeriodYM:     month.PeriodYM,
 				ErrorMessage: monthFailureMessage(err),
@@ -118,9 +144,19 @@ func (s *RegionClaimService) CreateRegionClaimJobs(ctx context.Context, input Re
 		result.TotalFiles += len(job.Files)
 	}
 
-	// 每一個月份都失敗時，整批視為查無資料——回傳一堆空結果只會讓使用者以為功能壞了。
 	if len(result.SucceededJobIDs) == 0 {
-		return RegionClaimResult{}, ErrNoExportData
+		switch {
+		case firstInternalErr != nil:
+			// 含有非「沒資料／混車衝突」的內部錯誤時，不能說成「沒有資料」，
+			// 讓呼叫端依一般錯誤處理（500），並保留其中一個具體原因供 log 對照。
+			return RegionClaimResult{}, fmt.Errorf("create region claim jobs: %w", firstInternalErr)
+		case hasPrecheckBlocked:
+			// 全部月份都是因為未裁決的混車衝突被擋下，屬於「資料檢核未通過」而非「沒有資料」。
+			return RegionClaimResult{}, ErrPrecheckBlocked
+		default:
+			// 每一個月份都是真的沒有可申報資料，整批視為查無資料。
+			return RegionClaimResult{}, ErrNoExportData
+		}
 	}
 	return result, nil
 }
