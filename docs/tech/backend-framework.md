@@ -118,6 +118,6 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 集中在 `internal/platform/config/config.go`，啟動時直接驗證並在缺漏必填值時拒絕啟動：
 
 - 必填：`APP_ENV`（僅接受 `local` 或 `production`）、`DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`（兩把 32 bytes base64 金鑰，且不可相同）。
-- `APP_ENV=production` 時額外必填：`SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`、`TRUSTED_PROXIES`。
-- 選填：`PORT`、`DB_MAX_CONNS`、`DB_MIN_CONNS`、`DB_MAX_CONN_LIFETIME`、`DB_MAX_CONN_IDLE_TIME`、`SUPABASE_PROJECT_REF`、`STORAGE_BUCKET`、`STORAGE_SIGNED_URL_TTL`、`GOOGLE_SA_JSON`、`SENTRY_DSN`、`LOG_LEVEL`。
+- `APP_ENV=production` 時額外必填：`SUPABASE_JWKS_URL`、`ALLOWED_ORIGINS`。
+- 選填：`PORT`、`DB_MAX_CONNS`、`DB_MIN_CONNS`、`DB_MAX_CONN_LIFETIME`、`DB_MAX_CONN_IDLE_TIME`、`SUPABASE_PROJECT_REF`、`TRUSTED_PROXIES`、`STORAGE_BUCKET`、`STORAGE_SIGNED_URL_TTL`、`GOOGLE_SA_JSON`、`SENTRY_DSN`、`LOG_LEVEL`。`APP_ENV=production` 且 `TRUSTED_PROXIES` 留空時由 router 使用 no-proxy 模式，不採信 `X-Forwarded-For`；local 未設定時則使用本機 loopback 預設值。
 - `NOTIFICATION_EMAIL_ENABLED` 明確控制寄信；`false` 時一律使用 `LogEmailSender`，即使 `RESEND_API_KEY` 存在也只寫入資料庫與 log。設為 `true` 時 `RESEND_API_KEY` 與 `NOTIFY_FROM` 都必填。

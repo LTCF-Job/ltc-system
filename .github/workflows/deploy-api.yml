@@ -31,6 +31,7 @@ env:
   # 以下皆為 Cloud Run service／job 的非機密設定值，跟 GCP_PROJECT_ID 等一樣走
   # GitHub Environment variables；機密值一律用 Secret Manager 的 secret 名稱參照
   # （見 deploy-prod job 的 --set-secrets），密碼與金鑰本身不會進到這個 workflow。
+  # TRUSTED_PROXIES 可留空；空值代表不信任 X-Forwarded-For，只有固定 ingress proxy 才設定 CIDR。
   SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
   ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
   TRUSTED_PROXIES: ${{ vars.TRUSTED_PROXIES }}

@@ -167,7 +167,7 @@ Console →「Cloud Run」→「服務」→ 點進 `ltc-api` →「編輯並部
   - `STORAGE_SIGNED_URL_TTL=24h`
   - `LOG_LEVEL=info`
   - `ALLOWED_ORIGINS=https://placeholder.example.com`（先填這個佔位值，步驟五拿到真正的網站網址後記得回來換掉，這欄位是「允許呼叫這個後端的網站清單」）
-  - `TRUSTED_PROXIES=<實際 ingress proxy 的 IP 或 CIDR>`（不可填全網段）
+  - `TRUSTED_PROXIES=<實際 ingress proxy 的 IP 或 CIDR>`（選填；直接使用 Cloud Run ingress 時可留空，不可填全網段）
   - `NOTIFICATION_EMAIL_ENABLED=false`（要外送通知才改成 `true`）
   - `NOTIFY_FROM=noreply@你的正式網域`（只有 email flag 為 `true` 時必填）
 - 「密鑰」區塊「參照密鑰」，把 `DATABASE_URL`／`ENCRYPTION_KEY`／`HMAC_KEY`／`SUPABASE_SERVICE_ROLE_KEY` 四個密鑰各自掛成同名環境變數（版本選「最新」）；有建立 `RESEND_API_KEY` 才一併掛上。
@@ -176,7 +176,7 @@ Console →「Cloud Run」→「服務」→ 點進 `ltc-api` →「編輯並部
 
 再到「Cloud Run」→「工作」→ 點進 `ltc-api-migrate` →「編輯」，一樣在「變數與密鑰」頁籤：
 
-- 「環境變數」加入 `APP_ENV=production`、`SUPABASE_PROJECT_REF=...`、`SUPABASE_JWKS_URL=...`（值跟上面一樣）、`ALLOWED_ORIGINS=https://placeholder.example.com`、`TRUSTED_PROXIES=<實際 ingress proxy 的 IP 或 CIDR>`、`NOTIFICATION_EMAIL_ENABLED=false`。若要外送通知，再設定 `NOTIFY_FROM` 並把 flag 改成 `true`。
+- 「環境變數」加入 `APP_ENV=production`、`SUPABASE_PROJECT_REF=...`、`SUPABASE_JWKS_URL=...`（值跟上面一樣）、`ALLOWED_ORIGINS=https://placeholder.example.com`、`NOTIFICATION_EMAIL_ENABLED=false`。migration job 不需要 `TRUSTED_PROXIES`；若固定 ingress proxy 且要沿用共同設定，再加入實際 proxy IP/CIDR。若要外送通知，再設定 `NOTIFY_FROM` 並把 flag 改成 `true`。
 - 「密鑰」掛上 `DATABASE_URL`、`ENCRYPTION_KEY`、`HMAC_KEY`、`SUPABASE_SERVICE_ROLE_KEY`。
 - 儲存。
 
@@ -239,7 +239,7 @@ git push origin main
 
 - [ ] 已在 Supabase「Authentication → Users」自行建立至少一組管理員帳號，且 `app_metadata` 有 `"role":"admin"`（migration 不會幫你建帳號）
 - [ ] 資料庫初始化跑到最新版本（`schema_migrations` 表對得上 `apps/api/migrations/` 底下最大的檔案編號；若走 SQL Editor 手動貼的方式，自行核對每一支 `.up.sql` 都依序執行成功）
-- [ ] `ltc-api-migrate` 這個工作跟 `ltc-api` 這個服務兩邊都各自設了 `APP_ENV=production`／`SUPABASE_JWKS_URL`／`ALLOWED_ORIGINS`／`TRUSTED_PROXIES`（拼字也要對，打錯字不會有明確的錯誤提示）
+- [ ] `ltc-api-migrate` 這個工作跟 `ltc-api` 這個服務兩邊都各自設了 `APP_ENV=production`／`SUPABASE_JWKS_URL`／`ALLOWED_ORIGINS`；若有固定 ingress proxy，再各自設定 `TRUSTED_PROXIES`（拼字也要對，打錯字不會有明確的錯誤提示）
 - [ ] `ltc-api-migrate` 工作的「指令」欄位確認是 `/app/migrate`（或 `//app/migrate`），不是一串看起來像 Windows 路徑（`D:/...`）的亂碼
 - [ ] `ltc-api` 服務的 `ALLOWED_ORIGINS` 已經從佔位值換成 Vercel 實際分配的網址
 - [ ] Vercel 的 Production 環境變數已設過一次 `VITE_SUPABASE_URL`／`VITE_SUPABASE_ANON_KEY`／`VITE_API_BASE_URL`
@@ -364,11 +364,11 @@ done
 
 gcloud run services update ltc-api --region <GCP_REGION> \
   --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
-  --update-env-vars="^;^APP_ENV=production;SUPABASE_PROJECT_REF=<project-ref>;SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json;STORAGE_BUCKET=ltc-exports;STORAGE_SIGNED_URL_TTL=24h;LOG_LEVEL=info;ALLOWED_ORIGINS=https://placeholder.example.com;TRUSTED_PROXIES=<proxy-cidr>;NOTIFICATION_EMAIL_ENABLED=false;NOTIFY_FROM=noreply@your-domain.example"
+  --update-env-vars="^;^APP_ENV=production;SUPABASE_PROJECT_REF=<project-ref>;SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json;STORAGE_BUCKET=ltc-exports;STORAGE_SIGNED_URL_TTL=24h;LOG_LEVEL=info;ALLOWED_ORIGINS=https://placeholder.example.com;NOTIFICATION_EMAIL_ENABLED=false;NOTIFY_FROM=noreply@your-domain.example"
 
 gcloud run jobs update ltc-api-migrate --region <GCP_REGION> \
   --set-secrets="DATABASE_URL=DATABASE_URL:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest,HMAC_KEY=HMAC_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
-  --update-env-vars="^;^APP_ENV=production;SUPABASE_PROJECT_REF=<project-ref>;SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json;ALLOWED_ORIGINS=https://placeholder.example.com;TRUSTED_PROXIES=<proxy-cidr>;NOTIFICATION_EMAIL_ENABLED=false;NOTIFY_FROM=noreply@your-domain.example"
+  --update-env-vars="^;^APP_ENV=production;SUPABASE_PROJECT_REF=<project-ref>;SUPABASE_JWKS_URL=https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json;ALLOWED_ORIGINS=https://placeholder.example.com;NOTIFICATION_EMAIL_ENABLED=false;NOTIFY_FROM=noreply@your-domain.example"
 
 # 步驟六：建立 GitHub Environment 並填入設定值
 gh api --method PUT repos/<GITHUB_ORG_OR_USER>/<GITHUB_REPO_NAME>/environments/Production
