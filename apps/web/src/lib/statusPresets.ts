@@ -42,6 +42,13 @@ export const DRIVER_REPORT_IMPORT_STATUS_PRESET: StatusPresetMap = {
   failed: { label: '失敗', variant: 'danger' }
 }
 
+// 接送匯報總覽：該車本月是否已匯入資料。尚未匯入不代表異常（當月可能還在進行中），
+// 故用 neutral 而非 warning，避免每台車在月初都被誤標成需留意
+export const MONTH_IMPORT_STATUS_PRESET: StatusPresetMap = {
+  imported: { label: '已匯入', variant: 'success' },
+  pending: { label: '尚未匯入', variant: 'neutral' }
+}
+
 // 欄位對應狀態（FieldMappingView 使用）
 export const FIELD_MAPPING_STATUS_PRESET: StatusPresetMap = {
   mapped: { label: '已對應', variant: 'success' },
@@ -97,6 +104,7 @@ export const STATUS_PRESETS = {
   activeState: ACTIVE_STATE_PRESET,
   employmentState: EMPLOYMENT_STATE_PRESET,
   driverReportImportStatus: DRIVER_REPORT_IMPORT_STATUS_PRESET,
+  monthImportStatus: MONTH_IMPORT_STATUS_PRESET,
   fieldMappingStatus: FIELD_MAPPING_STATUS_PRESET,
   completionStatus: COMPLETION_STATUS_PRESET,
   role: ROLE_PRESET,

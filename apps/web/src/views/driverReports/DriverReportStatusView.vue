@@ -24,40 +24,18 @@
         stripe
         row-key="id"
         style="width: 100%"
-        :expand-row-keys="expandedIds"
-        @expand-change="onExpandChange"
       >
-        <el-table-column type="expand">
+        <el-table-column label="車輛" min-width="180" class-name="vehicle-col">
           <template #default="{ row }">
-            <div class="months-detail">
-              <template v-if="monthsByForm.get(row.id)?.length">
-                <div
-                  v-for="m in monthsByForm.get(row.id)"
-                  :key="m.yearMonth"
-                  class="month-item month-item--clickable"
-                  @click="openMonthDetail(row as DriverReportFormDTO, m.yearMonth)"
-                >
-                  <span class="month-label">{{ m.yearMonth }}</span>
-                  <span class="month-count">{{ m.submissionCount }} 天</span>
-                  <span class="text-secondary">最後匯入 {{ formatDateTime(m.lastImportedAt, '—') }}</span>
-                </div>
-              </template>
-              <p v-else class="text-secondary">這台車尚未有任何月份的匯入紀錄。</p>
-            </div>
+            {{ row.vehicleName }}<span v-if="vehiclePlate(row.vehicleId)" class="vehicle-plate font-mono">({{ vehiclePlate(row.vehicleId) }})</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="車輛" min-width="140" class-name="vehicle-col">
+        <el-table-column label="已有資料月份（近 3 個月）" min-width="380" class-name="months-col">
           <template #default="{ row }">
-            {{ row.vehicleName }}
-          </template>
-        </el-table-column>
-
-        <el-table-column label="已有資料月份" min-width="260" class-name="months-col">
-          <template #default="{ row }">
-            <div v-if="monthsByForm.get(row.id)?.length" class="month-tags">
+            <div v-if="recentMonths(row.id).length" class="month-tags">
               <el-tag
-                v-for="m in monthsByForm.get(row.id)"
+                v-for="m in recentMonths(row.id)"
                 :key="m.yearMonth"
                 size="small"
                 class="month-tag--clickable"
@@ -66,13 +44,35 @@
                 {{ m.yearMonth }}（{{ m.submissionCount }}天）
               </el-tag>
             </div>
-            <span v-else class="text-muted">尚未匯入</span>
+            <span v-else class="text-muted">近 3 個月尚無匯入紀錄</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="本月已匯入" width="110" align="center" class-name="report-nowrap-col">
+          <template #default="{ row }">
+            <StatusTag :status="currentMonthImported(row.id) ? 'imported' : 'pending'" preset="monthImportStatus" />
           </template>
         </el-table-column>
 
         <el-table-column label="最後匯入時間" min-width="170" align="center" class-name="report-nowrap-col import-time-col">
           <template #default="{ row }">
             {{ formatDateTime(row.lastImportedAt, '尚未匯入') }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="100" align="center" fixed="right" class-name="report-nowrap-col">
+          <template #default="{ row }">
+            <TableRowActions>
+              <el-button
+                link
+                type="info"
+                size="small"
+                :disabled="!monthsByForm.get(row.id)?.length"
+                @click="openLatestDetail(row as DriverReportFormDTO)"
+              >
+                查看明細
+              </el-button>
+            </TableRowActions>
           </template>
         </el-table-column>
 
@@ -201,11 +201,14 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import DataTablePage from '@/components/DataTablePage.vue'
+import StatusTag from '@/components/StatusTag.vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 import {
   listDriverReportForms,
   listDriverReportImportedMonths,
   getDriverReportMonthDetail
 } from '@/api/driverReports'
+import { listAllVehicles } from '@/api/masters'
 import { formatDateTime } from '@/utils/formatters'
 import { LEG_SEQ_OPTIONS } from './legOptions'
 import type {
@@ -217,11 +220,15 @@ import type {
 
 const forms = ref<DriverReportFormDTO[]>([])
 const importedMonths = ref<DriverReportImportedMonthDTO[]>([])
+const plateByVehicleId = ref<Map<string, string>>(new Map())
 const searchQuery = ref('')
 const loading = ref(false)
-const expandedIds = ref<string[]>([])
 
-// 依 formId 分組並依月份新到舊排序，供展開列與月份標籤欄共用
+function vehiclePlate(vehicleId: string): string | undefined {
+  return plateByVehicleId.value.get(vehicleId)
+}
+
+// 依 formId 分組並依月份新到舊排序，供「已有資料月份」標籤欄與查看明細動作共用
 const monthsByForm = computed(() => {
   const grouped = new Map<string, DriverReportImportedMonthDTO[]>()
   for (const m of importedMonths.value) {
@@ -232,6 +239,26 @@ const monthsByForm = computed(() => {
   for (const list of grouped.values()) list.sort((a, b) => b.yearMonth.localeCompare(a.yearMonth))
   return grouped
 })
+
+// 已依新到舊排序，取前 3 筆即為最近 3 個月，避免標籤欄逐台車列出所有歷史月份造成折行
+function recentMonths(formId: string): DriverReportImportedMonthDTO[] {
+  return monthsByForm.value.get(formId)?.slice(0, 3) ?? []
+}
+
+const currentYearMonth = (() => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+})()
+
+function currentMonthImported(formId: string): boolean {
+  return monthsByForm.value.get(formId)?.some((m) => m.yearMonth === currentYearMonth) ?? false
+}
+
+function openLatestDetail(form: DriverReportFormDTO) {
+  const latest = monthsByForm.value.get(form.id)?.[0]
+  if (!latest) return
+  openMonthDetail(form, latest.yearMonth)
+}
 
 async function fetchForms() {
   loading.value = true
@@ -247,14 +274,15 @@ async function fetchForms() {
   }
 }
 
+// 車牌不隨查詢條件變動，獨立載入一次即可，避免每次查詢／重設都重打車輛清單 API
+async function loadVehiclePlates() {
+  const vehicles = await listAllVehicles()
+  plateByVehicleId.value = new Map(vehicles.map((v) => [v.id, v.plateNo]))
+}
+
 function handleReset() {
   searchQuery.value = ''
   fetchForms()
-}
-
-function onExpandChange(_row: unknown, expanded: unknown) {
-  if (!Array.isArray(expanded)) return
-  expandedIds.value = (expanded as DriverReportFormDTO[]).map((f) => f.id)
 }
 
 // 月份鑽取彈窗：點某台車某個月份的標籤後，載入該月完整匯入資料
@@ -370,7 +398,10 @@ async function openMonthDetail(form: DriverReportFormDTO, yearMonth: string) {
   }
 }
 
-onMounted(fetchForms)
+onMounted(() => {
+  fetchForms()
+  loadVehiclePlates()
+})
 </script>
 
 <style scoped>
@@ -391,11 +422,27 @@ onMounted(fetchForms)
 
 :deep(.vehicle-col .cell) {
   white-space: nowrap;
-  min-width: 140px;
+  min-width: 180px;
+}
+
+.vehicle-plate {
+  margin-left: 6px;
+  color: #606266;
+  font-size: var(--app-font-md);
+}
+
+/* 本頁列表字體放大一階：表頭用一般字級（原本是大寫微標籤字級），內文用大字級 */
+:deep(.el-table th.el-table__cell) {
+  font-size: var(--app-font-md);
+}
+
+:deep(.el-table td.el-table__cell) {
+  font-size: var(--app-font-lg);
 }
 
 :deep(.months-col .cell) {
-  min-width: 260px;
+  min-width: 380px;
+  overflow: visible;
 }
 
 :deep(.import-time-col .cell) {
@@ -404,29 +451,8 @@ onMounted(fetchForms)
 
 .month-tags {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
-}
-
-.months-detail {
-  padding: 8px 24px 12px;
-}
-
-.month-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-  font-size: 13px;
-}
-
-.month-label {
-  font-weight: 500;
-  min-width: 70px;
-}
-
-.month-count {
-  color: var(--app-status-success-fg);
 }
 
 .empty-state {
@@ -436,15 +462,6 @@ onMounted(fetchForms)
 
 .month-tag--clickable {
   cursor: pointer;
-}
-
-.month-item--clickable {
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.month-item--clickable:hover {
-  background: var(--app-bg-muted, #f8fafc);
 }
 
 .month-detail-summary {
