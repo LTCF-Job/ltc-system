@@ -181,9 +181,10 @@ covers:
    - 如司機接送匯報中填寫之司機姓名比對不到司機主檔（`driver_id IS NULL`）。
    - **個案自己的據點**比對不到據點主檔（`cases.site_pending`，`site_id IS NULL AND site_name_raw IS NOT NULL`）：手動新增個案時 `siteId` 為必填（`POST /cases` `binding:"required"`），不會產生此狀態；只有 Excel 匯入時據點名稱比對不到既有據點主檔，才會落入 `site_name_raw` 並觸發待維護，與既有的去／回程車輛比對不到主檔、司機接送匯報姓名比對不到司機主檔屬同一套模式。
    - **個案的照護人員**比對不到照護人員主檔（`cases.caregiver_pending`，`caregiver_id IS NULL AND care_contact_name` 非空白）：手動新增個案時 `caregiverId` 為必填（`POST /cases` `binding:"required"`），不會產生此狀態；只有 Excel 匯入時「個管or照專」旁的姓名比對不到主檔（查無此人，或同名多筆且無法以角色消歧）才會落入待維護，與據點是同一套模式。從未填過照護人員姓名的個案不算待維護。
-   - 個案指定之去/回程車輛找不到對應主檔（`case_transport_preferences.link_pending`；此條件現在**只涵蓋去/回程車輛**，據點比對已搬到上一條的 `cases.site_pending`，不再重複判定）。個案匯入已不再寫入去/回程車輛，此狀態只會來自既有資料與手動設定的交通偏好。
    - 照服員姓名或類型未填寫（`caregivers.is_pending`）。車輛與照護人員自己的據點欄位（`site_name`）是自由輸入文字、不關聯據點主檔，因此不會因據點問題進入待維護。
-3. **合併視圖**：`case_pending_status` view 將 `cases.profile_pending`、`cases.site_pending`、`cases.caregiver_pending`、`case_transport_preferences.link_pending` 四者以 `OR` 合併為單一 `is_pending`，供所有讀取個案的查詢統一 JOIN 使用（見準則四.二）。
+   - 個案不再關聯去/回程車輛，車輛不會產生任何待維護狀態（`case_transport_preferences` 已移除，見 migration `000055`）。
+3. **合併視圖**：`case_pending_status` view 將 `cases.profile_pending`、`cases.site_pending`、`cases.caregiver_pending` 三者以 `OR` 合併為單一 `is_pending`，供所有讀取個案的查詢統一 JOIN 使用（見準則四.二）。
+4. **系統自動重新關聯（唯一命中）**：主檔（據點、照護人員、司機、個案）新增或改名時，系統會針對該名稱重新比對現有待維護資料；判準與匯入時相同（若匯入當下主檔已存在會得到的結果），只有唯一命中才自動關聯並清除 `is_pending`，同名多筆一律留在待維護，不猜測。待維護工作台另提供「重新比對」按鈕，可手動重跑同一套規則補救。
 
 ### 4.2 核心鐵律：全站嚴格隔離（Strict Full-Site Isolation）
 - **隔離範圍**：
@@ -201,8 +202,8 @@ covers:
 ### 4.3 待維護資料的生命週期與出口
 待維護資料僅存在兩個合法出口，不允許長期處於不可維護的灰階狀態：
 1. **補齊維護並轉正（Resolve & Clear）**：
-   - 使用者在「待維護工作台」或指定待維護列表檢視該筆資料。
-   - 使用者將缺漏之必填欄位補齊，或手動綁定正確的關聯實體（如手動指定對應之司機或據點）。
+   - 使用者在「待維護工作台」或指定待維護列表檢視該筆資料，將缺漏之必填欄位補齊，或手動綁定正確的關聯實體（如手動指定對應之司機或據點）。
+   - **系統自動重新關聯（唯一命中）**：主檔新增或改名時，系統會針對該名稱自動重跑同一套比對規則；唯一命中即視同使用者手動綁定，不需人工操作（見 4.1.4）。
    - 儲存後，系統重新驗證；驗證通過後自動將 `is_pending` 清除，從待維護列表中移除，正式進入系統全站可用清單。
 2. **忽略此筆＝從系統移除（Discard / Delete）**：
    - 若使用者判定該筆資料為無效資料、垃圾資料或錯誤重複匯入，可點選「忽略此筆」。

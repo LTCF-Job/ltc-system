@@ -183,11 +183,6 @@ func (r *VehicleRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Veh
 	return r.getOne(ctx, vehicleSelect+` WHERE v.id = $1 AND v.deleted_at IS NULL`, id)
 }
 
-// GetByDisplayName 依顯示名稱尋找（支援匯入比對）。
-func (r *VehicleRepository) GetByDisplayName(ctx context.Context, displayName string) (*app.Vehicle, error) {
-	return r.getOne(ctx, vehicleSelect+` WHERE v.display_name = $1 AND v.deleted_at IS NULL LIMIT 1`, displayName)
-}
-
 func (r *VehicleRepository) getOne(ctx context.Context, query string, arg interface{}) (*app.Vehicle, error) {
 	var v vehicleRow
 	if err := pgxdb.FromContext(ctx, r.db).QueryRow(ctx, query, arg).Scan(scanVehicle(&v)...); err != nil {

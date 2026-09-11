@@ -2,6 +2,7 @@ package transport
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -13,12 +14,34 @@ import (
 
 // DriverHandler 處理司機相關請求。
 type DriverHandler struct {
-	svc *app.DriverService
+	svc      *app.DriverService
+	relinker PendingRelinker
 }
 
 // NewDriverHandler 建立 DriverHandler 實例。
-func NewDriverHandler(svc *app.DriverService) *DriverHandler {
-	return &DriverHandler{svc: svc}
+func NewDriverHandler(svc *app.DriverService, relinkers ...PendingRelinker) *DriverHandler {
+	h := &DriverHandler{svc: svc}
+	if len(relinkers) > 0 {
+		h.relinker = relinkers[0]
+	}
+	return h
+}
+
+// relinkPendingMeta 呼叫 relinker 重新比對待維護資料；筆數為 0 時回傳 nil，
+// 讓 RespondSuccess 的 meta 維持既有形狀，不多長一個恆為 0 的欄位。
+func (h *DriverHandler) relinkPendingMeta(c *gin.Context, name string) any {
+	if h.relinker == nil || name == "" {
+		return nil
+	}
+	n, err := h.relinker.RelinkByName(c.Request.Context(), name, auth.GetActorID(c), auth.GetActorRole(c), c.ClientIP(), c.Request.UserAgent())
+	if err != nil {
+		slog.Error("pending_relink_failed", slog.String("name", name), slog.Any("error", err))
+		return nil
+	}
+	if n == 0 {
+		return nil
+	}
+	return gin.H{"pendingRelinked": n}
 }
 
 // List 查詢司機清單。
@@ -103,7 +126,8 @@ func (h *DriverHandler) Create(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, newDriverResponse(*d), nil)
+	meta := h.relinkPendingMeta(c, d.Name)
+	httpx.RespondSuccess(c, http.StatusCreated, newDriverResponse(*d), meta)
 }
 
 // Update 更新司機。
@@ -175,7 +199,11 @@ func (h *DriverHandler) Update(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, newDriverResponse(*d), nil)
+	var meta any
+	if req.Name != nil {
+		meta = h.relinkPendingMeta(c, d.Name)
+	}
+	httpx.RespondSuccess(c, http.StatusOK, newDriverResponse(*d), meta)
 }
 
 // Delete 軟刪除司機。

@@ -194,6 +194,28 @@ func (r *DriverRepository) GetByNameNormalized(ctx context.Context, nameNorm str
 	return r.getOne(ctx, `SELECT `+driverColumns+` FROM drivers WHERE name_normalized = $1 AND deleted_at IS NULL LIMIT 1`, nameNorm)
 }
 
+// ListByNameNormalized 列出正規化姓名相符的所有未刪除司機。
+func (r *DriverRepository) ListByNameNormalized(ctx context.Context, nameNorm string) ([]app.Driver, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("driver database is not configured")
+	}
+	rows, err := r.db.Query(ctx, `SELECT id, name FROM drivers WHERE name_normalized = $1 AND deleted_at IS NULL`, nameNorm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query drivers by normalized name: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]app.Driver, 0)
+	for rows.Next() {
+		var d app.Driver
+		if err := rows.Scan(&d.ID, &d.Name); err != nil {
+			return nil, fmt.Errorf("scan driver by normalized name: %w", err)
+		}
+		list = append(list, d)
+	}
+	return list, rows.Err()
+}
+
 func (r *DriverRepository) getOne(ctx context.Context, query string, args ...interface{}) (*app.Driver, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("driver database is not configured")

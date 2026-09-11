@@ -321,7 +321,7 @@ func TestCommitCases_ResolvesSiteAndCaregiverWhenNamesMatch(t *testing.T) {
 	}
 
 	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
-		{RowIndex: 1, Name: "個案乙", SiteName: "竹南日照單位", CareContactRole: "個管", CareContactName: "陳小華", InboundVehicle: "查無此車回"},
+		{RowIndex: 1, Name: "個案乙", SiteName: "竹南日照單位", CareContactRole: "個管", CareContactName: "陳小華"},
 	}}
 
 	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})

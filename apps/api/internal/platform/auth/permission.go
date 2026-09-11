@@ -276,6 +276,46 @@ func RequirePermission(resolver PermissionResolver, customResolver CustomPermiss
 	}
 }
 
+// ModuleAction 是 RequireAnyPermission 的一個 (module, action) 檢查條件。
+type ModuleAction struct {
+	Module string
+	Action string
+}
+
+// RequireAnyPermission 與 RequirePermission 同一套解析邏輯，任一 (module, action)
+// 通過即放行，用於一個端點同時服務多個主檔模組的情境（例如待維護重新比對）。
+func RequireAnyPermission(resolver PermissionResolver, customResolver CustomPermissionResolver, checks ...ModuleAction) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		roleVal, exists := c.Get(ContextKeyActorRole)
+		if !exists {
+			httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthenticated, "未登入或無法識別角色", nil)
+			return
+		}
+		roleKey, _ := roleVal.(string)
+
+		effective, err := ResolveEffectivePermissions(c.Request.Context(), resolver, customResolver, roleKey, GetActorID(c))
+		if err != nil {
+			slog.Error("permission_resolution_failed",
+				slog.String("request_id", httpx.RequestID(c)),
+				slog.String("path", c.Request.URL.Path),
+				slog.String("role_key", roleKey),
+				slog.String("error_type", fmt.Sprintf("%T", err)),
+				slog.String("error_message", err.Error()),
+			)
+			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "無法解析權限", nil)
+			return
+		}
+
+		for _, check := range checks {
+			if hasAction(effective[check.Module], check.Action) {
+				c.Next()
+				return
+			}
+		}
+		httpx.RespondError(c, http.StatusForbidden, httpx.CodeForbidden, "權限不足，拒絕存取", nil)
+	}
+}
+
 // ResolveEffectivePermissions 解析某個使用者最終生效的模組權限矩陣：先取角色矩陣，再疊上
 // 個人層級覆蓋。RequirePermission 與 GET /auth/me 共用這一份邏輯，確保前端拿到的權限與
 // API 實際放行的範圍一致。

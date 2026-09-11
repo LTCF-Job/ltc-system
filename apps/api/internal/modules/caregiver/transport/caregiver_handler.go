@@ -1,8 +1,10 @@
 package transport
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,14 +16,43 @@ import (
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
+// PendingRelinker 讓照護人員新增或改名後，重新比對名稱相符的待維護個案；
+// 未接線時傳 nil，Create／Update 會略過重新比對。
+type PendingRelinker interface {
+	RelinkByName(ctx context.Context, name string, actorID uuid.UUID, actorRole, ip, ua string) (int, error)
+}
+
 // CaregiverHandler 處理照護人員主檔與批次匯入相關請求。
 type CaregiverHandler struct {
-	svc *app.CaregiverService
+	svc      *app.CaregiverService
+	relinker PendingRelinker
 }
 
 // NewCaregiverHandler 建立 CaregiverHandler 實例。
-func NewCaregiverHandler(svc *app.CaregiverService) *CaregiverHandler {
-	return &CaregiverHandler{svc: svc}
+func NewCaregiverHandler(svc *app.CaregiverService, relinkers ...PendingRelinker) *CaregiverHandler {
+	h := &CaregiverHandler{svc: svc}
+	if len(relinkers) > 0 {
+		h.relinker = relinkers[0]
+	}
+	return h
+}
+
+// relinkPendingMeta 呼叫 relinker 重新比對待維護資料；筆數為 0 時回傳 nil，
+// 讓 RespondSuccess 的 meta 維持既有形狀，不多長一個恆為 0 的欄位。
+func (h *CaregiverHandler) relinkPendingMeta(c *gin.Context, name string) any {
+	if h.relinker == nil || name == "" {
+		return nil
+	}
+	actor := actorOf(c)
+	n, err := h.relinker.RelinkByName(c.Request.Context(), name, actor.ActorID, actor.ActorRole, actor.IPAddress, actor.UserAgent)
+	if err != nil {
+		slog.Error("pending_relink_failed", slog.String("name", name), slog.Any("error", err))
+		return nil
+	}
+	if n == 0 {
+		return nil
+	}
+	return gin.H{"pendingRelinked": n}
 }
 
 func actorOf(c *gin.Context) app.ActorContext {
@@ -80,7 +111,8 @@ func (h *CaregiverHandler) Create(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, newCaregiverResponse(*caregiver), nil)
+	meta := h.relinkPendingMeta(c, caregiver.Name)
+	httpx.RespondSuccess(c, http.StatusCreated, newCaregiverResponse(*caregiver), meta)
 }
 
 // Update 更新照護人員。
@@ -110,7 +142,11 @@ func (h *CaregiverHandler) Update(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, newCaregiverResponse(*caregiver), nil)
+	var meta any
+	if req.Name != nil {
+		meta = h.relinkPendingMeta(c, caregiver.Name)
+	}
+	httpx.RespondSuccess(c, http.StatusOK, newCaregiverResponse(*caregiver), meta)
 }
 
 // Delete 刪除照護人員。

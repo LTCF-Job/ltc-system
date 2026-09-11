@@ -18,13 +18,14 @@
 判定下沉到資料庫成為單一來源：
 
 - `cases.profile_pending`（生日或身分證字號格式錯誤）
-- `case_transport_preferences.link_pending`（去程車輛／回程車輛比對不到主檔）
 - `caregivers.is_pending`（姓名或類型未填寫）
 
 > 據點（單位）比對不到主檔另外獨立成 `cases.site_pending`，`case_pending_status` view 合併
-> `profile_pending`／`site_pending`／`link_pending` 三者成單一 `is_pending`。這是後來（2026-09-09）
+> `profile_pending`／`site_pending`／`caregiver_pending` 三者成單一 `is_pending`。這是後來（2026-09-09）
 > 「個案 → 據點」關聯重構帶來的變化，見 [site-link-restructure.md](site-link-restructure.md)；
-> 車輛與照護人員的據點同時期改為自由文字，不再參與待維護判定。
+> 車輛與照護人員的據點同時期改為自由文字，不再參與待維護判定。個案的去/回程車輛關聯
+> （`case_transport_preferences.link_pending`）已於 migration `000055` 整張表移除：排班、搭乘、
+> 報表、匯出都不依賴它，移除後車輛不再是任何待維護狀態的來源。
 
 所有讀取個案的查詢一律 `JOIN case_pending_status` 並排除 `is_pending`。新增查詢時沿用這個 view，
 不要複製條件——條件散落各處正是這次要修掉的問題。
@@ -57,6 +58,26 @@ HTTP 契約同步改為預設安全：`GET /cases` 與 `GET /caregivers` 預設�
 | 出勤匯入衝突 | `attendance_import_conflicts` 該列 |
 
 `form_columns` 原有的 `mapping_status='ignored'` 保留為 enum 值但不再有 UI 入口。
+
+### 4. 系統自動重新關聯（2026-09-11）
+
+過去只有從待維護頁手動建立或關聯，才會讓資料離開待維護；使用者直接在主檔頁新增或改名據點、
+照護人員、司機、個案，既有待維護資料不會被重新比對。
+
+**判準**：只在主檔**新增或改名**時，針對該名稱、該類型重新比對對應的待維護資料；判準等同匯入
+當下若主檔已存在會得到的結果——同名唯一命中才自動關聯，多筆或方向不明一律留在待維護，不猜測。
+一般編輯（地址、電話、狀態等與名稱無關的欄位）不觸發任何重新比對。
+
+| 觸發 | 待維護對象 | 唯一命中條件 |
+|---|---|---|
+| 據點新增／改名 | `cases.site_pending` 且 `site_name_raw` 等於該名稱 | `sites.name` 等於該名稱恰好 1 筆（跨區域同名不算唯一） |
+| 照護人員新增／改名 | `cases.caregiver_pending` 且 `care_contact_name` 等於該名稱 | 沿用 `resolveCaregiver` 規則：同名唯一即採用；多筆時以「個管or照專」消歧 |
+| 司機新增／改名 | 未綁定的 `form_submissions.driver_name_raw` | 正規化姓名（`namenorm`）比對未刪除的 `drivers` 恰好 1 筆 |
+| 個案新增／改名 | `form_columns` 為 `pending` 且 `kind='ride'` | 表頭帶明確去程或回程方向，且清理後姓名完全一致的個案恰好 1 筆 |
+
+不處理：`profile_pending`（生日、身分證格式）、重複個案裁決、列衝突、出勤衝突——這些不是
+「參照找不到」，無從自動比對。自動關聯視同使用者手動綁定，寫入方式與稽核與手動路徑相同。
+待維護工作台另提供「重新比對」按鈕，手動重跑同一套規則以處理舊資料或補救偶發失敗。
 
 ### 例外：`form_submissions` 不能直接 DELETE
 

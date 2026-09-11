@@ -44,8 +44,6 @@ type CaseImportRowResult struct {
 	ServiceUsageType   int               `json:"serviceUsageType"`
 	SiteName           string            `json:"siteName"`
 	SiteID             *uuid.UUID        `json:"siteId,omitempty"`
-	OutboundVehicle    string            `json:"outboundVehicle,omitempty"`
-	InboundVehicle     string            `json:"inboundVehicle,omitempty"`
 	Remarks            string            `json:"remarks,omitempty"`
 	IsDuplicate        bool              `json:"isDuplicate"`
 	DuplicateCaseName  string            `json:"duplicateCaseName,omitempty"`

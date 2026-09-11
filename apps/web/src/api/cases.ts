@@ -1,10 +1,9 @@
-import { apiClient, createPaginationMeta, unwrapData, unwrapPaged } from './client'
+import { apiClient, createPaginationMeta, unwrapData, unwrapDataWithMeta, unwrapPaged, type PendingRelinkedMeta } from './client'
 import type {
   Paged,
   CaseDTO,
   CreateCaseRequest,
   UpdateCaseRequest,
-  UpdateCaseTransportPreferenceRequest,
   CaseScheduleDTO,
   SaveScheduleRequest,
   DryRunImportResultDTO,
@@ -48,9 +47,9 @@ export async function getCase(id: string): Promise<CaseDTO> {
   return unwrapData<CaseDTO>(res)
 }
 
-export async function createCase(data: CreateCaseRequest): Promise<CaseDTO> {
+export async function createCase(data: CreateCaseRequest): Promise<{ data: CaseDTO; meta?: PendingRelinkedMeta }> {
   const res = await apiClient.post('/cases', data)
-  return unwrapData<CaseDTO>(res)
+  return unwrapDataWithMeta<CaseDTO>(res)
 }
 
 export async function updateCase(id: string, data: UpdateCaseRequest): Promise<CaseDTO> {
@@ -61,14 +60,6 @@ export async function updateCase(id: string, data: UpdateCaseRequest): Promise<C
 export async function deleteCase(id: string): Promise<void> {
 	const res = await apiClient.delete(`/cases/${id}`)
 	unwrapData<unknown>(res)
-}
-
-export async function updateCaseTransportPreference(
-  id: string,
-  data: UpdateCaseTransportPreferenceRequest
-): Promise<CaseDTO> {
-  const res = await apiClient.put(`/cases/${id}/transport-preference`, data)
-  return unwrapData<CaseDTO>(res)
 }
 
 export async function downloadCaseImportTemplate(): Promise<Blob> {
@@ -121,4 +112,17 @@ export async function resolveCaseDuplicateCandidate(id: string, data: ResolveDup
 // discardCaseDuplicateCandidate 忽略一筆疑似重複個案，直接把暫存列從系統刪除，不建立個案。
 export async function discardCaseDuplicateCandidate(id: string): Promise<void> {
   await apiClient.delete(`/cases/import/duplicates/${id}`)
+}
+
+export interface PendingRelinkResult {
+  sites: number
+  caregivers: number
+  drivers: number
+  caseColumns: number
+}
+
+// relinkPendingData 手動重跑一次「主檔新增或改名時」同一套自動關聯規則，用於處理舊資料或補救單次失敗。
+export async function relinkPendingData(): Promise<PendingRelinkResult> {
+  const res = await apiClient.post('/pending-data/relink')
+  return unwrapData<PendingRelinkResult>(res)
 }

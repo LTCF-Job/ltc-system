@@ -90,6 +90,6 @@ API client 會把後端 `details` 裡的具體原因（例如表頭不符）以�
 
 ## 主檔批次匯入
 
-`CaseListView` 有「匯入 Excel」入口，先 `GET /cases/template` 讓使用者下載範本，填好後上傳走 `POST /cases/import`，後端回傳每列的解析結果（成功／失敗與原因），前端要把失敗列的錯誤原因列出來讓使用者修正後重傳，不是整批全有效才能匯入。據點/車輛比對不到主檔、生日或身分證字號格式錯誤都不擋列，個案照常建立並標記待維護；疑似重複個案則不建立個案，改建立為待裁決暫存列（`GET /cases/import/duplicates`），三者合併在「待維護」頁籤以一列一實體＋彙總問題欄呈現，疑似重複列的「人工裁決」會先呼叫 `POST /cases/import/duplicates/:id/reveal` 解密身分證字號供比對，再呼叫 `POST /cases/import/duplicates/:id/resolve` 確認為新個案或併入既有個案。
+`CaseListView` 有「匯入 Excel」入口，先 `GET /cases/template` 讓使用者下載範本，填好後上傳走 `POST /cases/import`，後端回傳每列的解析結果（成功／失敗與原因），前端要把失敗列的錯誤原因列出來讓使用者修正後重傳，不是整批全有效才能匯入。據點/照護人員比對不到主檔、生日或身分證字號格式錯誤都不擋列，個案照常建立並標記待維護；疑似重複個案則不建立個案，改建立為待裁決暫存列（`GET /cases/import/duplicates`），三者合併在「待維護」頁籤以一列一實體＋彙總問題欄呈現，疑似重複列的「人工裁決」會先呼叫 `POST /cases/import/duplicates/:id/reveal` 解密身分證字號供比對，再呼叫 `POST /cases/import/duplicates/:id/resolve` 確認為新個案或併入既有個案。主檔新增或改名時，系統會自動重新比對待維護資料，唯一命中即自動關聯（見 [pending-data-visibility.md](../decisions/pending-data-visibility.md) §4）。
 
 照護人員匯入的 duplicate 確認仍以後端回傳的 `rowId`（工作表名稱與列號組合）作為選取鍵、在預覽階段勾選才會一併匯入；`rowIndex` 僅用於畫面顯示，避免多工作表相同列號被誤視為同一筆。個案匯入不再使用這套勾選機制。

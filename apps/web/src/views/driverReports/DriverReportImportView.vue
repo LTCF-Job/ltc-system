@@ -171,7 +171,11 @@
           <PageHeader
             title="待維護資料"
             description="以下每一列是一筆匯報日期的提交紀錄，展開可看到這一列有哪些欄位比對不到個案、駕駛人是否比對不到司機主檔；可連結既有資料或建立新資料。個案與司機綁定完成後系統都會立即用當初上傳的資料補寫搭乘紀錄，不需要重新上傳檔案。"
-          />
+          >
+            <template #actions>
+              <el-button :loading="relinkPendingSaving" @click="handleRelinkPending">重新比對</el-button>
+            </template>
+          </PageHeader>
 
           <el-empty v-if="!reviewLoading && submissionReviews.length === 0" description="目前沒有待處理的匯報列" />
 
@@ -505,7 +509,7 @@ import {
   ignoreRowConflict
 } from '@/api/driverReports'
 import { listAttendanceConflicts, resolveAttendanceConflict, ignoreAttendanceConflict } from '@/api/attendance'
-import { listAllCases } from '@/api/cases'
+import { listAllCases, relinkPendingData } from '@/api/cases'
 import { listAllVehicles, listAllDrivers } from '@/api/masters'
 import PageHeader from '@/components/PageHeader.vue'
 import TableRowActions from '@/components/TableRowActions.vue'
@@ -1159,6 +1163,26 @@ async function fetchSubmissionReview() {
     // 全域攔截器負責顯示 API 錯誤。
   } finally {
     reviewLoading.value = false
+  }
+}
+
+const relinkPendingSaving = ref(false)
+
+async function handleRelinkPending() {
+  relinkPendingSaving.value = true
+  try {
+    const result = await relinkPendingData()
+    const total = result.sites + result.caregivers + result.drivers + result.caseColumns
+    if (total > 0) {
+      ElMessage.success(`已自動關聯 ${total} 筆待維護資料`)
+      await fetchSubmissionReview()
+    } else {
+      ElMessage.info('目前沒有可自動關聯的待維護資料')
+    }
+  } catch {
+    // 全域攔截器負責顯示 API 錯誤。
+  } finally {
+    relinkPendingSaving.value = false
   }
 }
 

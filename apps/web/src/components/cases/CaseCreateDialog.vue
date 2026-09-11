@@ -64,6 +64,7 @@ import DialogFooter from '@/components/DialogFooter.vue'
 import { createCase } from '@/api/cases'
 import { listAllSites } from '@/api/masters'
 import { listAllCaregivers } from '@/api/caregivers'
+import { notifyPendingRelinked } from '@/utils/pendingRelink'
 import { CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
 import type { CaseDTO, CreateCaseRequest, SiteDTO, CaregiverDTO } from '@/types/api'
 
@@ -135,8 +136,9 @@ async function handleConfirm() {
     if (!valid) return
     saving.value = true
     try {
-      const created = await createCase(form)
+      const { data: created, meta } = await createCase(form)
       ElMessage.success(`個案「${created.name}」建立成功`)
+      notifyPendingRelinked(meta)
       emit('update:modelValue', false)
       emit('created', created)
     } finally {

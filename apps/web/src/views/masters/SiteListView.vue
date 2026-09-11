@@ -211,6 +211,7 @@ import TableRowActions from '@/components/TableRowActions.vue'
 import { listSites, listAllSites, createSite, updateSite, deleteSite } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
+import { notifyPendingRelinked } from '@/utils/pendingRelink'
 import type { SiteDTO, CreateSiteRequest } from '@/types/api'
 
 const authStore = useAuthStore()
@@ -315,11 +316,13 @@ async function handleSubmit() {
     submitting.value = true
     try {
       if (editingId.value) {
-        await updateSite(editingId.value, form)
+        const { meta } = await updateSite(editingId.value, form)
         ElMessage.success('據點資料已更新')
+        notifyPendingRelinked(meta)
       } else {
-        await createSite(form)
+        const { meta } = await createSite(form)
         ElMessage.success('據點新增成功')
+        notifyPendingRelinked(meta)
       }
       dialogVisible.value = false
       executeFetch()

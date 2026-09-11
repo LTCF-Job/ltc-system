@@ -19,7 +19,6 @@ WHERE driver_id IN (SELECT id FROM drivers WHERE name LIKE 'QA%')
 DELETE FROM driver_report_forms
 WHERE vehicle_id IN (SELECT id FROM vehicles WHERE display_name LIKE 'QA%' OR plate_no LIKE 'QA%');
 
-DELETE FROM case_transport_preferences WHERE case_id IN (SELECT id FROM cases WHERE name LIKE 'QA%');
 DELETE FROM case_schedules WHERE case_id IN (SELECT id FROM cases WHERE name LIKE 'QA%');
 DELETE FROM case_import_idempotency WHERE case_id IN (SELECT id FROM cases WHERE name LIKE 'QA%');
 DELETE FROM case_import_duplicate_rows WHERE name LIKE 'QA%';

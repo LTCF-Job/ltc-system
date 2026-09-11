@@ -247,6 +247,117 @@ func (s *DriverReportService) BindPendingDriver(ctx context.Context, driverNameR
 	return affected, nil
 }
 
+// AutoBindColumnsForCase 讓個案新增或改名時，把清理後姓名與 name 完全一致、方向明確
+// 的待維護欄位自動綁定給這個個案；只有 name 目前在有效個案中唯一時才綁定，回傳實際
+// 綁定的欄位數。
+func (s *DriverReportService) AutoBindColumnsForCase(ctx context.Context, name string) (int, error) {
+	target := namenorm.Normalize(name)
+	if target == "" {
+		return 0, nil
+	}
+	active, err := s.caseRepo.ListActiveCases(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var matched *CaseRef
+	for i := range active {
+		if active[i].NameNormalized == target {
+			if matched != nil {
+				return 0, nil
+			}
+			matched = &active[i]
+		}
+	}
+	if matched == nil {
+		return 0, nil
+	}
+
+	pending, err := s.repo.ListColumnsWithMapping(ctx, "", "pending")
+	if err != nil {
+		return 0, err
+	}
+	targets := exactAutoBind(pending, name)
+
+	bound := 0
+	for _, col := range targets {
+		legSeq := legSeqForDirection(namenorm.ParseColumnHeader(col.ColumnHeader).Direction)
+		if _, err := s.UpdateColumnMapping(ctx, col.ID, "mapped", &matched.ID, legSeq); err != nil {
+			return bound, err
+		}
+		bound++
+	}
+	return bound, nil
+}
+
+// AutoBindDriver 讓司機新增或改名時，把正規化姓名相符、未比對到司機主檔的既有回報
+// 自動綁定給這位司機；只有姓名在司機主檔中唯一時才綁定，回傳實際回填的提交筆數。
+func (s *DriverReportService) AutoBindDriver(ctx context.Context, name string) (int, error) {
+	matches, err := s.driverRepo.ListByNameNormalized(ctx, namenorm.Normalize(name))
+	if err != nil {
+		return 0, err
+	}
+	if len(matches) != 1 {
+		return 0, nil
+	}
+	return s.BindPendingDriver(ctx, name, matches[0].ID.String())
+}
+
+// RelinkAllPendingDrivers 對目前所有司機姓名比對不到主檔的既有回報重新比對一次，
+// 回傳合計自動綁定的提交筆數。
+func (s *DriverReportService) RelinkAllPendingDrivers(ctx context.Context) (int, error) {
+	unmatched, err := s.rideIngestor.ListUnmatchedDriverSubmissions(ctx)
+	if err != nil {
+		return 0, err
+	}
+	seen := map[string]bool{}
+	total := 0
+	for _, u := range unmatched {
+		norm := namenorm.Normalize(u.DriverNameRaw)
+		if norm == "" || seen[norm] {
+			continue
+		}
+		seen[norm] = true
+		n, err := s.AutoBindDriver(ctx, u.DriverNameRaw)
+		// AutoBindDriver 沒有交易保護，err 不為 nil 時 n 仍可能是已生效的部分回填筆數，
+		// 不能整批捨棄，否則手動按鈕回報的總數會比實際生效的筆數少。
+		total += n
+		if err != nil {
+			slog.Error("relink_all_pending_drivers_failed", slog.String("name", u.DriverNameRaw), slog.Any("error", err))
+			continue
+		}
+	}
+	return total, nil
+}
+
+// RelinkAllPendingCaseColumns 對目前所有待維護的匯報欄位重新比對一次，回傳合計
+// 自動綁定的欄位數。
+func (s *DriverReportService) RelinkAllPendingCaseColumns(ctx context.Context) (int, error) {
+	pending, err := s.repo.ListColumnsWithMapping(ctx, "", "pending")
+	if err != nil {
+		return 0, err
+	}
+	seen := map[string]bool{}
+	total := 0
+	// ponytail: 每個相異姓名各自呼叫 AutoBindColumnsForCase，內部重複查詢
+	// ListActiveCases／ListColumnsWithMapping，為 O(相異姓名數 × 在案個案數)；資料量
+	// 成長後改把兩份清單提到迴圈外一次查好再傳入。
+	for _, col := range pending {
+		if col.Kind != "ride" || col.CleanedName == "" || seen[col.CleanedName] {
+			continue
+		}
+		seen[col.CleanedName] = true
+		n, err := s.AutoBindColumnsForCase(ctx, col.CleanedName)
+		// AutoBindColumnsForCase 逐欄呼叫 UpdateColumnMapping、沒有整批交易保護，
+		// err 不為 nil 時 n 仍可能是已生效的部分綁定數，不能整批捨棄。
+		total += n
+		if err != nil {
+			slog.Error("relink_all_pending_case_columns_failed", slog.String("name", col.CleanedName), slog.Any("error", err))
+			continue
+		}
+	}
+	return total, nil
+}
+
 // ResolveRowConflict 裁決一筆「同車同個案」衝突：useNew 時採用這次上傳的新值並重算
 // 搭乘紀錄，否則保留既有資料不動；兩者都只標記這筆衝突已解決，不影響其他未涉及的
 // slot。裁決與寫入搭乘來源、同步出勤落在同一交易內，任一步驟失敗全部回滾，避免衝突

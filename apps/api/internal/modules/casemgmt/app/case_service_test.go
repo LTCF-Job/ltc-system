@@ -25,20 +25,22 @@ func testConfig() *config.Config {
 
 // fakeCaseStore is a deterministic CaseStore test double.
 type fakeCaseStore struct {
-	byID           map[uuid.UUID]*Case
-	byHMAC         map[string]*Case
-	byNameNorm     map[string][]Case
-	createErr      error
-	lastCreate     *Case
-	lastUpsertPref struct {
-		caseID                                        uuid.UUID
-		outboundVehicleID, inboundVehicleID           *uuid.UUID
-		outboundVehicleNameRaw, inboundVehicleNameRaw string
-	}
+	byID               map[uuid.UUID]*Case
+	byHMAC             map[string]*Case
+	byNameNorm         map[string][]Case
+	createErr          error
+	lastCreate         *Case
 	deleted            map[uuid.UUID]bool
 	softDeleteErr      error
 	closedSchedulesFor uuid.UUID
 	closeSchedulesErr  error
+	relinkSiteIDs      []uuid.UUID
+	relinkSiteErr      error
+	// pendingSiteNames／relinkSiteByName 讓 RelinkAllPendingSites 的測試能依名稱
+	// 分別控制結果，模擬「其中一筆比對失敗、其他筆仍要繼續」的情境。
+	pendingSiteNames []string
+	relinkSiteByName map[string][]uuid.UUID
+	relinkErrByName  map[string]error
 }
 
 func newFakeCaseStore() *fakeCaseStore {
@@ -106,15 +108,6 @@ func (f *fakeCaseStore) GetActiveSchedulesForMonth(ctx context.Context, year, mo
 	return nil, nil
 }
 
-func (f *fakeCaseStore) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
-	f.lastUpsertPref.caseID = caseID
-	f.lastUpsertPref.outboundVehicleID = outboundVehicleID
-	f.lastUpsertPref.inboundVehicleID = inboundVehicleID
-	f.lastUpsertPref.outboundVehicleNameRaw = outboundVehicleNameRaw
-	f.lastUpsertPref.inboundVehicleNameRaw = inboundVehicleNameRaw
-	return nil
-}
-
 func (f *fakeCaseStore) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
 	if f.softDeleteErr != nil {
 		return false, f.softDeleteErr
@@ -132,6 +125,25 @@ func (f *fakeCaseStore) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (
 func (f *fakeCaseStore) CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error {
 	f.closedSchedulesFor = caseID
 	return f.closeSchedulesErr
+}
+
+func (f *fakeCaseStore) RelinkSiteByName(ctx context.Context, name string) ([]uuid.UUID, error) {
+	if f.relinkSiteByName != nil || f.relinkErrByName != nil {
+		return f.relinkSiteByName[name], f.relinkErrByName[name]
+	}
+	return f.relinkSiteIDs, f.relinkSiteErr
+}
+
+func (f *fakeCaseStore) RelinkCaregiverByName(ctx context.Context, name string) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (f *fakeCaseStore) ListPendingSiteNames(ctx context.Context) ([]string, error) {
+	return f.pendingSiteNames, nil
+}
+
+func (f *fakeCaseStore) ListPendingCaregiverNames(ctx context.Context) ([]string, error) {
+	return nil, nil
 }
 
 func TestCaseService_CreateCaseSchedule_ValidatesRequest(t *testing.T) {
@@ -200,6 +212,54 @@ type fakeCaseTransactionRunner struct {
 func (r *fakeCaseTransactionRunner) WithTx(ctx context.Context, fn func(context.Context) error) error {
 	r.calls++
 	return fn(ctx)
+}
+
+func TestCaseService_RelinkSiteByName(t *testing.T) {
+	t.Run("稽核寫入失敗時回報 0 筆", func(t *testing.T) {
+		store := newFakeCaseStore()
+		store.relinkSiteIDs = []uuid.UUID{uuid.New(), uuid.New()}
+		audit := &fakeCaseAuditWriter{err: errors.New("audit boom")}
+		txRunner := &fakeCaseTransactionRunner{}
+		svc := NewCaseService(testConfig(), store, audit, nil, nil, txRunner)
+
+		n, err := svc.RelinkSiteByName(context.Background(), "測試據點", uuid.New(), "admin", "127.0.0.1", "test-agent")
+
+		require.Error(t, err, "稽核失敗必須讓呼叫端知道，不能悄悄回報成功")
+		assert.Zero(t, n)
+		assert.Len(t, audit.entries, 1, "第二筆稽核失敗前就該中止，不繼續寫剩下的列")
+	})
+
+	t.Run("唯一命中時回報實際關聯筆數並帶入操作者", func(t *testing.T) {
+		store := newFakeCaseStore()
+		caseID := uuid.New()
+		store.relinkSiteIDs = []uuid.UUID{caseID}
+		audit := &fakeCaseAuditWriter{}
+		actorID := uuid.New()
+		svc := NewCaseService(testConfig(), store, audit, nil, nil)
+
+		n, err := svc.RelinkSiteByName(context.Background(), "測試據點", actorID, "admin", "127.0.0.1", "test-agent")
+
+		require.NoError(t, err)
+		assert.Equal(t, 1, n)
+		require.Len(t, audit.entries, 1)
+		assert.Equal(t, &actorID, audit.entries[0].ActorID, "自動關聯的稽核仍須留下實際操作者，不可記成匿名 system")
+		assert.Equal(t, "auto_relink_site", audit.entries[0].Action)
+	})
+}
+
+func TestCaseService_RelinkAllPendingSites_ContinuesAfterOneNameFails(t *testing.T) {
+	store := newFakeCaseStore()
+	store.pendingSiteNames = []string{"壞據點", "好據點"}
+	goodCaseID := uuid.New()
+	store.relinkSiteByName = map[string][]uuid.UUID{"好據點": {goodCaseID}}
+	store.relinkErrByName = map[string]error{"壞據點": errors.New("relink boom")}
+	audit := &fakeCaseAuditWriter{}
+	svc := NewCaseService(testConfig(), store, audit, nil, nil)
+
+	total, err := svc.RelinkAllPendingSites(context.Background(), uuid.New(), "admin", "127.0.0.1", "test-agent")
+
+	require.NoError(t, err, "單一名稱比對失敗只記 log，不能讓整個手動重新比對回報失敗")
+	assert.Equal(t, 1, total, "失敗的那筆不計入總數，成功的那筆仍要算進去")
 }
 
 func TestCaseService_Delete(t *testing.T) {
@@ -437,23 +497,4 @@ func TestRecordSkippedCaseImport_SanitizesPII(t *testing.T) {
 	assert.Equal(t, "王○明", row.CaseName)
 	assert.Equal(t, "A12***6789", row.RawValues["身分證字號"])
 	assert.Equal(t, "[REDACTED]", row.RawValues["居住地"])
-}
-
-func TestUpdateCaseTransportPreference_PutUsesExplicitFullReplacement(t *testing.T) {
-	cfg := testConfig()
-	store := newFakeCaseStore()
-	svc := NewCaseService(cfg, store, nil, nil, nil)
-	caseID := uuid.New()
-	cipher, err := crypto.Encrypt("A123456789", cfg.EncryptionKey)
-	require.NoError(t, err)
-	store.byID[caseID] = &Case{ID: caseID, NationalIDCipher: cipher}
-
-	result, err := svc.UpdateCaseTransportPreference(context.Background(), caseID, nil, nil, "未比對到的去程車", "未比對到的回程車")
-
-	require.NoError(t, err)
-	assert.Nil(t, store.lastUpsertPref.outboundVehicleID, "PUT 未提供的去程車 ID 應明確傳遞 nil 代表清除")
-	assert.Nil(t, store.lastUpsertPref.inboundVehicleID)
-	assert.Equal(t, "未比對到的去程車", store.lastUpsertPref.outboundVehicleNameRaw)
-	assert.Equal(t, "未比對到的回程車", store.lastUpsertPref.inboundVehicleNameRaw)
-	assert.Equal(t, "A123456789", result.NationalID)
 }

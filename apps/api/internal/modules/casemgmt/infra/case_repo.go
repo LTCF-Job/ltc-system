@@ -35,16 +35,12 @@ func (r *CaseRepository) List(ctx context.Context, status, q, region string, pag
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
 		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), COALESCE(cg.type, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
-		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
+		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), COALESCE(cg.type, ''),
 		       c.home_address, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
 		FROM cases c
 		LEFT JOIN sites st ON st.id = c.site_id
 		LEFT JOIN caregivers cg ON cg.id = c.caregiver_id
-		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
-		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id AND vo.deleted_at IS NULL
-		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id AND vi.deleted_at IS NULL
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.deleted_at IS NULL
 		  AND ($1 = '' OR c.status = $1)
@@ -67,8 +63,7 @@ func (r *CaseRepository) List(ctx context.Context, status, q, region string, pag
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked, &c.NationalIDInvalid,
 			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.BirthDateRaw, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
-			&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.CaregiverType, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
-			&c.InboundVehicleID, &c.InboundVehicle, &c.InboundVehicleNameRaw,
+			&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.CaregiverType,
 			&c.HomeAddress, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
 			&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
@@ -104,16 +99,12 @@ func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
 		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), COALESCE(cg.type, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
-		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
+		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), COALESCE(cg.type, ''),
 		       c.home_address, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
 		FROM cases c
 		LEFT JOIN sites st ON st.id = c.site_id
 		LEFT JOIN caregivers cg ON cg.id = c.caregiver_id
-		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
-		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id AND vo.deleted_at IS NULL
-		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id AND vi.deleted_at IS NULL
 		JOIN case_pending_status ps ON ps.case_id = c.id
 		WHERE c.deleted_at IS NULL
 		  AND NOT ps.is_pending
@@ -131,8 +122,7 @@ func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked, &c.NationalIDInvalid,
 			&c.HouseholdType, &c.Gender, &c.BirthDate, &c.BirthDateRaw, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
-			&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.CaregiverType, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
-			&c.InboundVehicleID, &c.InboundVehicle, &c.InboundVehicleNameRaw,
+			&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.CaregiverType,
 			&c.HomeAddress, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
 			&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
@@ -144,23 +134,6 @@ func (r *CaseRepository) ListAll(ctx context.Context) ([]app.Case, error) {
 		return nil, fmt.Errorf("failed to iterate all cases: %w", err)
 	}
 	return list, nil
-}
-
-// UpsertTransportPreference 以完整替換語意寫入個案的去回程車輛偏好；nil 的 ID 代表清除欄位。
-// 據點已改由個案本身持有（見 Update），不在此處理。
-func (r *CaseRepository) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
-	db := pgxdb.FromContext(ctx, r.db)
-	_, err := db.Exec(ctx, `INSERT INTO case_transport_preferences (case_id, outbound_vehicle_id, inbound_vehicle_id, outbound_vehicle_name_raw, inbound_vehicle_name_raw)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (case_id) DO UPDATE SET
-			outbound_vehicle_id = EXCLUDED.outbound_vehicle_id,
-			inbound_vehicle_id = EXCLUDED.inbound_vehicle_id,
-			outbound_vehicle_name_raw = EXCLUDED.outbound_vehicle_name_raw,
-			inbound_vehicle_name_raw = EXCLUDED.inbound_vehicle_name_raw,
-			updated_at = now()`,
-		caseID, outboundVehicleID, inboundVehicleID,
-		nullIfEmpty(outboundVehicleNameRaw), nullIfEmpty(inboundVehicleNameRaw))
-	return err
 }
 
 // ClaimCaseImportRow 以檔案雜湊與來源列鍵保護個案匯入重試；呼叫端應在列交易內執行。
@@ -195,29 +168,17 @@ func (r *CaseRepository) IsCaseImportRowCommitted(ctx context.Context, fileHash,
 	return exists, nil
 }
 
-// nullIfEmpty 將空字串轉為 nil，讓 SQL 端可用 IS NOT NULL 判斷是否有提供 raw name。
-func nullIfEmpty(v string) *string {
-	if v == "" {
-		return nil
-	}
-	return &v
-}
-
 // GetByID 依 UUID 取得個案。
 func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, error) {
 	query := `
 		SELECT c.id, c.name, c.name_normalized, c.national_id_cipher, c.national_id_hmac, c.national_id_masked, c.national_id_invalid,
 		       c.household_type, c.gender, c.birth_date, c.birth_date_raw, c.care_contact_role, c.care_contact_name, c.registered_address,
-		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), COALESCE(cg.type, ''), p.outbound_vehicle_id, COALESCE(vo.display_name, ''), p.outbound_vehicle_name_raw,
-		       p.inbound_vehicle_id, COALESCE(vi.display_name, ''), p.inbound_vehicle_name_raw,
+		       c.site_id, COALESCE(st.name, ''), c.site_name_raw, c.caregiver_id, COALESCE(cg.name, ''), COALESCE(cg.type, ''),
 		       c.home_address, c.ltc_level, c.service_category, c.service_usage_type, c.claim_end_date,
 		       c.status, c.remarks, c.created_at, c.updated_at
 		FROM cases c
 		LEFT JOIN sites st ON st.id = c.site_id
 		LEFT JOIN caregivers cg ON cg.id = c.caregiver_id
-		LEFT JOIN case_transport_preferences p ON p.case_id = c.id
-		LEFT JOIN vehicles vo ON vo.id = p.outbound_vehicle_id AND vo.deleted_at IS NULL
-		LEFT JOIN vehicles vi ON vi.id = p.inbound_vehicle_id AND vi.deleted_at IS NULL
 		WHERE c.id = $1 AND c.deleted_at IS NULL
 	`
 	var c app.Case
@@ -225,8 +186,7 @@ func (r *CaseRepository) GetByID(ctx context.Context, id uuid.UUID) (*app.Case, 
 	err := db.QueryRow(ctx, query, id).Scan(
 		&c.ID, &c.Name, &c.NameNormalized, &c.NationalIDCipher, &c.NationalIDHMAC, &c.NationalIDMasked, &c.NationalIDInvalid,
 		&c.HouseholdType, &c.Gender, &c.BirthDate, &c.BirthDateRaw, &c.CareContactRole, &c.CareContactName, &c.RegisteredAddress,
-		&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.CaregiverType, &c.OutboundVehicleID, &c.OutboundVehicle, &c.OutboundVehicleNameRaw,
-		&c.InboundVehicleID, &c.InboundVehicle, &c.InboundVehicleNameRaw,
+		&c.SiteID, &c.SiteName, &c.SiteNameRaw, &c.CaregiverID, &c.CaregiverName, &c.CaregiverType,
 		&c.HomeAddress, &c.LTCLevel, &c.ServiceCategory, &c.ServiceUsageType, &c.ClaimEndDate,
 		&c.Status, &c.Remarks, &c.CreatedAt, &c.UpdatedAt,
 	)
@@ -623,6 +583,159 @@ func (r *CaseRepository) SoftDelete(ctx context.Context, id, actorID uuid.UUID) 
 		return false, err
 	}
 	return tag.RowsAffected() == 1, nil
+}
+
+// sitePendingPlaceholder 是據點欄位完全空白時的哨兵值，與 caseimport.sitePendingPlaceholder
+// 及 migration 000044 一致；完全空白視為「待補齊」而非可比對的名稱，不可自動關聯。
+const sitePendingPlaceholder = "（待補齊據點）"
+
+// RelinkSiteByName 依名稱重新比對待維護個案的據點：只有這個名稱在 sites 恰好命中一筆才
+// 寫入，跨區域同名（uq_site_name_region 只保證同區域內唯一）或查無資料一律不動。
+func (r *CaseRepository) RelinkSiteByName(ctx context.Context, name string) ([]uuid.UUID, error) {
+	if name == "" || name == sitePendingPlaceholder {
+		return nil, nil
+	}
+	db := pgxdb.FromContext(ctx, r.db)
+	rows, err := db.Query(ctx, `
+		UPDATE cases c
+		SET site_id = s.id, site_name_raw = NULL, updated_at = now()
+		FROM (SELECT id FROM sites WHERE name = $1 LIMIT 1) s
+		WHERE c.deleted_at IS NULL
+		  AND c.site_id IS NULL
+		  AND c.site_name_raw = $1
+		  AND (SELECT count(*) FROM sites WHERE name = $1) = 1
+		RETURNING c.id
+	`, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to relink cases by site name: %w", err)
+	}
+	defer rows.Close()
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// RelinkCaregiverByName 依名稱重新比對待維護個案的照護人員，比對規則與匯入時的
+// resolveCaregiver（見 caseimport/app/commit.go）一致。
+func (r *CaseRepository) RelinkCaregiverByName(ctx context.Context, name string) ([]uuid.UUID, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, nil
+	}
+	db := pgxdb.FromContext(ctx, r.db)
+	var ids []uuid.UUID
+
+	// 同名唯一即採用，不看角色。
+	rows1, err := db.Query(ctx, `
+		WITH grouped AS (
+			SELECT btrim(name) AS name, (array_agg(id))[1] AS id, count(*) AS cnt
+			FROM caregivers
+			WHERE btrim(name) = $1
+			GROUP BY btrim(name)
+		)
+		UPDATE cases c
+		SET caregiver_id = m.id, updated_at = now()
+		FROM grouped m
+		WHERE c.deleted_at IS NULL
+		  AND c.caregiver_id IS NULL
+		  AND btrim(c.care_contact_name) = $1
+		  AND m.cnt = 1
+		RETURNING c.id
+	`, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to relink cases by caregiver name (unique): %w", err)
+	}
+	for rows1.Next() {
+		var id uuid.UUID
+		if err := rows1.Scan(&id); err != nil {
+			rows1.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows1.Err(); err != nil {
+		rows1.Close()
+		return nil, err
+	}
+	rows1.Close()
+
+	// 同名多筆時才用 care_contact_role 消歧，過濾後仍唯一才採用。
+	rows2, err := db.Query(ctx, `
+		WITH grouped AS (
+			SELECT btrim(name) AS name, type, (array_agg(id))[1] AS id, count(*) AS cnt
+			FROM caregivers
+			WHERE btrim(name) = $1
+			GROUP BY btrim(name), type
+		)
+		UPDATE cases c
+		SET caregiver_id = m.id, updated_at = now()
+		FROM grouped m
+		WHERE c.deleted_at IS NULL
+		  AND c.caregiver_id IS NULL
+		  AND btrim(c.care_contact_name) = $1
+		  AND m.cnt = 1
+		  AND m.type = CASE btrim(c.care_contact_role)
+		                   WHEN '個管' THEN 'case_manager'
+		                   WHEN '照專' THEN 'specialist'
+		                   WHEN '專護' THEN 'specialist'
+		                   ELSE NULL
+		               END
+		RETURNING c.id
+	`, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to relink cases by caregiver name (role-disambiguated): %w", err)
+	}
+	defer rows2.Close()
+	for rows2.Next() {
+		var id uuid.UUID
+		if err := rows2.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows2.Err()
+}
+
+// ListPendingSiteNames 列出目前待維護個案中相異的據點原始名稱。
+func (r *CaseRepository) ListPendingSiteNames(ctx context.Context) ([]string, error) {
+	rows, err := r.db.Query(ctx, `SELECT DISTINCT site_name_raw FROM cases WHERE site_pending AND deleted_at IS NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pending site names: %w", err)
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
+// ListPendingCaregiverNames 列出目前待維護個案中相異的照護人員原始姓名。
+func (r *CaseRepository) ListPendingCaregiverNames(ctx context.Context) ([]string, error) {
+	rows, err := r.db.Query(ctx, `SELECT DISTINCT btrim(care_contact_name) FROM cases WHERE caregiver_pending AND deleted_at IS NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pending caregiver names: %w", err)
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
 }
 
 // CloseOpenSchedules 收斂該個案所有生效中排班的區間至今天，供刪除個案時使用。

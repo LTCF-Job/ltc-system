@@ -33,26 +33,27 @@ import (
 
 // handlers 收集所有要註冊到路由的 delivery adapter。
 type handlers struct {
-	kase         *casetransport.CaseHandler
-	caseImport   *importtransport.ImportHandler
-	site         *mastertransport.SiteHandler
-	vehicle      *mastertransport.VehicleHandler
-	driver       *mastertransport.DriverHandler
-	ride         *ridetransport.RideHandler
-	export       *reporttransport.ExportHandler
-	notification *notifytransport.NotificationHandler
-	holiday      *holidaytransport.HolidayHandler
-	report       *reporttransport.ReportHandler
-	audit        *audittransport.AuditHandler
-	task         *tasktransport.TaskHandler
-	maintenance  *opstransport.MaintenanceHandler
-	attendance   *opstransport.AttendanceHandler
-	fuel         *opstransport.FuelHandler
-	dashboard    *reporttransport.DashboardHandler
-	driverReport *drtransport.DriverReportHandler
-	caregiver    *caregivertransport.CaregiverHandler
-	role         *identitytransport.RoleHandler
-	identity     *identitytransport.IdentityHandler
+	kase          *casetransport.CaseHandler
+	caseImport    *importtransport.ImportHandler
+	site          *mastertransport.SiteHandler
+	vehicle       *mastertransport.VehicleHandler
+	driver        *mastertransport.DriverHandler
+	ride          *ridetransport.RideHandler
+	export        *reporttransport.ExportHandler
+	notification  *notifytransport.NotificationHandler
+	holiday       *holidaytransport.HolidayHandler
+	report        *reporttransport.ReportHandler
+	audit         *audittransport.AuditHandler
+	task          *tasktransport.TaskHandler
+	maintenance   *opstransport.MaintenanceHandler
+	attendance    *opstransport.AttendanceHandler
+	fuel          *opstransport.FuelHandler
+	dashboard     *reporttransport.DashboardHandler
+	driverReport  *drtransport.DriverReportHandler
+	caregiver     *caregivertransport.CaregiverHandler
+	role          *identitytransport.RoleHandler
+	identity      *identitytransport.IdentityHandler
+	pendingRelink *pendingRelinkHandler
 }
 
 // newRouter 組裝 gin engine：全域 middleware、CORS、健康檢查與 v1 路由表。
@@ -125,7 +126,6 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.GET("/cases/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "view"), h.kase.Get)
 		apiV1.PATCH("/cases/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.Update)
 		apiV1.DELETE("/cases/:id", auth.RequirePermission(perm, customPerm, "masters_cases", "delete"), h.kase.Delete)
-		apiV1.PUT("/cases/:id/transport-preference", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.UpdateTransportPreference)
 		apiV1.GET("/cases/:id/schedule", auth.RequirePermission(perm, customPerm, "masters_cases", "view"), h.kase.GetSchedule)
 		apiV1.PUT("/cases/:id/schedule", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.SaveSchedule)
 		apiV1.POST("/cases/schedules", auth.RequirePermission(perm, customPerm, "masters_cases", "edit"), h.kase.CreateSchedule)
@@ -177,6 +177,12 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.DELETE("/driver-reports/submissions/:id", auth.RequirePermission(perm, customPerm, "driver_report_mappings", "edit"), h.driverReport.IgnoreSubmission)
 		apiV1.DELETE("/driver-reports/:id", auth.RequirePermission(perm, customPerm, "driver_reports", "delete"), h.driverReport.DeleteForm)
 		apiV1.GET("/driver-reports/:id/template", auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.DownloadTemplate)
+
+		// 待維護資料手動重新比對：站內主檔新增或改名時已自動觸發，這裡供處理舊資料或補救單次失敗。
+		apiV1.POST("/pending-data/relink", auth.RequireAnyPermission(perm, customPerm,
+			auth.ModuleAction{Module: "masters_cases", Action: "edit"},
+			auth.ModuleAction{Module: "driver_report_mappings", Action: "edit"},
+		), h.pendingRelink.Relink)
 		apiV1.POST("/driver-reports/:id/import", extendedImportDeadlineMiddleware(), auth.RequirePermission(perm, customPerm, "driver_reports", "edit"), h.driverReport.ImportExcel)
 
 		// 6. 搭乘月曆、搭乘紀錄更正、異常搭乘與未回報清單

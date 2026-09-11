@@ -110,29 +110,25 @@ type CaseImportIdempotencyStore interface {
 
 // StageDuplicateCandidate 是疑似重複個案暫存所需的完整列輸入。
 type StageDuplicateCandidate struct {
-	RowIndex               int
-	SheetName              string
-	Name                   string
-	NationalID             string
-	HouseholdType          *string
-	Gender                 *string
-	BirthDate              *time.Time
-	BirthDateRaw           *string
-	CareContactRole        *string
-	CareContactName        *string
-	RegisteredAddress      *string
-	HomeAddress            *string
-	ServiceCategory        int
-	ServiceUsageType       int
-	Remarks                *string
-	SiteID                 *uuid.UUID
-	SiteNameRaw            string
-	CaregiverID            *uuid.UUID
-	OutboundVehicleID      *uuid.UUID
-	OutboundVehicleNameRaw string
-	InboundVehicleID       *uuid.UUID
-	InboundVehicleNameRaw  string
-	DuplicateCaseID        uuid.UUID
+	RowIndex          int
+	SheetName         string
+	Name              string
+	NationalID        string
+	HouseholdType     *string
+	Gender            *string
+	BirthDate         *time.Time
+	BirthDateRaw      *string
+	CareContactRole   *string
+	CareContactName   *string
+	RegisteredAddress *string
+	HomeAddress       *string
+	ServiceCategory   int
+	ServiceUsageType  int
+	Remarks           *string
+	SiteID            *uuid.UUID
+	SiteNameRaw       string
+	CaregiverID       *uuid.UUID
+	DuplicateCaseID   uuid.UUID
 }
 
 // DuplicateCandidateStager 讓匯入在偵測到疑似重複個案時，把整列資料交給擁有加密

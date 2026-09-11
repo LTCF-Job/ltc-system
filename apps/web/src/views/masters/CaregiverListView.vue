@@ -312,6 +312,7 @@ import { listAllSites } from '@/api/masters'
 import { useAuthStore } from '@/stores/auth'
 import { useListQuery } from '@/composables/useListQuery'
 import { downloadBlob } from '@/utils/download'
+import { notifyPendingRelinked } from '@/utils/pendingRelink'
 import { CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
 import type { CaregiverDTO, SiteDTO } from '@/types/api'
 
@@ -512,7 +513,7 @@ async function handleSave() {
     saving.value = true
     try {
       if (editingId.value) {
-        await updateCaregiver(editingId.value, {
+        const { meta } = await updateCaregiver(editingId.value, {
           siteName: form.siteName,
           name: form.name,
           type: form.type as CaregiverType,
@@ -521,8 +522,9 @@ async function handleSave() {
           status: form.status
         })
         ElMessage.success('照護人員資料已更新')
+        notifyPendingRelinked(meta)
       } else {
-        await createCaregiver({
+        const { meta } = await createCaregiver({
           siteName: form.siteName,
           name: form.name,
           type: form.type as CaregiverType,
@@ -531,6 +533,7 @@ async function handleSave() {
           status: form.status
         })
         ElMessage.success('照護人員建立成功')
+        notifyPendingRelinked(meta)
       }
       dialogVisible.value = false
       executeFetch()

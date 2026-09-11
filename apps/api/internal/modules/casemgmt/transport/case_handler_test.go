@@ -79,16 +79,28 @@ func (f *fakeCaseStore) GetActiveSchedulesForMonth(ctx context.Context, year, mo
 	return nil, nil
 }
 
-func (f *fakeCaseStore) UpsertTransportPreference(ctx context.Context, caseID uuid.UUID, outboundVehicleID, inboundVehicleID *uuid.UUID, outboundVehicleNameRaw, inboundVehicleNameRaw string) error {
-	return nil
-}
-
 func (f *fakeCaseStore) SoftDelete(ctx context.Context, id, actorID uuid.UUID) (bool, error) {
 	return true, nil
 }
 
 func (f *fakeCaseStore) CloseOpenSchedules(ctx context.Context, caseID uuid.UUID) error {
 	return nil
+}
+
+func (f *fakeCaseStore) RelinkSiteByName(ctx context.Context, name string) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (f *fakeCaseStore) RelinkCaregiverByName(ctx context.Context, name string) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (f *fakeCaseStore) ListPendingSiteNames(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
+func (f *fakeCaseStore) ListPendingCaregiverNames(ctx context.Context) ([]string, error) {
+	return nil, nil
 }
 
 func newTestCaseHandler(store *fakeCaseStore) *CaseHandler {
@@ -228,6 +240,66 @@ func TestCaseHandler_GetSchedule_NoActiveSchedule_ReturnsNullNotNotFound(t *test
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
 	assert.Equal(t, "null", string(envelope.Data))
+}
+
+// fakeRelinker 讓測試控制 RelinkByName 回傳的筆數與呼叫參數。
+type fakeRelinker struct {
+	n         int
+	err       error
+	calledFor string
+}
+
+func (f *fakeRelinker) RelinkByName(ctx context.Context, name string, actorID uuid.UUID, actorRole, ip, ua string) (int, error) {
+	f.calledFor = name
+	return f.n, f.err
+}
+
+func TestCaseHandler_Create_NilRelinkerOmitsMeta(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &fakeCaseStore{}
+	svc := app.NewCaseService(&config.Config{}, store, nil, nil, nil)
+	h := NewCaseHandler(svc) // 未傳入 relinker
+
+	body := `{"name":"陳大華","siteId":"` + uuid.New().String() + `","caregiverId":"` + uuid.New().String() + `"}`
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/cases", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	h.Create(c)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	var resp struct {
+		Meta map[string]any `json:"meta"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Nil(t, resp.Meta, "relinker 未接線時不應出現 pendingRelinked")
+}
+
+func TestCaseHandler_Create_RelinkerReportsPendingRelinkedCount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &fakeCaseStore{}
+	svc := app.NewCaseService(&config.Config{}, store, nil, nil, nil)
+	relinker := &fakeRelinker{n: 3}
+	h := NewCaseHandler(svc, relinker)
+
+	body := `{"name":"陳大華","siteId":"` + uuid.New().String() + `","caregiverId":"` + uuid.New().String() + `"}`
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/cases", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	h.Create(c)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, "陳大華", relinker.calledFor)
+	var resp struct {
+		Meta struct {
+			PendingRelinked int `json:"pendingRelinked"`
+		} `json:"meta"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, 3, resp.Meta.PendingRelinked)
 }
 
 func TestCaseHandler_SaveSchedule_UsesPathCaseID(t *testing.T) {

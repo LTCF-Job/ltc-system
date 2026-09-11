@@ -285,6 +285,27 @@ func matchPendingColumnsForName(pending []ColumnMapping, name string) []ColumnMa
 	return out
 }
 
+// exactAutoBind 從待維護欄位中挑出可自動綁定給指定個案的欄位：清理後姓名須與 name
+// 完全一致（不含近似），且表頭要有明確的去程或回程標記；近似或無方向的欄位一律留給
+// 使用者在待維護頁自行確認，避免自動綁錯人。
+func exactAutoBind(pending []ColumnMapping, name string) []ColumnMapping {
+	target := namenorm.Normalize(name)
+	if target == "" {
+		return nil
+	}
+	var out []ColumnMapping
+	for _, c := range pending {
+		if c.Kind != "ride" || c.CleanedName != target {
+			continue
+		}
+		if legSeqForDirection(namenorm.ParseColumnHeader(c.ColumnHeader).Direction) == nil {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
 // legSeqForDirection 把去程／回程對應到表單趟次；四趟個案的展開由 ride 模組負責。
 func legSeqForDirection(direction string) *int16 {
 	switch direction {

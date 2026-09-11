@@ -30,7 +30,6 @@ Base path：`/api/v1`，全部要帶 JWT（`auth.Middleware`），除了 `/api/h
 | POST | `/cases/import` | staff, admin | 批次匯入個案 Excel；疑似重複個案不建立個案，改建立為待裁決暫存列。「個管or照專」旁的姓名會比對 `caregivers` 主檔寫入 `caregiver_id`，比不到則落入待維護 |
 | POST | `/masters/import` | staff, admin | 同上，走另一條相容路徑（歷史因素，實際都打 `caseH.ImportExcel`） |
 | GET | `/cases/export?caseIds=` | viewer, staff, admin | 匯出個案彙整表；`caseIds` 為逗號分隔的個案 ID，省略則匯出全部個案。「個管or照專」與其右方姓名取自關聯的照護人員主檔 |
-| PUT | `/cases/:id/transport-preference` | staff, admin | 更新個案交通偏好設定（去/回程車輛，完整替換語意：`outboundVehicleId`／`inboundVehicleId` 與對應的 `outboundVehicleNameRaw`／`inboundVehicleNameRaw` 未帶上即視為清空，尚未完成關聯的匯入原始名稱必須原樣回送）。**據點不在此端點設定**，個案的據點改由 `PATCH /cases/:id` 的 `siteId` 更新 |
 | GET | `/cases/import/duplicates` | viewer, staff, admin | 列出待裁決的疑似重複個案暫存列 |
 | POST | `/cases/import/duplicates/:id/reveal` | staff, admin | 解密單筆暫存列身分證字號供裁決比對（會寫 audit log 的 `reveal_pii`） |
 | POST | `/cases/import/duplicates/:id/resolve` | staff, admin | 裁決疑似重複個案（`confirmed_new` 建立新個案／`merged_existing` 合併進既有個案） |

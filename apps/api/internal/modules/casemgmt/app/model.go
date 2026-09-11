@@ -39,68 +39,56 @@ type Case struct {
 	CaregiverName string
 	// CaregiverType 是主檔的 case_manager／specialist，個案彙整表的「個管or照專」欄一律由它產生，
 	// 不再取用匯入時留下的 CareContactRole 文字。
-	CaregiverType          string
-	OutboundVehicleID      *uuid.UUID
-	OutboundVehicle        string
-	OutboundVehicleNameRaw *string
-	InboundVehicleID       *uuid.UUID
-	InboundVehicle         string
-	InboundVehicleNameRaw  *string
-	HomeAddress            *string
-	LTCLevel               *string
-	ServiceCategory        *int
-	ServiceUsageType       *int
-	ClaimEndDate           *time.Time
-	Status                 string
-	Remarks                *string
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	CaregiverType    string
+	HomeAddress      *string
+	LTCLevel         *string
+	ServiceCategory  *int
+	ServiceUsageType *int
+	ClaimEndDate     *time.Time
+	Status           string
+	Remarks          *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // DuplicateCandidate 代表批次匯入偵測到疑似重複個案、尚未裁決的一列暫存資料；
 // 裁決前不會出現在 cases 表，避免半確認的個案流入排班、匯出等下游流程。
 type DuplicateCandidate struct {
-	ID                     uuid.UUID
-	FileHash               string
-	RowKey                 string
-	RowIndex               int
-	SheetName              string
-	Name                   string
-	NameNormalized         string
-	NationalIDCipher       []byte
-	NationalIDHMAC         []byte
-	NationalIDMasked       string
-	NationalID             string
-	HouseholdType          *string
-	Gender                 *string
-	BirthDate              *time.Time
-	BirthDateRaw           *string
-	NationalIDInvalid      bool
-	CareContactRole        *string
-	CareContactName        *string
-	RegisteredAddress      *string
-	HomeAddress            *string
-	ServiceCategory        *int
-	ServiceUsageType       *int
-	SiteID                 *uuid.UUID
-	SiteName               string
-	SiteNameRaw            *string
-	CaregiverID            *uuid.UUID
-	CaregiverName          string
-	OutboundVehicleID      *uuid.UUID
-	OutboundVehicle        string
-	OutboundVehicleNameRaw *string
-	InboundVehicleID       *uuid.UUID
-	InboundVehicle         string
-	InboundVehicleNameRaw  *string
-	Remarks                *string
-	DuplicateCaseID        uuid.UUID
-	DuplicateCaseName      string
-	Status                 string
-	ResultingCaseID        *uuid.UUID
-	ResolvedAt             *time.Time
-	ResolvedBy             *uuid.UUID
-	CreatedAt              time.Time
+	ID                uuid.UUID
+	FileHash          string
+	RowKey            string
+	RowIndex          int
+	SheetName         string
+	Name              string
+	NameNormalized    string
+	NationalIDCipher  []byte
+	NationalIDHMAC    []byte
+	NationalIDMasked  string
+	NationalID        string
+	HouseholdType     *string
+	Gender            *string
+	BirthDate         *time.Time
+	BirthDateRaw      *string
+	NationalIDInvalid bool
+	CareContactRole   *string
+	CareContactName   *string
+	RegisteredAddress *string
+	HomeAddress       *string
+	ServiceCategory   *int
+	ServiceUsageType  *int
+	SiteID            *uuid.UUID
+	SiteName          string
+	SiteNameRaw       *string
+	CaregiverID       *uuid.UUID
+	CaregiverName     string
+	Remarks           *string
+	DuplicateCaseID   uuid.UUID
+	DuplicateCaseName string
+	Status            string
+	ResultingCaseID   *uuid.UUID
+	ResolvedAt        *time.Time
+	ResolvedBy        *uuid.UUID
+	CreatedAt         time.Time
 }
 
 // CaseSchedule 代表 case_schedules 與 schedule_legs 之組合排班實體。據點已改由個案

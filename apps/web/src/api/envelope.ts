@@ -24,6 +24,16 @@ export function unwrapData<T>(response: unknown): T {
   return response as T
 }
 
+export interface PendingRelinkedMeta {
+  pendingRelinked?: number
+}
+
+export function unwrapDataWithMeta<T>(response: unknown): { data: T; meta?: PendingRelinkedMeta } {
+  const data = unwrapData<T>(response)
+  const meta = isRecord(response) && isRecord(response.meta) ? (response.meta as PendingRelinkedMeta) : undefined
+  return { data, meta }
+}
+
 export function createPaginationMeta(page = 1, pageSize = 20, total = 0): PaginationMeta {
   return {
     page,

@@ -62,6 +62,9 @@ type DriverRef struct {
 // DriverResolver 由姓名比對司機主檔，由擁有司機主檔的模組實作。
 type DriverResolver interface {
 	GetByNameNormalized(ctx context.Context, nameNorm string) (*DriverRef, error)
+	// ListByNameNormalized 列出正規化姓名相符的所有未刪除司機，供自動綁定判斷唯一性；
+	// GetByNameNormalized 只取第一筆，無法用來判斷是否唯一。
+	ListByNameNormalized(ctx context.Context, nameNorm string) ([]DriverRef, error)
 }
 
 // SubmissionAnswerRow 是一筆既有回報留在 payload 的完整原始儲存格文字，供彙整待維護

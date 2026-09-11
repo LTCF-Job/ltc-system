@@ -1,4 +1,4 @@
-import { apiClient, createPaginationMeta, unwrapData, unwrapPaged } from './client'
+import { apiClient, createPaginationMeta, unwrapData, unwrapDataWithMeta, unwrapPaged, type PendingRelinkedMeta } from './client'
 import type {
   Paged,
   CaregiverDTO,
@@ -36,14 +36,14 @@ export async function listAllCaregivers(params?: Omit<NonNullable<Parameters<typ
   return items
 }
 
-export async function createCaregiver(data: CreateCaregiverRequest): Promise<CaregiverDTO> {
+export async function createCaregiver(data: CreateCaregiverRequest): Promise<{ data: CaregiverDTO; meta?: PendingRelinkedMeta }> {
   const res = await apiClient.post('/caregivers', data)
-  return unwrapData<CaregiverDTO>(res)
+  return unwrapDataWithMeta<CaregiverDTO>(res)
 }
 
-export async function updateCaregiver(id: string, data: UpdateCaregiverRequest): Promise<CaregiverDTO> {
+export async function updateCaregiver(id: string, data: UpdateCaregiverRequest): Promise<{ data: CaregiverDTO; meta?: PendingRelinkedMeta }> {
   const res = await apiClient.patch(`/caregivers/${id}`, data)
-  return unwrapData<CaregiverDTO>(res)
+  return unwrapDataWithMeta<CaregiverDTO>(res)
 }
 
 export async function deleteCaregiver(id: string): Promise<void> {

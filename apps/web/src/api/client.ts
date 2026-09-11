@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import router from '@/router'
 import type { ApiError } from '@/types/api'
 import { resolveApiErrorMessage, NETWORK_ERROR_MESSAGE, TIMEOUT_ERROR_MESSAGE } from './errorCodes'
-export { createPaginationMeta, unwrapData, unwrapPaged } from './envelope'
+export { createPaginationMeta, unwrapData, unwrapDataWithMeta, unwrapPaged, type PendingRelinkedMeta } from './envelope'
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',

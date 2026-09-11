@@ -188,43 +188,6 @@
             </el-button>
           </div>
         </el-form>
-
-        <el-divider content-position="left">交通偏好</el-divider>
-
-        <el-form label-width="140px" :disabled="!authStore.hasPermission('masters_cases', 'edit')">
-          <el-row :gutter="16">
-            <el-col :xs="24" :sm="12" :lg="8">
-              <el-form-item label="去程車輛">
-                <el-select v-model="transportForm.outboundVehicleId" filterable style="width: 100%">
-                  <el-option
-                    v-for="vehicle in availableVehicles"
-                    :key="vehicle.id"
-                    :value="vehicle.id"
-                    :label="vehicle.displayName"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :xs="24" :sm="12" :lg="8">
-              <el-form-item label="回程車輛">
-                <el-select v-model="transportForm.inboundVehicleId" filterable style="width: 100%">
-                  <el-option
-                    v-for="vehicle in availableVehicles"
-                    :key="vehicle.id"
-                    :value="vehicle.id"
-                    :label="vehicle.displayName"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <div v-if="authStore.hasPermission('masters_cases', 'edit')" class="form-actions">
-            <el-button type="primary" :loading="savingTransportPreference" @click="handleUpdateTransportPreference">
-              儲存交通偏好
-            </el-button>
-          </div>
-        </el-form>
       </el-tab-pane>
 
       <!-- 分頁 2：排班設定編輯器 -->
@@ -247,13 +210,13 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ScheduleEditor from './ScheduleEditor.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import { getCase, updateCase, deleteCase, getCaseSchedule, updateCaseTransportPreference } from '@/api/cases'
-import { listAllSites, listAllVehicles } from '@/api/masters'
+import { getCase, updateCase, deleteCase, getCaseSchedule } from '@/api/cases'
+import { listAllSites } from '@/api/masters'
 import { listAllCaregivers } from '@/api/caregivers'
 import { CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
 import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/formatters'
-import type { CaseDTO, UpdateCaseRequest, UpdateCaseTransportPreferenceRequest, SiteDTO, VehicleDTO, CaregiverDTO } from '@/types/api'
+import type { CaseDTO, UpdateCaseRequest, SiteDTO, CaregiverDTO } from '@/types/api'
 
 
 const route = useRoute()
@@ -263,11 +226,9 @@ const caseId = computed(() => route.params.id as string)
 
 const loading = ref(false)
 const saving = ref(false)
-const savingTransportPreference = ref(false)
 const activeTab = ref(route.query.tab === 'schedule' ? 'schedule' : 'basic')
 const caseData = ref<CaseDTO | null>(null)
 const availableSites = ref<SiteDTO[]>([])
-const availableVehicles = ref<VehicleDTO[]>([])
 const availableCaregivers = ref<CaregiverDTO[]>([])
 
 const editForm = reactive<UpdateCaseRequest>({
@@ -286,11 +247,6 @@ const editForm = reactive<UpdateCaseRequest>({
   careContactName: '',
   registeredAddress: '',
   remarks: ''
-})
-
-const transportForm = reactive<UpdateCaseTransportPreferenceRequest>({
-  outboundVehicleId: '',
-  inboundVehicleId: ''
 })
 
 async function fetchDetail() {
@@ -327,8 +283,6 @@ async function fetchDetail() {
     editForm.careContactName = res.careContactName || ''
     editForm.registeredAddress = res.registeredAddress || ''
     editForm.remarks = res.remarks || ''
-    transportForm.outboundVehicleId = res.outboundVehicleId || ''
-    transportForm.inboundVehicleId = res.inboundVehicleId || ''
   } catch {
     // 全域攔截器負責顯示 API 錯誤。
   } finally {
@@ -336,14 +290,12 @@ async function fetchDetail() {
   }
 }
 
-async function loadSitesAndVehicles() {
-  const [sitesRes, vehiclesRes, caregiversRes] = await Promise.all([
+async function loadSitesAndCaregivers() {
+  const [sitesRes, caregiversRes] = await Promise.all([
     listAllSites({ status: 'active' }),
-    listAllVehicles({ status: 'active' }),
     listAllCaregivers({ status: 'active' })
   ])
   availableSites.value = sitesRes
-  availableVehicles.value = vehiclesRes
   availableCaregivers.value = caregiversRes
 }
 
@@ -355,24 +307,6 @@ async function handleUpdateCase() {
     router.push('/cases')
   } finally {
     saving.value = false
-  }
-}
-
-async function handleUpdateTransportPreference() {
-  savingTransportPreference.value = true
-  try {
-    // 兩個欄位皆選填：只送出有值的欄位，避免把使用者未異動、原本為空的欄位當成「明確清空」送出。
-    // 這支 API 是完整替換，仍未關聯那欄的匯入原始名稱必須原樣回送，否則個案會無聲離開待維護清單
-    const payload: UpdateCaseTransportPreferenceRequest = {
-      outboundVehicleId: transportForm.outboundVehicleId || null,
-      inboundVehicleId: transportForm.inboundVehicleId || null,
-      outboundVehicleNameRaw: transportForm.outboundVehicleId ? '' : caseData.value?.outboundVehicleNameRaw || '',
-      inboundVehicleNameRaw: transportForm.inboundVehicleId ? '' : caseData.value?.inboundVehicleNameRaw || ''
-    }
-    await updateCaseTransportPreference(caseId.value, payload)
-    ElMessage.success('交通偏好已更新')
-  } finally {
-    savingTransportPreference.value = false
   }
 }
 
@@ -418,7 +352,7 @@ watch(
 
 onMounted(() => {
   fetchDetail()
-  loadSitesAndVehicles()
+  loadSitesAndCaregivers()
 })
 </script>
 

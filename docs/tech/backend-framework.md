@@ -47,7 +47,7 @@ internal/arch         架構測試：匯入矩陣檢查，跟著 go test ./... �
 | module | 範圍 |
 |---|---|
 | `masterdata` | 據點、車輛、司機、區域主檔 |
-| `casemgmt` | 個案主檔、排班設定、交通偏好、個案彙整表匯出 |
+| `casemgmt` | 個案主檔、排班設定、個案彙整表匯出 |
 | `caseimport` | 個案批次 `.xlsx` 解析、預覽與匯入 |
 | `ride` | 搭乘紀錄合併與人工更正、搭乘月曆、衝突裁決；接送匯報的展開與解析屬 `driverreport`，`ride` 透過其 port 消費 |
 | `driverreport` | 車輛匯報表登錄、`.xlsx` 匯入、解析與欄位對應 |

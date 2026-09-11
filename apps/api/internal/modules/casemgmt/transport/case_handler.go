@@ -1,8 +1,10 @@
 package transport
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,18 +17,45 @@ import (
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
+// PendingRelinker 讓個案新增或改名後，重新比對名稱相符的待維護司機匯報欄位；
+// 未接線時傳 nil，Create／Update 會略過重新比對。
+type PendingRelinker interface {
+	RelinkByName(ctx context.Context, name string, actorID uuid.UUID, actorRole, ip, ua string) (int, error)
+}
+
 // CaseHandler 處理個案相關之 HTTP 請求。
 type CaseHandler struct {
 	masterService *app.CaseService
+	relinker      PendingRelinker
 }
 
 // NewCaseHandler 建立 CaseHandler 實例。
 func NewCaseHandler(
 	masterService *app.CaseService,
+	relinkers ...PendingRelinker,
 ) *CaseHandler {
-	return &CaseHandler{
-		masterService: masterService,
+	h := &CaseHandler{masterService: masterService}
+	if len(relinkers) > 0 {
+		h.relinker = relinkers[0]
 	}
+	return h
+}
+
+// relinkPendingMeta 呼叫 relinker 重新比對待維護資料；筆數為 0 時回傳 nil，
+// 讓 RespondSuccess 的 meta 維持既有形狀，不多長一個恆為 0 的欄位。
+func (h *CaseHandler) relinkPendingMeta(c *gin.Context, name string) any {
+	if h.relinker == nil || name == "" {
+		return nil
+	}
+	n, err := h.relinker.RelinkByName(c.Request.Context(), name, auth.GetActorID(c), auth.GetActorRole(c), c.ClientIP(), c.Request.UserAgent())
+	if err != nil {
+		slog.Error("pending_relink_failed", slog.String("name", name), slog.Any("error", err))
+		return nil
+	}
+	if n == 0 {
+		return nil
+	}
+	return gin.H{"pendingRelinked": n}
 }
 
 // List 查詢個案清單（回傳遮罩身分證）。
@@ -83,7 +112,8 @@ func (h *CaseHandler) Create(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusCreated, newCaseResponse(*entity), nil)
+	meta := h.relinkPendingMeta(c, entity.Name)
+	httpx.RespondSuccess(c, http.StatusCreated, newCaseResponse(*entity), meta)
 }
 
 // Delete 軟刪除個案並收斂其生效中排班。
@@ -251,7 +281,11 @@ func (h *CaseHandler) Update(c *gin.Context) {
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
+	var meta any
+	if req.Name != nil {
+		meta = h.relinkPendingMeta(c, entity.Name)
+	}
+	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), meta)
 }
 
 // ListDuplicateCandidates 列出所有待裁決的疑似重複個案。
@@ -337,44 +371,6 @@ func (h *CaseHandler) DiscardDuplicateCandidate(c *gin.Context) {
 	}
 
 	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
-}
-
-// UpdateTransportPreference 更新個案的交通偏好（去回程車輛）。據點請改用 PATCH /cases/:id。
-func (h *CaseHandler) UpdateTransportPreference(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "無效的個案 ID", nil)
-		return
-	}
-
-	var req struct {
-		OutboundVehicleID      *uuid.UUID `json:"outboundVehicleId"`
-		InboundVehicleID       *uuid.UUID `json:"inboundVehicleId"`
-		OutboundVehicleNameRaw string     `json:"outboundVehicleNameRaw"`
-		InboundVehicleNameRaw  string     `json:"inboundVehicleNameRaw"`
-	}
-	if err := httpx.BindJSONStrict(c, &req); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, httpx.ExtractValidationDetails(err))
-		return
-	}
-
-	entity, err := h.masterService.UpdateCaseTransportPreference(
-		c.Request.Context(), id, req.OutboundVehicleID, req.InboundVehicleID,
-		req.OutboundVehicleNameRaw, req.InboundVehicleNameRaw,
-		app.AuditContext{
-			ActorID:   auth.GetActorID(c),
-			ActorRole: auth.GetActorRole(c),
-			IPAddress: c.ClientIP(),
-			UserAgent: c.Request.UserAgent(),
-		},
-	)
-	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "更新交通偏好失敗", nil)
-		return
-	}
-
-	httpx.RespondSuccess(c, http.StatusOK, newCaseResponse(*entity), nil)
 }
 
 // GetSchedule 取得個案現行排班。
