@@ -154,6 +154,24 @@ func TestAttendanceService_Upsert(t *testing.T) {
 	assert.Equal(t, "manual", item.Source, "使用者在司機月曆手動登記一律視為人工來源")
 }
 
+func TestAttendanceService_Upsert_PropagatesDriverNotFound(t *testing.T) {
+	store := &recordingAttendanceStore{upsertErr: ErrAttendanceDriverNotFound}
+	svc := NewAttendanceService(store, emptyDriverLister{}, discardAuditWriter{}, stubHolidayReader{})
+
+	_, err := svc.Upsert(context.Background(), uuid.New(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC), "work", nil, nil, nil)
+
+	assert.ErrorIs(t, err, ErrAttendanceDriverNotFound, "外鍵違反（司機不存在）應以 sentinel error 傳遞，讓 handler 能映射 404")
+}
+
+func TestAttendanceService_Upsert_PropagatesInvalidStatus(t *testing.T) {
+	store := &recordingAttendanceStore{upsertErr: ErrInvalidAttendanceStatus}
+	svc := NewAttendanceService(store, emptyDriverLister{}, discardAuditWriter{}, stubHolidayReader{})
+
+	_, err := svc.Upsert(context.Background(), uuid.New(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC), "work", nil, nil, nil)
+
+	assert.ErrorIs(t, err, ErrInvalidAttendanceStatus, "CHECK constraint 違反（狀態不合法）應以 sentinel error 傳遞，讓 handler 能映射 400")
+}
+
 func TestAttendanceService_SyncFromImport_NoExistingRecord_AutoRegistersWork(t *testing.T) {
 	store := &recordingAttendanceStore{}
 	svc := NewAttendanceService(store, emptyDriverLister{}, discardAuditWriter{}, stubHolidayReader{})

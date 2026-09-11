@@ -19,6 +19,12 @@ var ErrAttendanceConflictNotFound = errors.New("attendance import conflict not f
 // ErrInvalidAttendanceMonth 代表出勤月報的期別格式或月份不合法。
 var ErrInvalidAttendanceMonth = errors.New("invalid attendance month")
 
+// ErrAttendanceDriverNotFound 代表登記出勤時指定的司機不存在（外鍵限制違反）。
+var ErrAttendanceDriverNotFound = errors.New("attendance driver not found")
+
+// ErrInvalidAttendanceStatus 代表登記出勤時的狀態值不在允許範圍內（CHECK constraint 違反）。
+var ErrInvalidAttendanceStatus = errors.New("invalid attendance status")
+
 // DriverDayAttendanceDTO 代表司機單日出勤紀錄。
 type DriverDayAttendanceDTO struct {
 	Date   string  `json:"date"` // YYYY-MM-DD

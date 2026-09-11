@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"ltc-system/apps/api/internal/modules/ops/app"
 	"ltc-system/apps/api/internal/platform/pgxdb"
@@ -125,6 +126,15 @@ func (r *AttendanceRepository) Upsert(ctx context.Context, driverID uuid.UUID, r
 
 	db := pgxdb.FromContext(ctx, r.db)
 	if err := db.QueryRow(ctx, query, driverID, recordDate, status, note, source).Scan(&item.ID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case "23503": // foreign_key_violation：driver_id 對應之司機不存在
+				return nil, app.ErrAttendanceDriverNotFound
+			case "23514": // check_violation：status 不在允許範圍
+				return nil, app.ErrInvalidAttendanceStatus
+			}
+		}
 		return nil, fmt.Errorf("failed to upsert attendance record: %w", err)
 	}
 

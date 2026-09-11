@@ -654,8 +654,14 @@ async function handleTriggerNotify() {
     )
 
     triggering.value = true
-    const res = await triggerMissingReportsCheck()
-    ElMessage.success(res.message || '未回報催報通知已成功送出！')
+    const res = (await triggerMissingReportsCheck()) as Awaited<
+      ReturnType<typeof triggerMissingReportsCheck>
+    > & { notificationSent?: boolean }
+    if (res.notificationSent === false) {
+      ElMessage.warning(res.message || '未回報檢核已完成，但催報通知未成功送出，請確認通知設定。')
+    } else {
+      ElMessage.success(res.message || '未回報催報通知已成功送出！')
+    }
     await fetchNotificationLogs()
   } catch {
     // 使用者取消或 API 錯誤皆不在此重複顯示。

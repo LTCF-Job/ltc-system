@@ -14,6 +14,9 @@ import (
 // 會在畫面上被當成可點擊連結渲染、進而造成儲存型 XSS 的協定。
 var ErrInvalidReceiptURL = errors.New("receipt url must be an http or https link")
 
+// ErrMaintenanceLogNotFound 代表查無指定的維修保養紀錄；更新或刪除不存在的紀錄時回傳，供 handler 映射 404。
+var ErrMaintenanceLogNotFound = errors.New("maintenance log not found")
+
 // normalizeReceiptURL 將空白視為未填寫（nil，選填欄位），其餘內容必須是 http/https 開頭的合法網址。
 func normalizeReceiptURL(in *string) (*string, error) {
 	if in == nil {

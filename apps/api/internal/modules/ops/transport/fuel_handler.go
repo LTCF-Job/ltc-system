@@ -12,8 +12,6 @@ import (
 	"ltc-system/apps/api/internal/platform/httpx"
 )
 
-var errInvalidDateRange = errors.New("end date must not be before start date")
-
 // FuelHandler 處理車輛油資 API 請求。
 type FuelHandler struct {
 	fuelSvc *app.FuelService
@@ -28,7 +26,7 @@ func NewFuelHandler(fuelSvc *app.FuelService) *FuelHandler {
 func (h *FuelHandler) List(c *gin.Context) {
 	page, pageSize, err := httpx.ParsePagination(c)
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "分頁參數不正確，頁碼與每頁筆數需為正整數", nil)
 		return
 	}
 
@@ -36,7 +34,7 @@ func (h *FuelHandler) List(c *gin.Context) {
 	if vIDStr := c.Query("vehicleId"); vIDStr != "" {
 		id, parseErr := uuid.Parse(vIDStr)
 		if parseErr != nil {
-			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "查詢車輛編號格式不正確", nil)
 			return
 		}
 		vehicleID = &id
@@ -44,7 +42,7 @@ func (h *FuelHandler) List(c *gin.Context) {
 	if dIDStr := c.Query("driverId"); dIDStr != "" {
 		id, parseErr := uuid.Parse(dIDStr)
 		if parseErr != nil {
-			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "查詢司機編號格式不正確", nil)
 			return
 		}
 		driverID = &id
@@ -54,7 +52,7 @@ func (h *FuelHandler) List(c *gin.Context) {
 	if startStr := c.Query("startDate"); startStr != "" {
 		t, parseErr := time.Parse("2006-01-02", startStr)
 		if parseErr != nil {
-			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "開始日期格式必須為 YYYY-MM-DD", nil)
 			return
 		}
 		startDate = &t
@@ -62,13 +60,13 @@ func (h *FuelHandler) List(c *gin.Context) {
 	if endStr := c.Query("endDate"); endStr != "" {
 		t, parseErr := time.Parse("2006-01-02", endStr)
 		if parseErr != nil {
-			httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, parseErr, nil)
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "結束日期格式必須為 YYYY-MM-DD", nil)
 			return
 		}
 		endDate = &t
 	}
 	if startDate != nil && endDate != nil && endDate.Before(*startDate) {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, errInvalidDateRange, nil)
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "結束日期不能早於開始日期", nil)
 		return
 	}
 
@@ -190,6 +188,10 @@ func (h *FuelHandler) Update(c *gin.Context) {
 			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidationFailed, "收據連結必須是 http 或 https 開頭的網址", nil)
 			return
 		}
+		if errors.Is(err, app.ErrFuelLogNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無此筆油資紀錄，可能已被其他人刪除", nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
@@ -209,6 +211,10 @@ func (h *FuelHandler) Delete(c *gin.Context) {
 	actorID := auth.GetActorID(c)
 	actorRole := auth.GetActorRole(c)
 	if err := h.fuelSvc.Delete(c.Request.Context(), id, &actorID, &actorRole, auditContext(c)); err != nil {
+		if errors.Is(err, app.ErrFuelLogNotFound) {
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無此筆油資紀錄，可能已被其他人刪除", nil)
+			return
+		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}

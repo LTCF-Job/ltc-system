@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -61,11 +62,12 @@ func (f *fakeHolidayMapReader) GetHolidayMap(ctx context.Context, year, month in
 
 type fakeNotifier struct {
 	calls int
+	err   error
 }
 
 func (f *fakeNotifier) SendNotification(ctx context.Context, topic, subject, body string) error {
 	f.calls++
-	return nil
+	return f.err
 }
 
 func TestTaskService_MonthEndReminder(t *testing.T) {
@@ -131,10 +133,41 @@ func TestTaskService_CheckMissingReports_SingleDayStillNotifies(t *testing.T) {
 	repo := &mockTaskRepo{}
 	svc := NewTaskService(repo, scheduleReader, &fakeHolidayMapReader{}, notifier)
 
-	items, err := svc.CheckMissingReports(context.Background(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	result, err := svc.CheckMissingReports(context.Background(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
 	assert.NoError(t, err)
-	assert.Len(t, items, 1)
+	assert.Len(t, result.Items, 1)
 	assert.Equal(t, 1, notifier.calls, "單日模式偵測到未回報時仍應觸發通知")
+	assert.True(t, result.NotificationAttempted)
+	assert.True(t, result.NotificationSent)
+}
+
+func TestTaskService_CheckMissingReports_NotificationFailureDoesNotDropItems(t *testing.T) {
+	caseID := uuid.New()
+	scheduleReader := &fakeScheduleReader{schedules: []ActiveSchedule{weekdayScheduleFixture(caseID, 2026, 7)}}
+	notifier := &fakeNotifier{err: fmt.Errorf("smtp connection refused")}
+	repo := &mockTaskRepo{}
+	svc := NewTaskService(repo, scheduleReader, &fakeHolidayMapReader{}, notifier)
+
+	result, err := svc.CheckMissingReports(context.Background(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+
+	assert.NoError(t, err, "通知寄送失敗不應讓整支檢核回傳錯誤")
+	assert.Len(t, result.Items, 1, "已算出的未回報清單不應因為通知失敗被丟棄")
+	assert.True(t, result.NotificationAttempted)
+	assert.False(t, result.NotificationSent, "通知失敗應如實標示，讓呼叫端知道催報通知並未送達")
+}
+
+func TestTaskService_CheckMissingReports_NoNotifierConfigured(t *testing.T) {
+	caseID := uuid.New()
+	scheduleReader := &fakeScheduleReader{schedules: []ActiveSchedule{weekdayScheduleFixture(caseID, 2026, 7)}}
+	repo := &mockTaskRepo{}
+	svc := NewTaskService(repo, scheduleReader, &fakeHolidayMapReader{}, nil)
+
+	result, err := svc.CheckMissingReports(context.Background(), time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+
+	assert.NoError(t, err)
+	assert.Len(t, result.Items, 1)
+	assert.False(t, result.NotificationAttempted, "未設定通知服務時不應宣稱已嘗試寄送")
+	assert.False(t, result.NotificationSent)
 }
 
 func TestTaskService_ListMissingReports_SingleDayDoesNotNotify(t *testing.T) {
