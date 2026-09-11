@@ -177,11 +177,26 @@
             </template>
           </PageHeader>
 
-          <el-empty v-if="!reviewLoading && submissionReviews.length === 0" description="目前沒有待處理的匯報列" />
+          <el-alert
+            v-if="reviewLoadError"
+            type="error"
+            show-icon
+            :closable="false"
+            title="待維護資料載入失敗，請重試"
+          >
+            <template #default>
+              <el-button type="danger" size="small" plain @click="fetchSubmissionReview">重新載入</el-button>
+            </template>
+          </el-alert>
+
+          <el-empty
+            v-else-if="!reviewLoading && submissionReviews.length === 0"
+            description="目前沒有待處理的匯報列"
+          />
 
           <el-table
-            ref="submissionReviewTableRef"
             v-else
+            ref="submissionReviewTableRef"
             :data="submissionReviews"
             v-loading="reviewLoading"
             row-key="submissionId"
@@ -189,6 +204,7 @@
             border
             @expand-change="handleSubmissionReviewExpandChange"
           >
+
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="review-detail">
@@ -329,8 +345,20 @@
           class="attendance-conflict-header"
         />
 
+        <el-alert
+          v-if="attendanceConflictLoadError"
+          type="error"
+          show-icon
+          :closable="false"
+          title="出勤待維護載入失敗，請重試"
+        >
+          <template #default>
+            <el-button type="danger" size="small" plain @click="fetchAttendanceConflicts">重新載入</el-button>
+          </template>
+        </el-alert>
+
         <el-empty
-          v-if="canViewAttendance && !attendanceConflictLoading && attendanceConflicts.length === 0"
+          v-if="canViewAttendance && !attendanceConflictLoadError && !attendanceConflictLoading && attendanceConflicts.length === 0"
           description="目前沒有待處理的出勤衝突"
         />
 
@@ -560,7 +588,23 @@ const activeTab = ref<'upload' | 'pending'>(canViewDriverReports.value ? 'upload
 // ---- 批次上傳 ----
 
 type RowStatus = 'needsVehicle' | 'queued' | 'analyzing' | 'processing' | 'done' | 'failed'
-type RowIssue = { level: 'error' | 'warning'; message: string }
+// rowIndex／key 是去重用的識別鍵，不參與畫面顯示：message 在預覽階段與正式寫入階段
+// 走不同的格式化（前綴不同），同一列同一個原因的文字會不一樣，只比對 message 字串
+// 會讓同一個問題在清單裡重複出現兩次（見 dedupeIssues）。
+type RowIssue = { level: 'error' | 'warning'; message: string; rowIndex: number; key: string }
+
+// dedupeIssues 以「列號＋去重鍵＋層級」判斷是否為同一問題，而非直接比對格式化後的
+// message 字串——預覽階段（formatPreviewIssue）與正式寫入階段（skippedRows）對同一
+// 列同一原因會產生不同前綴的顯示文字，用完整字串比對會讓同一個問題重複列出兩次。
+function dedupeIssues(issues: RowIssue[]): RowIssue[] {
+  return issues.filter(
+    (issue, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.level === issue.level && candidate.rowIndex === issue.rowIndex && candidate.key === issue.key
+      ) === index
+  )
+}
 
 const IMPORT_FIELD_LABELS: Record<string, string> = {
   file: '檔案',
@@ -584,6 +628,9 @@ interface BatchFileRow {
   conflictCount: number
   backfilledCount: number
   pendingColumnCount: number
+  // failedRowCount 是後端 status:"partial" 時附帶的 failedRows——格式正確卻在寫入
+  // 資料庫時失敗、已略過的列數；即使整批仍標記為完成，也要讓使用者看到這個數字。
+  failedRowCount: number
   message: string
   issues: RowIssue[]
 }
@@ -688,6 +735,7 @@ function onFileChange(file: UploadFile) {
     conflictCount: 0,
     backfilledCount: 0,
     pendingColumnCount: 0,
+    failedRowCount: 0,
     message: '',
     issues: []
   }
@@ -797,7 +845,8 @@ function rowResultCounts(row: BatchFileRow) {
     reaffirmed: row.reaffirmedCount,
     conflicts: row.conflictCount,
     backfilled: row.backfilledCount,
-    pendingColumns: row.pendingColumnCount
+    pendingColumns: row.pendingColumnCount,
+    failed: row.failedRowCount
   }
 }
 
@@ -818,8 +867,18 @@ function monthStatusType(status: RowStatus): 'success' | 'warning' | 'danger' | 
 
 function collectPreviewIssues(preview: Pick<DriverReportPreviewDTO, 'errors' | 'warnings'>): RowIssue[] {
   return [
-    ...preview.errors.map((item) => ({ level: 'error' as const, message: formatPreviewIssue(item) })),
-    ...preview.warnings.map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) }))
+    ...preview.errors.map((item) => ({
+      level: 'error' as const,
+      message: formatPreviewIssue(item),
+      rowIndex: item.rowIndex,
+      key: item.message
+    })),
+    ...preview.warnings.map((item) => ({
+      level: 'warning' as const,
+      message: formatPreviewIssue(item),
+      rowIndex: item.rowIndex,
+      key: item.message
+    }))
   ]
 }
 
@@ -933,23 +992,35 @@ async function processRow(row: BatchFileRow) {
     row.reaffirmedCount += result.reaffirmedRows
     row.conflictCount += result.pendingConflictRows
     row.backfilledCount += result.backfilledRows
+    row.failedRowCount += result.failedRows
     row.months = result.coveredMonths
     row.issues.push(
       ...result.skippedRows.flatMap((item) =>
         item.reasons.map((reason) => ({
           level: 'error' as const,
-          message: `第 ${item.rowIndex} 列${item.reportDate ? `（${item.reportDate}）` : ''}：${reason}`
+          message: `第 ${item.rowIndex} 列${item.reportDate ? `（${item.reportDate}）` : ''}：${reason}`,
+          rowIndex: item.rowIndex,
+          key: reason
         }))
       ),
-      ...(result.warnings ?? []).map((item) => ({ level: 'warning' as const, message: formatPreviewIssue(item) })),
+      ...(result.warnings ?? []).map((item) => ({
+        level: 'warning' as const,
+        message: formatPreviewIssue(item),
+        rowIndex: item.rowIndex,
+        key: item.message
+      })),
       ...(result.pendingConflictRows > 0
-        ? [{ level: 'warning' as const, message: `${result.pendingConflictRows} 筆與既有資料不同，已進入待維護等待選擇` }]
+        ? [
+            {
+              level: 'warning' as const,
+              message: `${result.pendingConflictRows} 筆與既有資料不同，已進入待維護等待選擇`,
+              rowIndex: 0,
+              key: 'pendingConflictRows'
+            }
+          ]
         : [])
     )
-    row.issues = row.issues.filter(
-      (issue, index, all) =>
-        all.findIndex((candidate) => candidate.level === issue.level && candidate.message === issue.message) === index
-    )
+    row.issues = dedupeIssues(row.issues)
     row.status = 'done'
     row.pendingColumnCount = Object.values(decisions).filter((d) => d.mappingStatus === 'pending').length
   } catch (error) {
@@ -1066,6 +1137,7 @@ const cases = ref<CaseDTO[]>([])
 const drivers = ref<DriverDTO[]>([])
 const submissionReviews = ref<SubmissionReviewRow[]>([])
 const reviewLoading = ref(false)
+const reviewLoadError = ref(false)
 
 // el-table 的展開狀態綁在資料列的物件參考上；每次連結/略過都會整批重打
 // fetchSubmissionReview 換新陣列，若不自己記住已展開的 submissionId 並在資料回來後
@@ -1099,6 +1171,7 @@ const quickCreateDriverTarget = ref<SubmissionReviewRow | null>(null)
 
 const attendanceConflicts = ref<AttendanceConflictDTO[]>([])
 const attendanceConflictLoading = ref(false)
+const attendanceConflictLoadError = ref(false)
 
 const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
   work: '出勤 (O)',
@@ -1155,6 +1228,7 @@ async function handleUploadSuccess(result: { pendingColumns: number }) {
 async function fetchSubmissionReview() {
   if (!canViewMappings.value) return
   reviewLoading.value = true
+  reviewLoadError.value = false
   try {
     const reviews = await listSubmissionReview()
     submissionReviews.value = reviews.map((r) => ({
@@ -1164,7 +1238,10 @@ async function fetchSubmissionReview() {
     }))
     await restoreSubmissionReviewExpansion()
   } catch {
-    // 全域攔截器負責顯示 API 錯誤。
+    // 全域攔截器已顯示 API 錯誤 toast；這裡另外記錄載入失敗狀態，避免畫面把
+    // 「查詢失敗」跟「真的沒有待處理資料」顯示成同一個空狀態，讓使用者誤以為
+    // 沒有待維護項目。
+    reviewLoadError.value = true
   } finally {
     reviewLoading.value = false
   }
@@ -1268,10 +1345,13 @@ async function handleIgnoreAttendanceConflict(row: AttendanceConflictDTO) {
 async function fetchAttendanceConflicts() {
   if (!canViewAttendance.value) return
   attendanceConflictLoading.value = true
+  attendanceConflictLoadError.value = false
   try {
     attendanceConflicts.value = await listAttendanceConflicts()
   } catch {
-    // 全域攔截器負責顯示 API 錯誤。
+    // 同上：另外記錄載入失敗狀態，不讓查詢失敗跟「真的沒有出勤衝突」共用同一個
+    // 空狀態畫面。
+    attendanceConflictLoadError.value = true
   } finally {
     attendanceConflictLoading.value = false
   }

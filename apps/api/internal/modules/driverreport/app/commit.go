@@ -141,11 +141,19 @@ func (s *DriverReportService) CommitDriverReport(
 					return fmt.Errorf("第 %d 列：%w", row.preview.RowIndex, err)
 				}
 			} else if rowErr := savepoints.WithSavepoint(txCtx, writeRow); rowErr != nil {
+				// rowErr 可能帶原始 pgx 錯誤文字與個案 UUID（例如唯一鍵衝突訊息），
+				// 只能寫進伺服器端日誌；SkippedRows 是直接回傳給前端顯示的欄位，
+				// 一律用固定中文原因，不得外洩底層錯誤細節。
+				slog.Error("driver report row write failed, savepoint rolled back",
+					slog.String("formId", formID.String()),
+					slog.Int("rowIndex", row.preview.RowIndex),
+					slog.String("error", rowErr.Error()))
 				result.SkippedRows = append(result.SkippedRows, SkippedRow{
 					RowIndex:   row.preview.RowIndex,
 					ReportDate: row.preview.ReportDate,
-					Reasons:    []string{rowErr.Error()},
+					Reasons:    []string{"此列寫入失敗，已略過，請稍後重試或聯繫管理員"},
 				})
+				result.FailedRows++
 				continue
 			}
 
@@ -181,7 +189,13 @@ func (s *DriverReportService) CommitDriverReport(
 	if txErr != nil {
 		return nil, txErr
 	}
-	result.Status = "succeeded"
+	if result.FailedRows > 0 {
+		// 交易本身成功 commit（每列失敗都被各自的 savepoint 隔離回滾），但確實有
+		// 列因為寫入當下失敗而沒有真正落地，不能讓整份標成 succeeded 誤導使用者。
+		result.Status = "partial"
+	} else {
+		result.Status = "succeeded"
+	}
 
 	// 稽核留下檔案雜湊，事後才追得出某筆搭乘來源出自哪一次上傳；這不是重複判斷的依據
 	fileHash := fmt.Sprintf("sha256:%x", sha256.Sum256(data))
@@ -303,7 +317,7 @@ func (s *DriverReportService) persistColumnDecisions(
 		// 指標會被寫成 NULL，配上 mapped 就是一列「已對應卻沒有個案」的孤兒——該欄從此
 		// 展不出搭乘紀錄，待維護頁又因為狀態是 mapped 而看不到它。
 		if status == "mapped" && (d.CaseID == nil || strings.TrimSpace(*d.CaseID) == "" || d.LegSeq == nil) {
-			return nil, fmt.Errorf("欄位「%s」標記為已對應，但缺少個案或趟次", d.ColumnHeader)
+			return nil, newInputError("欄位「%s」標記為已對應，但缺少個案或趟次", d.ColumnHeader)
 		}
 		columnIndex, previousStatus, err := s.repo.UpdateColumnMappingByHeader(ctx, formID, d.ColumnHeader, status, d.CaseID, d.LegSeq)
 		if err != nil {
@@ -316,7 +330,7 @@ func (s *DriverReportService) persistColumnDecisions(
 		}
 		caseID, err := uuid.Parse(*d.CaseID)
 		if err != nil {
-			return nil, fmt.Errorf("欄位「%s」的個案編號格式錯誤：%w", d.ColumnHeader, err)
+			return nil, newInputError("欄位「%s」的個案編號格式錯誤", d.ColumnHeader)
 		}
 		targets = append(targets, backfillTarget{
 			columnHeader: d.ColumnHeader,

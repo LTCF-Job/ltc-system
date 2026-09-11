@@ -134,17 +134,22 @@ func (s *CaregiverService) Update(ctx context.Context, id uuid.UUID, in UpdateCa
 	return existing, nil
 }
 
-// Delete 刪除照護人員。
+// Delete 刪除照護人員。存在性一律要先確認，即使未設定 auditRepo（無需稽核快照）
+// 也不能略過，否則刪除不存在的資源會直接落到資料庫回傳「刪除 0 筆」但仍視為成功的 204。
 func (s *CaregiverService) Delete(ctx context.Context, id uuid.UUID, actors ...ActorContext) error {
-	var before interface{}
-	if s.auditRepo != nil {
-		existing, err := s.store.GetByID(ctx, id)
-		if err != nil {
-			return err
-		}
-		if existing == nil {
+	existing, err := s.store.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrCaregiverNotFound) {
 			return ErrCaregiverNotFound
 		}
+		return err
+	}
+	if existing == nil {
+		return ErrCaregiverNotFound
+	}
+
+	var before interface{}
+	if s.auditRepo != nil {
 		before = existing.AuditSnapshot()
 	}
 	if err := s.store.Delete(ctx, id); err != nil {

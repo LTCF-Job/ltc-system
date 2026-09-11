@@ -232,7 +232,16 @@ async function handleStartExport() {
       regions: [...selectedRegions.value],
       periodYms: [...periodYms.value]
     })
-    ElMessage.success(`已產生 ${result.value.totalFiles} 份申報檔案`)
+    const failedMonths = result.value.months.filter((m) => !m.succeeded)
+    if (failedMonths.length > 0) {
+      // 部分月份失敗時不能顯示成功 toast：使用者會以為全部月份都報出來了，
+      // 漏看失敗月份導致漏報。
+      ElMessage.warning(
+        `已產生 ${result.value.totalFiles} 份申報檔案，但有 ${failedMonths.length} 個月份失敗，請確認下方清單`
+      )
+    } else {
+      ElMessage.success(`已產生 ${result.value.totalFiles} 份申報檔案`)
+    }
     emit('exported')
   } catch {
     // 全域攔截器負責顯示 API 錯誤（含查無可申報資料）。

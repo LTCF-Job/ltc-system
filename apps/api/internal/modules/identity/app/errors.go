@@ -17,4 +17,9 @@ var (
 	ErrInvalidCredentials     = errors.New("invalid credentials")
 	ErrCannotResetOwnPassword = errors.New("cannot reset your own password through this endpoint")
 	ErrInvalidUserStatus      = errors.New("invalid user status")
+	// ErrEmailAlreadyExists／ErrWeakPassword 讓 SupabaseAdminClient 能把常見的 Auth Admin
+	// API 非 2xx 情境辨識出來，而不是全部折成一個看不出原因的內部錯誤；帳號不存在則直接沿用
+	// 既有的 ErrUserNotFound，維持與其他「查無使用者」情境相同的 404 映射。
+	ErrEmailAlreadyExists = errors.New("email already exists")
+	ErrWeakPassword       = errors.New("password does not meet strength requirements")
 )

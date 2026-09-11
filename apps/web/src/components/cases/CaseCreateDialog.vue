@@ -66,6 +66,7 @@ import { listAllSites } from '@/api/masters'
 import { listAllCaregivers } from '@/api/caregivers'
 import { notifyPendingRelinked } from '@/utils/pendingRelink'
 import { CAREGIVER_TYPE_LABELS, type CaregiverType } from '@/types/domain'
+import { nationalIdRules } from '@/utils/driverForm'
 import type { CaseDTO, CreateCaseRequest, SiteDTO, CaregiverDTO } from '@/types/api'
 
 const availableSites = ref<SiteDTO[]>([])
@@ -106,11 +107,13 @@ const form = reactive<CreateCaseRequest>({
   remarks: ''
 })
 
-// 姓名、所屬據點與照護人員為必填；身分證字號與戶籍／居住地址仍為選填
+// 姓名、所屬據點與照護人員為必填；身分證字號與戶籍／居住地址仍為選填，但有輸入時
+// 套用與司機共用的格式規則（含檢查碼），避免明顯錯誤的格式送到後端才被擋下。
 const rules = {
   name: [{ required: true, message: '請輸入個案姓名', trigger: 'blur' }],
   siteId: [{ required: true, message: '請選擇所屬據點', trigger: 'change' }],
-  caregiverId: [{ required: true, message: '請選擇照護人員', trigger: 'change' }]
+  caregiverId: [{ required: true, message: '請選擇照護人員', trigger: 'change' }],
+  nationalId: nationalIdRules(false)
 }
 
 watch(

@@ -104,37 +104,37 @@ func (h *RideHandler) Correct(c *gin.Context) {
 
 	effectiveStatus, err := parsePatchValue[string](dto.EffectiveStatus, "搭乘狀態")
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, err.Error(), nil)
 		return
 	}
 	vehicleID, err := parseUUIDPatch(dto.VehicleID, "車輛")
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, err.Error(), nil)
 		return
 	}
 	driverID, err := parseUUIDPatch(dto.DriverID, "司機")
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, err.Error(), nil)
 		return
 	}
 	departTimeOverride, err := parsePatchValue[string](dto.DepartTimeOverride, "出發時間")
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, err.Error(), nil)
 		return
 	}
 	durationMinOverride, err := parsePatchValue[int16](dto.DurationMinOverride, "服務時長")
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, err.Error(), nil)
 		return
 	}
 	notClaimedAA09, err := parsePatchValue[bool](dto.NotClaimedAA09, "AA09 設定")
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, err.Error(), nil)
 		return
 	}
 	reason, err := parsePatchValue[string](dto.Reason, "更正原因")
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, err.Error(), nil)
 		return
 	}
 	if dto.BasedOnFingerprint == nil || strings.TrimSpace(*dto.BasedOnFingerprint) == "" {
@@ -162,10 +162,15 @@ func (h *RideHandler) Correct(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, app.ErrStaleCorrection) {
-			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
+			httpx.RespondErrorCodeWithReason(c, http.StatusConflict, httpx.CodeStaleWrite, err, "資料已被其他人更新，請重新整理後再試", nil)
 			return
 		}
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		if errors.Is(err, app.ErrInvalidRideCorrectionField) {
+			httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, "此欄位不可設定為空值", nil)
+			return
+		}
+		// 其餘錯誤來自載入來源、寫入資料庫等系統層失敗，不是使用者輸入問題，不應偽裝成 400。
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
@@ -225,11 +230,24 @@ func (h *RideHandler) ManualReport(c *gin.Context) {
 
 	rec, err := h.rideService.ManualReportRide(c.Request.Context(), req, actorID, actorRole, c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		if errors.Is(err, app.ErrInvalidManualReportStatus) || errors.Is(err, app.ErrInvalidManualReportServiceDate) {
+			httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, err.Error(), nil)
+			return
+		}
+		if errors.Is(err, app.ErrInvalidManualRideLeg) {
+			httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, "該日期查無對應的有效排班趟次，無法人工補登", nil)
+			return
+		}
+		if errors.Is(err, app.ErrManualRideVehicleRequired) {
+			httpx.RespondErrorCodeWithReason(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, "此趟次尚未指派車輛，請先選擇車輛", nil)
+			return
+		}
+		// 其餘錯誤來自載入排班、寫入資料庫等系統層失敗，不是使用者輸入問題，不應偽裝成 400。
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
 		return
 	}
 
-	httpx.RespondSuccess(c, http.StatusOK, rec, nil)
+	httpx.RespondSuccess(c, http.StatusOK, toRideRecordResponse(rec), nil)
 }
 
 // rideRecordResponse 是搭乘紀錄的對外回應形狀。
@@ -460,7 +478,7 @@ func (h *RideHandler) ResolveConflict(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, app.ErrConflictAlreadyResolved) {
-			httpx.RespondErrorCode(c, http.StatusConflict, httpx.CodeResourceInUse, err, nil)
+			httpx.RespondErrorCodeWithReason(c, http.StatusConflict, httpx.CodeConflictAlreadyResolved, err, "此衝突已由其他人處理，請重新整理", nil)
 			return
 		}
 		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)

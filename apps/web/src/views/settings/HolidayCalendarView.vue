@@ -205,7 +205,12 @@ async function syncYear() {
   syncing.value = true
   try {
     const result = await importGovHolidays(Number(year.value))
-    ElMessage.success(`已匯入 ${result.importedCount || 0} 筆行事曆資料`)
+    const count = result.importedCount || 0
+    if (count > 0) {
+      ElMessage.success(`已匯入 ${count} 筆行事曆資料`)
+    } else {
+      ElMessage.info('本次同步沒有新增或更新任何行事曆資料')
+    }
     await load()
   } finally {
     syncing.value = false
@@ -240,12 +245,25 @@ async function create() {
 }
 
 async function removeHoliday(date: string) {
-  await ElMessageBox.confirm(`確定刪除 ${date} 的假日設定嗎？`, '請確認', {
-    type: 'warning'
-  })
-  await deleteHoliday(date)
-  await load()
-  ElMessage.success('假日設定已刪除')
+  try {
+    await ElMessageBox.confirm(`確定刪除 ${date} 的假日設定嗎？`, '請確認', {
+      type: 'warning'
+    })
+  } catch {
+    // 使用者取消，不需任何提示。
+    return
+  }
+
+  try {
+    await deleteHoliday(date)
+    ElMessage.success('假日設定已刪除')
+    await load()
+  } catch (error) {
+    // 全域攔截器已顯示 API 錯誤訊息；此處重新載入清單，避免刪除失敗（例如已被他人刪除）
+    // 時畫面仍停留在與伺服器不同步的舊資料。
+    await load()
+    throw error
+  }
 }
 
 watch(year, load)

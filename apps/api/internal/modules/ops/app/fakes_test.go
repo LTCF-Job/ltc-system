@@ -72,6 +72,8 @@ type recordingAttendanceStore struct {
 	conflictCalls []AttendanceImportConflict
 	resolveCalls  []uuid.UUID
 	deleteCalls   []uuid.UUID
+	// upsertErr 模擬 repo 層的 FK／CHECK constraint 違反等寫入錯誤，供 service 錯誤傳遞測試使用。
+	upsertErr error
 }
 
 func (s *recordingAttendanceStore) GetMonthRecords(context.Context, time.Time, time.Time, *uuid.UUID) ([]AttendanceRecord, error) {
@@ -83,6 +85,9 @@ func (s *recordingAttendanceStore) GetOne(context.Context, uuid.UUID, time.Time)
 }
 
 func (s *recordingAttendanceStore) Upsert(_ context.Context, driverID uuid.UUID, recordDate time.Time, status string, note *string, source string) (*AttendanceRecord, error) {
+	if s.upsertErr != nil {
+		return nil, s.upsertErr
+	}
 	item := &AttendanceRecord{ID: uuid.New(), DriverID: driverID, RecordDate: recordDate, Status: status, Note: note, Source: source}
 	s.upsertCalls = append(s.upsertCalls, *item)
 	return item, nil

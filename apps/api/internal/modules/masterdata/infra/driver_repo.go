@@ -288,7 +288,9 @@ func handleDriverDBError(err error) error {
 	return err
 }
 
-// AssignVehicle 建立司機車輛指派期間。
+// AssignVehicle 建立司機車輛指派期間。指定的司機/車輛不存在（外鍵違反）回傳
+// app.ErrAssignmentReferenceInvalid；與既有指派期間重疊（違反不重疊限制）回傳
+// app.ErrAssignmentOverlap，讓 transport 層能分流成正確的 HTTP 狀態碼。
 func (r *DriverRepository) AssignVehicle(ctx context.Context, a *app.DriverAssignment) error {
 	query := `
 		INSERT INTO driver_assignments (
@@ -305,8 +307,28 @@ func (r *DriverRepository) AssignVehicle(ctx context.Context, a *app.DriverAssig
 		exclusiveTo = &end
 	}
 	db := pgxdb.FromContext(ctx, r.db)
-	return db.QueryRow(ctx, query, a.ID, a.DriverID, a.VehicleID, a.EffectiveFrom, exclusiveTo).
+	err := db.QueryRow(ctx, query, a.ID, a.DriverID, a.VehicleID, a.EffectiveFrom, exclusiveTo).
 		Scan(&a.CreatedAt)
+	if err != nil {
+		return classifyAssignmentError(err)
+	}
+	return nil
+}
+
+// classifyAssignmentError 把 driver_assignments 寫入失敗的原始 pg 錯誤碼轉換成呼叫端可辨識
+// 的 sentinel：23503（外鍵違反，指派了不存在的司機/車輛）與 23P01（排除限制違反，期間重疊）。
+// 其餘錯誤原樣回傳，交由上層當成系統錯誤處理。
+func classifyAssignmentError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23503":
+			return app.ErrAssignmentReferenceInvalid
+		case "23P01":
+			return app.ErrAssignmentOverlap
+		}
+	}
+	return err
 }
 
 // ListDriversForVehicleOnDate 查詢某車輛在特定日期生效的所有司機，依司機姓名排序。
@@ -444,7 +466,7 @@ func (r *DriverRepository) ReplaceVehicleDrivers(ctx context.Context, vehicleID 
 			INSERT INTO driver_assignments (id, driver_id, vehicle_id, effective_range)
 			VALUES ($1, $2, $3, daterange($4::date, NULL, '[)'))
 		`, uuid.New(), driverID, vehicleID, effectiveFrom); err != nil {
-			return fmt.Errorf("failed to insert assignment: %w", err)
+			return classifyAssignmentError(err)
 		}
 	}
 

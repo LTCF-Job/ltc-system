@@ -126,9 +126,15 @@ type CreateScheduleRequest struct {
 	EffectiveTo        *optionalDate                  `json:"effectiveTo"`
 	Weekdays           []int16                        `json:"weekdays" binding:"required"`
 	TripPattern        int16                          `json:"tripPattern" binding:"required"`
-	UnitPrice          float64                        `json:"unitPrice" binding:"required"`
-	DistanceKM         float64                        `json:"distanceKm" binding:"required"`
-	ServiceDurationMin int16                          `json:"serviceDurationMin" binding:"required"`
+	// UnitPrice／DistanceKM／ServiceDurationMin 故意不用 binding:"required"：三者的業務下限
+	// 都高於 0（單價/距離須 >0，時長須落在 1-240），由 validateScheduleRequest 統一把關並給出
+	// 具體原因（如「單價必須大於 0，請重新輸入」）。若在這裡用 required，數值型別的零值會被
+	// validator 當成「未填」直接擋在 binding 階段，回應變成不具體的「為必填項目」，蓋掉後面
+	// 更明確的業務訊息；gte=0 只負責擋掉不可能通過業務規則的負數，讓 0 或省略都能一致地
+	// 由 validateScheduleRequest 給出正確原因。
+	UnitPrice          float64                        `json:"unitPrice" binding:"gte=0"`
+	DistanceKM         float64                        `json:"distanceKm" binding:"gte=0"`
+	ServiceDurationMin int16                          `json:"serviceDurationMin" binding:"gte=0"`
 	ServiceCode        string                         `json:"serviceCode" binding:"required"`
 	Note               *string                        `json:"note"`
 	Legs               []CreateScheduleLegItemRequest `json:"legs" binding:"required"`
@@ -148,9 +154,9 @@ type SaveScheduleRequest struct {
 	EffectiveTo        *optionalDate                  `json:"effectiveTo"`
 	Weekdays           []int16                        `json:"weekdays" binding:"required"`
 	TripPattern        int16                          `json:"tripPattern" binding:"required"`
-	UnitPrice          float64                        `json:"unitPrice" binding:"required"`
-	DistanceKM         float64                        `json:"distanceKm" binding:"required"`
-	ServiceDurationMin int16                          `json:"serviceDurationMin" binding:"required"`
+	UnitPrice          float64                        `json:"unitPrice" binding:"gte=0"`
+	DistanceKM         float64                        `json:"distanceKm" binding:"gte=0"`
+	ServiceDurationMin int16                          `json:"serviceDurationMin" binding:"gte=0"`
 	ServiceCode        string                         `json:"serviceCode" binding:"required"`
 	Note               *string                        `json:"note"`
 	Legs               []CreateScheduleLegItemRequest `json:"legs" binding:"required"`

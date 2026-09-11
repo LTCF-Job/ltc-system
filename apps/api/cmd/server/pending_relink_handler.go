@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	caseapp "ltc-system/apps/api/internal/modules/casemgmt/app"
@@ -22,7 +23,8 @@ func newPendingRelinkHandler(caseSvc *caseapp.CaseService, driverReportSvc *drap
 }
 
 // Relink 依序重新比對據點、照護人員、司機與匯報表單欄位四類待維護資料，回傳各類
-// 實際自動關聯的筆數。
+// 實際自動關聯的筆數。四段分開執行，中途某段失敗時，訊息會列出已完成的段落名稱，
+// 讓使用者知道還剩哪幾段需要重試，而不是整段訊息重來一次。
 func (h *pendingRelinkHandler) Relink(c *gin.Context) {
 	ctx := c.Request.Context()
 	actorID := auth.GetActorID(c)
@@ -30,24 +32,32 @@ func (h *pendingRelinkHandler) Relink(c *gin.Context) {
 	ip := c.ClientIP()
 	ua := c.Request.UserAgent()
 
+	var done []string
+
 	sites, err := h.caseSvc.RelinkAllPendingSites(ctx, actorID, actorRole, ip, ua)
 	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "重新比對待維護資料失敗", nil)
+		respondRelinkError(c, err, done, "據點")
 		return
 	}
+	done = append(done, "據點")
+
 	caregivers, err := h.caseSvc.RelinkAllPendingCaregivers(ctx, actorID, actorRole, ip, ua)
 	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "重新比對待維護資料失敗", nil)
+		respondRelinkError(c, err, done, "照護人員")
 		return
 	}
+	done = append(done, "照護人員")
+
 	drivers, err := h.driverReportSvc.RelinkAllPendingDrivers(ctx)
 	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "重新比對待維護資料失敗", nil)
+		respondRelinkError(c, err, done, "司機")
 		return
 	}
+	done = append(done, "司機")
+
 	caseColumns, err := h.driverReportSvc.RelinkAllPendingCaseColumns(ctx)
 	if err != nil {
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternalError, "重新比對待維護資料失敗", nil)
+		respondRelinkError(c, err, done, "匯報表單欄位")
 		return
 	}
 
@@ -57,4 +67,16 @@ func (h *pendingRelinkHandler) Relink(c *gin.Context) {
 		"drivers":     drivers,
 		"caseColumns": caseColumns,
 	}, nil)
+}
+
+// respondRelinkError 回報重新比對失敗，並在 reason 中列出已完成的段落，
+// 讓使用者知道還需要重試哪一段，而不必整個流程重來一次；err 只記錄於伺服器端 log。
+func respondRelinkError(c *gin.Context, err error, done []string, failedStage string) {
+	reason := "重新比對「" + failedStage + "」時失敗"
+	if len(done) > 0 {
+		reason += "（已完成：" + strings.Join(done, "、") + "），請重新整理後再試一次"
+	} else {
+		reason += "，請重新整理後再試一次"
+	}
+	httpx.RespondErrorCodeWithReason(c, http.StatusInternalServerError, httpx.CodeInternalError, err, reason, nil)
 }

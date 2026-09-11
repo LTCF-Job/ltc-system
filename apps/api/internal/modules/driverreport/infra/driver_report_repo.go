@@ -118,14 +118,21 @@ func (r *DriverReportRepository) CreateForm(ctx context.Context, id, vehicleID u
 	return formID, nil
 }
 
-// DeleteForm 刪除匯報表。
+// DeleteForm 刪除匯報表；刪除 0 筆（表單不存在或已被刪除）回傳 app.ErrFormNotFound，
+// 讓呼叫端能與真正的資料庫故障分開映射狀態碼，不再讓刪除不存在的表單也回報成功。
 func (r *DriverReportRepository) DeleteForm(ctx context.Context, formID uuid.UUID) error {
 	if r.db == nil {
 		return ErrNoDatabase
 	}
 
-	_, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `DELETE FROM driver_report_forms WHERE id = $1`, formID)
-	return err
+	tag, err := pgxdb.FromContext(ctx, r.db).Exec(ctx, `DELETE FROM driver_report_forms WHERE id = $1`, formID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return app.ErrFormNotFound
+	}
+	return nil
 }
 
 // ListColumnsWithMapping 查詢欄位對應狀態，可依匯報表與對應狀態篩選。

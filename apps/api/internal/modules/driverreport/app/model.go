@@ -133,6 +133,19 @@ type ColumnMappingUpdate struct {
 	LegSeq        *int16  `json:"legSeq"`
 }
 
+// BatchMappingFailure 是批次更新欄位對應時單一欄位失敗的原因。
+type BatchMappingFailure struct {
+	ColumnID string `json:"columnId"`
+	Reason   string `json:"reason"`
+}
+
+// BatchMappingResult 彙整批次欄位對應更新的結果；UpdatedCount 只算真正套用成功的
+// 筆數，Failures 逐筆列出失敗的欄位與原因，讓使用者知道中途失敗時哪些欄位沒套用到。
+type BatchMappingResult struct {
+	UpdatedCount int                   `json:"updatedCount"`
+	Failures     []BatchMappingFailure `json:"failures,omitempty"`
+}
+
 // SubmissionReview 是一筆匯報提交紀錄（一天一列）目前尚待處理的問題彙整，供待維護
 // 資料頁籤以匯報表列為單位顯示：同一列可能同時有個案欄位比對不到、駕駛人也比對不到、
 // 或這台車這個個案的資料與既有資料衝突。
@@ -169,7 +182,10 @@ type MonthDetail struct {
 // 新增的筆數；ReaffirmedRows 是值與既有資料相同的重複回報；PendingConflictRows 是
 // 因為與既有資料不同、已進入待維護等待使用者選擇的筆數；BackfilledRows 是本次有欄位
 // 從待維護變成已對應而順帶補寫的先前月份筆數——這幾個數字分開計算，不能只看單一數字
-// 就以為這次上傳「沒問題」。
+// 就以為這次上傳「沒問題」。FailedRows 只計「格式與內容都正確、卻在真正寫入資料庫時
+// 失敗」的列（savepoint 被回滾）；日期格式錯誤等在預覽階段就判定的略過列不計入，因為
+// 那些原本就預期不會寫入。Status 為 "partial" 時代表整份交易雖然成功、但 FailedRows>0，
+// 不能單看 Status=="succeeded" 就以為每一列都真的寫入了。
 type CommitResult struct {
 	Status              string              `json:"status"`
 	ImportedRows        int                 `json:"importedRows"`
@@ -178,6 +194,7 @@ type CommitResult struct {
 	PendingConflictRows int                 `json:"pendingConflictRows"`
 	BackfilledRows      int                 `json:"backfilledRows"`
 	MappedColumns       int                 `json:"mappedColumns"`
+	FailedRows          int                 `json:"failedRows"`
 	CoveredMonths       []string            `json:"coveredMonths"`
 	SkippedRows         []SkippedRow        `json:"skippedRows"`
 	Warnings            []ImportWarningItem `json:"warnings,omitempty"`
@@ -196,6 +213,7 @@ type DriverReportImportAuditSnapshot struct {
 	PendingConflictRows int       `json:"pendingConflictRows"`
 	BackfilledRows      int       `json:"backfilledRows"`
 	MappedColumns       int       `json:"mappedColumns"`
+	FailedRows          int       `json:"failedRows"`
 	CoveredMonths       []string  `json:"coveredMonths,omitempty"`
 	SkippedRows         int       `json:"skippedRows"`
 	WarningRows         int       `json:"warningRows"`
@@ -209,6 +227,7 @@ func (r CommitResult) AuditSnapshot(formID uuid.UUID, yearMonth, fileHash string
 		ImportedRows: r.ImportedRows, RideRecordRows: r.RideRecordRows,
 		ReaffirmedRows: r.ReaffirmedRows, PendingConflictRows: r.PendingConflictRows,
 		BackfilledRows: r.BackfilledRows, MappedColumns: r.MappedColumns,
+		FailedRows:    r.FailedRows,
 		CoveredMonths: r.CoveredMonths,
 		SkippedRows:   len(r.SkippedRows), WarningRows: len(r.Warnings),
 	}

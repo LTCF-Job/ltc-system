@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -26,7 +25,7 @@ func loadFuelAuditSnapshot(ctx context.Context, store FuelStore, id uuid.UUID) (
 		return nil, err
 	}
 	if item == nil {
-		return nil, fmt.Errorf("fuel log not found")
+		return nil, ErrFuelLogNotFound
 	}
 	return item.AuditSnapshot(), nil
 }
@@ -41,7 +40,7 @@ func loadMaintenanceAuditSnapshot(ctx context.Context, store MaintenanceStore, i
 		return nil, err
 	}
 	if item == nil {
-		return nil, fmt.Errorf("maintenance log not found")
+		return nil, ErrMaintenanceLogNotFound
 	}
 	return item.AuditSnapshot(), nil
 }

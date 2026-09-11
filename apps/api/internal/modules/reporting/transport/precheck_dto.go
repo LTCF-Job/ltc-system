@@ -1,6 +1,8 @@
 package transport
 
 import (
+	"fmt"
+
 	"ltc-system/apps/api/internal/modules/reporting/app"
 )
 
@@ -70,17 +72,29 @@ func toPrecheckDetails(message string, details map[string]interface{}) []prechec
 		return nil
 	}
 	detail := precheckDetailResponse{Description: message}
-	if v, ok := details["caseId"].(string); ok {
-		detail.CaseID = v
-	}
-	if v, ok := details["caseName"].(string); ok {
-		detail.CaseName = v
-	}
-	if v, ok := details["rideId"].(string); ok {
-		detail.RideID = v
-	}
-	if v, ok := details["serviceDate"].(string); ok {
-		detail.ServiceDate = v
-	}
+	detail.CaseID = stringDetail(details, "caseId")
+	detail.CaseName = stringDetail(details, "caseName")
+	detail.RideID = stringDetail(details, "rideId")
+	detail.ServiceDate = stringDetail(details, "serviceDate")
 	return []precheckDetailResponse{detail}
+}
+
+// stringDetail 從 PrecheckIssue.Details 的通用 map 取出字串值。
+//
+// caseId／rideId 在服務層存放的是 uuid.UUID（見 precheck_service.go），對它做
+// `.(string)` 型別斷言必定失敗（silently 回傳零值），過去因此導致回應中的
+// caseId／rideId 永遠是空字串；改用 fmt.Stringer 介面涵蓋 uuid.UUID 與其他
+// 具備 String() 的型別，其餘型別退回 %v 格式化，確保不管底層型別為何都能取到值。
+func stringDetail(details map[string]interface{}, key string) string {
+	v, ok := details[key]
+	if !ok || v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	if s, ok := v.(fmt.Stringer); ok {
+		return s.String()
+	}
+	return fmt.Sprintf("%v", v)
 }

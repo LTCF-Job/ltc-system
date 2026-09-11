@@ -8,8 +8,24 @@
       </el-button>
     </div>
 
+    <!-- 查詢個案／排班任一失敗時不呈現可編輯的空白表單，改顯示載入失敗狀態與重試按鈕 -->
+    <el-alert
+      v-if="loadError"
+      type="error"
+      :closable="false"
+      show-icon
+      role="alert"
+      class="case-detail-error"
+    >
+      <template #title>個案資料載入失敗</template>
+      <div class="case-detail-error-actions">
+        <span>請重新載入後再試一次。</span>
+        <el-button type="danger" plain size="small" :loading="loading" @click="fetchDetail">重新載入</el-button>
+      </div>
+    </el-alert>
+
     <!-- 分頁導覽：基本資料 / 排班設定 -->
-    <el-tabs v-model="activeTab" type="border-card" class="detail-tabs">
+    <el-tabs v-else v-model="activeTab" type="border-card" class="detail-tabs">
       <!-- 分頁 1：基本資料 -->
       <el-tab-pane label="基本資料" name="basic">
         <el-form
@@ -225,6 +241,7 @@ const authStore = useAuthStore()
 const caseId = computed(() => route.params.id as string)
 
 const loading = ref(false)
+const loadError = ref(false)
 const saving = ref(false)
 const activeTab = ref(route.query.tab === 'schedule' ? 'schedule' : 'basic')
 const caseData = ref<CaseDTO | null>(null)
@@ -252,6 +269,7 @@ const editForm = reactive<UpdateCaseRequest>({
 async function fetchDetail() {
   if (!caseId.value) return
   loading.value = true
+  loadError.value = false
   try {
     const [rawCase, rawSchedule] = await Promise.all([
       getCase(caseId.value) as Promise<any>,
@@ -261,7 +279,10 @@ async function fetchDetail() {
     const res: any = rawCase?.data ?? rawCase
     const sched: any = rawSchedule?.data ?? rawSchedule
 
-    if (!res) return
+    if (!res) {
+      loadError.value = true
+      return
+    }
 
     if (sched) {
       res.activeSchedule = sched?.data ?? sched
@@ -284,7 +305,9 @@ async function fetchDetail() {
     editForm.registeredAddress = res.registeredAddress || ''
     editForm.remarks = res.remarks || ''
   } catch {
-    // 全域攔截器負責顯示 API 錯誤。
+    // 全域攔截器負責顯示 API 錯誤；此處另外標記載入失敗，隱藏表單避免呈現
+    // 可編輯的空白個案資料。
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -305,6 +328,8 @@ async function handleUpdateCase() {
     await updateCase(caseId.value, editForm)
     ElMessage.success('個案基本資料已更新')
     router.push('/cases')
+  } catch {
+    // 更新失敗時停留在原頁面讓使用者可修正後重試；全域攔截器負責顯示錯誤訊息。
   } finally {
     saving.value = false
   }
@@ -379,6 +404,13 @@ onMounted(() => {
 .detail-tabs {
   border-radius: 8px;
   background-color: #ffffff;
+}
+
+.case-detail-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .form-actions {

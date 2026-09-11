@@ -318,12 +318,32 @@ func handleCaseDBError(err error) error {
 	return err
 }
 
+// handleScheduleDBError 將排班寫入時的 pg 錯誤轉譯為可辨識的 domain error：
+// 生效期間重疊（no_overlapping_case_schedule exclusion constraint）轉為 ErrScheduleOverlap，
+// 外鍵失效（選到不存在的個案或車輛）轉為 ErrScheduleInvalidReference，
+// 讓 transport 層只需比對 domain sentinel，不必直接依賴 pgconn。
+func handleScheduleDBError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		if pgErr.Code == "23P01" && pgErr.ConstraintName == "no_overlapping_case_schedule" {
+			return app.ErrScheduleOverlap
+		}
+		if pgErr.Code == "23503" {
+			return app.ErrScheduleInvalidReference
+		}
+	}
+	return err
+}
+
 // CreateSchedule 建立排班設定與對應的 legs（包在同一個事務中）。
 // 若 ctx 已掛載外層事務（見 pgxdb.TxRunner），排班與 legs 寫入會併入該事務，
 // 由外層決定 commit／rollback；否則自行開啟並管理事務。
 func (r *CaseRepository) CreateSchedule(ctx context.Context, s *app.CaseSchedule) error {
 	if tx, ok := pgxdb.TxFromContext(ctx); ok {
-		return r.insertSchedule(ctx, tx, s)
+		return handleScheduleDBError(r.insertSchedule(ctx, tx, s))
 	}
 
 	tx, err := r.db.Begin(ctx)
@@ -333,7 +353,7 @@ func (r *CaseRepository) CreateSchedule(ctx context.Context, s *app.CaseSchedule
 	defer tx.Rollback(ctx)
 
 	if err := r.insertSchedule(ctx, tx, s); err != nil {
-		return err
+		return handleScheduleDBError(err)
 	}
 	return tx.Commit(ctx)
 }

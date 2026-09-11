@@ -198,7 +198,9 @@ func newRouter(cfg *config.Config, pool *pgxpool.Pool, h handlers, perm auth.Per
 		apiV1.GET("/exports/precheck", auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.Precheck)
 		apiV1.POST("/exports/precheck", auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.Precheck)
 		apiV1.GET("/exports", auth.RequirePermission(perm, customPerm, "exports", "view"), h.export.List)
-		apiV1.POST("/exports", auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.Create)
+		// 逐案匯出同步產生每一份工作簿，個案數一多同樣可能超過全域 WriteTimeout，
+		// 比照下方依區域批次匯出解除這個請求的逾時。
+		apiV1.POST("/exports", extendedImportDeadlineMiddleware(), auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.Create)
 		// 依區域批次匯出一次可能產出數十至數百份檔案並逐一上傳 object storage，
 		// 會超過全域 WriteTimeout，比照匯報表匯入解除這個請求的逾時。
 		apiV1.POST("/exports/by-region", extendedImportDeadlineMiddleware(), auth.RequirePermission(perm, customPerm, "exports", "edit"), h.export.CreateByRegion)

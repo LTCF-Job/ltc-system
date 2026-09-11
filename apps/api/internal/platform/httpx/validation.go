@@ -105,6 +105,46 @@ var commonFieldLabels = map[string]string{
 	"thirdPartyInsuranceExpiry": "第三人責任險到期日",
 	"lastInspectionDate":        "最後驗車日",
 	"wheelchairAccessible":      "輪椅友善",
+	"caregiverId":               "照護人員",
+	"tripPattern":               "趟次型態",
+	"unitPrice":                 "單價",
+	"distanceKm":                "距離",
+	"serviceDurationMin":        "服務時長",
+	"legSeq":                    "趟次順序",
+	"departTime":                "出發時間",
+	"oldPassword":               "目前密碼",
+	"newPassword":               "新密碼",
+	"password":                  "密碼",
+	"role":                      "角色",
+	"topic":                     "通知主旨",
+	"recipients":                "收件人",
+	"file":                      "檔案",
+	"mileage":                   "里程",
+	"liters":                    "公升數",
+	"cost":                      "金額",
+	"decision":                  "裁決結果",
+	"type":                      "類型",
+}
+
+// chineseTypeLabel 把 json.UnmarshalTypeError 期望的 Go 型別轉成使用者看得懂的中文描述，
+// 避免直接把 int、time.Time 這類 Go 型別名稱洩漏給前端。
+func chineseTypeLabel(t reflect.Type) string {
+	switch t.Kind() {
+	case reflect.Slice, reflect.Array:
+		return "清單"
+	case reflect.Bool:
+		return "布林值"
+	case reflect.Struct:
+		return "日期"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return "數字"
+	case reflect.String:
+		return "文字"
+	default:
+		return "文字"
+	}
 }
 
 // ExtractValidationDetails 從 binding 與 validation 錯誤中提煉出友善的欄位詳細資訊。
@@ -134,11 +174,11 @@ func ExtractValidationDetails(err error) []ErrorDetail {
 			case "email":
 				reason = fmt.Sprintf("%s格式不正確", label)
 			case "uuid":
-				reason = fmt.Sprintf("%s必須為有效 UUID", label)
+				reason = fmt.Sprintf("%s格式不正確", label)
 			case "oneof":
-				reason = fmt.Sprintf("%s必須為下列選項之一：%s", label, fe.Param())
+				reason = fmt.Sprintf("%s必須為系統提供的有效選項之一", label)
 			default:
-				reason = fmt.Sprintf("%s不符合驗證規則 (%s)", label, fe.Tag())
+				reason = fmt.Sprintf("%s格式不符合要求", label)
 			}
 
 			details = append(details, ErrorDetail{
@@ -159,7 +199,7 @@ func ExtractValidationDetails(err error) []ErrorDetail {
 		return []ErrorDetail{
 			{
 				Field:  fieldName,
-				Reason: fmt.Sprintf("%s資料型態錯誤，預期為 %s", label, typeErr.Type.String()),
+				Reason: fmt.Sprintf("%s資料型態錯誤，預期為%s", label, chineseTypeLabel(typeErr.Type)),
 			},
 		}
 	}

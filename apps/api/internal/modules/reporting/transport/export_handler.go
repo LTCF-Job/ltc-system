@@ -11,8 +11,18 @@ import (
 	"github.com/google/uuid"
 	"ltc-system/apps/api/internal/modules/reporting/app"
 	"ltc-system/apps/api/internal/platform/auth"
+	"ltc-system/apps/api/internal/platform/clock"
 	"ltc-system/apps/api/internal/platform/httpx"
 )
+
+// currentPeriodYM 以系統目前日期推導民國 5 碼申報月份（RRRMM），
+// 取代先前寫死的過期月份字串（過去固定回傳 "11507"，時間一久就與實際月份脫節，
+// 使用者若忘記帶 periodYm 會被導去查一個早已結束的月份）。
+func currentPeriodYM() string {
+	today := clock.Today()
+	rocYear := today.Year() - 1911
+	return fmt.Sprintf("%03d%02d", rocYear, int(today.Month()))
+}
 
 const xlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -49,7 +59,7 @@ func NewExportHandler(
 func (h *ExportHandler) Precheck(c *gin.Context) {
 	periodYM := c.Query("periodYm")
 	if periodYM == "" {
-		periodYM = c.DefaultQuery("month", "11507")
+		periodYM = c.DefaultQuery("month", currentPeriodYM())
 	}
 	periodYMValues := queryList(c, "periodYms")
 	caseIDValues := queryList(c, "caseIds")
@@ -93,6 +103,13 @@ func (h *ExportHandler) Precheck(c *gin.Context) {
 		cases, err := h.claimCaseResolve.ListCasesByRegions(c.Request.Context(), regionValues)
 		if err != nil {
 			httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+			return
+		}
+		// 該區域底下查無個案時，caseIDs 若維持空陣列，SQL 語意上等同「不限個案」，
+		// 會變成對全機構跑檢核、顯示一堆與選定區域無關的混車衝突；此處必須直接
+		// 視為「沒有可申報的資料」，不能讓空範圍被解讀成不限範圍。
+		if len(cases) == 0 {
+			httpx.RespondErrorCode(c, http.StatusUnprocessableEntity, httpx.CodeNoExportData, app.ErrNoExportData, nil)
 			return
 		}
 		for _, item := range cases {
@@ -143,10 +160,15 @@ func (h *ExportHandler) DownloadBatch(c *gin.Context) {
 		return
 	}
 
-	fileName, archive, err := h.govClaimService.RenderBatchZip(c.Request.Context(), jobIDs)
+	fileName, archive, skippedPeriodYMs, err := h.govClaimService.RenderBatchZip(c.Request.Context(), jobIDs)
 	if err != nil {
 		respondExportError(c, err)
 		return
+	}
+	// 被略過的月份（尚未完成或失敗）透過自訂標頭揭露，避免使用者收到一包壓縮檔
+	// 卻不知道少了哪幾個月——瀏覽器下載回應無法帶 JSON body 說明。
+	if len(skippedPeriodYMs) > 0 {
+		c.Header("X-Export-Skipped-Periods", strings.Join(skippedPeriodYMs, ","))
 	}
 
 	writeAttachment(c, "application/zip", fileName, fileName, archive)

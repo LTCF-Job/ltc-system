@@ -259,14 +259,17 @@
                 <span v-if="row.status === 'succeeded'" class="status-badge badge-routine">
                   <span class="status-indicator-dot dot-routine"></span>已完成
                 </span>
-                <span v-else class="status-badge badge-critical">
+                <span v-else-if="row.status === 'failed'" class="status-badge badge-critical">
                   <span class="status-indicator-dot dot-critical"></span>失敗
+                </span>
+                <span v-else class="status-badge badge-moderate">
+                  <span class="status-indicator-dot dot-moderate"></span>{{ EXPORT_STATUS_LABELS[row.status as ExportJobStatus] || row.status }}
                 </span>
               </template>
             </el-table-column>
           </el-table>
           <el-empty
-            v-if="!recentExports || recentExports.length === 0"
+            v-if="!exportsError && (!recentExports || recentExports.length === 0)"
             description="尚無申報匯出紀錄"
           />
           <div class="app-panel-footer">
@@ -297,7 +300,9 @@ import {
 import { getDashboardMetrics } from '@/api/dashboard'
 import { getDashboardStats } from '@/api/exports'
 import { formatDateTime } from '@/utils/formatters'
+import { EXPORT_STATUS_LABELS } from '@/types/domain'
 import type { DashboardMetricsDTO, ExportJobDTO } from '@/types/api'
+import type { ExportJobStatus } from '@/types/domain'
 
 // 註冊 ECharts 核心元件
 use([
@@ -553,6 +558,12 @@ onMounted(() => {
     background-color: var(--app-status-success-bg);
     border-color: var(--app-status-success-border);
     color: var(--app-status-success-fg);
+  }
+
+  &.badge-moderate {
+    background-color: var(--app-status-warning-bg);
+    border-color: var(--app-status-warning-border);
+    color: var(--app-status-warning-fg);
   }
 }
 

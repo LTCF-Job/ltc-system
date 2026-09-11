@@ -166,7 +166,7 @@ func (r *MaintenanceRepository) Update(ctx context.Context, item *app.Maintenanc
 		return fmt.Errorf("failed to update maintenance log: %w", err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("maintenance log not found")
+		return app.ErrMaintenanceLogNotFound
 	}
 	return nil
 }
@@ -183,7 +183,7 @@ func (r *MaintenanceRepository) Delete(ctx context.Context, id uuid.UUID) error 
 		return fmt.Errorf("failed to delete maintenance log: %w", err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("maintenance log not found")
+		return app.ErrMaintenanceLogNotFound
 	}
 	return nil
 }

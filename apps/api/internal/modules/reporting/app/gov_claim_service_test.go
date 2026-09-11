@@ -535,6 +535,59 @@ func TestRenderZip_PacksEveryCaseFile(t *testing.T) {
 	assert.Equal(t, "蔡曾切11507.xlsx", archiver.entries[1].Name)
 }
 
+// multiJobStore 讓 GetJob 依 jobID 回傳不同工作，模擬批次下載跨多個 export_job 的情境。
+type multiJobStore struct {
+	jobs map[uuid.UUID]app.GovClaimJob
+}
+
+func (s *multiJobStore) CreateJob(context.Context, app.ExportJobCreate) (uuid.UUID, error) {
+	return uuid.Nil, nil
+}
+func (s *multiJobStore) CompleteJob(context.Context, uuid.UUID, []app.GovClaimCaseFile, []app.ExportLine) error {
+	return nil
+}
+func (s *multiJobStore) FailJob(context.Context, uuid.UUID, string) error { return nil }
+func (s *multiJobStore) GetJob(_ context.Context, jobID uuid.UUID) (app.GovClaimJob, error) {
+	job, ok := s.jobs[jobID]
+	if !ok {
+		return app.GovClaimJob{}, app.ErrExportJobNotFound
+	}
+	return job, nil
+}
+func (s *multiJobStore) ListJobs(context.Context, int, int) ([]app.GovClaimJob, int64, error) {
+	return nil, 0, nil
+}
+func (s *multiJobStore) LoadCaseLines(context.Context, uuid.UUID, uuid.UUID) ([]app.ExportLine, error) {
+	return nil, nil
+}
+func (s *multiJobStore) LoadNationalIDCiphers(context.Context, uuid.UUID, []uuid.UUID) (app.NationalIDCiphers, error) {
+	return app.NationalIDCiphers{}, nil
+}
+func (s *multiJobStore) LoadExportFile(context.Context, uuid.UUID, uuid.UUID) ([]byte, error) {
+	return []byte("PK-file"), nil
+}
+
+func TestRenderBatchZip_ReportsSkippedPeriods(t *testing.T) {
+	// 非成功狀態的工作被略過不該讓整包下載失敗，但使用者得知道少了哪個月，
+	// 不然只會收到一包檔案卻猜不出為什麼月份對不上。
+	succeededID, failedID := uuid.New(), uuid.New()
+	caseID := uuid.New()
+	store := &multiJobStore{jobs: map[uuid.UUID]app.GovClaimJob{
+		succeededID: {
+			ID: succeededID, PeriodYM: "11505", Status: app.ExportStatusSucceeded,
+			Files: []app.GovClaimCaseFile{{CaseID: caseID, FileName: "case.xlsx"}},
+		},
+		failedID: {ID: failedID, PeriodYM: "11506", Status: app.ExportStatusFailed},
+	}}
+	svc := newService(&fakeSourceReader{}, store, &recordingRenderer{}, &recordingArchiver{}, stubPrecheckRepo{})
+
+	fileName, archive, skipped, err := svc.RenderBatchZip(context.Background(), []uuid.UUID{succeededID, failedID})
+	require.NoError(t, err)
+	assert.NotEmpty(t, archive)
+	assert.Equal(t, "gov-claim-11505.zip", fileName)
+	assert.Equal(t, []string{"11506"}, skipped)
+}
+
 func TestRenderZip_RejectsDirectModeJob(t *testing.T) {
 	store := &fakeExportStore{jobID: uuid.New()}
 	store.storedJob.Mode = app.GovClaimModeDirect

@@ -421,11 +421,17 @@ func TestCommitDriverReport_SavepointIsolatesFailingRowFromOthers(t *testing.T) 
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, "succeeded", result.Status)
+	// 有列因為寫入當下失敗（非預覽階段就判定的格式錯誤）而被跳過，Status 不能再
+	// 說 succeeded 誤導使用者以為整份都寫入了；FailedRows 對應到底有幾列是這種情況。
+	assert.Equal(t, "partial", result.Status)
+	assert.Equal(t, 1, result.FailedRows)
 	assert.Equal(t, 1, result.ImportedRows, "只有 3/2 那列失敗，3/3 仍要寫入")
 	require.Len(t, result.SkippedRows, 1)
 	assert.Equal(t, 2, result.SkippedRows[0].RowIndex)
-	assert.Contains(t, result.SkippedRows[0].Reasons[0], "boom")
+	// 略過原因只能是固定中文提示，底層 pgx 錯誤文字（"boom"）只能進伺服器端日誌，
+	// 不得原樣顯示給使用者。
+	assert.NotContains(t, result.SkippedRows[0].Reasons[0], "boom")
+	assert.Equal(t, "此列寫入失敗，已略過，請稍後重試或聯繫管理員", result.SkippedRows[0].Reasons[0])
 	assert.True(t, store.markedImported, "還有列成功寫入時仍要更新最後匯入時間")
 }
 

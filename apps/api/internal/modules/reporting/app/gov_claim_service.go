@@ -276,10 +276,11 @@ func (s *GovClaimService) RenderZip(ctx context.Context, jobID uuid.UUID) (strin
 // 每個月份是一個獨立的 export_job（export_job_files 有 UNIQUE(job_id, case_id)，
 // 同一個案的不同月份塞不進同一個 job），因此跨月下載必須在這裡合併。zip 內以民國年月
 // 分資料夾，避免使用者解開後面對一坨扁平的檔案。
-// 非成功狀態的工作直接略過：它沒有檔案可取，不該讓整包下載失敗。
-func (s *GovClaimService) RenderBatchZip(ctx context.Context, jobIDs []uuid.UUID) (string, []byte, error) {
+// 非成功狀態的工作直接略過：它沒有檔案可取，不該讓整包下載失敗；但被略過的
+// 月份會透過回傳值揭露給呼叫端，避免使用者收到一包檔案卻不知道少了哪幾個月。
+func (s *GovClaimService) RenderBatchZip(ctx context.Context, jobIDs []uuid.UUID) (fileName string, archive []byte, skippedPeriodYMs []string, err error) {
 	if len(jobIDs) == 0 {
-		return "", nil, ErrExportJobNotFound
+		return "", nil, nil, ErrExportJobNotFound
 	}
 
 	periodYMs := make([]string, 0, len(jobIDs))
@@ -287,16 +288,17 @@ func (s *GovClaimService) RenderBatchZip(ctx context.Context, jobIDs []uuid.UUID
 	for _, jobID := range jobIDs {
 		job, err := s.store.GetJob(ctx, jobID)
 		if err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 		if job.Status != ExportStatusSucceeded {
+			skippedPeriodYMs = append(skippedPeriodYMs, job.PeriodYM)
 			continue
 		}
 		periodYMs = append(periodYMs, job.PeriodYM)
 		for _, f := range job.Files {
 			content, err := s.loadImmutableFile(ctx, job.ID, f.CaseID)
 			if err != nil {
-				return "", nil, err
+				return "", nil, nil, err
 			}
 			entries = append(entries, ZipEntry{
 				Name:    fmt.Sprintf("%s/%s", job.PeriodYM, f.FileName),
@@ -306,15 +308,16 @@ func (s *GovClaimService) RenderBatchZip(ctx context.Context, jobIDs []uuid.UUID
 	}
 
 	if len(entries) == 0 {
-		return "", nil, ErrNoExportData
+		return "", nil, nil, ErrNoExportData
 	}
 
 	sort.Strings(periodYMs)
-	archive, err := s.archiver.BuildZip(entries)
+	sort.Strings(skippedPeriodYMs)
+	built, err := s.archiver.BuildZip(entries)
 	if err != nil {
-		return "", nil, fmt.Errorf("build batch zip: %w", err)
+		return "", nil, nil, fmt.Errorf("build batch zip: %w", err)
 	}
-	return BatchZipFileName(periodYMs), archive, nil
+	return BatchZipFileName(periodYMs), built, skippedPeriodYMs, nil
 }
 
 // ZipFileName 組出壓縮檔檔名。

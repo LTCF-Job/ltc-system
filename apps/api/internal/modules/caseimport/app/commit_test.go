@@ -398,6 +398,37 @@ func TestCommitCases_LookupDatabaseErrorFailsOnlyThatRow(t *testing.T) {
 	assert.Equal(t, "仍可匯入的個案", registrar.created[0].Name)
 }
 
+// duplicateNationalIDCaseRegistrar 模擬 casemgmt 在唯一鍵衝突時回傳的底層錯誤
+// （案文字與 casemgmt/app.ErrDuplicateNationalID 一致，見 commit.go 的
+// caseRegistrarDuplicateNationalIDText 說明），驗證 commit.go 能把它改寫成
+// 「身分證字號與本檔其他列重複」而非通用失敗訊息。
+type duplicateNationalIDCaseRegistrar struct{}
+
+func (duplicateNationalIDCaseRegistrar) CreateCase(ctx context.Context, in NewCase, actor Actor) (uuid.UUID, error) {
+	return uuid.Nil, errors.New("national id already exists")
+}
+
+func (duplicateNationalIDCaseRegistrar) RecordSkipped(ctx context.Context, row CaseImportSkippedRow, actor Actor) {
+}
+
+func TestCommitCases_DuplicateNationalIDWithinFileGetsSpecificReason(t *testing.T) {
+	svc := &ImportService{
+		cases:    duplicateNationalIDCaseRegistrar{},
+		txRunner: fakeTxRunner{},
+	}
+	preview := &CaseImportPreviewResult{Rows: []CaseImportRowResult{
+		{RowIndex: 1, Name: "身分證字號重複列"},
+	}}
+
+	result, err := svc.CommitCases(context.Background(), preview, Actor{ActorID: uuid.New()})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.FailedCount)
+	require.Len(t, result.FailedRows, 1)
+	require.Len(t, result.FailedRows[0].Reasons, 1)
+	assert.Equal(t, "身分證字號與本檔其他列重複", result.FailedRows[0].Reasons[0])
+}
+
 func TestCommitCases_IdempotencySkipsRepeatedFileRow(t *testing.T) {
 	registrar := &fakeCaseRegistrar{}
 	idempotency := &fakeCaseImportIdempotency{}

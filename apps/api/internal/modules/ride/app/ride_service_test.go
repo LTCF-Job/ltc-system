@@ -33,6 +33,7 @@ func TestRideService_ManualReportRide_Validation(t *testing.T) {
 		_, err := svc.ManualReportRide(ctx, req, actorID, "staff", "127.0.0.1", "test-ua")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "無效的搭乘狀態")
+		assert.ErrorIs(t, err, ErrInvalidManualReportStatus)
 	})
 
 	t.Run("Invalid date format", func(t *testing.T) {
@@ -45,7 +46,41 @@ func TestRideService_ManualReportRide_Validation(t *testing.T) {
 		_, err := svc.ManualReportRide(ctx, req, actorID, "staff", "127.0.0.1", "test-ua")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "無效的服務日期格式")
+		assert.ErrorIs(t, err, ErrInvalidManualReportServiceDate)
 	})
+}
+
+func TestDescribeAnomalyFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		flag string
+		want string
+	}{
+		{
+			name: "未對應欄位",
+			flag: "unmapped_column:3.王小明[去程]",
+			want: "欄位『3.王小明[去程]』尚未對應個案",
+		},
+		{
+			name: "無法辨識的值",
+			flag: "unparsed_value:3.王小明[回程]:?",
+			want: "欄位『3.王小明[回程]』的內容「?」無法辨識",
+		},
+		{
+			name: "未知旗標退回通用文字",
+			flag: "unknown_flag:foo",
+			want: "匯入資料異常",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := describeAnomalyFlag(tt.flag)
+			assert.Equal(t, tt.want, got)
+			assert.NotContains(t, got, "unmapped_column")
+			assert.NotContains(t, got, "unparsed_value")
+		})
+	}
 }
 
 func TestRideService_ManualReportRide_WithMockRepo(t *testing.T) {

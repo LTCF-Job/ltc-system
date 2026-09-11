@@ -134,8 +134,20 @@
       <!-- 待維護：匯入時姓名或類型未填寫的照護人員資料，統一用「缺少欄位」欄提示 -->
       <el-tab-pane label="待維護" name="pending">
         <div v-loading="pendingLoading" class="pending-panel">
-          <el-empty v-if="!pendingLoading && pendingCaregivers.length === 0" description="目前沒有待維護的照護人員" />
-          <el-table v-else v-table-auto-width :data="pendingCaregivers" border stripe style="width: 100%">
+          <el-alert
+            v-if="pendingError"
+            type="error"
+            show-icon
+            :closable="false"
+            title="待維護照護人員清單載入失敗"
+            style="margin-bottom: 12px"
+          >
+            <template #default>
+              <el-button size="small" @click="fetchPending">重試</el-button>
+            </template>
+          </el-alert>
+          <el-empty v-if="!pendingLoading && !pendingError && pendingCaregivers.length === 0" description="目前沒有待維護的照護人員" />
+          <el-table v-else-if="!pendingError" v-table-auto-width :data="pendingCaregivers" border stripe style="width: 100%">
             <el-table-column label="姓名" min-width="120" class-name="name-col">
               <template #default="{ row }">
                 <span :class="{ 'empty-value': !row.name }">{{ row.name || '（未填寫）' }}</span>
@@ -188,6 +200,7 @@
     <ImportPreviewDialog
       ref="importDialogRef"
       title="批次匯入照護人員 (類型/單位/姓名/聯絡方式/備註.xlsx)"
+      instruction-text="依照範本格式填寫姓名等必填欄位，類型請填寫「個管」或「照專」，系統會自動比對現有主檔資料。"
       :on-dry-run="handleDryRun"
       :on-commit="handleCommitImport"
       :on-download-template="handleDownloadTemplate"
@@ -382,9 +395,13 @@ async function handleDryRun(file: File): Promise<any> {
 
 async function handleCommitImport(file: File, includeDuplicateRows: string[]): Promise<any> {
   const result: any = await commitImportCaregivers(file, includeDuplicateRows)
+  // failedCount／failedRows 是後端寫入資料庫失敗（非使用者選擇略過）的列，之前整個
+  // 被丟棄，使用者看不出這批匯入有列真的失敗；比照 skippedRows 轉接欄位形狀後保留。
   return {
     importedCount: result.importedCount,
     skippedRows: (result.skippedRows || []).map((row: any) => ({ rowId: row.rowId, rowIndex: row.rowIndex, caseName: row.name, reasons: row.reasons })),
+    failedCount: result.failedCount,
+    failedRows: (result.failedRows || []).map((row: any) => ({ rowId: row.rowId, rowIndex: row.rowIndex, caseName: row.name, reasons: row.reasons })),
     warnings: withCaseNameAlias(result.warnings)
   }
 }
@@ -567,13 +584,18 @@ async function handleDelete(row: any) {
 // 待維護頁籤：匯入時姓名或類型未填寫、待人工補齊的照護人員
 const pendingLoading = ref(false)
 const pendingCaregivers = ref<CaregiverDTO[]>([])
+// 載入失敗與「查無資料」是不同狀態，不應共用同一個「目前沒有待維護的照護人員」空狀態，
+// 否則使用者會誤以為真的沒有待維護資料而不會重試。
+const pendingError = ref(false)
 
 async function fetchPending() {
   pendingLoading.value = true
+  pendingError.value = false
   try {
     pendingCaregivers.value = await listAllCaregivers({ pending: true })
   } catch {
-    // 全域攔截器負責顯示 API 錯誤。
+    // 全域攔截器負責顯示 API 錯誤 toast；這裡另外標記狀態以顯示可重試的載入失敗畫面。
+    pendingError.value = true
   } finally {
     pendingLoading.value = false
   }

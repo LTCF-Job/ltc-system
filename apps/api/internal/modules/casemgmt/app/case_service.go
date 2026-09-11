@@ -32,6 +32,8 @@ var (
 	ErrDuplicateCandidateNotFound = errors.New("duplicate candidate not found")
 	ErrDuplicateCandidateResolved = errors.New("duplicate candidate already resolved")
 	ErrInvalidDuplicateDecision   = errors.New("invalid duplicate candidate decision")
+	ErrScheduleOverlap            = errors.New("schedule effective period overlaps an existing schedule")
+	ErrScheduleInvalidReference   = errors.New("schedule references a case or vehicle that does not exist")
 )
 
 // CaseService 封裝個案、據點、車輛、司機與排班之業務邏輯。

@@ -531,7 +531,9 @@ export interface DriverReportColumnDecision {
 }
 
 export interface DriverReportCommitResultDTO {
-  status: "pending" | "succeeded";
+  // partial 代表整份交易雖然成功，但仍有 failedRows > 0 的列在真正寫入資料庫時失敗
+  // （已略過，非預期會發生）；不可把 status !== "succeeded" 一律當成失敗處理。
+  status: "pending" | "succeeded" | "partial";
   importedRows: number;
   rideRecordRows: number;
   // reaffirmedRows 是值與既有資料相同的重複回報；pendingConflictRows 是與既有資料不同、
@@ -540,6 +542,9 @@ export interface DriverReportCommitResultDTO {
   reaffirmedRows: number;
   pendingConflictRows: number;
   backfilledRows: number;
+  // failedRows 只計格式與內容都正確、卻在真正寫入資料庫時失敗的列數；與 skippedRows
+  // （格式或內容問題而略過的列）分開計算，兩者都要顯示才不會讓使用者誤以為全數成功。
+  failedRows: number;
   mappedColumns: number;
   coveredMonths: string[];
   skippedRows: Array<{
@@ -958,6 +963,15 @@ export interface ResolveDuplicateCandidateRequest {
 export interface CaregiverImportCommitResult {
   importedCount: number;
   skippedRows: Array<{
+    rowId?: string;
+    rowIndex: number;
+    name: string;
+    reasons: string[];
+  }>;
+  // failedCount／failedRows 只計格式與內容都正確、卻在真正寫入資料庫時失敗的列數，
+  // 與 skippedRows（格式或內容問題而略過的列）分開計算。
+  failedCount: number;
+  failedRows: Array<{
     rowId?: string;
     rowIndex: number;
     name: string;

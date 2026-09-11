@@ -82,7 +82,19 @@
 
     <!-- 各車輛趟數明細區塊 -->
     <div v-loading="loading" class="tables-wrapper">
-      <template v-if="reportData && reportData.vehicles && reportData.vehicles.length">
+      <el-alert
+        v-if="loadError"
+        type="error"
+        title="查詢失敗，無法取得趟數表資料"
+        show-icon
+        :closable="false"
+        class="load-error-alert"
+      >
+        <template #default>
+          <el-button size="small" type="primary" @click="fetchReport">重新查詢</el-button>
+        </template>
+      </el-alert>
+      <template v-else-if="reportData && reportData.vehicles && reportData.vehicles.length">
         <el-card
           v-for="veh in reportData.vehicles"
           :key="veh.vehicleId"
@@ -123,7 +135,7 @@
         </el-card>
       </template>
 
-      <el-empty v-else-if="!loading" description="此月份與篩選條件下無任何搭乘紀錄趟數資料" />
+      <el-empty v-else-if="!loading && !loadError" description="此月份與篩選條件下無任何搭乘紀錄趟數資料" />
     </div>
   </div>
 </template>
@@ -146,6 +158,7 @@ const vehicleOptions = ref<VehicleDTO[]>([])
 const loading = ref(false)
 const exporting = ref(false)
 const reportData = ref<TripSummaryReportDTO | null>(null)
+const loadError = ref(false)
 
 async function fetchVehicleOptions() {
   try {
@@ -157,6 +170,10 @@ async function fetchVehicleOptions() {
 
 async function fetchReport() {
   loading.value = true
+  loadError.value = false
+  // 查詢開始就清空舊資料，避免切換月份後查詢失敗時畫面殘留上一次的結果，
+  // 讓使用者誤以為查到的是目前選定月份的資料。
+  reportData.value = null
   try {
     const res = await getTripSummaryReport({
       periodYm: queryMonth.value,
@@ -165,7 +182,9 @@ async function fetchReport() {
     })
     reportData.value = res
   } catch {
-    // 全域攔截器負責顯示 API 錯誤。
+    // 全域攔截器負責顯示 API 錯誤 toast；畫面另外呈現載入失敗狀態並提供重試，
+    // 避免跟「查無資料」的空狀態長得一樣。
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -301,5 +320,9 @@ onMounted(() => {
 .count-cell {
   font-family: monospace;
   font-size: 14px;
+}
+
+.load-error-alert {
+  width: 100%;
 }
 </style>

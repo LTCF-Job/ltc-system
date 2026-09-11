@@ -19,6 +19,7 @@ type fakeVehicleStore struct {
 	activeScheduleLegs int
 	countErr           error
 	softDeleteCalled   bool
+	lastUpdated        *Vehicle
 }
 
 func (f *fakeVehicleStore) List(ctx context.Context, filter VehicleFilter, page, pageSize int) ([]Vehicle, int64, error) {
@@ -27,7 +28,10 @@ func (f *fakeVehicleStore) List(ctx context.Context, filter VehicleFilter, page,
 
 func (f *fakeVehicleStore) Create(ctx context.Context, v *Vehicle) error { return nil }
 
-func (f *fakeVehicleStore) Update(ctx context.Context, v *Vehicle) error { return nil }
+func (f *fakeVehicleStore) Update(ctx context.Context, v *Vehicle) error {
+	f.lastUpdated = v
+	return nil
+}
 
 func (f *fakeVehicleStore) CountActiveDriverAssignments(ctx context.Context, vehicleID uuid.UUID) (int, error) {
 	return f.activeAssignments, f.countErr
@@ -134,6 +138,26 @@ func TestVehicleService_Update_NormalizesStatus(t *testing.T) {
 		_, err := svc.Update(context.Background(), uuid.New(), VehicleInput{Status: "retired"})
 		assert.ErrorIs(t, err, ErrInvalidStatus)
 	})
+}
+
+// TestVehicleService_Update_IsFullOverwrite_RemarksLostWhenOmitted 是資料遺失 bug 的
+// regression guard：Update 是整筆覆寫語意（VehicleInput 直接套用到全新的 Vehicle{ID: id}），
+// 並非部分更新。呼叫端（例如 VehicleListView.vue 的快速啟用/停用切換）若省略 remarks，
+// 既有備註會被覆寫成空字串。這裡鎖定該行為，避免未來有人誤以為後端會保留未帶的欄位而
+// 再次讓前端呼叫端漏帶 remarks。
+func TestVehicleService_Update_IsFullOverwrite_RemarksLostWhenOmitted(t *testing.T) {
+	store := &fakeVehicleStore{}
+	svc := NewVehicleService(store, newFakeDriverStore(), nil)
+
+	_, err := svc.Update(context.Background(), uuid.New(), VehicleInput{
+		DisplayName: "竹南2車",
+		Status:      "inactive",
+		// Remarks 故意留空，模擬只想切換狀態、未攜帶備註的呼叫端。
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, store.lastUpdated)
+	assert.Equal(t, "", store.lastUpdated.Remarks, "Update 為整筆覆寫，呼叫端必須自行帶入目前的 remarks 才能保留備註")
 }
 
 type fakeMasterAuditWriter struct {

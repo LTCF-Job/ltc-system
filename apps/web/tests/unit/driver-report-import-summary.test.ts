@@ -56,3 +56,29 @@ test('hasPendingWork 只在有衝突或待維護欄位時為真', () => {
   assert.equal(hasPendingWork({ conflicts: 1, pendingColumns: 0 }), true)
   assert.equal(hasPendingWork({ conflicts: 0, pendingColumns: 2 }), true)
 })
+
+test('有寫入失敗的列時說明會列出失敗筆數，不能只顯示樂觀的成功結果', () => {
+  assert.equal(
+    describeImportResult({ ...empty, importedDays: 22, rideRecords: 41, failed: 2 }),
+    '已處理 22 天：新增 41 筆、2 筆寫入失敗'
+  )
+})
+
+test('hasPendingWork 在有寫入失敗列時也視為需要使用者留意，比照衝突與待維護欄位', () => {
+  assert.equal(hasPendingWork({ conflicts: 0, pendingColumns: 0, failed: 1 }), true)
+  assert.equal(hasPendingWork({ conflicts: 0, pendingColumns: 0, failed: 0 }), false)
+})
+
+test('整批列都在寫入資料庫時失敗（importedDays 為 0）不能落回「沒有可寫入的搭乘資料」', () => {
+  assert.equal(
+    describeImportResult({ ...empty, failed: 5 }),
+    '5 筆寫入失敗，請稍後重試或聯繫管理員'
+  )
+})
+
+test('整批寫入失敗又同時建立了待維護欄位時，兩者都要說明', () => {
+  assert.equal(
+    describeImportResult({ ...empty, failed: 3, pendingColumns: 2 }),
+    '已建立 2 個待維護欄位，3 筆寫入失敗，請稍後重試或聯繫管理員'
+  )
+})

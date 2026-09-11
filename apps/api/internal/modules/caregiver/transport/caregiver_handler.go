@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -138,7 +139,7 @@ func (h *CaregiverHandler) Update(c *gin.Context) {
 		Status:   req.Status,
 	}, actorOf(c))
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		respondCaregiverServiceError(c, err)
 		return
 	}
 
@@ -158,11 +159,51 @@ func (h *CaregiverHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.svc.Delete(c.Request.Context(), id, actorOf(c)); err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		respondCaregiverServiceError(c, err)
 		return
 	}
 
 	httpx.RespondSuccess(c, http.StatusNoContent, nil, nil)
+}
+
+// respondCaregiverServiceError 把 CaregiverService 的已知 sentinel 錯誤映射為對應的
+// HTTP 狀態碼與非技術性訊息；查無資料回 404，FK 仍被個案關聯回 409，其餘已知驗證錯誤
+// 回 400，未知錯誤（DB 故障等）一律回 500，不得偽裝成使用者輸入錯誤。
+func respondCaregiverServiceError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, app.ErrCaregiverNotFound):
+		httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "查無此照護人員", nil)
+	case errors.Is(err, app.ErrCaregiverInUse):
+		httpx.RespondError(c, http.StatusConflict, httpx.CodeResourceInUse, "仍有個案關聯，請先解除關聯", nil)
+	case errors.Is(err, app.ErrCaregiverNameRequired),
+		errors.Is(err, app.ErrCaregiverTypeInvalid),
+		errors.Is(err, app.ErrCaregiverStatusInvalid):
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+	default:
+		httpx.RespondErrorCode(c, http.StatusInternalServerError, httpx.CodeInternalError, err, nil)
+	}
+}
+
+// respondCaregiverParseError 把匯入前置解析失敗分流到各自的錯誤碼並附上可行動的原因，
+// 不再全部壓成 VALIDATION_FAILED 讓使用者無從判斷是檔案格式、檔案損毀，還是套用了
+// 錯誤的範本。
+func respondCaregiverParseError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, app.ErrUnsupportedFileType):
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeUnsupportedFileType, err, []httpx.ErrorDetail{
+			{Field: "file", Reason: "僅支援 .xlsx 檔案，請另存為 Excel 活頁簿後再上傳"},
+		})
+	case errors.Is(err, app.ErrTemplateMismatch):
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeImportTemplateMismatch, err, []httpx.ErrorDetail{
+			{Field: "file", Reason: "找不到「姓名」欄，請確認是否使用照護人員批次匯入範本，且標題列在第一列"},
+		})
+	case errors.Is(err, app.ErrFileUnreadable):
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeFileUnreadable, err, []httpx.ErrorDetail{
+			{Field: "file", Reason: "檔案內容無法讀取，可能已損毀或不是有效的 Excel 檔"},
+		})
+	default:
+		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+	}
 }
 
 // ImportExcel 批次上傳解析照護人員新增資料 Excel 檔案。
@@ -181,7 +222,7 @@ func (h *CaregiverHandler) ImportExcel(c *gin.Context) {
 
 	preview, err := h.svc.ParseCaregivers(c.Request.Context(), f, fileHeader.Filename)
 	if err != nil {
-		httpx.RespondErrorCode(c, http.StatusBadRequest, httpx.CodeValidationFailed, err, nil)
+		respondCaregiverParseError(c, err)
 		return
 	}
 

@@ -135,7 +135,7 @@ func (s *DriverReportService) CreateForm(ctx context.Context, vehicleID, title s
 		return nil, ErrVehicleRequired
 	}
 	if strings.TrimSpace(title) == "" {
-		return nil, errors.New("匯報表名稱不可為空")
+		return nil, newInputError("匯報表名稱不可為空")
 	}
 
 	// 一台車一份匯報表，重複建立會撞上 uq_driver_report_forms_vehicle；此時要回傳既有那份的
@@ -180,7 +180,7 @@ func (s *DriverReportService) UpdateColumnMapping(ctx context.Context, colID, st
 	// 空字串一併擋下：repository 走 NULLIF($3,'')::uuid，指向空字串的指標會寫成 NULL，
 	// 配上 mapped 就成了「已對應卻沒有個案」的孤兒列，該欄從此展不出搭乘紀錄。
 	if status == "mapped" && (caseID == nil || strings.TrimSpace(*caseID) == "" || legSeq == nil) {
-		return 0, errors.New("標記為已對應時必須同時指定個案與趟次")
+		return 0, newInputError("標記為已對應時必須同時指定個案與趟次")
 	}
 
 	var backfilled int
@@ -203,7 +203,7 @@ func (s *DriverReportService) UpdateColumnMapping(ctx context.Context, colID, st
 
 		parsedCaseID, err := uuid.Parse(*caseID)
 		if err != nil {
-			return fmt.Errorf("個案編號格式錯誤: %w", err)
+			return newInputError("個案編號格式錯誤")
 		}
 
 		// 待維護頁的手動綁定沒有「另有來源」的日期，這一欄留下的既有回報全部都要補寫
@@ -232,7 +232,7 @@ func (s *DriverReportService) MatchPendingColumnsByName(ctx context.Context, nam
 func (s *DriverReportService) BindPendingDriver(ctx context.Context, driverNameRaw, driverID string) (int, error) {
 	parsed, err := uuid.Parse(driverID)
 	if err != nil {
-		return 0, fmt.Errorf("司機編號格式錯誤: %w", err)
+		return 0, newInputError("司機編號格式錯誤")
 	}
 	affected, dates, err := s.rideIngestor.BackfillDriver(ctx, driverNameRaw, parsed)
 	if err != nil {
@@ -368,12 +368,22 @@ func (s *DriverReportService) ResolveRowConflict(ctx context.Context, conflictID
 	}
 	parsedID, err := uuid.Parse(conflictID)
 	if err != nil {
-		return fmt.Errorf("衝突編號格式錯誤: %w", err)
+		return newInputError("衝突編號格式錯誤")
 	}
 
 	txErr := s.txRunner.WithTx(ctx, func(txCtx context.Context) error {
 		appliedDriverID, appliedDate, err := s.rideIngestor.ResolveRowConflict(txCtx, parsedID, useNew, actor.ActorID)
 		if err != nil {
+			// rideIngestor 目前直接轉發 ride 模組的 sentinel（"row conflict already
+			// resolved"），跨模組不能 import 對方的 app 套件比對型別（見
+			// layering-rules.md），改以固定英文文字比對，轉譯成本模組自有的
+			// ErrRowConflictAlreadyResolved 供 transport 層映射 409。這段比對耦合於
+			// ride 模組錯誤訊息的精確文字，屬過渡作法：乾淨的解法是在
+			// cmd/server/module_adapters.go 的 driverReportRideIngestor 轉接層直接
+			// 回傳這個 sentinel，但該檔案不在本次任務的檔案擁有權範圍內。
+			if strings.Contains(err.Error(), "already resolved") {
+				return ErrRowConflictAlreadyResolved
+			}
 			return err
 		}
 		if appliedDriverID != nil && appliedDate != nil {
@@ -415,7 +425,7 @@ func (s *DriverReportService) ResolveRowConflict(ctx context.Context, conflictID
 // 檔案時該欄位會以 pending 重新建立，屬預期行為——使用者要的是把目前這筆從系統移除。
 func (s *DriverReportService) IgnoreColumn(ctx context.Context, colID string, actor Actor) error {
 	if _, err := uuid.Parse(colID); err != nil {
-		return fmt.Errorf("欄位編號格式錯誤: %w", err)
+		return newInputError("欄位編號格式錯誤")
 	}
 
 	rowsAffected, err := s.repo.DeleteColumn(ctx, colID)
@@ -435,7 +445,7 @@ func (s *DriverReportService) IgnoreColumn(ctx context.Context, colID string, ac
 func (s *DriverReportService) IgnoreRowConflict(ctx context.Context, conflictID string, actor Actor) error {
 	parsedID, err := uuid.Parse(conflictID)
 	if err != nil {
-		return fmt.Errorf("衝突編號格式錯誤: %w", err)
+		return newInputError("衝突編號格式錯誤")
 	}
 
 	rowsAffected, err := s.rideIngestor.DeleteRowConflict(ctx, parsedID)
@@ -458,7 +468,7 @@ func (s *DriverReportService) IgnoreSubmission(ctx context.Context, submissionID
 	}
 	parsedID, err := uuid.Parse(submissionID)
 	if err != nil {
-		return fmt.Errorf("匯報列編號格式錯誤: %w", err)
+		return newInputError("匯報列編號格式錯誤")
 	}
 
 	var rowsAffected int64
@@ -593,16 +603,28 @@ func (s *DriverReportService) ListSubmissionReview(ctx context.Context) ([]Submi
 	return out, nil
 }
 
-// BatchMapping 批次更新欄位對應狀態，回傳成功更新筆數。
-func (s *DriverReportService) BatchMapping(ctx context.Context, updates []ColumnMappingUpdate) (int, error) {
-	count := 0
+// BatchMapping 批次更新欄位對應狀態。每筆更新各自沿用 UpdateColumnMapping 既有的
+// 交易保護，但整批之間沒有共用交易：中途某筆失敗時，前面已成功套用的不會被回滾。
+// 因此這裡逐筆繼續處理、彙整成功筆數與逐筆失敗原因一起回傳，不再讓中途失敗把整批
+// 都當成失敗、卻讓已經寫入的變更悄悄留在資料庫。
+func (s *DriverReportService) BatchMapping(ctx context.Context, updates []ColumnMappingUpdate) (*BatchMappingResult, error) {
+	result := &BatchMappingResult{Failures: []BatchMappingFailure{}}
 	for _, u := range updates {
 		if _, err := s.UpdateColumnMapping(ctx, u.ColumnID, u.MappingStatus, u.CaseID, u.LegSeq); err != nil {
-			return count, err
+			reason := "更新此欄位對應失敗，請稍後再試"
+			if IsInputError(err) {
+				reason = err.Error()
+			} else {
+				slog.Error("batch column mapping update failed",
+					slog.String("columnId", u.ColumnID),
+					slog.String("error", err.Error()))
+			}
+			result.Failures = append(result.Failures, BatchMappingFailure{ColumnID: u.ColumnID, Reason: reason})
+			continue
 		}
-		count++
+		result.UpdatedCount++
 	}
-	return count, nil
+	return result, nil
 }
 
 // TemplateExcel 產生指定匯報表的空白範本；欄位由該車已對應的個案趟次組成，
