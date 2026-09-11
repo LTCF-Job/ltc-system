@@ -97,7 +97,7 @@ rows, err := db.Query(ctx, query, pgxdb.UUIDStrings(caseIDs))
 | `TRUSTED_PROXIES` | `127.0.0.1,::1` | 實際 ingress proxy 的 IP／CIDR 清單 | `production` 可留空；空值不信任 `X-Forwarded-For`。只填真正會改寫該 header 的 proxy，禁止填全網段 |
 | `SUPABASE_URL` | 可由 `SUPABASE_PROJECT_REF` 推導 | 同左 | private object storage API 的專案網址；正式環境用 service-role key 存取，不可暴露給前端 |
 | `SUPABASE_SERVICE_ROLE_KEY` | 可留空 | Secret Manager | private export object storage 與使用者管理 API；正式環境必填 |
-| `STORAGE_BUCKET` | `ltc-exports` | 同左 | 必須在 Supabase Storage 建立為 private bucket；匯出檔案存於 `exports/{jobId}/{fileName}` |
+| `STORAGE_BUCKET` | `ltc-exports` | 同左 | 必須在 Supabase Storage 建立為 private bucket；匯出檔案存於 `exports/{jobId}/{caseId}{ext}`（storage key 用 ASCII，避免中文檔名觸發 InvalidKey） |
 | `STORAGE_SIGNED_URL_TTL` | `24h` | 同左 | |
 | `NOTIFICATION_EMAIL_ENABLED` | `false` | `false` 或 `true` | 明確控制是否真的外送通知；`false` 時即使有 provider key 也只寫 log |
 | `RESEND_API_KEY` | 可留空 | `NOTIFICATION_EMAIL_ENABLED=true` 時必填 | `true` 時透過 Resend API 實際寄出通知信 |
