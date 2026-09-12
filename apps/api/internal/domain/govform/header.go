@@ -39,3 +39,18 @@ var Headers33 = [33]string{
 	"BD03、DA01使用-車號",
 	"BD03必填-服務使用類型\n1.社區式長照機構\n2.社區服務據點(不含身障類)\n3.輔具中心\n4.身障日間照顧服務",
 }
+
+// RequiredHeaderCount 為政府申報表中以紅字標示的必填欄位數量。
+// 官方範本將第 1～11 欄（身分證字號 ～ 結束時段-分鐘）標為紅字必填，
+// 第 12 欄起為選填欄位並以黑字呈現。此區隔屬政府格式規範，
+// 實際的字型與色碼由 reporting/infra 的 renderer 決定。
+const RequiredHeaderCount = 11
+
+// IsRequiredHeader 回報第 col 欄（1-based）是否為必填欄位。
+func IsRequiredHeader(col int) bool {
+	return col >= 1 && col <= RequiredHeaderCount
+}
+
+// DefaultServiceCode 為長照交通接送的服務項目代碼。
+// 本系統的申報範圍僅有交通接送一種服務，故未指定時一律以此代碼申報。
+const DefaultServiceCode = "BD03"
