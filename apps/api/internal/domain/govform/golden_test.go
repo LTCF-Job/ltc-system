@@ -173,3 +173,75 @@ func TestBuildClaimRow_ServiceCodeDefaultsToBD03(t *testing.T) {
 		assert.Equal(t, "DA01", row.Cells[2])
 	})
 }
+
+// 單價未提供時應補上預設值 115：申報檔的單價為必填欄位，
+// 留白會被主管機關退件。
+func TestBuildClaimRow_UnitPriceDefaultsTo115(t *testing.T) {
+	t.Run("未提供或非正數時補 115", func(t *testing.T) {
+		for _, in := range []float64{0, -1} {
+			row, err := BuildClaimRow(ClaimRowInput{UnitPrice: in})
+			require.NoError(t, err)
+			assert.Equal(t, 115, row.Cells[5], "UnitPrice=%v", in)
+		}
+	})
+
+	t.Run("已提供時沿用原值", func(t *testing.T) {
+		row, err := BuildClaimRow(ClaimRowInput{UnitPrice: 200})
+		require.NoError(t, err)
+		assert.Equal(t, 200, row.Cells[5])
+	})
+
+	t.Run("非整數單價保留小數", func(t *testing.T) {
+		row, err := BuildClaimRow(ClaimRowInput{UnitPrice: 115.5})
+		require.NoError(t, err)
+		assert.Equal(t, 115.5, row.Cells[5])
+	})
+}
+
+// 趟次序號與去回程方向的對應：奇數去程、偶數回程，超出 1..4 無從判斷。
+func TestDirectionForLegSeq(t *testing.T) {
+	for _, tt := range []struct {
+		legSeq int16
+		want   string
+	}{
+		{1, "outbound"}, {2, "inbound"}, {3, "outbound"}, {4, "inbound"},
+		{0, ""}, {5, ""}, {-1, ""},
+	} {
+		assert.Equal(t, tt.want, DirectionForLegSeq(tt.legSeq), "legSeq=%d", tt.legSeq)
+	}
+}
+
+// 排班缺漏時仍應依 LegSeq 填出發地與目的地；有 Direction 時以 Direction 為準。
+func TestBuildClaimRow_AddressesUseLegSeqWhenDirectionMissing(t *testing.T) {
+	const home = "新竹縣新埔鎮成功街202巷53號"
+	const site = "新竹縣新埔鎮文德路三段248巷1號"
+
+	t.Run("無方向時由趟次還原", func(t *testing.T) {
+		out, err := BuildClaimRow(ClaimRowInput{LegSeq: 1, HomeAddress: home, SiteAddress: site})
+		require.NoError(t, err)
+		assert.Equal(t, home, out.Cells[24], "去程出發地為居住地址")
+		assert.Equal(t, site, out.Cells[25], "去程目的地為據點地址")
+
+		in, err := BuildClaimRow(ClaimRowInput{LegSeq: 2, HomeAddress: home, SiteAddress: site})
+		require.NoError(t, err)
+		assert.Equal(t, site, in.Cells[24], "回程出發地為據點地址")
+		assert.Equal(t, home, in.Cells[25], "回程目的地為居住地址")
+	})
+
+	t.Run("有方向時以方向為準", func(t *testing.T) {
+		// LegSeq 為奇數但明確標示回程，應尊重 Direction。
+		row, err := BuildClaimRow(ClaimRowInput{
+			LegSeq: 1, Direction: "inbound", HomeAddress: home, SiteAddress: site,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, site, row.Cells[24])
+		assert.Equal(t, home, row.Cells[25])
+	})
+
+	t.Run("趟次超出範圍時兩欄留白", func(t *testing.T) {
+		row, err := BuildClaimRow(ClaimRowInput{LegSeq: 9, HomeAddress: home, SiteAddress: site})
+		require.NoError(t, err)
+		assert.Equal(t, "", row.Cells[24])
+		assert.Equal(t, "", row.Cells[25])
+	})
+}
