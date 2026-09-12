@@ -368,7 +368,6 @@ func TestCreateGovClaimJob_BlanksMissingFieldsAndKeepsTheRow(t *testing.T) {
 		reason    string
 		blankCell int
 	}{
-		{"排班趟次對不到", func(s *app.GovClaimSource) { s.Direction = nil }, "NO_SCHEDULE_LEG", 24},
 		{"沒有出發時間", func(s *app.GovClaimSource) { s.DepartTime = nil }, "NO_DEPART_TIME", 7},
 		{"沒有服務時長", func(s *app.GovClaimSource) { s.DurationMin = intPtr(0) }, "NO_DEPART_TIME", 9},
 		{"沒有司機", func(s *app.GovClaimSource) { s.DriverID = nil }, "NO_DRIVER", 6},
@@ -376,7 +375,6 @@ func TestCreateGovClaimJob_BlanksMissingFieldsAndKeepsTheRow(t *testing.T) {
 		{"服務類別超出範圍", func(s *app.GovClaimSource) { s.ServiceCategory = intPtr(9) }, "NO_SERVICE_CATEGORY", 3},
 		{"服務使用類型未設定", func(s *app.GovClaimSource) { s.ServiceUsageType = nil }, "NO_SERVICE_USAGE_TYPE", 32},
 		{"服務使用類型超出範圍", func(s *app.GovClaimSource) { s.ServiceUsageType = intPtr(0) }, "NO_SERVICE_USAGE_TYPE", 32},
-		{"單價為零", func(s *app.GovClaimSource) { s.UnitPrice = 0 }, "NO_UNIT_PRICE", 5},
 		{"沒有車號", func(s *app.GovClaimSource) { s.PlateNo = "" }, "NO_PLATE_NO", 31},
 		{"沒有里程", func(s *app.GovClaimSource) { s.DistanceKM = 0 }, "NO_DISTANCE", 30},
 	}
@@ -709,4 +707,79 @@ func TestRenderCaseFile_ReturnsSnapshotROCDateError(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, rocdate.ErrInvalidROCVal)
 	assert.Contains(t, err.Error(), "convert service date from ROC")
+}
+
+// 單價未設定時改以預設值 115 申報，但仍回報 NO_UNIT_PRICE 缺口。
+//
+// 申報檔的單價是必填欄位，留白會被主管機關退件；而 case_schedules.unit_price
+// 的 schema 預設值本就是 115.00，個案僅是尚未建立排班。因此值一律補滿，
+// 同時保留缺口回報讓使用者知道該筆資料其實不完整。
+func TestCreateGovClaimJob_UnitPriceFallsBackToDefault(t *testing.T) {
+	driver := uuid.New()
+	caseA := uuid.New()
+	good := newSource(t, caseA, "C001", "蔡曾切", driver, 1, 1, "outbound", "09:40")
+	bad := newSource(t, caseA, "C001", "蔡曾切", driver, 2, 1, "outbound", "09:40",
+		func(s *app.GovClaimSource) { s.UnitPrice = 0 })
+
+	store := &fakeExportStore{jobID: uuid.New()}
+	renderer := &recordingRenderer{}
+
+	job, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{good, bad}}, store, renderer, &recordingArchiver{}, stubPrecheckRepo{}).
+		CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseA))
+	require.NoError(t, err)
+
+	require.Len(t, renderer.batches, 1)
+	require.Len(t, renderer.batches[0], 2)
+	for i, row := range renderer.batches[0] {
+		assert.Equal(t, 115, row.Cells[5], "第 %d 列的單價應為預設值而非留白", i+1)
+	}
+
+	require.Len(t, job.DataGaps, 1)
+	assert.Equal(t, "NO_UNIT_PRICE", job.DataGaps[0].Reason, "值補滿後仍要回報缺口")
+	assert.Equal(t, 1, job.DataGaps[0].Count)
+}
+
+// 排班缺漏時由 LegSeq 還原去回程方向，出發地與目的地照樣填寫，
+// 但仍回報 NO_SCHEDULE_LEG 缺口。
+//
+// 排班趟次一律奇數去程、偶數回程，ride_records.leg_seq 不依賴 schedule_legs，
+// 因此個案尚未建立排班時仍可正確判斷哪一邊是出發地。
+func TestCreateGovClaimJob_AddressesFallBackToLegSeqDirection(t *testing.T) {
+	driver := uuid.New()
+	const home = "新竹縣竹北市光明六路264號"
+	const site = "新竹縣竹北市中正西路100號"
+
+	tests := []struct {
+		name     string
+		legSeq   int16
+		wantFrom string
+		wantTo   string
+	}{
+		{"奇數趟次視為去程", 1, home, site},
+		{"偶數趟次視為回程", 2, site, home},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caseA := uuid.New()
+			src := newSource(t, caseA, "C001", "蔡曾切", driver, 1, tt.legSeq, "outbound", "09:40",
+				func(s *app.GovClaimSource) { s.Direction = nil })
+
+			store := &fakeExportStore{jobID: uuid.New()}
+			renderer := &recordingRenderer{}
+
+			job, err := newService(&fakeSourceReader{sources: []app.GovClaimSource{src}}, store, renderer, &recordingArchiver{}, stubPrecheckRepo{}).
+				CreateGovClaimJob(context.Background(), newInput(app.GovClaimModeDirect, caseA))
+			require.NoError(t, err)
+
+			require.Len(t, renderer.batches, 1)
+			require.Len(t, renderer.batches[0], 1)
+			row := renderer.batches[0][0]
+			assert.Equal(t, tt.wantFrom, row.Cells[24], "第 25 欄出發地")
+			assert.Equal(t, tt.wantTo, row.Cells[25], "第 26 欄目的地")
+
+			require.Len(t, job.DataGaps, 1)
+			assert.Equal(t, "NO_SCHEDULE_LEG", job.DataGaps[0].Reason, "還原方向後仍要回報缺口")
+		})
+	}
 }

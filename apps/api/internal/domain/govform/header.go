@@ -54,3 +54,24 @@ func IsRequiredHeader(col int) bool {
 // DefaultServiceCode 為長照交通接送的服務項目代碼。
 // 本系統的申報範圍僅有交通接送一種服務，故未指定時一律以此代碼申報。
 const DefaultServiceCode = "BD03"
+
+// DefaultUnitPrice 為長照交通接送的申報單價（新臺幣元）。
+// case_schedules.unit_price 的 schema 預設值同為 115.00 且 NOT NULL，
+// 個案尚未建立排班時以此值申報，避免必填欄位留白。
+const DefaultUnitPrice = 115
+
+// DirectionForLegSeq 由趟次序號推導去回程方向。
+//
+// 排班的趟次一律以「奇數去程、偶數回程」成對配置（二趟為 1 去 2 回，
+// 四趟為 1 去 2 回 3 去 4 回），driverreport 的欄位對應也依此慣例。
+// 個案尚未建立排班時 schedule_legs 沒有資料，但 ride_records.leg_seq
+// 本身仍在，可據以還原方向。超出 1..4 範圍時回傳空字串表示無從判斷。
+func DirectionForLegSeq(legSeq int16) string {
+	if legSeq < 1 || legSeq > 4 {
+		return ""
+	}
+	if legSeq%2 == 1 {
+		return "outbound"
+	}
+	return "inbound"
+}
