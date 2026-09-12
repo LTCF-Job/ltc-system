@@ -65,7 +65,13 @@ func BuildClaimRow(input ClaimRowInput) (ClaimRow, error) {
 	}
 
 	// 3. 服務項目代碼 (文字)
+	// 本系統只申報長照交通接送，代碼固定為 BD03（case_schedules.service_code
+	// 的 schema 預設值亦為 BD03 且 NOT NULL）。個案尚未建立排班時 ServiceCode
+	// 會是空字串，此處補上預設值，避免申報檔出現空白的必填欄位。
 	row.Cells[2] = strings.TrimSpace(input.ServiceCode)
+	if row.Cells[2] == "" {
+		row.Cells[2] = DefaultServiceCode
+	}
 
 	// 4. 服務類別 (數值: 1 補助 / 2 自費)
 	row.Cells[3] = ""
@@ -77,13 +83,17 @@ func BuildClaimRow(input ClaimRowInput) (ClaimRow, error) {
 	row.Cells[4] = 1
 
 	// 6. 單價 (數值)
-	row.Cells[5] = ""
-	if input.UnitPrice > 0 {
-		if input.UnitPrice == float64(int(input.UnitPrice)) {
-			row.Cells[5] = int(input.UnitPrice)
-		} else {
-			row.Cells[5] = input.UnitPrice
-		}
+	// 未提供時以 DefaultUnitPrice 申報，理由同服務項目代碼：個案尚未建立排班
+	// 時不可讓必填欄位留白，而 case_schedules.unit_price 的 schema 預設值
+	// 本就是 115.00 且 NOT NULL CHECK (> 0)。
+	unitPrice := input.UnitPrice
+	if unitPrice <= 0 {
+		unitPrice = DefaultUnitPrice
+	}
+	if unitPrice == float64(int(unitPrice)) {
+		row.Cells[5] = int(unitPrice)
+	} else {
+		row.Cells[5] = unitPrice
 	}
 
 	// 7. 服務人員身分證 (文字)
@@ -141,10 +151,16 @@ func BuildClaimRow(input ClaimRowInput) (ClaimRow, error) {
 	row.Cells[23] = ""
 
 	// 25, 26. 出發地與目的地 (R1 去回程地址對調)。
-	// 方向不明時無從判斷哪一邊是出發地，兩欄一起留白，不猜一個方向填進去。
+	// 排班缺漏時 Direction 為空，改由 LegSeq 的奇偶還原方向；這不是臆測，
+	// 而是排班趟次既有的配置慣例（奇數去程、偶數回程）。兩者皆無從判斷時
+	// 兩欄一起留白，不猜一個方向填進去。
 	row.Cells[24] = ""
 	row.Cells[25] = ""
-	switch input.Direction {
+	direction := strings.TrimSpace(input.Direction)
+	if direction == "" {
+		direction = DirectionForLegSeq(input.LegSeq)
+	}
+	switch direction {
 	case "inbound":
 		row.Cells[24] = strings.TrimSpace(input.SiteAddress)
 		row.Cells[25] = strings.TrimSpace(input.HomeAddress)
