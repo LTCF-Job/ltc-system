@@ -120,6 +120,7 @@ func LoadFromEnv() (*Config, error) {
 	if _, err := ParseTrustedProxies(cfg.TrustedProxies); err != nil {
 		return nil, err
 	}
+
 	// 寄信是明確的 feature flag：未開啟時即使誤留 RESEND_API_KEY 也不能偷偷外送；
 	// 開啟時兩個 provider 設定必須同時存在，避免通知看似成功但沒有可送出的寄件設定。
 	if cfg.NotificationEmailEnabled {
