@@ -155,3 +155,21 @@ func TestGovClaim_NotClaimedAA09(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, row.Cells[16])
 }
+
+// 服務項目代碼未提供時應補上 BD03：本系統只申報交通接送，
+// 個案尚未建立排班時不可讓必填欄位留白。
+func TestBuildClaimRow_ServiceCodeDefaultsToBD03(t *testing.T) {
+	t.Run("未提供時補 BD03", func(t *testing.T) {
+		for _, in := range []string{"", "   "} {
+			row, err := BuildClaimRow(ClaimRowInput{ServiceCode: in})
+			require.NoError(t, err)
+			assert.Equal(t, "BD03", row.Cells[2], "ServiceCode=%q", in)
+		}
+	})
+
+	t.Run("已提供時沿用原值", func(t *testing.T) {
+		row, err := BuildClaimRow(ClaimRowInput{ServiceCode: " DA01 "})
+		require.NoError(t, err)
+		assert.Equal(t, "DA01", row.Cells[2])
+	})
+}

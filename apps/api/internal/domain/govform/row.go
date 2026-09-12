@@ -65,7 +65,13 @@ func BuildClaimRow(input ClaimRowInput) (ClaimRow, error) {
 	}
 
 	// 3. 服務項目代碼 (文字)
+	// 本系統只申報長照交通接送，代碼固定為 BD03（case_schedules.service_code
+	// 的 schema 預設值亦為 BD03 且 NOT NULL）。個案尚未建立排班時 ServiceCode
+	// 會是空字串，此處補上預設值，避免申報檔出現空白的必填欄位。
 	row.Cells[2] = strings.TrimSpace(input.ServiceCode)
+	if row.Cells[2] == "" {
+		row.Cells[2] = DefaultServiceCode
+	}
 
 	// 4. 服務類別 (數值: 1 補助 / 2 自費)
 	row.Cells[3] = ""
